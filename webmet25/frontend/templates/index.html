@@ -1,0 +1,123 @@
+{% extends 'base_fe.html' %}
+
+{% load static %}
+
+{% block extra_head %}
+    <title>Grupo Radar Cordoba</title>
+{% endblock %}
+
+
+{% block header %}
+    <!-- LEAFLET-->
+    <link 
+        rel="stylesheet" 
+        href="https://unpkg.com/leaflet@1.1.0/dist/leaflet.css" 
+        integrity="sha512-wcw6ts8Anuw10Mzh9Ytw4pylW8+NAD4ch3lqm9lzAsTxg0GFeJgoAtxuCLREZSC5lUXdVyo/7yfsqFjQ4S+aKw==" 
+        crossorigin=""
+    />
+    <link rel="stylesheet" href="{% static 'css/leaflet-search.css' %}">
+{% endblock %}
+
+{% block content %}
+    <div id="gif_radar_cont">
+        <div id='gif_radar_img'>
+            <h5 style="font-size:10px;"><span id='loader_string'>Cargando</span><marquee style="width:15px;">...</marquee></h5>
+            <img src="{% static 'images/radar.gif' %}" width="85px"/>
+        </div>
+    </div>
+        <div class='logo'>
+        <img class='hide-on-small-only' src="{% static 'images/grc_ohmc.png' %}" height="85px">
+        <img class='hide-on-med-and-up' src="{% static 'images/grc_ohmc.png' %}" height="45px">
+    </div>
+    <div class='logo_inst'>
+        <img class='hide-on-small-only' src="{% static 'images/logos_inst_grande.png' %}" width="200px">
+        <img class='hide-on-med-and-up' src="{% static 'images/logos_inst_grande.png' %}" width="  100px">
+    </div>
+    <div class="fixed-action-btn click-to-toggle" style="z-index: 100000"></div>
+        <a class="btn-floating btn-large blue">
+            <i class="large material-icons">menu</i>
+        </a>
+        <ul>
+            <li class="waves-effect waves-light">
+                <a href="#" data-activates="side-user" class="btn-floating cyan button-sidenave sidenav-effect tooltipped"
+                data-position="left" data-delay="50" data-tooltip="Configuración">
+                    <i class="material-icons">settings</i>
+                </a>
+            </li>
+            <li class="waves-effect waves-light">
+                <a href="#!" id='show_graficos' class="disabled btn-floating green tooltipped" 
+                data-position="left" data-delay="50" data-tooltip="Gráficos">
+                    <i class="material-icons">timeline</i>
+                </a>
+            </li>
+            <li class="waves-effect waves-light">
+                <a href="#" data-activates="side-layers" class="btn-floating orange button-sidenave sidenav-effect tooltipped"
+                data-position="left" data-delay="50" data-tooltip="Capas">
+                    <i class="material-icons">clear_all</i>
+                </a>
+            </li>
+            <li class="waves-effect waves-light">
+                <a href="#" data-activates="side-estaciones" class="disabled btn-floating green button-sidenave sidenav-effect tooltipped"
+                data-position="left" data-delay="50" data-tooltip="Estaciones Meteorológicas">
+                    <i class="material-icons">wb_sunny</i>
+                </a>
+            </li>
+            <li class="waves-effect waves-light">
+                <a href="#" data-activates="side-molino" class="btn-floating red button-sidenave sidenav-effect tooltipped"
+                data-position="left" data-delay="50" data-tooltip="Molinos de campo eléctrico ">
+                    <i class="material-icons" style="transform: rotate(45deg);">games</i>
+                </a>
+            </li>
+            <li class="waves-effect waves-light">
+                <button data-target="help_modal" data-position="left" data-delay="50"
+                        data-tooltip="Ayuda"
+                        onclick="$('.fixed-action-btn').closeFAB();"
+                        class="btn-floating sidenav-effect yellow tooltipped modal-trigger">
+                    <i class="material-icons">help</i></button>
+            </li>
+        </ul>
+    </div>
+
+    {% include 'configuration.html' %}
+    
+{% endblock %}
+
+{% block script %}
+    <script>
+        var init_values= {};
+
+        init_values['lat'] = {% if lat %} {{lat}} {% else %} -39.740986355883564 {% endif %};
+        init_values['long'] = {% if long %} {{long}} {% else %} -65.25878906250001 {% endif %};
+        init_values['zoom'] = {% if zoom %} {{zoom}} {% else %} 5 {% endif %};
+
+        // var wrf_prod = [];
+        // {% for prod in wrf_products %}
+        //     wrf_prod.push('{{prod.product_key}}');
+        // {% endfor %}
+
+        var polarimetrics_vars = [];
+        var polarimetrics_vars_utils = {};
+        {% for prod in radar_products %}
+            polarimetrics_vars.push('{{prod.product_key}}');
+            polarimetrics_vars_utils['{{prod.product_key}}'] = {
+                'strategy':'{{prod.strategy}}',
+                'scanning':'{{prod.scanning}}',
+                'sweep':'{{prod.sweep}}',
+                'show_me':'{{prod.show}}'
+            };
+        {% endfor %}
+    </script>
+    <script type="text/javascript" src="https://code.jquery.com/jquery-2.2.4.min.js"></script>
+    <script 
+        src="https://unpkg.com/leaflet@1.1.0/dist/leaflet.js"
+        integrity="sha512-mNqn2Wg7tSToJhvHcqfzLMU6J4mkOImSPTxVZAdo+lcPlk+GhZmYgACEe0x35K7YzW1zJ7XyJV/TT1MrdXvMcA=="
+        crossorigin="">
+    </script>
+    <script src="{% static 'js/leaflet-search.js' %}"></script>
+    <script src="{% static 'js/leaflet-bouncemarker.js' %}"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+    <script src="{% static 'js/materialize.js' %}"></script>
+    <script src="{% static 'js/nouislider.js' %}"></script>
+    <script src="{% static 'js/moments.js' %}"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-datetimepicker/2.5.4/build/jquery.datetimepicker.full.min.js"></script>
+{% endblock %}

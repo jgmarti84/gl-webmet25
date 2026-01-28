@@ -1,0 +1,3 @@
+"""
+frontend Django application package.
+"""

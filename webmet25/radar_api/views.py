@@ -18,6 +18,8 @@ from .models import RadarImage, Radar
 import sys, os
 from dateutil import parser
 import shutil
+from django.http import FileResponse, HttpResponse
+from django.conf import settings
 
 class RadarView(viewsets.ReadOnlyModelViewSet):
     """
@@ -115,6 +117,114 @@ class RadarImageView(viewsets.ModelViewSet):
                                                     timezone.make_aware(date_to, timezone.get_default_timezone()))) # type: ignore
             print(queryset)
         return queryset
+
+    @action(detail=False, methods=['get'], url_path='filtered')
+    def filtered(self, request):
+        """
+        API endpoint to get radar images with radar metadata (location) for map visualization.
+        
+        Query parameters:
+          - date_from: ISO format datetime (e.g., 2025-12-05T23:00:00Z)
+          - date_to: ISO format datetime (e.g., 2025-12-06T00:10:00Z)
+          - radar_code: Filter by radar code (e.g., RMA3)
+          - polarimetric_var: Filter by polarimetric variable (e.g., DBZH,VRAD)
+        
+        Returns:
+          {
+            "images": [
+              {
+                "id": 123,
+                "radar_code": "RMA3",
+                "radar_lat": 40.123,
+                "radar_long": -3.456,
+                "image_url": "/media/radares/images/RMA3/2025/12/05/...",
+                "polarimetric_var": "DBZH",
+                "date": "2025-12-05T23:10:00Z",
+                "sweep": 0.0
+              },
+              ...
+            ],
+            "radars": {
+              "RMA3": {
+                "code": "RMA3",
+                "title": "Radar Centro",
+                "lat": 40.123,
+                "long": -3.456,
+                "is_active": true
+              }
+            }
+          }
+        """
+        queryset = self.get_queryset()
+
+        # Parse query params
+        date_from_str = request.query_params.get('date_from', None)
+        date_to_str = request.query_params.get('date_to', None)
+        radar_code = request.query_params.get('radar_code', None)
+        polarimetric_vars = request.query_params.get('polarimetric_var', None)
+
+        # Filter by date range (ISO 8601)
+        if date_from_str and date_to_str:
+            try:
+                date_from = parser.isoparse(date_from_str)
+                date_to = parser.isoparse(date_to_str)
+                queryset = queryset.filter(date__range=(date_from, date_to))
+            except Exception as e:
+                return Response(
+                    {'error': f'Invalid date format: {e}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # Filter by radar code
+        if radar_code:
+            queryset = queryset.filter(radar__code=radar_code)
+
+        # Filter by polarimetric variable (comma-separated)
+        if polarimetric_vars:
+            var_list = [v.strip() for v in polarimetric_vars.split(',')]
+            queryset = queryset.filter(polarimetric_var__in=var_list)
+
+        # Order by date descending
+        queryset = queryset.order_by('-date')[:500]  # Limit to 500 images
+
+        # Build response with radar metadata
+        images_data = []
+        radars_data = {}
+
+        for img in queryset:
+            radar = img.radar
+            if radar.code not in radars_data:
+                radars_data[radar.code] = {
+                    'code': radar.code,
+                    'title': radar.title,
+                    'lat': float(radar.center_lat),
+                    'long': float(radar.center_long),
+                    'is_active': radar.is_active,
+                    'img_radio': radar.img_radio,
+                }
+
+            images_data.append({
+                'id': img.id,
+                'radar_code': radar.code,
+                'radar_lat': float(radar.center_lat),
+                'radar_long': float(radar.center_long),
+                'image_url': img.image.url if img.image else None,
+                'image_path': str(img.image) if img.image else None,
+                'polarimetric_var': img.polarimetric_var,
+                'date': img.date.isoformat(),
+                'sweep': float(img.sweep),
+                'strategy': img.strategy,
+                'scanning': img.scanning,
+                # Direct serve URL from product_output
+                'product_image_url': f'/radar_api/serve_image/?path=RMA3/{img.date.year}/{img.date.month:02d}/{img.date.day:02d}/{radar.code}_{img.date.strftime("%Y%m%dT%H%M%SZ")}_{img.polarimetric_var}_{img.scanning:02d}.png',
+            })
+
+        return Response({
+            'images': images_data,
+            'radars': radars_data,
+            'count': len(images_data),
+        })
+
 
 
 class AddImagesView(APIView):
@@ -234,3 +344,43 @@ class AddOLDImagesView(APIView):
 
         response = Response("Listo. Elapsed time: {:0.10f} minutos. Archivos: {}".format(elapsed_time / 60, count_files), status=status.HTTP_200_OK)
         return response
+
+
+class ServeProductImageView(APIView):
+    """
+    Serve PNG images directly from product_output folder.
+    URL: /radar_api/serve_image/RMA3/2025/12/05/RMA3_20251205T231000Z_DBZH_00.png
+    """
+    def get(self, request, *args, **kwargs):
+        # Get the image path from URL parameters or query string
+        image_path = request.query_params.get('path', '')
+        if not image_path:
+            return Response(
+                {'error': 'Missing path parameter'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Security: only allow paths under /app/product_output/
+        full_path = os.path.join('/app/product_output', image_path.lstrip('/'))
+        full_path = os.path.abspath(full_path)  # resolve .. and such
+        base_path = os.path.abspath('/app/product_output')
+
+        if not full_path.startswith(base_path) or not os.path.isfile(full_path):
+            return Response(
+                {'error': 'Image not found or invalid path'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Serve the file
+        try:
+            return FileResponse(
+                open(full_path, 'rb'),
+                content_type='image/png',
+                as_attachment=False
+            )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+

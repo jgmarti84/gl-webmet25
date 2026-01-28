@@ -9,12 +9,11 @@ This service handles:
 """
 import asyncio
 import logging
-from logging.handlers import TimedRotatingFileHandler
 import os
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
-
-import config
 from radarlib.daemons import DaemonManager, DaemonManagerConfig
+import config
 
 
 def main():
@@ -66,7 +65,12 @@ def main():
 
     # Define volume types
     volume_types = config.VOLUME_TYPES # type: ignore
-
+    geometry_config = {
+            "0315": {
+                "01": {"grid_resolution": 1000, "toa": 12000, "min_radius": 250, "rfactor": 0.017},
+                "02": {"grid_resolution": 1000, "toa": 12000, "min_radius": 250, "rfactor": 0.017},
+            }
+        }
     base_path = Path(os.path.join(config.ROOT_RADAR_FILES_PATH, radar_name)) # type: ignore
 
     # Create manager configuration
@@ -86,12 +90,13 @@ def main():
         enable_processing_daemon=config.ENABLE_PROCESSING_DAEMON, # type: ignore
         enable_product_daemon=config.ENABLE_PRODUCT_DAEMON, # type: ignore
         product_dir=Path(os.path.join(config.ROOT_RADAR_PRODUCTS_PATH, radar_name)), # type: ignore
-        product_type="image",
+        product_type=config.PRODUCT_TYPE, # type: ignore
         add_colmax=config.ADD_COLMAX, # type: ignore
         enable_cleanup_daemon=config.ENABLE_CLEANUP_DAEMON, # type: ignore
         netcdf_retention_days=config.NETCDF_RETENTION_DAYS, # type: ignore
         bufr_retention_days=config.BUFR_RETENTION_DAYS, # type: ignore
         cleanup_poll_interval=config.CLEANUP_POLL_INTERVAL, # type: ignore
+        geometry=geometry_config
     )
 
     # Create manager

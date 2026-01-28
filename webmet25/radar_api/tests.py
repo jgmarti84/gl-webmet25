@@ -3,9 +3,9 @@ This file contains test cases for the radar_api application.
 """
 
 from django.test import TestCase
-from .models import YourModel  # Replace with your actual model
+from .models import Radar, Estrategia, RadarImage, Reference, Volumen, RadarProduct
 
-class YourModelTests(TestCase):
+class RadarTests(TestCase):
     def setUp(self):
         # Set up any initial data for your tests here
         pass

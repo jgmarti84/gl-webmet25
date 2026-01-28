@@ -10,6 +10,8 @@ from django.conf.urls.static import static
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('radar_api/', include('radar_api.urls')),
+    path('frontend/', include('frontend.urls')),
+    path('', include('radar_viewer.urls')),
 ]
 
 # Serve media files in development

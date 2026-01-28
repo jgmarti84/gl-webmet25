@@ -33,6 +33,8 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'radar_api',
+    'radar_viewer',
+    'frontend',
 ]
 
 MIDDLEWARE = [

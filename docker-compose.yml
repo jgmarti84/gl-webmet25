@@ -34,6 +34,7 @@ services:
       ROOT_CACHE_PATH: "/app/cache"
       ROOT_RADAR_FILES_PATH: "/app/data/radares"
       ROOT_RADAR_PRODUCTS_PATH: "/app/product_output"
+      ROOT_GATE_COORDS_PATH: "/app/data/gate_coordinates"
       ROOT_LOGS_PATH: "/app/logs"
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
