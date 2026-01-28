@@ -1,0 +1,18 @@
+# Django web framework
+Django>=4.2.0
+
+# Database connectivity
+psycopg2-binary>=2.9.9
+
+# Environment configuration
+python-dotenv>=1.0.0
+
+# CORS headers for API
+django-cors-headers>=4.3.0
+
+# For serving static files in production
+whitenoise>=6.6.0
+
+djangorestframework==3.16.1
+python-dateutil==2.9.0
+pillow==12.0.0

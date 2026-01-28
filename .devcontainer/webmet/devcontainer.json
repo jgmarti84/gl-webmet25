@@ -1,0 +1,26 @@
+{
+  "name": "Webmet25 Dev Container",
+  "dockerComposeFile": ["../../docker-compose.yml", "../../docker-compose.devcontainer.yml"],
+  "service": "webmet25",
+  "workspaceFolder": "/app",
+  "mounts": [
+    "source=${localWorkspaceFolder}/webmet25,target=/app,type=bind,consistency=cached"
+  ],
+  "runServices": ["db", "webmet25"],
+  "shutdownAction": "stopCompose",
+  // "initializeCommand": "mkdir -p \"${localWorkspaceFolder}/data/products\"",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-azuretools.vscode-docker",
+        "GitHub.copilot"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "terminal.integrated.shell.linux": "/bin/bash"
+      }
+    }
+  },
+  "remoteUser": "root"
+}

@@ -1,0 +1,6 @@
+version: "3.8"
+services:
+  genpro25:
+    command: ["tail", "-f", "/dev/null"]
+  webmet25:
+    command: ["tail", "-f", "/dev/null"]

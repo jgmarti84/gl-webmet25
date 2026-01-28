@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webmet25 - Radar Visualization</title>
+    {% load static %}
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
+    <link rel="stylesheet" href="{% static 'radar_viewer/css/style.css' %}">
+    <style>
+        #controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            padding: 10px;
+            background: #f0f0f0;
+            border-bottom: 1px solid #ccc;
+        }
+        #controls > div {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        #controls label {
+            font-weight: bold;
+            font-size: 14px;
+        }
+        #controls select, #controls input, #controls button {
+            padding: 6px 10px;
+            border: 1px solid #999;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        #controls button {
+            background-color: #3498db;
+            color: white;
+            cursor: pointer;
+        }
+        #controls button:hover {
+            background-color: #2980b9;
+        }
+        #info-panel {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            width: 300px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+            z-index: 1000;
+        }
+        #info-panel h3 {
+            margin-top: 0;
+            font-size: 16px;
+        }
+        #product-info {
+            font-size: 12px;
+        }
+        .image-count {
+            background: #ecf0f1;
+            padding: 5px;
+            border-radius: 3px;
+            margin-top: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <h1>Webmet25 - Radar Visualization</h1>
+        <div id="controls">
+            <div>
+                <label for="radar-select">Radar:</label>
+                <select id="radar-select">
+                    <option value="">All Radars</option>
+                </select>
+            </div>
+            <div>
+                <label for="product-select">Product:</label>
+                <select id="product-select">
+                    <option value="">All Products</option>
+                </select>
+            </div>
+            <div>
+                <label for="date-from">From:</label>
+                <input type="datetime-local" id="date-from">
+            </div>
+            <div>
+                <label for="date-to">To:</label>
+                <input type="datetime-local" id="date-to">
+            </div>
+            <button id="load-images-btn">Load Images</button>
+            <button id="clear-images-btn">Clear</button>
+        </div>
+    </div>
+    
+    <div id="map"></div>
+    
+    <div id="info-panel">
+        <h3>Radar Images</h3>
+        <div id="product-info">
+            <p>Use controls above to load and filter radar images.</p>
+            <p><strong>Instructions:</strong></p>
+            <ul>
+                <li>Select radar, product, and date range</li>
+                <li>Click "Load Images" to fetch and display</li>
+                <li>Images appear as overlays at their radar location</li>
+                <li>Click an image to view details</li>
+            </ul>
+        </div>
+        <div class="image-count">
+            Images loaded: <strong id="image-count">0</strong>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+    <script src="{% static 'radar_viewer/js/map.js' %}"></script>
+</body>
+</html>

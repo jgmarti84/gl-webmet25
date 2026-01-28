@@ -1,0 +1,20 @@
+{% load static %}
+
+<!-- side user -->
+<ul id="side-user" class="side-nav">
+    <li>
+        <div class="userView">
+            <div class="background" style="padding-left: 20px">
+                <img class='' src="{% static 'images/icon.png' %}" width="170px">
+            </div>
+            <br>
+            <!--            <span class="black-text name">Usuario logueado:  <a href='#!' class="black-text email"><b>{{ user.username }}</b></a></span>-->
+            <div class='logout'>
+                <a href="#" title="Salir (no implementado)" role="button" aria-disabled="true" data-url-name="account:logout">
+                    <span class="black-text email"><i class="material-icons">exit_to_app</i></span>
+                </a>
+            </div>
+            <br>
+        </div>
+    </li>
+</ul>
