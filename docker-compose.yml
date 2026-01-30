@@ -1,22 +1,79 @@
 services:
-  # PostgreSQL database service
-  db:
-    image: postgres:15-alpine
-    container_name: webmet25-db
-    environment:
-      POSTGRES_DB: radardb
+  # ==========================================================================
+  # DATABASE
+  # ==========================================================================
+  radar_db:
+    image: postgis/postgis:15-3.5
+    container_name: radar_db
+    environment: 
+      POSTGRES_DB: radar_prod_db
       POSTGRES_USER: radar
       POSTGRES_PASSWORD: radarpass
     volumes:
-      - ./postgres_data:/var/lib/postgresql/data
+      - ./radar_db_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U radar -d radardb"]
+      test: ["CMD-SHELL", "pg_isready -U radar -d radar_prod_db"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
+
+  # ==========================================================================
+  # DATABASE INITIALIZATION (runs once)
+  # ==========================================================================
+  db-init:
+    build:
+      context: ./database
+      dockerfile: Dockerfile
+    container_name: radar_db_init
+    environment:
+      DB_HOST: radar_db
+      DB_PORT: 5432
+      DB_NAME: radar_prod_db
+      DB_USER: radar
+      DB_PASSWORD: radarpass
+    depends_on:
+      radar_db:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Waiting for database...' &&
+        python -m radar_db.manage init &&
+        python -m radar_db.manage seed &&
+        echo 'Database initialized!'
+      "
+    restart: "no"
+
+  # # ==========================================================================
+  # # COG INDEXER SERVICE
+  # # ==========================================================================
+  # indexer:
+  #   build:
+  #     context: ./indexer
+  #     dockerfile: Dockerfile
+  #   container_name: radar_indexer
+  #   environment:
+  #     DB_HOST: postgres
+  #     DB_PORT: 5432
+  #     DB_NAME: radar_db
+  #     DB_USER: radar
+  #     DB_PASSWORD: ${DB_PASSWORD:-radarpass}
+  #     WATCH_PATH: /product_output
+  #     SCAN_INTERVAL: 30
+  #     FILE_PATTERN: "*.tif"
+  #     COMPUTE_STATS: "true"
+  #     COMPUTE_CHECKSUM: "false"
+  #     # RADAR_CODES: "RMA3,AR5"  # Optional: limit to specific radars
+  #   volumes:
+  #     - ./product_output:/product_output:ro
+  #   depends_on:
+  #     radar_db:
+  #       condition: service_healthy
+  #     db-init:
+  #       condition: service_completed_successfully
+  #   restart: unless-stopped
 
   # Radar data processing service
   genpro25:
@@ -45,34 +102,53 @@ services:
     #     condition: service_healthy
     restart: unless-stopped
 
-  # Web visualization service
-  webmet25:
-    build:
-      context: ./webmet25
-      dockerfile: Dockerfile
-    container_name: webmet25-frontend
-    environment:
-      # IMPORTANT: Change DJANGO_SECRET_KEY in production
-      # Generate a new key with: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
-      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-in-production}
-      DEBUG: ${DEBUG:-False}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,webmet25}
-      POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: radardb
-      POSTGRES_USER: radar
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-radarpass}
-      PRODUCTS_DIR: /data/products
-    volumes:
-      - ./product_output:/app/product_output
-      # - radar_products:/data/products
-    ports:
-      - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-    restart: unless-stopped
-
+# PostgreSQL database service
+  # db:
+  #   image: postgres:15-alpine
+  #   container_name: webmet25-db
+  #   environment:
+  #     POSTGRES_DB: radardb
+  #     POSTGRES_USER: radar
+  #     POSTGRES_PASSWORD: radarpass
+  #   volumes:
+  #     - ./postgres_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U radar -d radardb"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   restart: unless-stopped
+  
+# # Web visualization service
+  # webmet25:
+  #   build:
+  #     context: ./webmet25
+  #     dockerfile: Dockerfile
+  #   container_name: webmet25-frontend
+  #   environment:
+  #     # IMPORTANT: Change DJANGO_SECRET_KEY in production
+  #     # Generate a new key with: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+  #     DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-in-production}
+  #     DEBUG: ${DEBUG:-False}
+  #     ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,webmet25}
+  #     POSTGRES_HOST: db
+  #     POSTGRES_PORT: 5432
+  #     POSTGRES_DB: radardb
+  #     POSTGRES_USER: radar
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-radarpass}
+  #     PRODUCTS_DIR: /data/products
+  #   volumes:
+  #     - ./product_output:/app/product_output
+  #     # - radar_products:/data/products
+  #   ports:
+  #     - "8000:8000"
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+  
 # volumes:
 #   postgres_data:
 #   product_output:
