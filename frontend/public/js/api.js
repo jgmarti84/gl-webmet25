@@ -48,9 +48,17 @@ export const api = {
     },
     
     /**
-     * Get latest COG for multiple radars and a product
+     * Get latest COG for a radar/product
      */
-    async getLatestCogs(radarCodes, productKey) {
+    async getLatestCog(radarCode, productKey) {
+        return this.get(`/cogs/latest?radar_code=${radarCode}&product_key=${productKey}`);
+    },
+    
+    /**
+     * Get latest COGs for multiple radars and a product
+     * Returns array of {radarCode, cog} objects
+     */
+    async getLatestCogsForRadars(radarCodes, productKey) {
         const promises = radarCodes.map(radarCode => 
             this.getLatestCog(radarCode, productKey)
                 .catch(err => {

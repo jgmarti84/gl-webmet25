@@ -106,7 +106,7 @@ body {
     padding: 8px;
     background: rgba(0, 0, 0, 0.3);
     border-radius: 4px;
-    max-height: 200px;
+    max-height: 40vh; /* Use viewport height for better scaling */
     overflow-y: auto;
 }
 

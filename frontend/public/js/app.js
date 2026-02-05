@@ -229,7 +229,7 @@ const app = {
         
         try {
             // Get latest COGs for all selected radars
-            const latestCogs = await api.getLatestCogs(state.selectedRadars, state.selectedProduct);
+            const latestCogs = await api.getLatestCogsForRadars(state.selectedRadars, state.selectedProduct);
             
             if (latestCogs.length === 0) {
                 state.ui.setStatus('No data available', 'error');
@@ -248,11 +248,14 @@ const app = {
             state.mapManager.clearRadarLayer();
             state.hasZoomedToBounds = false;
             
+            // Track first radar for time display
+            let firstRadarTime = null;
+            
             // Display latest COG for each radar
             latestCogs.forEach(({ radarCode, cog }) => {
                 if (!cog) return;
                 
-                // Get radar bounds for zoom
+                // Get radar bounds for zoom (only for first radar)
                 let bounds = null;
                 if (!state.hasZoomedToBounds) {
                     const radar = state.radars.find(r => r.code === radarCode);
@@ -263,11 +266,16 @@ const app = {
                 // Display on map
                 state.mapManager.setRadarLayer(radarCode, cog.id, bounds);
                 
-                // Update time display with first radar's time
-                if (radarCode === latestCogs[0].radarCode) {
-                    state.ui.setTimeDisplay(cog.observation_time);
+                // Store first radar's time for display
+                if (!firstRadarTime) {
+                    firstRadarTime = cog.observation_time;
                 }
             });
+            
+            // Update time display with first radar's time
+            if (firstRadarTime) {
+                state.ui.setTimeDisplay(firstRadarTime);
+            }
             
             // Render legend if available
             if (colormap) {
