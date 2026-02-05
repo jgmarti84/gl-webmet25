@@ -198,3 +198,12 @@ export class UIControls {
         const btn = document.getElementById('btn-load-latest');
         if (btn) btn.disabled = !enabled;
     }
+    
+    /**
+     * Get selected value from dropdown
+     */
+    getSelectedValue(selectId) {
+        const select = document.getElementById(selectId);
+        return select ? select.value : null;
+    }
+}
