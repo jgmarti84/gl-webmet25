@@ -1,8 +1,10 @@
 version: "3.8"
 services:
-  db-init:
-    command: ["tail", "-f", "/dev/null"]
+  # db-init:
+  #   command: ["tail", "-f", "/dev/null"]
   genpro25:
+    command: ["tail", "-f", "/dev/null"]
+  indexer:
     command: ["tail", "-f", "/dev/null"]
   # webmet25:
   #   command: ["tail", "-f", "/dev/null"]

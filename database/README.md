@@ -25,7 +25,7 @@ python -m radar_db.manage --help
 
 ### From Outside the Container (Docker)
 ```bash
-docker exec -it db-init python -m radar_db.manage --help
+docker exec -it <container_name> python -m radar_db.manage --help
 ```
 
 ---
