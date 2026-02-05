@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Radar Visualization</title>
+    <title>Radar Visualization - WebMet25</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -15,7 +15,7 @@
     <!-- Map Container -->
     <div id="map"></div>
     
-    <!-- Control Panel -->
+    <!-- Control Panel (Top Right) -->
     <div id="control-panel">
         <h3>🌧️ Radar Viewer</h3>
         
@@ -48,14 +48,41 @@
             <button id="btn-next" title="Next">▶</button>
         </div>
         
+        <!-- Opacity Control -->
+        <div class="control-group">
+            <label for="opacity-slider">Opacity:</label>
+            <div class="opacity-control">
+                <input type="range" id="opacity-slider" min="0" max="1" step="0.1" value="0.7">
+                <span id="opacity-value">70%</span>
+            </div>
+        </div>
+        
         <!-- Status -->
         <div id="status" class="status">Ready</div>
+    </div>
+    
+    <!-- Legend Container (Bottom Left) -->
+    <div id="legend-container"></div>
+    
+    <!-- Animation Controls (Bottom Center) -->
+    <div id="animation-controls">
+        <!-- Animation Slider -->
+        <div class="animation-slider-container">
+            <input type="range" id="animation-slider" min="0" max="0" value="0" step="1">
+        </div>
+        
+        <!-- Control Buttons -->
+        <div class="animation-buttons">
+            <button id="btn-play-pause" title="Play">▶</button>
+            <button id="btn-speed" title="Speed: 1x">1x</button>
+            <span id="frame-counter">-- / --</span>
+        </div>
     </div>
     
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
-    <!-- Our JS -->
-    <script src="js/app.js"></script>
+    <!-- Our JS Modules -->
+    <script type="module" src="js/app.js"></script>
 </body>
 </html>

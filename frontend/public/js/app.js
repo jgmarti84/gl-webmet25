@@ -1,331 +1,256 @@
 /**
- * Radar Visualization App - Step 1 (Minimal Version)
+ * Radar Visualization App - Enhanced Version
  * 
  * Features:
- * - Display map with base layer
- * - Load radars from API
- * - Load products from API
- * - Display radar tiles on map
- * - Basic time navigation
+ * - Modular architecture with separate concerns
+ * - Animation controls with play/pause/speed
+ * - Color legend with API integration
+ * - Opacity slider
+ * - Improved UI/UX matching webmet.ohmc.ar
  */
 
-// =============================================================================
-// CONFIGURATION
-// =============================================================================
-
-const CONFIG = {
-    // API base URL - adjust if needed
-    API_BASE: window.location.hostname === 'localhost' 
-        ? 'http://localhost:8000/api/v1'
-        : '/api/v1',
-    
-    // Default map center (Argentina)
-    DEFAULT_CENTER: [-34.0, -64.0],
-    DEFAULT_ZOOM: 5,
-    
-    // Radar layer opacity
-    RADAR_OPACITY: 0.7,
-};
+import { api } from './api.js';
+import { MapManager } from './map.js';
+import { AnimationController } from './animation.js';
+import { UIControls } from './controls.js';
+import { LegendRenderer } from './legend.js';
 
 // =============================================================================
-// STATE
+// APPLICATION STATE
 // =============================================================================
 
 const state = {
-    map: null,
-    radarLayer: null,
-    
+    // Data
     radars: [],
     products: [],
     cogs: [],
     
+    // Selections
     selectedRadar: null,
     selectedProduct: null,
-    currentCogIndex: 0,
+    
+    // Module instances
+    mapManager: null,
+    animator: null,
+    ui: null,
+    legend: null,
+    
+    // Flags
+    hasZoomedToBounds: false,
 };
 
 // =============================================================================
-// API FUNCTIONS
-// =============================================================================
-
-const api = {
-    async get(endpoint) {
-        const response = await fetch(`${CONFIG.API_BASE}${endpoint}`);
-        if (!response.ok) {
-            throw new Error(`API error: ${response.status}`);
-        }
-        return response.json();
-    },
-    
-    async getRadars() {
-        const data = await this.get('/radars');
-        return data.radars || [];
-    },
-    
-    async getProducts() {
-        const data = await this.get('/products');
-        return data.products || [];
-    },
-    
-    async getCogs(radarCode, productKey, limit = 20) {
-        const params = new URLSearchParams({
-            radar_code: radarCode,
-            product_key: productKey,
-            page_size: limit,
-        });
-        const data = await this.get(`/cogs?${params}`);
-        return data.cogs || [];
-    },
-    
-    async getLatestCog(radarCode, productKey) {
-        return this.get(`/cogs/latest?radar_code=${radarCode}&product_key=${productKey}`);
-    },
-    
-    getTileUrl(cogId) {
-        return `${CONFIG.API_BASE}/tiles/${cogId}/{z}/{x}/{y}.png`;
-    },
-};
-
-// =============================================================================
-// UI FUNCTIONS
-// =============================================================================
-
-const ui = {
-    setStatus(message, type = '') {
-        const status = document.getElementById('status');
-        status.textContent = message;
-        status.className = `status ${type}`;
-    },
-    
-    setTimeDisplay(dateString) {
-        const display = document.getElementById('time-display');
-        if (!dateString) {
-            display.textContent = '--:--';
-            return;
-        }
-        
-        const date = new Date(dateString);
-        display.textContent = date.toLocaleString('es-AR', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            timeZone: 'America/Argentina/Buenos_Aires',
-        });
-    },
-    
-    populateSelect(selectId, items, valueKey, labelKey, placeholder = 'Select...') {
-        const select = document.getElementById(selectId);
-        select.innerHTML = `<option value="">${placeholder}</option>`;
-        
-        items.forEach(item => {
-            const option = document.createElement('option');
-            option.value = item[valueKey];
-            option.textContent = item[labelKey];
-            select.appendChild(option);
-        });
-    },
-    
-    enableNavButtons(enabled) {
-        document.getElementById('btn-prev').disabled = !enabled;
-        document.getElementById('btn-next').disabled = !enabled;
-        document.getElementById('btn-latest').disabled = !enabled;
-    },
-};
-
-// =============================================================================
-// MAP FUNCTIONS
-// =============================================================================
-
-const map = {
-    init() {
-        // Create map
-        state.map = L.map('map').setView(CONFIG.DEFAULT_CENTER, CONFIG.DEFAULT_ZOOM);
-        
-        // Add base layer (OpenStreetMap)
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors',
-            maxZoom: 18,
-        }).addTo(state.map);
-        
-        // Alternative: Dark base layer (comment above and uncomment this)
-        // L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        //     attribution: '© OpenStreetMap contributors, © CARTO',
-        //     maxZoom: 18,
-        // }).addTo(state.map);
-    },
-    
-    setRadarLayer(cogId, bounds = null) {
-        // Remove existing radar layer
-        if (state.radarLayer) {
-            state.map.removeLayer(state.radarLayer);
-            state.radarLayer = null;
-        }
-        
-        if (!cogId) return;
-        
-        // Add new radar layer
-        const tileUrl = api.getTileUrl(cogId);
-        
-        state.radarLayer = L.tileLayer(tileUrl, {
-            opacity: CONFIG.RADAR_OPACITY,
-            maxZoom: 18,
-            tms: false,
-        }).addTo(state.map);
-        
-        // Fit to bounds if provided
-        if (bounds) {
-            state.map.fitBounds([
-                [bounds.lat_min, bounds.lon_min],
-                [bounds.lat_max, bounds.lon_max],
-            ]);
-        }
-    },
-    
-    clearRadarLayer() {
-        if (state.radarLayer) {
-            state.map.removeLayer(state.radarLayer);
-            state.radarLayer = null;
-        }
-    },
-};
-
-// =============================================================================
-// MAIN APP LOGIC
+// MAIN APPLICATION
 // =============================================================================
 
 const app = {
+    /**
+     * Initialize the application
+     */
     async init() {
-        ui.setStatus('Initializing...', 'loading');
+        // Initialize modules
+        state.ui = new UIControls();
+        state.ui.setStatus('Initializing...', 'loading');
         
         try {
             // Initialize map
-            map.init();
+            state.mapManager = new MapManager();
+            state.mapManager.init();
             
-            // Load radars
-            state.radars = await api.getRadars();
-            ui.populateSelect('radar-select', state.radars, 'code', 'title', 'Select radar...');
+            // Initialize animation controller
+            state.animator = new AnimationController();
+            state.animator.setOnFrameChange((index, frame) => {
+                this.onFrameChange(index, frame);
+            });
             
-            // Load products
-            state.products = await api.getProducts();
-            ui.populateSelect('product-select', state.products, 'product_key', 'product_title', 'Select product...');
+            // Initialize legend
+            state.legend = new LegendRenderer('legend-container');
+            
+            // Load initial data
+            await this.loadInitialData();
             
             // Setup event listeners
             this.setupEventListeners();
             
-            // Disable nav buttons initially
-            ui.enableNavButtons(false);
+            // Disable animation controls initially
+            state.ui.enableAnimationControls(false);
+            state.ui.enableNavButtons(false);
             
-            ui.setStatus('Ready', 'success');
+            state.ui.setStatus('Ready', 'success');
             
         } catch (error) {
             console.error('Init error:', error);
-            ui.setStatus(`Error: ${error.message}`, 'error');
+            state.ui.setStatus(`Error: ${error.message}`, 'error');
         }
     },
     
+    /**
+     * Load radars and products from API
+     */
+    async loadInitialData() {
+        // Load radars
+        state.radars = await api.getRadars();
+        state.ui.populateSelect('radar-select', state.radars, 'code', 'title', 'Select radar...');
+        
+        // Load products
+        state.products = await api.getProducts();
+        state.ui.populateSelect('product-select', state.products, 'product_key', 'product_title', 'Select product...');
+    },
+    
+    /**
+     * Setup all event listeners
+     */
     setupEventListeners() {
-        // Radar selection
+        // Radar/Product selection
         document.getElementById('radar-select').addEventListener('change', (e) => {
             state.selectedRadar = e.target.value;
             this.onSelectionChange();
         });
         
-        // Product selection
         document.getElementById('product-select').addEventListener('change', (e) => {
             state.selectedProduct = e.target.value;
             this.onSelectionChange();
         });
         
         // Navigation buttons
-        document.getElementById('btn-prev').addEventListener('click', () => this.navigate(-1));
-        document.getElementById('btn-next').addEventListener('click', () => this.navigate(1));
-        document.getElementById('btn-latest').addEventListener('click', () => this.goToLatest());
+        document.getElementById('btn-prev').addEventListener('click', () => {
+            state.animator.previous();
+        });
+        
+        document.getElementById('btn-next').addEventListener('click', () => {
+            state.animator.next();
+        });
+        
+        document.getElementById('btn-latest').addEventListener('click', () => {
+            state.animator.goToLatest();
+        });
+        
+        // Animation controls
+        document.getElementById('btn-play-pause').addEventListener('click', () => {
+            state.animator.toggle();
+            state.ui.updatePlayButton(state.animator.getIsPlaying());
+        });
+        
+        document.getElementById('btn-speed').addEventListener('click', () => {
+            this.cycleSpeed();
+        });
+        
+        document.getElementById('animation-slider').addEventListener('input', (e) => {
+            state.animator.goToFrame(parseInt(e.target.value));
+        });
+        
+        // Opacity control
+        document.getElementById('opacity-slider').addEventListener('input', (e) => {
+            const opacity = parseFloat(e.target.value);
+            state.mapManager.setOpacity(opacity);
+            state.ui.updateOpacityDisplay(opacity);
+        });
     },
     
+    /**
+     * Handle radar/product selection change
+     */
     async onSelectionChange() {
         // Clear current display
-        map.clearRadarLayer();
-        ui.setTimeDisplay(null);
+        state.mapManager.clearRadarLayer();
+        state.ui.setTimeDisplay(null);
+        state.legend.clear();
         state.cogs = [];
-        state.currentCogIndex = 0;
+        state.animator.stop();
+        state.animator.setFrames([]);
+        state.hasZoomedToBounds = false;
         
         // Need both radar and product selected
         if (!state.selectedRadar || !state.selectedProduct) {
-            ui.enableNavButtons(false);
+            state.ui.enableNavButtons(false);
+            state.ui.enableAnimationControls(false);
             return;
         }
         
-        ui.setStatus('Loading data...', 'loading');
+        state.ui.setStatus('Loading data...', 'loading');
         
         try {
-            // Load COGs for this radar/product combination
-            state.cogs = await api.getCogs(state.selectedRadar, state.selectedProduct);
+            // Load COGs and colormap in parallel
+            const [cogs, colormap] = await Promise.all([
+                api.getCogs(state.selectedRadar, state.selectedProduct, 30),
+                api.getColormap(state.selectedProduct)
+            ]);
+            
+            state.cogs = cogs;
             
             if (state.cogs.length === 0) {
-                ui.setStatus('No data available', 'error');
-                ui.enableNavButtons(false);
+                state.ui.setStatus('No data available', 'error');
+                state.ui.enableNavButtons(false);
+                state.ui.enableAnimationControls(false);
                 return;
             }
             
-            // Display the latest (first in list, since sorted desc)
-            state.currentCogIndex = 0;
-            this.displayCurrentCog();
+            // Setup animation with COGs
+            state.animator.setFrames(state.cogs);
             
-            ui.enableNavButtons(true);
-            ui.setStatus(`Loaded ${state.cogs.length} images`, 'success');
+            // Display the latest frame
+            state.animator.goToLatest();
+            
+            // Render legend
+            state.legend.render(colormap);
+            state.legend.show();
+            
+            // Enable controls
+            state.ui.enableNavButtons(true);
+            state.ui.enableAnimationControls(true);
+            state.ui.updatePlayButton(false);
+            state.ui.updateSpeedButton(state.animator.getSpeed());
+            
+            state.ui.setStatus(`Loaded ${state.cogs.length} images`, 'success');
             
         } catch (error) {
             console.error('Load error:', error);
-            ui.setStatus(`Error: ${error.message}`, 'error');
-            ui.enableNavButtons(false);
+            state.ui.setStatus(`Error: ${error.message}`, 'error');
+            state.ui.enableNavButtons(false);
+            state.ui.enableAnimationControls(false);
         }
     },
     
-    displayCurrentCog() {
-        if (state.cogs.length === 0) return;
+    /**
+     * Handle frame change from animator
+     */
+    onFrameChange(index, frame) {
+        if (!frame) return;
         
-        const cog = state.cogs[state.currentCogIndex];
-        
-        // Get radar bounds for initial zoom
-        const radar = state.radars.find(r => r.code === state.selectedRadar);
-        const bounds = radar?.extent || null;
-        
-        // Display on map
-        map.setRadarLayer(cog.id, bounds);
-        
-        // Update time display
-        ui.setTimeDisplay(cog.observation_time);
-        
-        // Update status
-        ui.setStatus(`${state.currentCogIndex + 1} / ${state.cogs.length}`, '');
-    },
-    
-    navigate(direction) {
-        if (state.cogs.length === 0) return;
-        
-        const newIndex = state.currentCogIndex + direction;
-        
-        // Check bounds
-        if (newIndex < 0 || newIndex >= state.cogs.length) {
-            return;
+        // Get radar bounds for initial zoom (only first time)
+        let bounds = null;
+        if (!state.hasZoomedToBounds) {
+            const radar = state.radars.find(r => r.code === state.selectedRadar);
+            bounds = radar?.extent || null;
+            state.hasZoomedToBounds = true;
         }
         
-        state.currentCogIndex = newIndex;
-        this.displayCurrentCog();
+        // Display frame on map
+        state.mapManager.setRadarLayer(frame.id, bounds);
+        
+        // Update UI
+        state.ui.setTimeDisplay(frame.observation_time);
+        state.ui.updateFrameCounter(index, state.animator.getFrameCount());
+        state.ui.updateAnimationSlider(index, state.animator.getFrameCount());
     },
     
-    goToLatest() {
-        if (state.cogs.length === 0) return;
+    /**
+     * Cycle through animation speeds
+     */
+    cycleSpeed() {
+        const speeds = [0.5, 1.0, 2.0];
+        const currentSpeed = state.animator.getSpeed();
+        const currentIndex = speeds.indexOf(currentSpeed);
+        const nextIndex = (currentIndex + 1) % speeds.length;
+        const nextSpeed = speeds[nextIndex];
         
-        state.currentCogIndex = 0; // First item is latest (sorted desc)
-        this.displayCurrentCog();
+        state.animator.setSpeed(nextSpeed);
+        state.ui.updateSpeedButton(nextSpeed);
     },
 };
 
 // =============================================================================
-// START APP
+// START APPLICATION
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
