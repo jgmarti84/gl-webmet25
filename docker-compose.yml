@@ -46,34 +46,66 @@ services:
       "
     restart: "no"
 
-  # # ==========================================================================
-  # # COG INDEXER SERVICE
-  # # ==========================================================================
-  # indexer:
-  #   build:
-  #     context: ./indexer
-  #     dockerfile: Dockerfile
-  #   container_name: radar_indexer
-  #   environment:
-  #     DB_HOST: postgres
-  #     DB_PORT: 5432
-  #     DB_NAME: radar_db
-  #     DB_USER: radar
-  #     DB_PASSWORD: ${DB_PASSWORD:-radarpass}
-  #     WATCH_PATH: /product_output
-  #     SCAN_INTERVAL: 30
-  #     FILE_PATTERN: "*.tif"
-  #     COMPUTE_STATS: "true"
-  #     COMPUTE_CHECKSUM: "false"
-  #     # RADAR_CODES: "RMA3,AR5"  # Optional: limit to specific radars
-  #   volumes:
-  #     - ./product_output:/product_output:ro
-  #   depends_on:
-  #     radar_db:
-  #       condition: service_healthy
-  #     db-init:
-  #       condition: service_completed_successfully
-  #   restart: unless-stopped
+  # ==========================================================================
+  # COG INDEXER SERVICE
+  # ==========================================================================
+  indexer:
+    build:
+      context: ./
+      dockerfile: ./indexer/Dockerfile
+    container_name: radar_indexer
+    environment:
+      DB_HOST: radar_db
+      DB_PORT: 5432
+      DB_NAME: radar_prod_db
+      DB_USER: radar
+      DB_PASSWORD: radarpass
+      WATCH_PATH: /product_output
+      SCAN_INTERVAL: 30
+      FILE_PATTERN: "*.tif"
+      COMPUTE_STATS: "true"
+      COMPUTE_CHECKSUM: "false"
+      RADAR_CODES: "RMA3"  # Optional: limit to specific radars
+    volumes:
+      - ./product_output:/product_output:ro
+    depends_on:
+      radar_db:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # ==========================================================================
+  # BACKEND API
+  # ==========================================================================
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: radar_api
+    environment:
+      DB_HOST: radar_db
+      DB_PORT: 5432
+      DB_NAME: radar_prod_db
+      DB_USER: radar
+      DB_PASSWORD: radarpass
+      COG_BASE_PATH: /product_output
+      CORS_ORIGINS: "*"
+    volumes:
+      - ${PRODUCT_OUTPUT_PATH:-./product_output}:/product_output:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      radar_db:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # Radar data processing service
   genpro25:

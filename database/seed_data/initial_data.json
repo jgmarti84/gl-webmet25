@@ -260,7 +260,7 @@
         "enabled": false,
         "see_in_open": false
     }
-}, 
+},
 {
     "model": "radar_api.radarproduct",
     "pk": 3,
