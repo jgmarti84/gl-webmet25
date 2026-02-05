@@ -81,6 +81,125 @@ body {
     color: #fff;
 }
 
+/* Toggle button for radar checkboxes */
+.toggle-btn {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s;
+}
+
+.toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: #4fc3f7;
+}
+
+/* Checkbox container */
+.checkbox-container {
+    margin-top: 8px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.checkbox-actions {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.small-btn {
+    flex: 1;
+    padding: 4px 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.small-btn:hover {
+    background: rgba(79, 195, 247, 0.3);
+    border-color: #4fc3f7;
+}
+
+#radar-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.radar-checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px;
+    border-radius: 3px;
+    transition: background 0.2s;
+}
+
+.radar-checkbox-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.radar-checkbox-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.radar-checkbox-item label {
+    flex: 1;
+    margin: 0;
+    font-size: 12px;
+    color: #eee;
+    text-transform: none;
+    letter-spacing: normal;
+    cursor: pointer;
+}
+
+/* Action button (Load Latest) */
+.action-btn {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid rgba(79, 195, 247, 0.5);
+    border-radius: 4px;
+    background: rgba(79, 195, 247, 0.2);
+    color: #4fc3f7;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.action-btn:hover:not(:disabled) {
+    background: rgba(79, 195, 247, 0.3);
+    border-color: #4fc3f7;
+    transform: translateY(-1px);
+}
+
+.action-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.1);
+    color: #888;
+}
+
 /* Time display */
 #time-display {
     background: rgba(0, 0, 0, 0.3);

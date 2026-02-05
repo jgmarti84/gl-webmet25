@@ -26,7 +26,7 @@ const state = {
     cogs: [],
     
     // Selections
-    selectedRadar: null,
+    selectedRadars: [], // Changed from selectedRadar to support multiple
     selectedProduct: null,
     
     // Module instances
@@ -90,7 +90,7 @@ const app = {
     async loadInitialData() {
         // Load radars
         state.radars = await api.getRadars();
-        state.ui.populateSelect('radar-select', state.radars, 'code', 'title', 'Select radar...');
+        state.ui.populateRadarCheckboxes(state.radars);
         
         // Load products
         state.products = await api.getProducts();
@@ -101,15 +101,52 @@ const app = {
      * Setup all event listeners
      */
     setupEventListeners() {
-        // Radar/Product selection
-        document.getElementById('radar-select').addEventListener('change', (e) => {
-            state.selectedRadar = e.target.value;
-            this.onSelectionChange();
+        // Basemap selection
+        document.getElementById('basemap-select').addEventListener('change', (e) => {
+            state.mapManager.setBasemap(e.target.value);
         });
         
+        // Radar checkboxes toggle
+        document.getElementById('btn-toggle-radars').addEventListener('click', () => {
+            const container = document.getElementById('radar-checkboxes');
+            const btn = document.getElementById('btn-toggle-radars');
+            if (container.style.display === 'none') {
+                container.style.display = 'block';
+                btn.textContent = 'Hide Radars ▲';
+            } else {
+                container.style.display = 'none';
+                btn.textContent = 'Show Radars ▼';
+            }
+        });
+        
+        // Select all radars
+        document.getElementById('btn-select-all-radars').addEventListener('click', () => {
+            state.ui.selectAllRadars();
+            this.onRadarSelectionChange();
+        });
+        
+        // Clear all radars
+        document.getElementById('btn-clear-all-radars').addEventListener('click', () => {
+            state.ui.clearAllRadars();
+            this.onRadarSelectionChange();
+        });
+        
+        // Radar checkbox changes
+        document.addEventListener('change', (e) => {
+            if (e.target.classList.contains('radar-checkbox')) {
+                this.onRadarSelectionChange();
+            }
+        });
+        
+        // Product selection
         document.getElementById('product-select').addEventListener('change', (e) => {
             state.selectedProduct = e.target.value;
             this.onSelectionChange();
+        });
+        
+        // Load latest button
+        document.getElementById('btn-load-latest').addEventListener('click', () => {
+            this.loadLatestCogs();
         });
         
         // Navigation buttons
@@ -148,7 +185,18 @@ const app = {
     },
     
     /**
-     * Handle radar/product selection change
+     * Handle radar selection changes
+     */
+    onRadarSelectionChange() {
+        state.selectedRadars = state.ui.getSelectedRadars();
+        
+        // Enable/disable load latest button
+        const canLoad = state.selectedRadars.length > 0 && state.selectedProduct;
+        state.ui.enableLoadLatestButton(canLoad);
+    },
+    
+    /**
+     * Handle radar/product selection change (for animation mode)
      */
     async onSelectionChange() {
         // Clear current display
@@ -160,72 +208,79 @@ const app = {
         state.animator.setFrames([]);
         state.hasZoomedToBounds = false;
         
-        // Need both radar and product selected
-        if (!state.selectedRadar || !state.selectedProduct) {
-            state.ui.enableNavButtons(false);
-            state.ui.enableAnimationControls(false);
+        // Update load latest button state
+        this.onRadarSelectionChange();
+        
+        // For now, disable animation until user loads data
+        state.ui.enableNavButtons(false);
+        state.ui.enableAnimationControls(false);
+    },
+    
+    /**
+     * Load latest COGs for selected radars and product
+     */
+    async loadLatestCogs() {
+        if (state.selectedRadars.length === 0 || !state.selectedProduct) {
+            state.ui.setStatus('Select radar(s) and product', 'error');
             return;
         }
         
-        state.ui.setStatus('Loading data...', 'loading');
+        state.ui.setStatus('Loading latest images...', 'loading');
         
         try {
-            // Load COGs and colormap in parallel
-            let cogs, colormap;
-            try {
-                [cogs, colormap] = await Promise.all([
-                    api.getCogs(state.selectedRadar, state.selectedProduct, 30),
-                    api.getColormap(state.selectedProduct)
-                ]);
-            } catch (parallelError) {
-                // If parallel load fails, try loading separately for better error messages
-                try {
-                    cogs = await api.getCogs(state.selectedRadar, state.selectedProduct, 30);
-                } catch (cogError) {
-                    throw new Error(`Failed to load radar images: ${cogError.message}`);
-                }
-                try {
-                    colormap = await api.getColormap(state.selectedProduct);
-                } catch (colormapError) {
-                    console.warn('Failed to load colormap:', colormapError);
-                    colormap = null; // Continue without colormap
-                }
-            }
+            // Get latest COGs for all selected radars
+            const latestCogs = await api.getLatestCogs(state.selectedRadars, state.selectedProduct);
             
-            state.cogs = cogs;
-            
-            if (state.cogs.length === 0) {
+            if (latestCogs.length === 0) {
                 state.ui.setStatus('No data available', 'error');
-                state.ui.enableNavButtons(false);
-                state.ui.enableAnimationControls(false);
                 return;
             }
             
-            // Setup animation with COGs
-            state.animator.setFrames(state.cogs);
+            // Load colormap
+            let colormap = null;
+            try {
+                colormap = await api.getColormap(state.selectedProduct);
+            } catch (error) {
+                console.warn('Failed to load colormap:', error);
+            }
             
-            // Display the latest frame
-            state.animator.goToLatest();
+            // Clear existing layers
+            state.mapManager.clearRadarLayer();
+            state.hasZoomedToBounds = false;
             
-            // Render legend if colormap is available
+            // Display latest COG for each radar
+            latestCogs.forEach(({ radarCode, cog }) => {
+                if (!cog) return;
+                
+                // Get radar bounds for zoom
+                let bounds = null;
+                if (!state.hasZoomedToBounds) {
+                    const radar = state.radars.find(r => r.code === radarCode);
+                    bounds = radar?.extent || null;
+                    state.hasZoomedToBounds = true;
+                }
+                
+                // Display on map
+                state.mapManager.setRadarLayer(radarCode, cog.id, bounds);
+                
+                // Update time display with first radar's time
+                if (radarCode === latestCogs[0].radarCode) {
+                    state.ui.setTimeDisplay(cog.observation_time);
+                }
+            });
+            
+            // Render legend if available
             if (colormap) {
                 state.legend.render(colormap);
                 state.legend.show();
             }
             
-            // Enable controls
-            state.ui.enableNavButtons(true);
-            state.ui.enableAnimationControls(true);
-            state.ui.updatePlayButton(false);
-            state.ui.updateSpeedButton(state.animator.getSpeed());
-            
-            state.ui.setStatus(`Loaded ${state.cogs.length} images`, 'success');
+            const radarText = latestCogs.length === 1 ? 'radar' : 'radars';
+            state.ui.setStatus(`Showing latest from ${latestCogs.length} ${radarText}`, 'success');
             
         } catch (error) {
             console.error('Load error:', error);
             state.ui.setStatus(`Error: ${error.message}`, 'error');
-            state.ui.enableNavButtons(false);
-            state.ui.enableAnimationControls(false);
         }
     },
     

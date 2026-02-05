@@ -139,10 +139,62 @@ export class UIControls {
     }
     
     /**
-     * Get selected value from dropdown
+     * Populate radar checkboxes
      */
-    getSelectedValue(selectId) {
-        const select = document.getElementById(selectId);
-        return select ? select.value : null;
+    populateRadarCheckboxes(radars) {
+        const container = document.getElementById('radar-list');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        
+        radars.forEach(radar => {
+            const item = document.createElement('div');
+            item.className = 'radar-checkbox-item';
+            
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = `radar-${radar.code}`;
+            checkbox.value = radar.code;
+            checkbox.className = 'radar-checkbox';
+            
+            const label = document.createElement('label');
+            label.htmlFor = `radar-${radar.code}`;
+            label.textContent = radar.title;
+            
+            item.appendChild(checkbox);
+            item.appendChild(label);
+            container.appendChild(item);
+        });
     }
-}
+    
+    /**
+     * Get selected radar codes
+     */
+    getSelectedRadars() {
+        const checkboxes = document.querySelectorAll('.radar-checkbox:checked');
+        return Array.from(checkboxes).map(cb => cb.value);
+    }
+    
+    /**
+     * Select all radars
+     */
+    selectAllRadars() {
+        const checkboxes = document.querySelectorAll('.radar-checkbox');
+        checkboxes.forEach(cb => cb.checked = true);
+    }
+    
+    /**
+     * Clear all radar selections
+     */
+    clearAllRadars() {
+        const checkboxes = document.querySelectorAll('.radar-checkbox');
+        checkboxes.forEach(cb => cb.checked = false);
+    }
+    
+    /**
+     * Enable/disable load latest button
+     */
+    enableLoadLatestButton(enabled) {
+        const btn = document.getElementById('btn-load-latest');
+        if (btn) btn.disabled = !enabled;
+    }

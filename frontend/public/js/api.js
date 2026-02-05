@@ -48,10 +48,23 @@ export const api = {
     },
     
     /**
-     * Get latest COG for a radar/product
+     * Get latest COG for multiple radars and a product
      */
-    async getLatestCog(radarCode, productKey) {
-        return this.get(`/cogs/latest?radar_code=${radarCode}&product_key=${productKey}`);
+    async getLatestCogs(radarCodes, productKey) {
+        const promises = radarCodes.map(radarCode => 
+            this.getLatestCog(radarCode, productKey)
+                .catch(err => {
+                    console.warn(`Failed to get latest COG for ${radarCode}:`, err);
+                    return null;
+                })
+        );
+        
+        const results = await Promise.all(promises);
+        
+        // Filter out failed requests and return array of {radarCode, cog}
+        return results
+            .map((cog, index) => ({ radarCode: radarCodes[index], cog }))
+            .filter(item => item.cog !== null);
     },
     
     /**
