@@ -39,6 +39,9 @@ async def get_tile(
     if not cog:
         raise HTTPException(status_code=404, detail=f"COG with ID {cog_id} not found")
     
+    # Log the file path being accessed
+    logger.info(f"Requesting tile for COG {cog_id}: {cog.file_path}")
+    
     # Build colormap from product references
     colormap = None
     if cog.product and cog.product.references:
@@ -58,7 +61,18 @@ async def get_tile(
     )
     
     if tile_data is None:
-        raise HTTPException(status_code=404, detail="Tile not found or outside bounds")
+        # Check if file exists to provide better error message
+        from pathlib import Path
+        full_path = tile_service.get_full_path(cog.file_path)
+        if not full_path.exists():
+            logger.error(f"COG file not found on disk: {full_path}")
+            raise HTTPException(
+                status_code=404, 
+                detail=f"COG file not found on disk. Expected at: {cog.file_path}. "
+                       f"Please ensure COG files are available in the configured path."
+            )
+        else:
+            raise HTTPException(status_code=404, detail="Tile not found or outside bounds")
     
     return Response(
         content=tile_data,
