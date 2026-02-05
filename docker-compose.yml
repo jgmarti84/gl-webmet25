@@ -107,6 +107,20 @@ services:
       timeout: 10s
       retries: 3
 
+  # ==========================================================================
+  # FRONTEND
+  # ==========================================================================
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: radar_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+    
   # Radar data processing service
   genpro25:
     build:

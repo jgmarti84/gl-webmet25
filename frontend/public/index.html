@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radar Visualization</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Our CSS -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Map Container -->
+    <div id="map"></div>
+    
+    <!-- Control Panel -->
+    <div id="control-panel">
+        <h3>🌧️ Radar Viewer</h3>
+        
+        <!-- Radar Selection -->
+        <div class="control-group">
+            <label for="radar-select">Radar:</label>
+            <select id="radar-select">
+                <option value="">Loading...</option>
+            </select>
+        </div>
+        
+        <!-- Product Selection -->
+        <div class="control-group">
+            <label for="product-select">Product:</label>
+            <select id="product-select">
+                <option value="">Select radar first</option>
+            </select>
+        </div>
+        
+        <!-- Time Display -->
+        <div class="control-group">
+            <label>Time:</label>
+            <div id="time-display">--:--</div>
+        </div>
+        
+        <!-- Navigation Buttons -->
+        <div class="control-group nav-buttons">
+            <button id="btn-prev" title="Previous">◀</button>
+            <button id="btn-latest" title="Latest">⟲</button>
+            <button id="btn-next" title="Next">▶</button>
+        </div>
+        
+        <!-- Status -->
+        <div id="status" class="status">Ready</div>
+    </div>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Our JS -->
+    <script src="js/app.js"></script>
+</body>
+</html>
