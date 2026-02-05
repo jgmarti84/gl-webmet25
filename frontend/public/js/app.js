@@ -171,10 +171,26 @@ const app = {
         
         try {
             // Load COGs and colormap in parallel
-            const [cogs, colormap] = await Promise.all([
-                api.getCogs(state.selectedRadar, state.selectedProduct, 30),
-                api.getColormap(state.selectedProduct)
-            ]);
+            let cogs, colormap;
+            try {
+                [cogs, colormap] = await Promise.all([
+                    api.getCogs(state.selectedRadar, state.selectedProduct, 30),
+                    api.getColormap(state.selectedProduct)
+                ]);
+            } catch (parallelError) {
+                // If parallel load fails, try loading separately for better error messages
+                try {
+                    cogs = await api.getCogs(state.selectedRadar, state.selectedProduct, 30);
+                } catch (cogError) {
+                    throw new Error(`Failed to load radar images: ${cogError.message}`);
+                }
+                try {
+                    colormap = await api.getColormap(state.selectedProduct);
+                } catch (colormapError) {
+                    console.warn('Failed to load colormap:', colormapError);
+                    colormap = null; // Continue without colormap
+                }
+            }
             
             state.cogs = cogs;
             
@@ -191,9 +207,11 @@ const app = {
             // Display the latest frame
             state.animator.goToLatest();
             
-            // Render legend
-            state.legend.render(colormap);
-            state.legend.show();
+            // Render legend if colormap is available
+            if (colormap) {
+                state.legend.render(colormap);
+                state.legend.show();
+            }
             
             // Enable controls
             state.ui.enableNavButtons(true);

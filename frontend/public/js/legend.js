@@ -33,7 +33,8 @@ export class LegendRenderer {
         const scale = document.createElement('div');
         scale.className = 'legend-scale';
         
-        // Render each entry (reversed to show high values at top)
+        // Render entries - API returns sorted ascending by value, reverse to show high values at top
+        // Note: If your colormap API returns entries in a different order, adjust accordingly
         const entries = [...colormapData.entries].reverse();
         
         entries.forEach(entry => {
