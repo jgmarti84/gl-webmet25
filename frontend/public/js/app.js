@@ -53,6 +53,9 @@ const app = {
         state.ui.setStatus('Initializing...', 'loading');
         
         try {
+            // Wait for Leaflet to be loaded
+            await this.waitForLeaflet();
+            
             // Initialize map
             state.mapManager = new MapManager();
             state.mapManager.init();
@@ -82,6 +85,23 @@ const app = {
             console.error('Init error:', error);
             state.ui.setStatus(`Error: ${error.message}`, 'error');
         }
+    },
+    
+    /**
+     * Wait for Leaflet library to be loaded
+     */
+    async waitForLeaflet(maxWait = 5000) {
+        const startTime = Date.now();
+        
+        while (typeof L === 'undefined') {
+            if (Date.now() - startTime > maxWait) {
+                throw new Error('Leaflet library failed to load. Please check your internet connection.');
+            }
+            // Wait 100ms before checking again
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        console.log('Leaflet loaded successfully');
     },
     
     /**
