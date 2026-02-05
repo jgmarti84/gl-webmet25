@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import Response as FastAPIResponse
 from sqlalchemy.orm import Session, joinedload
 from typing import Optional
+from pathlib import Path
 import logging
 
 from radar_db import get_db, RadarCOG, RadarProduct
@@ -62,7 +63,6 @@ async def get_tile(
     
     if tile_data is None:
         # Check if file exists to provide better error message
-        from pathlib import Path
         full_path = tile_service.get_full_path(cog.file_path)
         if not full_path.exists():
             logger.error(f"COG file not found on disk: {full_path}")
