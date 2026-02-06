@@ -51,6 +51,9 @@ async def get_tile(
             for ref in cog.product.references
         ]
         colormap = tile_service.build_colormap_from_references(references)
+        logger.info(f"Built colormap with {len(references)} references for COG {cog_id}")
+    else:
+        logger.warning(f"No product references found for COG {cog_id}. Product: {cog.product}, References: {cog.product.references if cog.product else 'N/A'}")
     
     # Generate tile
     tile_data = tile_service.generate_tile(
@@ -62,17 +65,13 @@ async def get_tile(
     )
     
     if tile_data is None:
-        # Check if file exists to provide better error message
+        # Only return 404 if the file itself doesn't exist
         full_path = tile_service.get_full_path(cog.file_path)
-        if not full_path.exists():
-            logger.error(f"COG file not found on disk: {full_path}")
-            raise HTTPException(
-                status_code=404, 
-                detail=f"COG file not found on disk. Expected at: {cog.file_path}. "
-                       f"Please ensure COG files are available in the configured path."
-            )
-        else:
-            raise HTTPException(status_code=404, detail="Tile not found or outside bounds")
+        logger.error(f"COG file not found on disk: {full_path}")
+        raise HTTPException(
+            status_code=404, 
+            detail=f"COG file not found on disk. Expected at: {cog.file_path}."
+        )
     
     return Response(
         content=tile_data,

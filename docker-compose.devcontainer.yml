@@ -6,5 +6,8 @@ services:
     command: ["tail", "-f", "/dev/null"]
   indexer:
     command: ["tail", "-f", "/dev/null"]
+  api:
+    command: ["tail", "-f", "/dev/null"]
+  
   # webmet25:
   #   command: ["tail", "-f", "/dev/null"]
