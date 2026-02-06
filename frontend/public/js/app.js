@@ -280,9 +280,24 @@ const app = {
             // Get latest COGs for all selected radars
             const latestCogs = await api.getLatestCogsForRadars(state.selectedRadars, state.selectedProduct);
             
+            // Check which radars have no data
+            const radarCodesWithData = latestCogs.map(item => item.radarCode);
+            const radarCodesWithoutData = state.selectedRadars.filter(code => !radarCodesWithData.includes(code));
+            
             if (latestCogs.length === 0) {
-                state.ui.setStatus('No data available', 'error');
+                const radarList = state.selectedRadars.join(', ').toUpperCase();
+                const productName = state.products.find(p => p.product_key === state.selectedProduct)?.product_title || state.selectedProduct;
+                state.ui.setStatus(
+                    `⚠️ No data available for ${radarList} with product "${productName}". Try a different product or radar.`,
+                    'error'
+                );
                 return;
+            }
+            
+            // Show warning if some radars don't have data
+            if (radarCodesWithoutData.length > 0) {
+                const unavailableRadars = radarCodesWithoutData.map(code => code.toUpperCase()).join(', ');
+                console.warn(`No data available for: ${unavailableRadars}`);
             }
             
             // Load colormap
@@ -332,8 +347,18 @@ const app = {
                 state.legend.show();
             }
             
+            // Build success message with radar names
+            const loadedRadars = latestCogs.map(item => item.radarCode.toUpperCase()).join(', ');
             const radarText = latestCogs.length === 1 ? 'radar' : 'radars';
-            state.ui.setStatus(`Showing latest from ${latestCogs.length} ${radarText}`, 'success');
+            let successMsg = `✓ Showing latest from ${latestCogs.length} ${radarText}: ${loadedRadars}`;
+            
+            // Add warning about missing radars if applicable
+            if (radarCodesWithoutData.length > 0) {
+                const unavailableRadars = radarCodesWithoutData.map(code => code.toUpperCase()).join(', ');
+                successMsg += ` (${unavailableRadars} has no data)`;
+            }
+            
+            state.ui.setStatus(successMsg, 'success');
             
         } catch (error) {
             console.error('Load error:', error);
