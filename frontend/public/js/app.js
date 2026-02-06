@@ -187,6 +187,7 @@ const app = {
                 } else {
                     // Clear selection if product not in new list
                     state.selectedProduct = null;
+                    productSelect.value = ''; // Reset dropdown to placeholder
                     this.onSelectionChange();
                 }
             }
