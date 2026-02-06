@@ -28,6 +28,7 @@ const state = {
     // Selections
     selectedRadars: [], // Changed from selectedRadar to support multiple
     selectedProduct: null,
+    showUnfilteredProducts: false, // Filter state for products
     
     // Module instances
     mapManager: null,
@@ -114,7 +115,9 @@ const app = {
         
         // Load products
         state.products = await api.getProducts();
-        state.ui.populateSelect('product-select', state.products, 'product_key', 'product_title', 'Select product...');
+        // Populate with filtered products by default
+        state.ui.populateProductSelect(state.products, state.showUnfilteredProducts);
+        state.ui.updateFilterButton(state.showUnfilteredProducts);
     },
     
     /**
@@ -162,6 +165,31 @@ const app = {
         document.getElementById('product-select').addEventListener('change', (e) => {
             state.selectedProduct = e.target.value;
             this.onSelectionChange();
+        });
+        
+        // Product filter toggle
+        document.getElementById('btn-toggle-filter').addEventListener('click', () => {
+            state.showUnfilteredProducts = !state.showUnfilteredProducts;
+            
+            // Remember current selection
+            const currentSelection = state.selectedProduct;
+            
+            // Update product list
+            state.ui.populateProductSelect(state.products, state.showUnfilteredProducts);
+            state.ui.updateFilterButton(state.showUnfilteredProducts);
+            
+            // Try to restore selection if it exists in the new list
+            const productSelect = document.getElementById('product-select');
+            if (currentSelection && productSelect) {
+                const optionExists = Array.from(productSelect.options).some(opt => opt.value === currentSelection);
+                if (optionExists) {
+                    productSelect.value = currentSelection;
+                } else {
+                    // Clear selection if product not in new list
+                    state.selectedProduct = null;
+                    this.onSelectionChange();
+                }
+            }
         });
         
         // Load latest button

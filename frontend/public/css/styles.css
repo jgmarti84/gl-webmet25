@@ -81,6 +81,45 @@ body {
     color: #fff;
 }
 
+/* Product controls container */
+.product-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.product-controls select {
+    flex: 1;
+}
+
+/* Filter toggle button */
+.filter-toggle-btn {
+    padding: 6px 10px;
+    background: rgba(79, 195, 247, 0.2);
+    color: #4fc3f7;
+    border: 1px solid #4fc3f7;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    min-width: 70px;
+    text-align: center;
+}
+
+.filter-toggle-btn:hover {
+    background: rgba(79, 195, 247, 0.3);
+}
+
+.filter-toggle-btn:active {
+    background: rgba(79, 195, 247, 0.4);
+}
+
+.filter-toggle-btn.active {
+    background: #4fc3f7;
+    color: #1a1a2e;
+}
+
 /* Toggle button for radar checkboxes */
 .toggle-btn {
     width: 100%;

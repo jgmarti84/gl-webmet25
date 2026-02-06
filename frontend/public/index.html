@@ -49,9 +49,14 @@
         <!-- Product Selection -->
         <div class="control-group">
             <label for="product-select">Product:</label>
-            <select id="product-select">
-                <option value="">Select product...</option>
-            </select>
+            <div class="product-controls">
+                <select id="product-select">
+                    <option value="">Select product...</option>
+                </select>
+                <button id="btn-toggle-filter" class="filter-toggle-btn" title="Toggle filtered/unfiltered products">
+                    <span id="filter-status">Filtered</span>
+                </button>
+            </div>
         </div>
         
         <!-- Latest Button -->

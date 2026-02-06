@@ -42,7 +42,7 @@ export class UIControls {
     }
     
     /**
-     * Populate a select dropdown
+     * Populate a select dropdown with optional filtering
      */
     populateSelect(selectId, items, valueKey, labelKey, placeholder = 'Select...') {
         const select = document.getElementById(selectId);
@@ -56,6 +56,44 @@ export class UIControls {
             option.textContent = item[labelKey];
             select.appendChild(option);
         });
+    }
+    
+    /**
+     * Populate product select with filtered/unfiltered products
+     */
+    populateProductSelect(allProducts, showUnfiltered = false) {
+        const select = document.getElementById('product-select');
+        if (!select) return;
+        
+        // Filter products based on whether they end with 'o' (unfiltered) or not (filtered)
+        const filteredProducts = allProducts.filter(product => {
+            const productKey = product.product_key;
+            const isUnfiltered = productKey.endsWith('o');
+            return showUnfiltered ? isUnfiltered : !isUnfiltered;
+        });
+        
+        // Populate the select
+        this.populateSelect('product-select', filteredProducts, 'product_key', 'product_title', 'Select product...');
+    }
+    
+    /**
+     * Update filter button appearance
+     */
+    updateFilterButton(showUnfiltered) {
+        const btn = document.getElementById('btn-toggle-filter');
+        const statusSpan = document.getElementById('filter-status');
+        
+        if (!btn || !statusSpan) return;
+        
+        if (showUnfiltered) {
+            btn.classList.add('active');
+            statusSpan.textContent = 'Unfiltered';
+            btn.title = 'Showing unfiltered products (ending with "o")';
+        } else {
+            btn.classList.remove('active');
+            statusSpan.textContent = 'Filtered';
+            btn.title = 'Showing filtered products';
+        }
     }
     
     /**
