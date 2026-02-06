@@ -47,7 +47,7 @@ class TileService:
             resampling: Resampling method
             
         Returns:
-            PNG image bytes or None if tile is outside bounds
+            PNG image bytes or transparent tile if tile is outside bounds
         """
         full_path = self.get_full_path(file_path)
         
@@ -57,8 +57,15 @@ class TileService:
         
         try:
             with Reader(str(full_path)) as src:
-                # Get tile data
-                img = src.tile(x, y, z, resampling_method=resampling)
+                # Check number of bands - Reader.dataset.count
+                num_bands = src.dataset.count
+                
+                # Get tile data, specifying band 1 only if multi-band
+                if num_bands > 1:
+                    # Multi-band COG - read only first band
+                    img = src.tile(x, y, z, resampling_method=resampling, indexes=1)
+                else:
+                    img = src.tile(x, y, z, resampling_method=resampling)
                 
                 # Apply colormap if provided
                 if colormap:
@@ -71,10 +78,13 @@ class TileService:
                 
         except TileOutsideBounds:
             # Return transparent tile for areas outside the COG
+            logger.debug(f"Tile {z}/{x}/{y} outside bounds for {file_path}")
             return self._generate_transparent_tile()
         except Exception as e:
-            logger.error(f"Error generating tile for {file_path}: {e}")
-            return None
+            logger.error(f"Error generating tile {z}/{x}/{y} for {file_path}: {e}", exc_info=True)
+            # Return transparent tile on error instead of None
+            # This prevents 404 errors and allows the map to function
+            return self._generate_transparent_tile()
     
     def _generate_transparent_tile(self, size: int = 256) -> bytes:
         """Generate a fully transparent PNG tile."""

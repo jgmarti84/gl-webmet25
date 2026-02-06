@@ -9,6 +9,7 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
     background: #1a1a2e;
     color: #eee;
+    overflow: hidden;
 }
 
 /* Map takes full screen */
@@ -21,7 +22,7 @@ body {
     z-index: 1;
 }
 
-/* Control panel */
+/* Control panel (Top Right) */
 #control-panel {
     position: absolute;
     top: 10px;
@@ -30,7 +31,8 @@ body {
     background: rgba(26, 26, 46, 0.95);
     padding: 15px;
     border-radius: 8px;
-    min-width: 200px;
+    min-width: 220px;
+    max-width: 280px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
@@ -79,6 +81,164 @@ body {
     color: #fff;
 }
 
+/* Product controls container */
+.product-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.product-controls select {
+    flex: 1;
+}
+
+/* Filter toggle button */
+.filter-toggle-btn {
+    padding: 6px 10px;
+    background: rgba(79, 195, 247, 0.2);
+    color: #4fc3f7;
+    border: 1px solid #4fc3f7;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    min-width: 70px;
+    text-align: center;
+}
+
+.filter-toggle-btn:hover {
+    background: rgba(79, 195, 247, 0.3);
+}
+
+.filter-toggle-btn:active {
+    background: rgba(79, 195, 247, 0.4);
+}
+
+.filter-toggle-btn.active {
+    background: #4fc3f7;
+    color: #1a1a2e;
+}
+
+/* Toggle button for radar checkboxes */
+.toggle-btn {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s;
+}
+
+.toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: #4fc3f7;
+}
+
+/* Checkbox container */
+.checkbox-container {
+    margin-top: 8px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    max-height: 40vh; /* Use viewport height for better scaling */
+    overflow-y: auto;
+}
+
+.checkbox-actions {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.small-btn {
+    flex: 1;
+    padding: 4px 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.small-btn:hover {
+    background: rgba(79, 195, 247, 0.3);
+    border-color: #4fc3f7;
+}
+
+#radar-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.radar-checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px;
+    border-radius: 3px;
+    transition: background 0.2s;
+}
+
+.radar-checkbox-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.radar-checkbox-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.radar-checkbox-item label {
+    flex: 1;
+    margin: 0;
+    font-size: 12px;
+    color: #eee;
+    text-transform: none;
+    letter-spacing: normal;
+    cursor: pointer;
+}
+
+/* Action button (Load Latest) */
+.action-btn {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid rgba(79, 195, 247, 0.5);
+    border-radius: 4px;
+    background: rgba(79, 195, 247, 0.2);
+    color: #4fc3f7;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.action-btn:hover:not(:disabled) {
+    background: rgba(79, 195, 247, 0.3);
+    border-color: #4fc3f7;
+    transform: translateY(-1px);
+}
+
+.action-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.1);
+    color: #888;
+}
+
 /* Time display */
 #time-display {
     background: rgba(0, 0, 0, 0.3);
@@ -123,6 +283,47 @@ body {
     cursor: not-allowed;
 }
 
+/* Opacity control */
+.opacity-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#opacity-slider {
+    flex: 1;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+#opacity-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #4fc3f7;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+#opacity-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: #4fc3f7;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+}
+
+#opacity-value {
+    min-width: 40px;
+    font-size: 12px;
+    color: #4fc3f7;
+    text-align: right;
+}
+
 /* Status bar */
 .status {
     font-size: 11px;
@@ -155,4 +356,248 @@ body {
 @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   LEGEND CONTAINER (Bottom Left)
+   ============================================ */
+
+#legend-container {
+    position: absolute;
+    bottom: 70px;
+    left: 10px;
+    z-index: 1000;
+    background: rgba(26, 26, 46, 0.95);
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    min-width: 80px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.legend-title {
+    font-size: 12px;
+    font-weight: bold;
+    color: #4fc3f7;
+    text-align: center;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.legend-scale {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.legend-color {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    flex-shrink: 0;
+}
+
+.legend-value {
+    font-size: 11px;
+    color: #eee;
+    font-family: 'Courier New', monospace;
+}
+
+.legend-unit {
+    font-size: 10px;
+    color: #888;
+    text-align: center;
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ============================================
+   ANIMATION CONTROLS (Bottom Center)
+   ============================================ */
+
+#animation-controls {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    background: rgba(26, 26, 46, 0.95);
+    padding: 12px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    min-width: 400px;
+    max-width: 600px;
+}
+
+.animation-slider-container {
+    margin-bottom: 10px;
+}
+
+#animation-slider {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+
+#animation-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background: #4fc3f7;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+#animation-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    background: #4fc3f7;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.animation-buttons {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
+
+#btn-play-pause {
+    width: 48px;
+    height: 48px;
+    border: none;
+    border-radius: 50%;
+    background: #4fc3f7;
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(79, 195, 247, 0.4);
+}
+
+#btn-play-pause:hover {
+    background: #42a5f5;
+    transform: scale(1.05);
+}
+
+#btn-play-pause:active {
+    transform: scale(0.95);
+}
+
+#btn-play-pause:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#btn-speed {
+    padding: 8px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 50px;
+}
+
+#btn-speed:hover {
+    background: rgba(79, 195, 247, 0.3);
+    border-color: #4fc3f7;
+}
+
+#btn-speed:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#frame-counter {
+    font-size: 12px;
+    color: #aaa;
+    font-family: 'Courier New', monospace;
+    min-width: 60px;
+    text-align: center;
+}
+
+/* ============================================
+   RESPONSIVE DESIGN
+   ============================================ */
+
+@media (max-width: 768px) {
+    #control-panel {
+        top: 5px;
+        right: 5px;
+        min-width: 180px;
+        max-width: 200px;
+        padding: 10px;
+    }
+    
+    #control-panel h3 {
+        font-size: 14px;
+    }
+    
+    #animation-controls {
+        min-width: 300px;
+        max-width: 90vw;
+        padding: 10px 15px;
+    }
+    
+    #btn-play-pause {
+        width: 40px;
+        height: 40px;
+        font-size: 16px;
+    }
+    
+    #legend-container {
+        bottom: 80px;
+        left: 5px;
+        padding: 8px;
+        max-height: 250px;
+    }
+}
+
+@media (max-width: 480px) {
+    #control-panel {
+        max-width: 160px;
+    }
+    
+    .control-group label {
+        font-size: 10px;
+    }
+    
+    .control-group select {
+        font-size: 12px;
+        padding: 6px;
+    }
+    
+    #animation-controls {
+        min-width: 250px;
+    }
+    
+    #btn-speed {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
 }

@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import Response as FastAPIResponse
 from sqlalchemy.orm import Session, joinedload
 from typing import Optional
+from pathlib import Path
 import logging
 
 from radar_db import get_db, RadarCOG, RadarProduct
@@ -39,6 +40,9 @@ async def get_tile(
     if not cog:
         raise HTTPException(status_code=404, detail=f"COG with ID {cog_id} not found")
     
+    # Log the file path being accessed
+    logger.info(f"Requesting tile for COG {cog_id}: {cog.file_path}")
+    
     # Build colormap from product references
     colormap = None
     if cog.product and cog.product.references:
@@ -47,6 +51,9 @@ async def get_tile(
             for ref in cog.product.references
         ]
         colormap = tile_service.build_colormap_from_references(references)
+        logger.info(f"Built colormap with {len(references)} references for COG {cog_id}")
+    else:
+        logger.warning(f"No product references found for COG {cog_id}. Product: {cog.product}, References: {cog.product.references if cog.product else 'N/A'}")
     
     # Generate tile
     tile_data = tile_service.generate_tile(
@@ -58,7 +65,13 @@ async def get_tile(
     )
     
     if tile_data is None:
-        raise HTTPException(status_code=404, detail="Tile not found or outside bounds")
+        # Only return 404 if the file itself doesn't exist
+        full_path = tile_service.get_full_path(cog.file_path)
+        logger.error(f"COG file not found on disk: {full_path}")
+        raise HTTPException(
+            status_code=404, 
+            detail=f"COG file not found on disk. Expected at: {cog.file_path}."
+        )
     
     return Response(
         content=tile_data,
