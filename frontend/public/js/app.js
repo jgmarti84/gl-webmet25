@@ -193,9 +193,47 @@ const app = {
             }
         });
         
+        // Time range toggle
+        document.getElementById('btn-toggle-timerange').addEventListener('click', () => {
+            const container = document.getElementById('timerange-container');
+            const btn = document.getElementById('btn-toggle-timerange');
+            if (container.style.display === 'none') {
+                container.style.display = 'block';
+                btn.textContent = 'Hide Time Range ▲';
+            } else {
+                container.style.display = 'none';
+                btn.textContent = 'Select Time Range ▼';
+            }
+        });
+        
+        // Time range preset buttons
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const hours = parseInt(e.target.dataset.hours);
+                const endDate = new Date();
+                const startDate = new Date(endDate.getTime() - hours * 60 * 60 * 1000);
+                state.ui.setTimeRangeValues(startDate, endDate);
+                this.onTimeRangeChange();
+            });
+        });
+        
+        // Time range inputs change
+        document.getElementById('start-date').addEventListener('change', () => {
+            this.onTimeRangeChange();
+        });
+        
+        document.getElementById('end-date').addEventListener('change', () => {
+            this.onTimeRangeChange();
+        });
+        
         // Load latest button
         document.getElementById('btn-load-latest').addEventListener('click', () => {
             this.loadLatestCogs();
+        });
+        
+        // Load time range button
+        document.getElementById('btn-load-timerange').addEventListener('click', () => {
+            this.loadTimeRangeCogs();
         });
         
         // Navigation buttons
@@ -242,6 +280,19 @@ const app = {
         // Enable/disable load latest button
         const canLoad = state.selectedRadars.length > 0 && state.selectedProduct;
         state.ui.enableLoadLatestButton(canLoad);
+        
+        // Also update time range button state
+        this.onTimeRangeChange();
+    },
+    
+    /**
+     * Handle time range input changes
+     */
+    onTimeRangeChange() {
+        const timeRange = state.ui.getTimeRangeValues();
+        const hasValidRange = timeRange.start && timeRange.end && timeRange.start < timeRange.end;
+        const canLoad = state.selectedRadars.length > 0 && state.selectedProduct && hasValidRange;
+        state.ui.enableLoadTimeRangeButton(canLoad);
     },
     
     /**
@@ -367,6 +418,111 @@ const app = {
     },
     
     /**
+     * Load COGs for selected radars and product within a time range
+     */
+    async loadTimeRangeCogs() {
+        if (state.selectedRadars.length === 0 || !state.selectedProduct) {
+            state.ui.setStatus('Select radar(s) and product', 'error');
+            return;
+        }
+        
+        const timeRange = state.ui.getTimeRangeValues();
+        if (!timeRange.start || !timeRange.end) {
+            state.ui.setStatus('Select valid time range', 'error');
+            return;
+        }
+        
+        if (timeRange.start >= timeRange.end) {
+            state.ui.setStatus('Start time must be before end time', 'error');
+            return;
+        }
+        
+        state.ui.setStatus('Loading time range data...', 'loading');
+        
+        try {
+            // Get COGs for time range
+            const cogs = await api.getCogsForTimeRange(
+                state.selectedRadars, 
+                state.selectedProduct,
+                timeRange.start,
+                timeRange.end,
+                100 // limit
+            );
+            
+            if (cogs.length === 0) {
+                const radarList = state.selectedRadars.join(', ').toUpperCase();
+                const productName = state.products.find(p => p.product_key === state.selectedProduct)?.product_title || state.selectedProduct;
+                state.ui.setStatus(
+                    `⚠️ No data available for ${radarList} with product "${productName}" in selected time range.`,
+                    'error'
+                );
+                return;
+            }
+            
+            // Load colormap
+            let colormap = null;
+            try {
+                colormap = await api.getColormap(state.selectedProduct);
+            } catch (error) {
+                console.warn('Failed to load colormap:', error);
+            }
+            
+            // Store COGs
+            state.cogs = cogs;
+            state.hasZoomedToBounds = false;
+            
+            // Setup animation with frames
+            state.animator.setFrames(cogs);
+            state.animator.goToLatest(); // Start at most recent
+            
+            // Display first frame (most recent)
+            if (cogs.length > 0) {
+                const firstCog = cogs[0];
+                
+                // Get radar bounds for zoom
+                let bounds = null;
+                const radar = state.radars.find(r => r.code === firstCog.radar_code);
+                bounds = radar?.extent || null;
+                
+                // Display on map
+                state.mapManager.clearRadarLayer();
+                state.mapManager.setRadarLayer(firstCog.radar_code, firstCog.id, bounds);
+                state.hasZoomedToBounds = true;
+                
+                // Update time display
+                state.ui.setTimeDisplay(firstCog.observation_time);
+            }
+            
+            // Render legend if available
+            if (colormap) {
+                state.legend.render(colormap);
+                state.legend.show();
+            }
+            
+            // Enable animation controls
+            if (cogs.length > 1) {
+                state.ui.enableAnimationControls(true);
+                state.ui.enableNavButtons(true);
+                state.ui.updateFrameCounter(0, cogs.length);
+                state.ui.updateAnimationSlider(0, cogs.length);
+            }
+            
+            // Build success message
+            const radarCodes = [...new Set(cogs.map(c => c.radar_code))];
+            const loadedRadars = radarCodes.map(code => code.toUpperCase()).join(', ');
+            const radarText = radarCodes.length === 1 ? 'radar' : 'radars';
+            state.ui.setStatus(
+                `✓ Loaded ${cogs.length} frames from ${radarCodes.length} ${radarText}: ${loadedRadars}`,
+                'success'
+            );
+            
+        } catch (error) {
+            console.error('Load time range error:', error);
+            state.ui.setStatus(`Error: ${error.message}`, 'error');
+        }
+    },
+    
+    /**
      * Handle frame change from animator
      */
     onFrameChange(index, frame) {
@@ -375,13 +531,14 @@ const app = {
         // Get radar bounds for initial zoom (only first time)
         let bounds = null;
         if (!state.hasZoomedToBounds) {
-            const radar = state.radars.find(r => r.code === state.selectedRadar);
+            const radar = state.radars.find(r => r.code === frame.radar_code);
             bounds = radar?.extent || null;
             state.hasZoomedToBounds = true;
         }
         
-        // Display frame on map
-        state.mapManager.setRadarLayer(frame.id, bounds);
+        // Clear and display new frame on map
+        state.mapManager.clearRadarLayer();
+        state.mapManager.setRadarLayer(frame.radar_code, frame.id, bounds);
         
         // Update UI
         state.ui.setTimeDisplay(frame.observation_time);

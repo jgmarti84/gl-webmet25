@@ -59,9 +59,34 @@
             </div>
         </div>
         
-        <!-- Latest Button -->
+        <!-- Time Range Selection -->
         <div class="control-group">
+            <label>Time Range:</label>
+            <button id="btn-toggle-timerange" class="toggle-btn">Select Time Range ▼</button>
+            <div id="timerange-container" class="timerange-container" style="display: none;">
+                <div class="timerange-inputs">
+                    <div class="input-group">
+                        <label for="start-date" class="input-label">From:</label>
+                        <input type="datetime-local" id="start-date" class="datetime-input">
+                    </div>
+                    <div class="input-group">
+                        <label for="end-date" class="input-label">To:</label>
+                        <input type="datetime-local" id="end-date" class="datetime-input">
+                    </div>
+                    <div class="timerange-presets">
+                        <button class="preset-btn" data-hours="3">Last 3h</button>
+                        <button class="preset-btn" data-hours="6">Last 6h</button>
+                        <button class="preset-btn" data-hours="12">Last 12h</button>
+                        <button class="preset-btn" data-hours="24">Last 24h</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div class="control-group action-buttons">
             <button id="btn-load-latest" class="action-btn" disabled>Load Latest</button>
+            <button id="btn-load-timerange" class="action-btn secondary" disabled>Load Time Range</button>
         </div>
         
         <!-- Time Display -->

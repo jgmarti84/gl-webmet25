@@ -12,6 +12,31 @@ body {
     overflow: hidden;
 }
 
+/* Smooth scrolling for all scrollable elements */
+* {
+    scroll-behavior: smooth;
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(79, 195, 247, 0.5);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(79, 195, 247, 0.7);
+}
+
 /* Map takes full screen */
 #map {
     position: absolute;
@@ -35,6 +60,8 @@ body {
     max-width: 280px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
     border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    transition: transform 0.3s ease, opacity 0.3s ease;
 }
 
 #control-panel h3 {
@@ -207,6 +234,94 @@ body {
     cursor: pointer;
 }
 
+/* Time Range Container */
+.timerange-container {
+    margin-top: 8px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+.timerange-inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.input-label {
+    font-size: 10px;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0;
+}
+
+.datetime-input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.datetime-input:focus {
+    outline: none;
+    border-color: #4fc3f7;
+    background: rgba(79, 195, 247, 0.1);
+}
+
+.datetime-input::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    cursor: pointer;
+}
+
+.timerange-presets {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.preset-btn {
+    padding: 6px 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.preset-btn:hover {
+    background: rgba(79, 195, 247, 0.3);
+    border-color: #4fc3f7;
+    transform: translateY(-1px);
+}
+
+.preset-btn:active {
+    transform: translateY(0);
+}
+
+/* Action buttons container */
+.action-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
 /* Action button (Load Latest) */
 .action-btn {
     width: 100%;
@@ -218,13 +333,26 @@ body {
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s ease;
+}
+
+.action-btn.secondary {
+    border-color: rgba(156, 39, 176, 0.5);
+    background: rgba(156, 39, 176, 0.2);
+    color: #ba68c8;
 }
 
 .action-btn:hover:not(:disabled) {
     background: rgba(79, 195, 247, 0.3);
     border-color: #4fc3f7;
     transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(79, 195, 247, 0.3);
+}
+
+.action-btn.secondary:hover:not(:disabled) {
+    background: rgba(156, 39, 176, 0.3);
+    border-color: #ba68c8;
+    box-shadow: 0 2px 8px rgba(156, 39, 176, 0.3);
 }
 
 .action-btn:active:not(:disabled) {
