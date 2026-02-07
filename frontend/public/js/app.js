@@ -269,6 +269,56 @@ const app = {
             state.mapManager.setOpacity(opacity);
             state.ui.updateOpacityDisplay(opacity);
         });
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Ignore if user is typing in an input field
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') {
+                return;
+            }
+            
+            switch(e.key) {
+                case ' ': // Space - play/pause
+                    e.preventDefault();
+                    if (state.animator.getFrameCount() > 1) {
+                        state.animator.toggle();
+                        state.ui.updatePlayButton(state.animator.getIsPlaying());
+                    }
+                    break;
+                    
+                case 'ArrowLeft': // Previous frame
+                    e.preventDefault();
+                    state.animator.previous();
+                    break;
+                    
+                case 'ArrowRight': // Next frame
+                    e.preventDefault();
+                    state.animator.next();
+                    break;
+                    
+                case 'Home': // Go to latest
+                    e.preventDefault();
+                    state.animator.goToLatest();
+                    break;
+                    
+                case 'l': // Load latest
+                case 'L':
+                    e.preventDefault();
+                    const loadBtn = document.getElementById('btn-load-latest');
+                    if (loadBtn && !loadBtn.disabled) {
+                        this.loadLatestCogs();
+                    }
+                    break;
+                    
+                case 's': // Cycle speed
+                case 'S':
+                    e.preventDefault();
+                    if (state.animator.getFrameCount() > 1) {
+                        this.cycleSpeed();
+                    }
+                    break;
+            }
+        });
     },
     
     /**
