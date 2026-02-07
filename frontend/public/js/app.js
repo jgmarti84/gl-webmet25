@@ -133,7 +133,11 @@ const app = {
         document.getElementById('btn-toggle-radars').addEventListener('click', () => {
             const container = document.getElementById('radar-checkboxes');
             const btn = document.getElementById('btn-toggle-radars');
-            if (container.style.display === 'none') {
+            // Check if hidden by inline style or initial CSS
+            const isHidden = container.style.display === 'none' || 
+                           window.getComputedStyle(container).display === 'none';
+            
+            if (isHidden) {
                 container.style.display = 'block';
                 btn.textContent = 'Hide Radars ▲';
             } else {
@@ -197,7 +201,11 @@ const app = {
         document.getElementById('btn-toggle-timerange').addEventListener('click', () => {
             const container = document.getElementById('timerange-container');
             const btn = document.getElementById('btn-toggle-timerange');
-            if (container.style.display === 'none') {
+            // Check if hidden by inline style or initial CSS
+            const isHidden = container.style.display === 'none' || 
+                           window.getComputedStyle(container).display === 'none';
+            
+            if (isHidden) {
                 container.style.display = 'block';
                 btn.textContent = 'Hide Time Range ▲';
             } else {
