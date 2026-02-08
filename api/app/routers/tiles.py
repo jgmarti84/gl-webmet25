@@ -20,6 +20,7 @@ async def get_tile(
     z: int,
     x: int,
     y: int,
+    colormap: Optional[str] = Query(None, description="Override colormap (e.g., grc_th, grc_rain, pyart_NWSRef)"),
     db: Session = Depends(get_db),
     tile_service: TileService = Depends(get_tile_service)
 ):
@@ -30,10 +31,11 @@ async def get_tile(
     - **z**: Zoom level
     - **x**: Tile X coordinate
     - **y**: Tile Y coordinate
+    - **colormap**: Optional colormap name to override default
     """
     # Get COG record
     cog = db.query(RadarCOG)\
-        .options(joinedload(RadarCOG.product).joinedload(RadarProduct.references))\
+        .options(joinedload(RadarCOG.product))\
         .filter(RadarCOG.id == cog_id)\
         .first()
     
@@ -43,17 +45,16 @@ async def get_tile(
     # Log the file path being accessed
     logger.info(f"Requesting tile for COG {cog_id}: {cog.file_path}")
     
-    # Build colormap from product references
-    colormap = None
-    if cog.product and cog.product.references:
-        references = [
-            {'value': ref.value, 'color': ref.color}
-            for ref in cog.product.references
-        ]
-        colormap = tile_service.build_colormap_from_references(references)
-        logger.info(f"Built colormap with {len(references)} references for COG {cog_id}")
+    # Build colormap from product key using predefined colormaps
+    colormap_dict = None
+    product_key = cog.polarimetric_var or (cog.product.product_key if cog.product else None)
+    
+    if product_key:
+        colormap_dict = tile_service.build_colormap_for_product(product_key, override_cmap=colormap)
+        logger.info(f"Built colormap for product '{product_key}' (COG {cog_id})")
     else:
-        logger.warning(f"No product references found for COG {cog_id}. Product: {cog.product}, References: {cog.product.references if cog.product else 'N/A'}")
+        logger.warning(f"No product key found for COG {cog_id}. Using default colormap.")
+        colormap_dict = tile_service._get_default_radar_colormap()
     
     # Generate tile
     tile_data = tile_service.generate_tile(
@@ -61,7 +62,7 @@ async def get_tile(
         z=z,
         x=x,
         y=y,
-        colormap=colormap
+        colormap=colormap_dict
     )
     
     if tile_data is None:
@@ -91,6 +92,7 @@ async def get_tile_by_params(
     z: int,
     x: int,
     y: int,
+    colormap: Optional[str] = Query(None, description="Override colormap"),
     db: Session = Depends(get_db),
     tile_service: TileService = Depends(get_tile_service)
 ):
@@ -103,12 +105,13 @@ async def get_tile_by_params(
     - **z**: Zoom level
     - **x**: Tile X coordinate  
     - **y**: Tile Y coordinate
+    - **colormap**: Optional colormap name to override default
     """
     from datetime import datetime
     from sqlalchemy import desc
     
     query = db.query(RadarCOG)\
-        .options(joinedload(RadarCOG.product).joinedload(RadarProduct.references))\
+        .options(joinedload(RadarCOG.product))\
         .filter(
             RadarCOG.radar_code == radar_code,
             RadarCOG.polarimetric_var == product_key
@@ -129,14 +132,8 @@ async def get_tile_by_params(
             detail=f"No COG found for {radar_code}/{product_key}/{timestamp}"
         )
     
-    # Build colormap
-    colormap = None
-    if cog.product and cog.product.references:
-        references = [
-            {'value': ref.value, 'color': ref.color}
-            for ref in cog.product.references
-        ]
-        colormap = tile_service.build_colormap_from_references(references)
+    # Build colormap using predefined colormaps
+    colormap_dict = tile_service.build_colormap_for_product(product_key, override_cmap=colormap)
     
     # Generate tile
     tile_data = tile_service.generate_tile(
@@ -144,7 +141,7 @@ async def get_tile_by_params(
         z=z,
         x=x,
         y=y,
-        colormap=colormap
+        colormap=colormap_dict
     )
     
     if tile_data is None:

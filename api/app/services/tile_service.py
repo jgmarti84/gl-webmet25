@@ -12,6 +12,7 @@ from rio_tiler.errors import TileOutsideBounds
 from rio_tiler.colormap import cmap as rio_cmap
 
 from ..config import settings
+from ..utils.colormaps import colormap_for_field, colormap_to_rio_tiler
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,9 @@ class TileService:
         nodata_transparent: bool = True
     ) -> Dict[int, Tuple[int, int, int, int]]:
         """
+        DEPRECATED: This method is no longer used.
+        Colormaps are now defined in utils/colormaps.py based on product type.
+        
         Build a rio-tiler compatible colormap from product references.
         
         Args:
@@ -112,6 +116,8 @@ class TileService:
         Returns:
             Colormap dict for rio-tiler
         """
+        logger.warning("build_colormap_from_references is deprecated. Use predefined colormaps instead.")
+        
         if not references:
             return self._get_default_radar_colormap()
         
@@ -140,6 +146,32 @@ class TileService:
         colormap = self._interpolate_colormap(colormap)
         
         return colormap
+    
+    def build_colormap_for_product(
+        self,
+        product_key: str,
+        override_cmap: Optional[str] = None
+    ) -> Dict[int, Tuple[int, int, int, int]]:
+        """
+        Build a rio-tiler compatible colormap for a radar product.
+        Uses predefined colormaps from utils/colormaps.py.
+        
+        Args:
+            product_key: Product key (e.g., 'DBZH', 'VRAD')
+            override_cmap: Optional colormap name to override default
+            
+        Returns:
+            Colormap dict for rio-tiler
+        """
+        # Get colormap configuration for this product
+        cmap, vmin, vmax, cmap_name = colormap_for_field(product_key, override_cmap)
+        
+        # Convert to rio-tiler format
+        colormap_dict = colormap_to_rio_tiler(cmap, vmin, vmax)
+        
+        logger.info(f"Built colormap '{cmap_name}' for product '{product_key}' (range: {vmin} to {vmax})")
+        
+        return colormap_dict
     
     def _interpolate_colormap(
         self, 
