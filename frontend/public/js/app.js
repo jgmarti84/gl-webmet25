@@ -409,12 +409,18 @@ const app = {
                 console.warn(`No data available for: ${unavailableRadars}`);
             }
             
-            // Load colormap
+            // Load colormap using new API
             let colormap = null;
             try {
-                colormap = await api.getColormap(state.selectedProduct);
+                colormap = await api.getColormapInfo(state.selectedProduct);
             } catch (error) {
                 console.warn('Failed to load colormap:', error);
+                // Fallback to old API if new one fails
+                try {
+                    colormap = await api.getColormap(state.selectedProduct);
+                } catch (fallbackError) {
+                    console.warn('Failed to load fallback colormap:', fallbackError);
+                }
             }
             
             // Clear existing layers
@@ -517,12 +523,18 @@ const app = {
                 return;
             }
             
-            // Load colormap
+            // Load colormap using new API
             let colormap = null;
             try {
-                colormap = await api.getColormap(state.selectedProduct);
+                colormap = await api.getColormapInfo(state.selectedProduct);
             } catch (error) {
                 console.warn('Failed to load colormap:', error);
+                // Fallback to old API if new one fails
+                try {
+                    colormap = await api.getColormap(state.selectedProduct);
+                } catch (fallbackError) {
+                    console.warn('Failed to load fallback colormap:', fallbackError);
+                }
             }
             
             // Store COGs

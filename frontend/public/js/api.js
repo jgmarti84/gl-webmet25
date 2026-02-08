@@ -129,10 +129,36 @@ export const api = {
     },
     
     /**
-     * Get colormap for a product
+     * Get colormap for a product (DEPRECATED - uses old endpoint)
      */
     async getColormap(productKey) {
         return this.get(`/products/${productKey}/colormap`);
+    },
+    
+    /**
+     * Get colormap info for a product (NEW - uses predefined colormaps)
+     */
+    async getColormapInfo(productKey, colormapName = null) {
+        const params = new URLSearchParams();
+        if (colormapName) {
+            params.append('colormap', colormapName);
+        }
+        const query = params.toString() ? `?${params}` : '';
+        return this.get(`/colormap/info/${productKey}${query}`);
+    },
+    
+    /**
+     * Get available colormap options for all products
+     */
+    async getColormapOptions() {
+        return this.get('/colormap/options');
+    },
+    
+    /**
+     * Get default colormaps for all products
+     */
+    async getColormapDefaults() {
+        return this.get('/colormap/defaults');
     },
     
     /**
