@@ -2,6 +2,9 @@
  * Legend Module - Renders color legend for radar products
  */
 
+// Configuration constants
+const MAX_LEGEND_STOPS = 15;  // Maximum number of color stops to display in legend
+
 export class LegendRenderer {
     constructor(containerId) {
         this.container = document.getElementById(containerId);
@@ -41,7 +44,7 @@ export class LegendRenderer {
             const vmax = colormapData.vmax || 100;
             
             // Show approximately 10-15 color stops for the legend
-            const numStops = Math.min(15, colors.length);
+            const numStops = Math.min(MAX_LEGEND_STOPS, colors.length);
             const step = Math.floor(colors.length / numStops);
             
             // Reverse to show high values at top
