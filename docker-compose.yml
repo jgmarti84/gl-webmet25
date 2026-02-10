@@ -139,14 +139,13 @@ services:
       ROOT_RADAR_FILES_PATH: "/app/data/radares"
       ROOT_RADAR_PRODUCTS_PATH: "/app/product_output"
       ROOT_GATE_COORDS_PATH: "/app/data/gate_coordinates"
+      ROOT_GEOMETRY_PATH: "/app/data/geometries"
       ROOT_LOGS_PATH: "/app/logs"
+      GEOMETRY_TYPES: '{"0315":{"01":[1100,12000,0.017,250],"02":[800,12000,0.021,300]}}'
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
     working_dir: /app
     command: ["bash", "-c", "mkdir -p /app/product_output && python main.py"]
-    # depends_on:
-    #   db:
-    #     condition: service_healthy
     restart: unless-stopped
 
 # PostgreSQL database service

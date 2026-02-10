@@ -65,12 +65,13 @@ def main():
 
     # Define volume types
     volume_types = config.VOLUME_TYPES # type: ignore
-    geometry_config = {
-            "0315": {
-                "01": {"grid_resolution": 1000, "toa": 12000, "min_radius": 250, "rfactor": 0.017},
-                "02": {"grid_resolution": 1000, "toa": 12000, "min_radius": 250, "rfactor": 0.017},
-            }
-        }
+    # geometry_config = {
+    #         "0315": {
+    #             "01": {"grid_resolution": 1000, "toa": 12000, "min_radius": 250, "rfactor": 0.017},
+    #             "02": {"grid_resolution": 1000, "toa": 12000, "min_radius": 250, "rfactor": 0.017},
+    #         }
+    #     }
+    # config.GEOMETRY_CONFIG
     base_path = Path(os.path.join(config.ROOT_RADAR_FILES_PATH, radar_name)) # type: ignore
 
     # Create manager configuration
@@ -96,7 +97,8 @@ def main():
         netcdf_retention_days=config.NETCDF_RETENTION_DAYS, # type: ignore
         bufr_retention_days=config.BUFR_RETENTION_DAYS, # type: ignore
         cleanup_poll_interval=config.CLEANUP_POLL_INTERVAL, # type: ignore
-        geometry=geometry_config
+        # geometry=geometry_config
+        geometry_types=config.GEOMETRY_TYPES, # type: ignore
     )
 
     # Create manager

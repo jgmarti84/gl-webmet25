@@ -14,3 +14,6 @@ rio-tiler>=6.0.0
 shapely>=2.0.0
 pillow>=10.0.0
 numpy>=1.24.0
+
+# Colormap utilities
+matplotlib>=3.7.0
