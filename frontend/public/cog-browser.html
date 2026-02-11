@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COG Browser - WebMet25</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Our CSS -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Map Container -->
+    <div id="map"></div>
+    
+    <!-- Control Panel (Top Right) -->
+    <div id="control-panel">
+        <div class="nav-header">
+            <h3>🗂️ COG Browser</h3>
+            <a href="index.html" class="nav-link">← Back to Radar Viewer</a>
+        </div>
+        
+        <!-- Radar Selection -->
+        <div class="control-group">
+            <label for="radar-select">Radar:</label>
+            <select id="radar-select">
+                <option value="">Select radar...</option>
+            </select>
+        </div>
+        
+        <!-- Product Selection -->
+        <div class="control-group">
+            <label for="product-select">Product:</label>
+            <select id="product-select">
+                <option value="">Select product...</option>
+            </select>
+        </div>
+        
+        <!-- Colormap Selection -->
+        <div class="control-group">
+            <label for="colormap-select">Colormap:</label>
+            <select id="colormap-select">
+                <option value="">Default</option>
+            </select>
+            <div id="colormap-range" class="colormap-range" style="display: none;">
+                <small id="range-text">Range: -- to --</small>
+            </div>
+        </div>
+        
+        <!-- Basemap Selection -->
+        <div class="control-group">
+            <label for="basemap-select">Basemap:</label>
+            <select id="basemap-select">
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+                <option value="osm">OpenStreetMap</option>
+                <option value="satellite">Satellite</option>
+                <option value="terrain">Terrain</option>
+            </select>
+        </div>
+        
+        <!-- Status Message -->
+        <div class="control-group">
+            <div id="status-message" class="status-message"></div>
+        </div>
+        
+        <!-- COG List -->
+        <div class="control-group">
+            <label>Available COGs:</label>
+            <div id="cog-list" class="cog-list">
+                <div class="cog-list-empty">No COGs available. Select radar and product.</div>
+            </div>
+        </div>
+        
+        <!-- Time Display -->
+        <div class="control-group">
+            <label>Active COG Time:</label>
+            <div id="time-display">--:--</div>
+        </div>
+        
+        <!-- Opacity Control -->
+        <div class="control-group">
+            <label for="opacity-slider">Opacity: <span id="opacity-display">70%</span></label>
+            <input type="range" id="opacity-slider" min="0" max="100" value="70" class="slider">
+        </div>
+    </div>
+    
+    <!-- Legend Container -->
+    <div id="legend-container"></div>
+    
+    <!-- Leaflet and Mapbox GL -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Application Scripts -->
+    <script type="module" src="js/cog-browser-api.js"></script>
+    <script type="module" src="js/cog-browser.js"></script>
+</body>
+</html>
