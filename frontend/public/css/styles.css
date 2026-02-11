@@ -732,6 +732,186 @@ body {
 }
 
 /* ============================================
+   COG BROWSER STYLES
+   ============================================ */
+
+.nav-header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.nav-header h3 {
+    margin: 0;
+    font-size: 16px;
+    color: #4fc3f7;
+    text-align: center;
+}
+
+.nav-link {
+    text-align: center;
+    font-size: 12px;
+    color: #4fc3f7;
+    text-decoration: none;
+    padding: 6px 8px;
+    border: 1px solid rgba(79, 195, 247, 0.3);
+    border-radius: 4px;
+    background: rgba(79, 195, 247, 0.1);
+    transition: all 0.2s ease;
+}
+
+.nav-link:hover {
+    background: rgba(79, 195, 247, 0.2);
+    border-color: #4fc3f7;
+}
+
+/* Status message styling */
+.status-message {
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    text-align: center;
+    min-height: 20px;
+    display: none;
+}
+
+.status-message.show {
+    display: block;
+}
+
+.status-message.info {
+    background: rgba(33, 150, 243, 0.2);
+    color: #64b5f6;
+    border: 1px solid rgba(33, 150, 243, 0.3);
+}
+
+.status-message.success {
+    background: rgba(76, 175, 80, 0.2);
+    color: #81c784;
+    border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.status-message.error {
+    background: rgba(244, 67, 54, 0.2);
+    color: #ef5350;
+    border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+.status-message.loading {
+    background: rgba(255, 152, 0, 0.2);
+    color: #ffb74d;
+    border: 1px solid rgba(255, 152, 0, 0.3);
+}
+/* Colormap range display */
+.colormap-range {
+    margin-top: 6px;
+    padding: 6px 8px;
+    background: rgba(79, 195, 247, 0.1);
+    border: 1px solid rgba(79, 195, 247, 0.2);
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+.colormap-range small {
+    color: #81d4fa;
+    font-family: 'Courier New', monospace;
+    display: block;
+}
+/* COG List styling */
+.cog-list {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    padding: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    font-size: 12px;
+}
+
+.cog-list-empty {
+    color: #999;
+    text-align: center;
+    padding: 20px 10px;
+    font-style: italic;
+}
+
+.cog-item {
+    padding: 8px;
+    margin-bottom: 6px;
+    background: rgba(79, 195, 247, 0.1);
+    border: 1px solid rgba(79, 195, 247, 0.2);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cog-item:hover {
+    background: rgba(79, 195, 247, 0.2);
+    border-color: #4fc3f7;
+    transform: translateX(2px);
+}
+
+.cog-item.active {
+    background: rgba(79, 195, 247, 0.3);
+    border-color: #4fc3f7;
+    font-weight: bold;
+}
+
+.cog-item-time {
+    font-family: 'Courier New', monospace;
+    color: #aaa;
+    font-size: 10px;
+}
+
+.cog-item-info {
+    color: #ccc;
+    margin-top: 2px;
+}
+
+/* Slider styling (for opacity) */
+.slider {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.2);
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #4fc3f7;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.slider::-webkit-slider-thumb:hover {
+    background: #81d4fa;
+}
+
+.slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #4fc3f7;
+    cursor: pointer;
+    border: none;
+    transition: background 0.2s;
+}
+
+.slider::-moz-range-thumb:hover {
+    background: #81d4fa;
+}
+
+/* ============================================
    RESPONSIVE DESIGN
    ============================================ */
 

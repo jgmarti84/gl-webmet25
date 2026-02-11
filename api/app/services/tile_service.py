@@ -44,7 +44,7 @@ class TileService:
             z: Zoom level
             x: Tile X coordinate
             y: Tile Y coordinate
-            colormap: Optional colormap dict {value: (r, g, b, a)}
+            colormap: Optional colormap dict {value: (r, g, b, a)} - ignored if COG is already RGBA
             resampling: Resampling method
             
         Returns:
@@ -58,22 +58,27 @@ class TileService:
         
         try:
             with Reader(str(full_path)) as src:
-                # Check number of bands - Reader.dataset.count
                 num_bands = src.dataset.count
                 
-                # Get tile data, specifying band 1 only if multi-band
-                if num_bands > 1:
-                    # Multi-band COG - read only first band
-                    img = src.tile(x, y, z, resampling_method=resampling, indexes=1)
-                else:
-                    img = src.tile(x, y, z, resampling_method=resampling)
+                # Check if the COG is already RGBA (pre-colored)
+                is_rgba_cog = num_bands >= 3  # At minimum RGB
                 
-                # Apply colormap if provided
-                if colormap:
-                    rendered = img.render(colormap=colormap)
-                else:
-                    # Use default rendering
+                if is_rgba_cog:
+                    # Read all available bands (RGB or RGBA)
+                    # rio_tiler will automatically handle the bands correctly
+                    img = src.tile(x, y, z, resampling_method=resampling)
+                    logger.debug(f"COG {file_path} is pre-colored RGBA/RGB, skipping colormap application")
+                    # Render directly without applying a colormap
+                    # The rio_tiler Image.render() will convert bands to PNG properly
                     rendered = img.render()
+                else:
+                    # Single-band grayscale data - apply colormap
+                    img = src.tile(x, y, z, resampling_method=resampling, indexes=1)
+                    
+                    if colormap:
+                        rendered = img.render(colormap=colormap)
+                    else:
+                        rendered = img.render()
                 
                 return rendered
                 

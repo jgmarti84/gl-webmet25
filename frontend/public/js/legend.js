@@ -20,6 +20,15 @@ export class LegendRenderer {
         
         this.currentColormap = colormapData;
         
+        console.log('[Legend] Rendering with data:', {
+            product_key: colormapData?.product_key,
+            colormap: colormapData?.colormap,
+            vmin: colormapData?.vmin,
+            vmax: colormapData?.vmax,
+            colors_count: colormapData?.colors?.length,
+            has_entries: !!colormapData?.entries
+        });
+        
         // Clear existing content
         this.container.innerHTML = '';
         
@@ -43,14 +52,17 @@ export class LegendRenderer {
             const vmin = colormapData.vmin || 0;
             const vmax = colormapData.vmax || 100;
             
+            console.log('[Legend] Using new format with vmin:', vmin, 'vmax:', vmax);
+            
             // Show approximately 10-15 color stops for the legend
             const numStops = Math.min(MAX_LEGEND_STOPS, colors.length);
-            const step = Math.floor(colors.length / numStops);
             
             // Reverse to show high values at top
             for (let i = numStops - 1; i >= 0; i--) {
-                const colorIndex = i * step;
-                const value = vmin + (colorIndex / colors.length) * (vmax - vmin);
+                // Calculate position as a fraction from 0 to 1
+                const fraction = i / (numStops - 1);  // This ensures we go from 0 to 1
+                const colorIndex = Math.round(fraction * (colors.length - 1));  // Map to color array index
+                const value = vmin + fraction * (vmax - vmin);  // Map to actual data value
                 
                 const item = document.createElement('div');
                 item.className = 'legend-item';
