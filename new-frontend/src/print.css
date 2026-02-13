@@ -1,0 +1,41 @@
+/* Estilos para impresión */
+@media print {
+
+    /* Ocultar elementos de UI durante la impresión */
+    .no-print,
+    .MuiButton-root,
+    .MuiIconButton-root,
+    .MuiFab-root,
+    [class*="toolbar"],
+    [class*="controls"],
+    [class*="menu"] {
+        display: none !important;
+    }
+
+    /* Asegurar que el mapa ocupe toda la página */
+    #map-container {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Ocultar scrollbars */
+    body {
+        overflow: hidden !important;
+    }
+
+    /* Asegurar que las capas de Leaflet se impriman correctamente */
+    .leaflet-container {
+        width: 100% !important;
+        height: 100% !important;
+    }
+
+    /* Mantener la leyenda de colores visible */
+    [class*="ColorLegend"] {
+        display: block !important;
+    }
+}
