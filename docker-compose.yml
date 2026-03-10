@@ -1,0 +1,149 @@
+services:
+  # ==========================================================================
+  # DATABASE
+  # ==========================================================================
+  radar_db:
+    image: postgis/postgis:15-3.5
+    container_name: radar_db
+    environment: 
+      POSTGRES_DB: radar_prod_db
+      POSTGRES_USER: radar
+      POSTGRES_PASSWORD: radarpass
+    volumes:
+      - ./radar_db_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U radar -d radar_prod_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ==========================================================================
+  # DATABASE INITIALIZATION (runs once)
+  # ==========================================================================
+  db-init:
+    build:
+      context: ./database
+      dockerfile: Dockerfile
+    container_name: radar_db_init
+    environment:
+      DB_HOST: radar_db
+      DB_PORT: 5432
+      DB_NAME: radar_prod_db
+      DB_USER: radar
+      DB_PASSWORD: radarpass
+    depends_on:
+      radar_db:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Waiting for database...' &&
+        python -m radar_db.manage init &&
+        python -m radar_db.manage seed &&
+        echo 'Database initialized!'
+      "
+    restart: "no"
+
+  # ==========================================================================
+  # COG INDEXER SERVICE
+  # ==========================================================================
+  indexer:
+    build:
+      context: ./
+      dockerfile: ./indexer/Dockerfile
+    container_name: radar_indexer
+    environment:
+      DB_HOST: radar_db
+      DB_PORT: 5432
+      DB_NAME: radar_prod_db
+      DB_USER: radar
+      DB_PASSWORD: radarpass
+      WATCH_PATH: /product_output
+      SCAN_INTERVAL: 30
+      FILE_PATTERN: "*.tif"
+      COMPUTE_STATS: "true"
+      COMPUTE_CHECKSUM: "false"
+      RADAR_CODES: "RMA1, RMA2, RMA3"  # Optional: limit to specific radars
+    volumes:
+      - ./product_output:/product_output:ro
+    depends_on:
+      radar_db:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # ==========================================================================
+  # BACKEND API
+  # ==========================================================================
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: radar_api
+    environment:
+      DB_HOST: radar_db
+      DB_PORT: 5432
+      DB_NAME: radar_prod_db
+      DB_USER: radar
+      DB_PASSWORD: radarpass
+      COG_BASE_PATH: /product_output
+      CORS_ORIGINS: "*"
+    volumes:
+      - ${PRODUCT_OUTPUT_PATH:-./product_output}:/product_output:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      radar_db:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5).read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ==========================================================================
+  # FRONTEND
+  # ==========================================================================
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: radar_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+    
+  # Radar data processing service
+  genpro25-1:
+    build:
+      context: ./genpro25
+      dockerfile: Dockerfile
+    container_name: webmet25-genpro25-1
+    volumes:
+      - ./product_output:/app/product_output
+      - ./logs:/app/logs
+      - ./genpro25.yml:/app/genpro25.yml:ro # Read-only volume for genpro25 configuration
+    environment:
+      RADAR_NAME: "RMA1"
+      GENPRO25_CONFIG: "/app/genpro25.yml"
+      ROOT_CACHE_PATH: "/app/cache"
+      ROOT_RADAR_FILES_PATH: "/app/data/radares"
+      ROOT_RADAR_PRODUCTS_PATH: "/app/product_output"
+      ROOT_GATE_COORDS_PATH: "/app/data/gate_coordinates"
+      ROOT_GEOMETRY_PATH: "/app/data/geometries"
+      ROOT_LOGS_PATH: "/app/logs"
+      # GEOMETRY_TYPES: '{"0315":{"01":[1100,12000,0.017,250],"02":[800,12000,0.021,300]}}'
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    working_dir: /app
+    command: ["bash", "-c", "mkdir -p /app/product_output && python main.py"]
+    restart: unless-stopped

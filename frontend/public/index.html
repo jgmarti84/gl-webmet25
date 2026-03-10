@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radar Visualization - WebMet25</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Our CSS -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Map Container -->
+    <div id="map"></div>
+    
+    <!-- Control Panel (Top Right) -->
+    <div id="control-panel">
+        <div class="nav-header">
+            <h3>🌧️ Radar Viewer</h3>
+            <a href="cog-browser.html" class="nav-link">Go to COG Browser →</a>
+        </div>
+        
+        <!-- Basemap Selection -->
+        <div class="control-group">
+            <label for="basemap-select">Basemap:</label>
+            <select id="basemap-select">
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+                <option value="osm">OpenStreetMap</option>
+                <option value="satellite">Satellite</option>
+                <option value="terrain">Terrain</option>
+            </select>
+        </div>
+        
+        <!-- Radar Selection (Checkboxes) -->
+        <div class="control-group">
+            <label>Radars:</label>
+            <button id="btn-toggle-radars" class="toggle-btn">Show Radars ▼</button>
+            <div id="radar-checkboxes" class="checkbox-container" style="display: none;">
+                <div class="checkbox-actions">
+                    <button id="btn-select-all-radars" class="small-btn">All</button>
+                    <button id="btn-clear-all-radars" class="small-btn">None</button>
+                </div>
+                <div id="radar-list">
+                    <!-- Checkboxes will be populated dynamically -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- Product Selection -->
+        <div class="control-group">
+            <label for="product-select">Product:</label>
+            <div class="product-controls">
+                <select id="product-select">
+                    <option value="">Select product...</option>
+                </select>
+                <button id="btn-toggle-filter" class="filter-toggle-btn" title="Toggle filtered/unfiltered products">
+                    <span id="filter-status">Filtered</span>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Time Range Selection -->
+        <div class="control-group">
+            <label>Time Range:</label>
+            <button id="btn-toggle-timerange" class="toggle-btn">Select Time Range ▼</button>
+            <div id="timerange-container" class="timerange-container" style="display: none;">
+                <div class="timerange-inputs">
+                    <div class="input-group">
+                        <label for="start-date" class="input-label">From:</label>
+                        <input type="datetime-local" id="start-date" class="datetime-input">
+                    </div>
+                    <div class="input-group">
+                        <label for="end-date" class="input-label">To:</label>
+                        <input type="datetime-local" id="end-date" class="datetime-input">
+                    </div>
+                    <div class="timerange-presets">
+                        <button class="preset-btn" data-hours="3">Last 3h</button>
+                        <button class="preset-btn" data-hours="6">Last 6h</button>
+                        <button class="preset-btn" data-hours="12">Last 12h</button>
+                        <button class="preset-btn" data-hours="24">Last 24h</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div class="control-group action-buttons">
+            <button id="btn-load-latest" class="action-btn" disabled>Load Latest</button>
+            <button id="btn-load-timerange" class="action-btn secondary" disabled>Load Time Range</button>
+        </div>
+        
+        <!-- Time Display -->
+        <div class="control-group">
+            <label>Time:</label>
+            <div id="time-display">--:--</div>
+        </div>
+        
+        <!-- Navigation Buttons -->
+        <div class="control-group nav-buttons">
+            <button id="btn-prev" title="Previous">◀</button>
+            <button id="btn-latest" title="Latest">⟲</button>
+            <button id="btn-next" title="Next">▶</button>
+        </div>
+        
+        <!-- Opacity Control -->
+        <div class="control-group">
+            <label for="opacity-slider">Opacity:</label>
+            <div class="opacity-control">
+                <input type="range" id="opacity-slider" min="0" max="1" step="0.1" value="0.7">
+                <span id="opacity-value">70%</span>
+            </div>
+        </div>
+        
+        <!-- Keyboard Shortcuts Info -->
+        <div class="control-group shortcuts-info">
+            <details>
+                <summary>⌨️ Shortcuts</summary>
+                <div class="shortcuts-list">
+                    <div><kbd>Space</kbd> Play/Pause</div>
+                    <div><kbd>←</kbd> <kbd>→</kbd> Navigate</div>
+                    <div><kbd>Home</kbd> Latest</div>
+                    <div><kbd>L</kbd> Load Latest</div>
+                    <div><kbd>S</kbd> Speed</div>
+                </div>
+            </details>
+        </div>
+        
+        <!-- Status -->
+        <div id="status" class="status">Ready</div>
+    </div>
+    
+    <!-- Legend Container (Bottom Left) -->
+    <div id="legend-container"></div>
+    
+    <!-- Animation Controls (Bottom Center) -->
+    <div id="animation-controls">
+        <!-- Animation Slider -->
+        <div class="animation-slider-container">
+            <input type="range" id="animation-slider" min="0" max="0" value="0" step="1">
+        </div>
+        
+        <!-- Control Buttons -->
+        <div class="animation-buttons">
+            <button id="btn-play-pause" title="Play">▶</button>
+            <button id="btn-speed" title="Speed: 1x">1x</button>
+            <span id="frame-counter">-- / --</span>
+        </div>
+    </div>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Our JS Modules (with built-in Leaflet loading check) -->
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>

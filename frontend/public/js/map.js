@@ -1,0 +1,300 @@
+/**
+ * Map Module - Handles map initialization and layer management
+ */
+
+const DEFAULT_CENTER = [-34.0, -64.0];
+const DEFAULT_ZOOM = 5;
+const DEFAULT_OPACITY = 0.7;
+
+// Tile layer z-index values – ensures radar always renders above basemap
+const ZINDEX_BASEMAP = 1;
+const ZINDEX_RADAR   = 2;
+
+// Frame pre-loading tuning
+const PRELOAD_BATCH_SIZE  = 5;   // frames to add to map per batch
+const PRELOAD_BATCH_DELAY = 100; // ms between batches
+
+// Available basemap options
+const BASEMAPS = {
+    'dark': {
+        name: 'Dark',
+        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        attribution: '© OpenStreetMap contributors, © CARTO',
+        maxZoom: 18
+    },
+    'light': {
+        name: 'Light',
+        url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+        attribution: '© OpenStreetMap contributors, © CARTO',
+        maxZoom: 18
+    },
+    'osm': {
+        name: 'OpenStreetMap',
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19
+    },
+    'satellite': {
+        name: 'Satellite',
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        attribution: 'Tiles © Esri',
+        maxZoom: 18
+    },
+    'terrain': {
+        name: 'Terrain',
+        url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+        attribution: 'Map data: © OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap',
+        maxZoom: 17
+    }
+};
+
+export class MapManager {
+    constructor() {
+        this.map = null;
+        this.baseLayer = null;
+        this.radarLayers = {}; // Support multiple radar layers
+        this.currentOpacity = DEFAULT_OPACITY;
+        this.currentBasemap = 'dark';
+        // Pre-cached layers for smooth animation
+        this.cachedFrameLayers = []; // Array of {radarCode: L.tileLayer}
+        this.currentCachedFrameIndex = -1;
+    }
+    
+    /**
+     * Get available basemaps
+     */
+    getBasemaps() {
+        return BASEMAPS;
+    }
+    
+    /**
+     * Initialize the Leaflet map
+     */
+    init(containerId = 'map', basemapKey = 'dark') {
+        // Create map
+        this.map = L.map(containerId).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+        
+        // Add initial basemap
+        this.setBasemap(basemapKey);
+        
+        return this.map;
+    }
+    
+    /**
+     * Change basemap
+     */
+    setBasemap(basemapKey) {
+        if (!BASEMAPS[basemapKey]) {
+            console.warn(`Unknown basemap: ${basemapKey}`);
+            return;
+        }
+        
+        // Remove existing base layer
+        if (this.baseLayer) {
+            this.map.removeLayer(this.baseLayer);
+        }
+        
+        // Add new base layer (zIndex: ZINDEX_BASEMAP keeps it below radar layers)
+        const basemap = BASEMAPS[basemapKey];
+        this.baseLayer = L.tileLayer(basemap.url, {
+            attribution: basemap.attribution,
+            maxZoom: basemap.maxZoom,
+            zIndex: ZINDEX_BASEMAP,
+        }).addTo(this.map);
+        
+        this.currentBasemap = basemapKey;
+    }
+    
+    /**
+     * Set radar layer on the map (supports multiple radars)
+     */
+    setRadarLayer(radarCode, cogId, bounds = null, opacity = null) {
+        if (!cogId) return;
+        
+        // Use provided opacity or current opacity
+        const layerOpacity = opacity !== null ? opacity : this.currentOpacity;
+        
+        // Remove existing layer for this radar if it exists
+        if (this.radarLayers[radarCode]) {
+            this.map.removeLayer(this.radarLayers[radarCode]);
+        }
+        
+        // Add new radar layer (zIndex: ZINDEX_RADAR keeps it above basemap)
+        const tileUrl = `/api/v1/tiles/${cogId}/{z}/{x}/{y}.png`;
+        
+        this.radarLayers[radarCode] = L.tileLayer(tileUrl, {
+            opacity: layerOpacity,
+            maxZoom: 18,
+            tms: false,
+            zIndex: ZINDEX_RADAR,
+        }).addTo(this.map);
+        
+        // Fit to bounds if provided (only once for the first radar)
+        if (bounds && bounds.lat_min && bounds.lat_max && Object.keys(this.radarLayers).length === 1) {
+            this.map.fitBounds([
+                [bounds.lat_min, bounds.lon_min],
+                [bounds.lat_max, bounds.lon_max],
+            ]);
+        }
+        
+        return this.radarLayers[radarCode];
+    }
+    
+    /**
+     * Pre-create all tile layers for animation frames so tiles are loaded in
+     * the background and frame transitions don't have to wait for network requests.
+     *
+     * Frames are loaded in small batches with a brief delay between batches to
+     * avoid saturating the server/browser with simultaneous tile requests.
+     *
+     * @param {Array}    groupedFrames - Array of {timestamp, cogsByRadar: {radarCode: cog}}
+     * @param {Function} onLayerLoaded - Optional callback fired each time a layer finishes loading its tiles
+     */
+    preloadFrames(groupedFrames, onLayerLoaded = null) {
+        this.clearCachedFrames();
+
+        // Pre-size the array so indices stay stable while batches fill in
+        this.cachedFrameLayers = new Array(groupedFrames.length).fill(null);
+
+        const BATCH_SIZE  = PRELOAD_BATCH_SIZE;
+        const BATCH_DELAY = PRELOAD_BATCH_DELAY;
+
+        const loadBatch = (startIdx) => {
+            if (startIdx >= groupedFrames.length) return;
+            const endIdx = Math.min(startIdx + BATCH_SIZE, groupedFrames.length);
+
+            for (let i = startIdx; i < endIdx; i++) {
+                const frame = groupedFrames[i];
+                const layerMap = {};
+                Object.entries(frame.cogsByRadar).forEach(([radarCode, cog]) => {
+                    const tileUrl = `/api/v1/tiles/${cog.id}/{z}/{x}/{y}.png`;
+                    const layer = L.tileLayer(tileUrl, {
+                        opacity: 0, // hidden until this frame is active
+                        maxZoom: 18,
+                        tms: false,
+                        keepBuffer: 2,
+                        zIndex: ZINDEX_RADAR,
+                    });
+                    if (onLayerLoaded) {
+                        layer.once('load', onLayerLoaded);
+                    }
+                    layer.addTo(this.map);
+                    layerMap[radarCode] = layer;
+                });
+                this.cachedFrameLayers[i] = layerMap;
+            }
+
+            if (endIdx < groupedFrames.length) {
+                setTimeout(() => loadBatch(endIdx), BATCH_DELAY);
+            }
+        };
+
+        loadBatch(0);
+    }
+
+    /**
+     * Show a specific pre-cached frame, hiding the previous one.
+     * All radars for that frame are made visible simultaneously.
+     *
+     * @param {number} frameIndex
+     */
+    showCachedFrame(frameIndex) {
+        const opacity = this.currentOpacity;
+
+        // Hide previous frame's layers
+        if (
+            this.currentCachedFrameIndex >= 0 &&
+            this.cachedFrameLayers[this.currentCachedFrameIndex]
+        ) {
+            Object.values(this.cachedFrameLayers[this.currentCachedFrameIndex]).forEach(layer => {
+                layer.setOpacity(0);
+            });
+        }
+
+        // Show new frame's layers
+        if (frameIndex >= 0 && this.cachedFrameLayers[frameIndex]) {
+            Object.values(this.cachedFrameLayers[frameIndex]).forEach(layer => {
+                layer.setOpacity(opacity);
+            });
+        }
+
+        this.currentCachedFrameIndex = frameIndex;
+    }
+
+    /**
+     * Remove all pre-cached animation layers from the map and reset state.
+     */
+    clearCachedFrames() {
+        this.cachedFrameLayers.forEach(frameLayerMap => {
+            if (frameLayerMap) {
+                Object.values(frameLayerMap).forEach(layer => {
+                    if (this.map && this.map.hasLayer(layer)) {
+                        this.map.removeLayer(layer);
+                    }
+                });
+            }
+        });
+        this.cachedFrameLayers = [];
+        this.currentCachedFrameIndex = -1;
+    }
+
+    /**
+     * Update radar layer opacity for all layers
+     */
+    setOpacity(opacity) {
+        this.currentOpacity = opacity;
+        // Update "latest" mode layers
+        Object.values(this.radarLayers).forEach(layer => {
+            layer.setOpacity(opacity);
+        });
+        // Update currently-visible cached frame layers
+        if (
+            this.currentCachedFrameIndex >= 0 &&
+            this.cachedFrameLayers[this.currentCachedFrameIndex]
+        ) {
+            Object.values(this.cachedFrameLayers[this.currentCachedFrameIndex]).forEach(layer => {
+                layer.setOpacity(opacity);
+            });
+        }
+    }
+    
+    /**
+     * Get current opacity
+     */
+    getOpacity() {
+        return this.currentOpacity;
+    }
+    
+    /**
+     * Remove specific radar layer
+     */
+    clearRadarLayer(radarCode = null) {
+        if (radarCode) {
+            // Remove specific radar layer
+            if (this.radarLayers[radarCode]) {
+                this.map.removeLayer(this.radarLayers[radarCode]);
+                delete this.radarLayers[radarCode];
+            }
+        } else {
+            // Remove all radar layers
+            Object.values(this.radarLayers).forEach(layer => {
+                this.map.removeLayer(layer);
+            });
+            this.radarLayers = {};
+        }
+    }
+    
+    /**
+     * Get active radar codes
+     */
+    getActiveRadars() {
+        return Object.keys(this.radarLayers);
+    }
+    
+    /**
+     * Get map instance
+     */
+    getMap() {
+        return this.map;
+    }
+}
