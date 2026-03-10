@@ -111,6 +111,7 @@ local:
         - VRAD
         - WRAD
   DAEMON_PARAMS:
+    START_DATE: None # Set to a specific datetime string in ISO format (e.g., "2025-11-25T10:00:00Z") to start from that date, or None to start from the most recent data
     ENABLE_DOWNLOAD_DAEMON: True # Set to True to enable the download daemon
     ENABLE_PROCESSING_DAEMON: True # Set to True to enable the processing daemon
     ENABLE_PRODUCT_DAEMON: True # Set to True to enable the product generation daemon

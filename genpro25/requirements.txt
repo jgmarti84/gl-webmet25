@@ -1,2 +1,0 @@
-# Radarlib package from GitHub repository
-git+https://github.com/jgmarti84/radarlib.git@main#egg=radarlib
