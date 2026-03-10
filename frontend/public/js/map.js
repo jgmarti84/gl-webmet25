@@ -47,6 +47,9 @@ export class MapManager {
         this.radarLayers = {}; // Support multiple radar layers
         this.currentOpacity = DEFAULT_OPACITY;
         this.currentBasemap = 'dark';
+        // Pre-cached layers for smooth animation
+        this.cachedFrameLayers = []; // Array of {radarCode: L.tileLayer}
+        this.currentCachedFrameIndex = -1;
     }
     
     /**
@@ -128,13 +131,99 @@ export class MapManager {
     }
     
     /**
+     * Pre-create all tile layers for animation frames so tiles are loaded in
+     * the background and frame transitions don't have to wait for network requests.
+     *
+     * @param {Array}    groupedFrames - Array of {timestamp, cogsByRadar: {radarCode: cog}}
+     * @param {Function} onLayerLoaded - Optional callback fired each time a layer finishes loading its tiles
+     */
+    preloadFrames(groupedFrames, onLayerLoaded = null) {
+        this.clearCachedFrames();
+
+        this.cachedFrameLayers = groupedFrames.map((frame) => {
+            const layerMap = {};
+            Object.entries(frame.cogsByRadar).forEach(([radarCode, cog]) => {
+                const tileUrl = `/api/v1/tiles/${cog.id}/{z}/{x}/{y}.png`;
+                const layer = L.tileLayer(tileUrl, {
+                    opacity: 0, // hidden until this frame is active
+                    maxZoom: 18,
+                    tms: false,
+                    keepBuffer: 4,
+                });
+                if (onLayerLoaded) {
+                    layer.once('load', onLayerLoaded);
+                }
+                layer.addTo(this.map);
+                layerMap[radarCode] = layer;
+            });
+            return layerMap;
+        });
+    }
+
+    /**
+     * Show a specific pre-cached frame, hiding the previous one.
+     * All radars for that frame are made visible simultaneously.
+     *
+     * @param {number} frameIndex
+     */
+    showCachedFrame(frameIndex) {
+        const opacity = this.currentOpacity;
+
+        // Hide previous frame's layers
+        if (
+            this.currentCachedFrameIndex >= 0 &&
+            this.cachedFrameLayers[this.currentCachedFrameIndex]
+        ) {
+            Object.values(this.cachedFrameLayers[this.currentCachedFrameIndex]).forEach(layer => {
+                layer.setOpacity(0);
+            });
+        }
+
+        // Show new frame's layers
+        if (frameIndex >= 0 && this.cachedFrameLayers[frameIndex]) {
+            Object.values(this.cachedFrameLayers[frameIndex]).forEach(layer => {
+                layer.setOpacity(opacity);
+            });
+        }
+
+        this.currentCachedFrameIndex = frameIndex;
+    }
+
+    /**
+     * Remove all pre-cached animation layers from the map and reset state.
+     */
+    clearCachedFrames() {
+        this.cachedFrameLayers.forEach(frameLayerMap => {
+            if (frameLayerMap) {
+                Object.values(frameLayerMap).forEach(layer => {
+                    if (this.map && this.map.hasLayer(layer)) {
+                        this.map.removeLayer(layer);
+                    }
+                });
+            }
+        });
+        this.cachedFrameLayers = [];
+        this.currentCachedFrameIndex = -1;
+    }
+
+    /**
      * Update radar layer opacity for all layers
      */
     setOpacity(opacity) {
         this.currentOpacity = opacity;
+        // Update "latest" mode layers
         Object.values(this.radarLayers).forEach(layer => {
             layer.setOpacity(opacity);
         });
+        // Update currently-visible cached frame layers
+        if (
+            this.currentCachedFrameIndex >= 0 &&
+            this.cachedFrameLayers[this.currentCachedFrameIndex]
+        ) {
+            Object.values(this.cachedFrameLayers[this.currentCachedFrameIndex]).forEach(layer => {
+                layer.setOpacity(opacity);
+            });
+        }
     }
     
     /**

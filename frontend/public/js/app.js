@@ -41,6 +41,47 @@ const state = {
 };
 
 // =============================================================================
+// HELPERS
+// =============================================================================
+
+/**
+ * Group a flat list of COGs (from multiple radars) into animation frames.
+ *
+ * COGs that fall within the same `toleranceMinutes` window are merged into one
+ * frame so all selected radars are rendered simultaneously at each step.
+ *
+ * @param {Array}  cogs             - Raw COG objects (sorted newest-first)
+ * @param {number} toleranceMinutes - Bucket size in minutes (default 5)
+ * @returns {Array} groupedFrames   - [{timestamp, cogsByRadar: {code: cog}}, …]
+ *                                    sorted newest-first
+ */
+function groupCogsByTimestamp(cogs, toleranceMinutes = 5) {
+    const bucketMs = toleranceMinutes * 60 * 1000;
+
+    const buckets = new Map(); // rounded-epoch → frame object
+
+    cogs.forEach(cog => {
+        const t = new Date(cog.observation_time).getTime();
+        const key = Math.round(t / bucketMs) * bucketMs;
+
+        if (!buckets.has(key)) {
+            buckets.set(key, { timestamp: cog.observation_time, cogsByRadar: {} });
+        }
+
+        const frame = buckets.get(key);
+        // Keep only one COG per radar per bucket (first encountered wins)
+        if (!frame.cogsByRadar[cog.radar_code]) {
+            frame.cogsByRadar[cog.radar_code] = cog;
+        }
+    });
+
+    // Return sorted newest-first
+    return Array.from(buckets.entries())
+        .sort((a, b) => b[0] - a[0])
+        .map(([, frame]) => frame);
+}
+
+// =============================================================================
 // MAIN APPLICATION
 // =============================================================================
 
@@ -357,7 +398,8 @@ const app = {
      * Handle radar/product selection change (for animation mode)
      */
     async onSelectionChange() {
-        // Clear current display
+        // Clear current display (both latest-mode layers and animation cache)
+        state.mapManager.clearCachedFrames();
         state.mapManager.clearRadarLayer();
         state.ui.setTimeDisplay(null);
         state.legend.clear();
@@ -423,7 +465,8 @@ const app = {
                 }
             }
             
-            // Clear existing layers
+            // Clear existing layers (both latest-mode and any previous animation cache)
+            state.mapManager.clearCachedFrames();
             state.mapManager.clearRadarLayer();
             state.hasZoomedToBounds = false;
             
@@ -482,7 +525,12 @@ const app = {
     },
     
     /**
-     * Load COGs for selected radars and product within a time range
+     * Load COGs for selected radars and product within a time range.
+     *
+     * COGs from all radars are grouped into per-timestamp animation frames so
+     * every radar is rendered simultaneously.  All tile layers are created
+     * upfront (opacity 0) so the browser pre-fetches and caches them; the
+     * animation then just toggles opacity – no network round-trips per frame.
      */
     async loadTimeRangeCogs() {
         if (state.selectedRadars.length === 0 || !state.selectedProduct) {
@@ -504,13 +552,13 @@ const app = {
         state.ui.setStatus('Loading time range data...', 'loading');
         
         try {
-            // Get COGs for time range
+            // Fetch flat COG list for all selected radars
             const cogs = await api.getCogsForTimeRange(
-                state.selectedRadars, 
+                state.selectedRadars,
                 state.selectedProduct,
                 timeRange.start,
                 timeRange.end,
-                100 // limit
+                100
             );
             
             if (cogs.length === 0) {
@@ -522,70 +570,96 @@ const app = {
                 );
                 return;
             }
-            
-            // Load colormap using new API
+
+            // Group COGs from all radars into per-timestamp frames
+            const groupedFrames = groupCogsByTimestamp(cogs);
+
+            // Load colormap
             let colormap = null;
             try {
                 colormap = await api.getColormapInfo(state.selectedProduct);
             } catch (error) {
                 console.warn('Failed to load colormap:', error);
-                // Fallback to old API if new one fails
                 try {
                     colormap = await api.getColormap(state.selectedProduct);
                 } catch (fallbackError) {
                     console.warn('Failed to load fallback colormap:', fallbackError);
                 }
             }
-            
-            // Store COGs
-            state.cogs = cogs;
+
+            // Clear any previous layers / animation
+            state.mapManager.clearCachedFrames();
+            state.mapManager.clearRadarLayer();
+            state.animator.stop();
             state.hasZoomedToBounds = false;
-            
-            // Setup animation with frames
-            state.animator.setFrames(cogs);
-            state.animator.goToLatest(); // Start at most recent
-            
-            // Display first frame (most recent)
-            if (cogs.length > 0) {
-                const firstCog = cogs[0];
-                
-                // Get radar bounds for zoom
-                let bounds = null;
-                const radar = state.radars.find(r => r.code === firstCog.radar_code);
-                bounds = radar?.extent || null;
-                
-                // Display on map
-                state.mapManager.clearRadarLayer();
-                state.mapManager.setRadarLayer(firstCog.radar_code, firstCog.id, bounds);
+
+            // Pre-create all tile layers (tiles start loading in background).
+            // Pass a progress callback so the user sees feedback as tiles cache.
+            const totalLayers = groupedFrames.reduce(
+                (sum, f) => sum + Object.keys(f.cogsByRadar).length, 0
+            );
+            let loadedLayers = 0;
+            state.ui.setStatus(
+                `Caching tiles for ${groupedFrames.length} frames (0 / ${totalLayers} layers ready)…`,
+                'loading'
+            );
+            state.mapManager.preloadFrames(groupedFrames, () => {
+                loadedLayers++;
+                if (loadedLayers < totalLayers) {
+                    state.ui.setStatus(
+                        `Caching tiles… (${loadedLayers} / ${totalLayers} layers ready)`,
+                        'loading'
+                    );
+                } else {
+                    state.ui.setStatus('All frames cached – ready to play ✓', 'success');
+                }
+            });
+
+            // Zoom to bounds of first radar in first frame (once)
+            const firstFrame = groupedFrames[0];
+            const firstRadarCode = Object.keys(firstFrame.cogsByRadar)[0];
+            if (firstRadarCode && !state.hasZoomedToBounds) {
+                const radar = state.radars.find(r => r.code === firstRadarCode);
+                if (radar?.extent) {
+                    const ext = radar.extent;
+                    state.mapManager.getMap().fitBounds([
+                        [ext.lat_min, ext.lon_min],
+                        [ext.lat_max, ext.lon_max],
+                    ]);
+                }
                 state.hasZoomedToBounds = true;
-                
-                // Update time display
-                state.ui.setTimeDisplay(firstCog.observation_time);
             }
-            
-            // Render legend if available
+
+            // Store grouped frames and hand off to animator
+            state.cogs = groupedFrames;
+            state.animator.setFrames(groupedFrames);
+            state.animator.goToLatest(); // fires onFrameChange(0, …)
+
+            // Render legend
             if (colormap) {
                 state.legend.render(colormap);
                 state.legend.show();
             }
-            
+
             // Enable animation controls
-            if (cogs.length > 1) {
+            if (groupedFrames.length > 1) {
                 state.ui.enableAnimationControls(true);
                 state.ui.enableNavButtons(true);
-                state.ui.updateFrameCounter(0, cogs.length);
-                state.ui.updateAnimationSlider(0, cogs.length);
+                state.ui.updateFrameCounter(0, groupedFrames.length);
+                state.ui.updateAnimationSlider(0, groupedFrames.length);
             }
-            
-            // Build success message
-            const radarCodes = [...new Set(cogs.map(c => c.radar_code))];
+
+            // Build success message (extract radar codes from grouped frames)
+            const radarCodes = [...new Set(
+                groupedFrames.flatMap(f => Object.keys(f.cogsByRadar))
+            )];
             const loadedRadars = radarCodes.map(code => code.toUpperCase()).join(', ');
             const radarText = radarCodes.length === 1 ? 'radar' : 'radars';
             state.ui.setStatus(
-                `✓ Loaded ${cogs.length} frames from ${radarCodes.length} ${radarText}: ${loadedRadars}`,
+                `✓ Loaded ${groupedFrames.length} frames from ${radarCodes.length} ${radarText}: ${loadedRadars} — tiles caching in background`,
                 'success'
             );
-            
+
         } catch (error) {
             console.error('Load time range error:', error);
             state.ui.setStatus(`Error: ${error.message}`, 'error');
@@ -593,24 +667,35 @@ const app = {
     },
     
     /**
-     * Handle frame change from animator
+     * Handle frame change from animator.
+     *
+     * For animation mode, switches the visible cached frame (all radars for
+     * that timestamp are shown simultaneously).  Works for both grouped frames
+     * (animation mode) and single-COG frames (legacy).
      */
     onFrameChange(index, frame) {
         if (!frame) return;
-        
-        // Get radar bounds for initial zoom (only first time)
+
+        // Animation mode: grouped frame – use pre-cached layers
+        if (frame.cogsByRadar) {
+            state.mapManager.showCachedFrame(index);
+            state.ui.setTimeDisplay(frame.timestamp);
+            state.ui.updateFrameCounter(index, state.animator.getFrameCount());
+            state.ui.updateAnimationSlider(index, state.animator.getFrameCount());
+            return;
+        }
+
+        // Legacy / single-COG fallback (latest mode)
         let bounds = null;
         if (!state.hasZoomedToBounds) {
             const radar = state.radars.find(r => r.code === frame.radar_code);
             bounds = radar?.extent || null;
             state.hasZoomedToBounds = true;
         }
-        
-        // Clear and display new frame on map
+
         state.mapManager.clearRadarLayer();
         state.mapManager.setRadarLayer(frame.radar_code, frame.id, bounds);
-        
-        // Update UI
+
         state.ui.setTimeDisplay(frame.observation_time);
         state.ui.updateFrameCounter(index, state.animator.getFrameCount());
         state.ui.updateAnimationSlider(index, state.animator.getFrameCount());
