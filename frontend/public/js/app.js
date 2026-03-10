@@ -38,6 +38,7 @@ const state = {
     
     // Flags
     hasZoomedToBounds: false,
+    animationMode: null, // 'latest' | 'timerange' | null
 };
 
 // =============================================================================
@@ -75,9 +76,9 @@ function groupCogsByTimestamp(cogs, toleranceMinutes = 5) {
         }
     });
 
-    // Return sorted newest-first
+    // Return sorted oldest-first so animation plays forward in time
     return Array.from(buckets.entries())
-        .sort((a, b) => b[0] - a[0])
+        .sort((a, b) => a[0] - b[0])
         .map(([, frame]) => frame);
 }
 
@@ -395,10 +396,20 @@ const app = {
     },
     
     /**
-     * Handle radar/product selection change (for animation mode)
+     * Handle radar/product selection change.
+     *
+     * When the user changes the product (field) while a time-range animation is
+     * already loaded, we automatically reload with the new product so the movie
+     * clip continues without requiring a manual button press.
      */
     async onSelectionChange() {
-        // Clear current display (both latest-mode layers and animation cache)
+        // If in time-range mode and product is valid, reload seamlessly
+        if (state.animationMode === 'timerange' && state.selectedProduct) {
+            await this.loadTimeRangeCogs();
+            return;
+        }
+
+        // Otherwise clear current display (both latest-mode layers and animation cache)
         state.mapManager.clearCachedFrames();
         state.mapManager.clearRadarLayer();
         state.ui.setTimeDisplay(null);
@@ -407,6 +418,7 @@ const app = {
         state.animator.stop();
         state.animator.setFrames([]);
         state.hasZoomedToBounds = false;
+        state.animationMode = null;
         
         // Update load latest button state
         this.onRadarSelectionChange();
@@ -469,6 +481,7 @@ const app = {
             state.mapManager.clearCachedFrames();
             state.mapManager.clearRadarLayer();
             state.hasZoomedToBounds = false;
+            state.animationMode = 'latest';
             
             // Track first radar for time display
             let firstRadarTime = null;
@@ -592,17 +605,14 @@ const app = {
             state.mapManager.clearRadarLayer();
             state.animator.stop();
             state.hasZoomedToBounds = false;
+            state.animationMode = 'timerange';
 
-            // Pre-create all tile layers (tiles start loading in background).
-            // Pass a progress callback so the user sees feedback as tiles cache.
+            // Pre-create tile layers in batches so tiles start loading immediately
+            // without a burst of requests.  A progress callback updates the status bar.
             const totalLayers = groupedFrames.reduce(
                 (sum, f) => sum + Object.keys(f.cogsByRadar).length, 0
             );
             let loadedLayers = 0;
-            state.ui.setStatus(
-                `Caching tiles for ${groupedFrames.length} frames (0 / ${totalLayers} layers ready)…`,
-                'loading'
-            );
             state.mapManager.preloadFrames(groupedFrames, () => {
                 loadedLayers++;
                 if (loadedLayers < totalLayers) {
@@ -615,11 +625,11 @@ const app = {
                 }
             });
 
-            // Zoom to bounds of first radar in first frame (once)
-            const firstFrame = groupedFrames[0];
-            const firstRadarCode = Object.keys(firstFrame.cogsByRadar)[0];
-            if (firstRadarCode && !state.hasZoomedToBounds) {
-                const radar = state.radars.find(r => r.code === firstRadarCode);
+            // Zoom to bounds using any radar from the loaded frames
+            const anyFrame = groupedFrames[0];
+            const anyRadarCode = Object.keys(anyFrame.cogsByRadar)[0];
+            if (anyRadarCode && !state.hasZoomedToBounds) {
+                const radar = state.radars.find(r => r.code === anyRadarCode);
                 if (radar?.extent) {
                     const ext = radar.extent;
                     state.mapManager.getMap().fitBounds([
@@ -630,10 +640,11 @@ const app = {
                 state.hasZoomedToBounds = true;
             }
 
-            // Store grouped frames and hand off to animator
+            // Store grouped frames and hand off to animator.
+            // Start at frame 0 (oldest) so animation plays forward in time.
             state.cogs = groupedFrames;
             state.animator.setFrames(groupedFrames);
-            state.animator.goToLatest(); // fires onFrameChange(0, …)
+            state.animator.goToFrame(0); // oldest frame first; fires onFrameChange(0, …)
 
             // Render legend
             if (colormap) {

@@ -98,11 +98,11 @@ export class AnimationController {
     }
     
     /**
-     * Go to latest frame (first in array)
+     * Go to latest frame (last in array, i.e., most recent timestamp)
      */
     goToLatest() {
         if (this.frames.length === 0) return;
-        this.goToFrame(0);
+        this.goToFrame(this.frames.length - 1);
     }
     
     /**

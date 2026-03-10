@@ -6,6 +6,14 @@ const DEFAULT_CENTER = [-34.0, -64.0];
 const DEFAULT_ZOOM = 5;
 const DEFAULT_OPACITY = 0.7;
 
+// Tile layer z-index values – ensures radar always renders above basemap
+const ZINDEX_BASEMAP = 1;
+const ZINDEX_RADAR   = 2;
+
+// Frame pre-loading tuning
+const PRELOAD_BATCH_SIZE  = 5;   // frames to add to map per batch
+const PRELOAD_BATCH_DELAY = 100; // ms between batches
+
 // Available basemap options
 const BASEMAPS = {
     'dark': {
@@ -86,11 +94,12 @@ export class MapManager {
             this.map.removeLayer(this.baseLayer);
         }
         
-        // Add new base layer
+        // Add new base layer (zIndex: ZINDEX_BASEMAP keeps it below radar layers)
         const basemap = BASEMAPS[basemapKey];
         this.baseLayer = L.tileLayer(basemap.url, {
             attribution: basemap.attribution,
             maxZoom: basemap.maxZoom,
+            zIndex: ZINDEX_BASEMAP,
         }).addTo(this.map);
         
         this.currentBasemap = basemapKey;
@@ -110,13 +119,14 @@ export class MapManager {
             this.map.removeLayer(this.radarLayers[radarCode]);
         }
         
-        // Add new radar layer
+        // Add new radar layer (zIndex: ZINDEX_RADAR keeps it above basemap)
         const tileUrl = `/api/v1/tiles/${cogId}/{z}/{x}/{y}.png`;
         
         this.radarLayers[radarCode] = L.tileLayer(tileUrl, {
             opacity: layerOpacity,
             maxZoom: 18,
             tms: false,
+            zIndex: ZINDEX_RADAR,
         }).addTo(this.map);
         
         // Fit to bounds if provided (only once for the first radar)
@@ -134,30 +144,52 @@ export class MapManager {
      * Pre-create all tile layers for animation frames so tiles are loaded in
      * the background and frame transitions don't have to wait for network requests.
      *
+     * Frames are loaded in small batches with a brief delay between batches to
+     * avoid saturating the server/browser with simultaneous tile requests.
+     *
      * @param {Array}    groupedFrames - Array of {timestamp, cogsByRadar: {radarCode: cog}}
      * @param {Function} onLayerLoaded - Optional callback fired each time a layer finishes loading its tiles
      */
     preloadFrames(groupedFrames, onLayerLoaded = null) {
         this.clearCachedFrames();
 
-        this.cachedFrameLayers = groupedFrames.map((frame) => {
-            const layerMap = {};
-            Object.entries(frame.cogsByRadar).forEach(([radarCode, cog]) => {
-                const tileUrl = `/api/v1/tiles/${cog.id}/{z}/{x}/{y}.png`;
-                const layer = L.tileLayer(tileUrl, {
-                    opacity: 0, // hidden until this frame is active
-                    maxZoom: 18,
-                    tms: false,
-                    keepBuffer: 4,
+        // Pre-size the array so indices stay stable while batches fill in
+        this.cachedFrameLayers = new Array(groupedFrames.length).fill(null);
+
+        const BATCH_SIZE  = PRELOAD_BATCH_SIZE;
+        const BATCH_DELAY = PRELOAD_BATCH_DELAY;
+
+        const loadBatch = (startIdx) => {
+            if (startIdx >= groupedFrames.length) return;
+            const endIdx = Math.min(startIdx + BATCH_SIZE, groupedFrames.length);
+
+            for (let i = startIdx; i < endIdx; i++) {
+                const frame = groupedFrames[i];
+                const layerMap = {};
+                Object.entries(frame.cogsByRadar).forEach(([radarCode, cog]) => {
+                    const tileUrl = `/api/v1/tiles/${cog.id}/{z}/{x}/{y}.png`;
+                    const layer = L.tileLayer(tileUrl, {
+                        opacity: 0, // hidden until this frame is active
+                        maxZoom: 18,
+                        tms: false,
+                        keepBuffer: 2,
+                        zIndex: ZINDEX_RADAR,
+                    });
+                    if (onLayerLoaded) {
+                        layer.once('load', onLayerLoaded);
+                    }
+                    layer.addTo(this.map);
+                    layerMap[radarCode] = layer;
                 });
-                if (onLayerLoaded) {
-                    layer.once('load', onLayerLoaded);
-                }
-                layer.addTo(this.map);
-                layerMap[radarCode] = layer;
-            });
-            return layerMap;
-        });
+                this.cachedFrameLayers[i] = layerMap;
+            }
+
+            if (endIdx < groupedFrames.length) {
+                setTimeout(() => loadBatch(endIdx), BATCH_DELAY);
+            }
+        };
+
+        loadBatch(0);
     }
 
     /**
