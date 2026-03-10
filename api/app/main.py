@@ -7,7 +7,7 @@ import logging
 import time
 
 from .config import settings
-from .routers import radars_router, products_router, cogs_router, tiles_router
+from .routers import radars_router, products_router, cogs_router, tiles_router, colormap_router
 from .schemas import HealthResponse
 
 # Setup logging
@@ -91,6 +91,7 @@ app.include_router(radars_router, prefix=settings.api_prefix)
 app.include_router(products_router, prefix=settings.api_prefix)
 app.include_router(cogs_router, prefix=settings.api_prefix)
 app.include_router(tiles_router, prefix=settings.api_prefix)
+app.include_router(colormap_router, prefix=settings.api_prefix)
 
 
 # Health check endpoints

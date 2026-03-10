@@ -1,5 +1,6 @@
 import yaml
 import os
+import json
 from pathlib import Path
 
 from radarlib import config as radarlib_config
@@ -25,6 +26,11 @@ _GENPRO25_ENV = os.getenv("GENPRO25_ENV", "local").lower()
 # Extract the environment-specific config
 RAW_CONFIG = _ALL_ENVS_CONFIG.get(_GENPRO25_ENV, {})
 
+# Custom overwriting through environment variables
+key = "GEOMETRY_TYPES"
+env_geom_types = os.environ.get(key)
+if env_geom_types:
+    RAW_CONFIG["DAEMON_PARAMS"][key] = json.loads(env_geom_types)
 
 def _flatten_config(cfg):
     """
@@ -98,7 +104,6 @@ def _load_config_from_yaml():
     # add daemon params
     merged_config = dict(merged_config, **flat_raw_config["DAEMON_PARAMS"])
     return merged_config
-
 
 # Load merged configuration and set as module attributes
 _merged = _load_config_from_yaml()

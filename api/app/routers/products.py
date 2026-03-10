@@ -80,13 +80,16 @@ def get_product(
     )
 
 
-@router.get("/{product_key}/colormap", response_model=ColormapResponse)
+@router.get("/{product_key}/colormap", response_model=ColormapResponse, deprecated=True)
 def get_product_colormap(
     product_key: str,
     db: Session = Depends(get_db)
 ):
     """
-    Get the colormap for a product.
+    DEPRECATED: Get the colormap for a product from database references.
+    
+    This endpoint is deprecated. Use /api/v1/colormap/info/{product_key} instead
+    to get predefined colormaps based on product type.
     
     Returns color mapping for use in tile rendering and legend display.
     """

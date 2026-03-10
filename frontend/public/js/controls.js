@@ -239,6 +239,61 @@ export class UIControls {
     }
     
     /**
+     * Enable/disable load time range button
+     */
+    enableLoadTimeRangeButton(enabled) {
+        const btn = document.getElementById('btn-load-timerange');
+        if (btn) btn.disabled = !enabled;
+    }
+    
+    /**
+     * Set time range input values
+     */
+    setTimeRangeValues(startDate, endDate) {
+        const startInput = document.getElementById('start-date');
+        const endInput = document.getElementById('end-date');
+        
+        if (startInput && startDate) {
+            startInput.value = this.formatDateTimeLocal(startDate);
+        }
+        
+        if (endInput && endDate) {
+            endInput.value = this.formatDateTimeLocal(endDate);
+        }
+    }
+    
+    /**
+     * Get time range input values as Date objects
+     */
+    getTimeRangeValues() {
+        const startInput = document.getElementById('start-date');
+        const endInput = document.getElementById('end-date');
+        
+        const startValue = startInput ? startInput.value : null;
+        const endValue = endInput ? endInput.value : null;
+        
+        return {
+            start: startValue ? new Date(startValue) : null,
+            end: endValue ? new Date(endValue) : null,
+        };
+    }
+    
+    /**
+     * Format Date object for datetime-local input
+     */
+    formatDateTimeLocal(date) {
+        if (!date) return '';
+        
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+    
+    /**
      * Get selected value from dropdown
      */
     getSelectedValue(selectId) {

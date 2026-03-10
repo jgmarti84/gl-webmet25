@@ -76,10 +76,89 @@ export const api = {
     },
     
     /**
-     * Get colormap for a product
+     * Get COGs for multiple radars within a time range
+     * Returns array of COG objects sorted by observation_time descending (newest first)
+     */
+    async getCogsForTimeRange(radarCodes, productKey, startTime, endTime, limit = 100) {
+        // Build query parameters
+        const params = new URLSearchParams({
+            product_key: productKey,
+            page_size: limit,
+        });
+        
+        if (startTime) {
+            params.append('start_time', startTime.toISOString());
+        }
+        
+        if (endTime) {
+            params.append('end_time', endTime.toISOString());
+        }
+        
+        // Fetch COGs for each radar
+        const promises = radarCodes.map(radarCode => {
+            const radarParams = new URLSearchParams(params);
+            radarParams.append('radar_code', radarCode);
+            
+            return this.get(`/cogs?${radarParams}`)
+                .then(data => ({
+                    radarCode,
+                    cogs: data.cogs || []
+                }))
+                .catch(err => {
+                    console.warn(`Failed to get COGs for ${radarCode}:`, err);
+                    return { radarCode, cogs: [] };
+                });
+        });
+        
+        const results = await Promise.all(promises);
+        
+        // Merge all COGs from all radars into a single array
+        const allCogs = results.flatMap(result => 
+            result.cogs.map(cog => ({
+                ...cog,
+                radar_code: result.radarCode
+            }))
+        );
+        
+        // Sort by observation_time descending (newest first)
+        allCogs.sort((a, b) => 
+            new Date(b.observation_time) - new Date(a.observation_time)
+        );
+        
+        return allCogs;
+    },
+    
+    /**
+     * Get colormap for a product (DEPRECATED - uses old endpoint)
      */
     async getColormap(productKey) {
         return this.get(`/products/${productKey}/colormap`);
+    },
+    
+    /**
+     * Get colormap info for a product (NEW - uses predefined colormaps)
+     */
+    async getColormapInfo(productKey, colormapName = null) {
+        const params = new URLSearchParams();
+        if (colormapName) {
+            params.append('colormap', colormapName);
+        }
+        const query = params.toString() ? `?${params}` : '';
+        return this.get(`/colormap/info/${productKey}${query}`);
+    },
+    
+    /**
+     * Get available colormap options for all products
+     */
+    async getColormapOptions() {
+        return this.get('/colormap/options');
+    },
+    
+    /**
+     * Get default colormaps for all products
+     */
+    async getColormapDefaults() {
+        return this.get('/colormap/defaults');
     },
     
     /**

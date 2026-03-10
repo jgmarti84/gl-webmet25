@@ -12,6 +12,7 @@ from rio_tiler.errors import TileOutsideBounds
 from rio_tiler.colormap import cmap as rio_cmap
 
 from ..config import settings
+from ..utils.colormaps import colormap_for_field, colormap_to_rio_tiler
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ class TileService:
             z: Zoom level
             x: Tile X coordinate
             y: Tile Y coordinate
-            colormap: Optional colormap dict {value: (r, g, b, a)}
+            colormap: Optional colormap dict {value: (r, g, b, a)} - ignored if COG is already RGBA
             resampling: Resampling method
             
         Returns:
@@ -57,22 +58,27 @@ class TileService:
         
         try:
             with Reader(str(full_path)) as src:
-                # Check number of bands - Reader.dataset.count
                 num_bands = src.dataset.count
                 
-                # Get tile data, specifying band 1 only if multi-band
-                if num_bands > 1:
-                    # Multi-band COG - read only first band
-                    img = src.tile(x, y, z, resampling_method=resampling, indexes=1)
-                else:
-                    img = src.tile(x, y, z, resampling_method=resampling)
+                # Check if the COG is already RGBA (pre-colored)
+                is_rgba_cog = num_bands >= 3  # At minimum RGB
                 
-                # Apply colormap if provided
-                if colormap:
-                    rendered = img.render(colormap=colormap)
-                else:
-                    # Use default rendering
+                if is_rgba_cog:
+                    # Read all available bands (RGB or RGBA)
+                    # rio_tiler will automatically handle the bands correctly
+                    img = src.tile(x, y, z, resampling_method=resampling)
+                    logger.debug(f"COG {file_path} is pre-colored RGBA/RGB, skipping colormap application")
+                    # Render directly without applying a colormap
+                    # The rio_tiler Image.render() will convert bands to PNG properly
                     rendered = img.render()
+                else:
+                    # Single-band grayscale data - apply colormap
+                    img = src.tile(x, y, z, resampling_method=resampling, indexes=1)
+                    
+                    if colormap:
+                        rendered = img.render(colormap=colormap)
+                    else:
+                        rendered = img.render()
                 
                 return rendered
                 
@@ -103,6 +109,9 @@ class TileService:
         nodata_transparent: bool = True
     ) -> Dict[int, Tuple[int, int, int, int]]:
         """
+        DEPRECATED: This method is no longer used.
+        Colormaps are now defined in utils/colormaps.py based on product type.
+        
         Build a rio-tiler compatible colormap from product references.
         
         Args:
@@ -112,6 +121,8 @@ class TileService:
         Returns:
             Colormap dict for rio-tiler
         """
+        logger.warning("build_colormap_from_references is deprecated. Use predefined colormaps instead.")
+        
         if not references:
             return self._get_default_radar_colormap()
         
@@ -140,6 +151,32 @@ class TileService:
         colormap = self._interpolate_colormap(colormap)
         
         return colormap
+    
+    def build_colormap_for_product(
+        self,
+        product_key: str,
+        override_cmap: Optional[str] = None
+    ) -> Dict[int, Tuple[int, int, int, int]]:
+        """
+        Build a rio-tiler compatible colormap for a radar product.
+        Uses predefined colormaps from utils/colormaps.py.
+        
+        Args:
+            product_key: Product key (e.g., 'DBZH', 'VRAD')
+            override_cmap: Optional colormap name to override default
+            
+        Returns:
+            Colormap dict for rio-tiler
+        """
+        # Get colormap configuration for this product
+        cmap, vmin, vmax, cmap_name = colormap_for_field(product_key, override_cmap)
+        
+        # Convert to rio-tiler format
+        colormap_dict = colormap_to_rio_tiler(cmap, vmin, vmax)
+        
+        logger.info(f"Built colormap '{cmap_name}' for product '{product_key}' (range: {vmin} to {vmax})")
+        
+        return colormap_dict
     
     def _interpolate_colormap(
         self, 

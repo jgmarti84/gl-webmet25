@@ -65,7 +65,7 @@ services:
       FILE_PATTERN: "*.tif"
       COMPUTE_STATS: "true"
       COMPUTE_CHECKSUM: "false"
-      RADAR_CODES: "RMA3"  # Optional: limit to specific radars
+      RADAR_CODES: "RMA1, RMA2, RMA3"  # Optional: limit to specific radars
     volumes:
       - ./product_output:/product_output:ro
     depends_on:
@@ -102,10 +102,11 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5).read()"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
 
   # ==========================================================================
   # FRONTEND
@@ -122,30 +123,54 @@ services:
     restart: unless-stopped
     
   # Radar data processing service
-  genpro25:
+  genpro25-1:
     build:
       context: ./genpro25
       dockerfile: Dockerfile
-    container_name: webmet25-genpro25
+    container_name: webmet25-genpro25-1
     volumes:
       - ./product_output:/app/product_output
       - ./logs:/app/logs
       - ./genpro25.yml:/app/genpro25.yml:ro # Read-only volume for genpro25 configuration
     environment:
-      RADAR_NAME: "RMA3"
+      RADAR_NAME: "RMA1"
       GENPRO25_CONFIG: "/app/genpro25.yml"
       ROOT_CACHE_PATH: "/app/cache"
       ROOT_RADAR_FILES_PATH: "/app/data/radares"
       ROOT_RADAR_PRODUCTS_PATH: "/app/product_output"
       ROOT_GATE_COORDS_PATH: "/app/data/gate_coordinates"
+      ROOT_GEOMETRY_PATH: "/app/data/geometries"
       ROOT_LOGS_PATH: "/app/logs"
+      # GEOMETRY_TYPES: '{"0315":{"01":[1100,12000,0.017,250],"02":[800,12000,0.021,300]}}'
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
     working_dir: /app
     command: ["bash", "-c", "mkdir -p /app/product_output && python main.py"]
-    # depends_on:
-    #   db:
-    #     condition: service_healthy
+    restart: unless-stopped
+
+  genpro25-2:
+    build:
+      context: ./genpro25
+      dockerfile: Dockerfile
+    container_name: webmet25-genpro25-2
+    volumes:
+      - ./product_output:/app/product_output
+      - ./logs:/app/logs
+      - ./genpro25.yml:/app/genpro25.yml:ro # Read-only volume for genpro25 configuration
+    environment:
+      RADAR_NAME: "RMA2"
+      GENPRO25_CONFIG: "/app/genpro25.yml"
+      ROOT_CACHE_PATH: "/app/cache"
+      ROOT_RADAR_FILES_PATH: "/app/data/radares"
+      ROOT_RADAR_PRODUCTS_PATH: "/app/product_output"
+      ROOT_GATE_COORDS_PATH: "/app/data/gate_coordinates"
+      ROOT_GEOMETRY_PATH: "/app/data/geometries"
+      ROOT_LOGS_PATH: "/app/logs"
+      # GEOMETRY_TYPES: '{"0315":{"01":[1100,12000,0.017,250],"02":[800,12000,0.021,300]}}'
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    working_dir: /app
+    command: ["bash", "-c", "mkdir -p /app/product_output && python main.py"]
     restart: unless-stopped
 
 # PostgreSQL database service

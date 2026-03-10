@@ -17,7 +17,10 @@
     
     <!-- Control Panel (Top Right) -->
     <div id="control-panel">
-        <h3>🌧️ Radar Viewer</h3>
+        <div class="nav-header">
+            <h3>🌧️ Radar Viewer</h3>
+            <a href="cog-browser.html" class="nav-link">Go to COG Browser →</a>
+        </div>
         
         <!-- Basemap Selection -->
         <div class="control-group">
@@ -59,9 +62,34 @@
             </div>
         </div>
         
-        <!-- Latest Button -->
+        <!-- Time Range Selection -->
         <div class="control-group">
+            <label>Time Range:</label>
+            <button id="btn-toggle-timerange" class="toggle-btn">Select Time Range ▼</button>
+            <div id="timerange-container" class="timerange-container" style="display: none;">
+                <div class="timerange-inputs">
+                    <div class="input-group">
+                        <label for="start-date" class="input-label">From:</label>
+                        <input type="datetime-local" id="start-date" class="datetime-input">
+                    </div>
+                    <div class="input-group">
+                        <label for="end-date" class="input-label">To:</label>
+                        <input type="datetime-local" id="end-date" class="datetime-input">
+                    </div>
+                    <div class="timerange-presets">
+                        <button class="preset-btn" data-hours="3">Last 3h</button>
+                        <button class="preset-btn" data-hours="6">Last 6h</button>
+                        <button class="preset-btn" data-hours="12">Last 12h</button>
+                        <button class="preset-btn" data-hours="24">Last 24h</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div class="control-group action-buttons">
             <button id="btn-load-latest" class="action-btn" disabled>Load Latest</button>
+            <button id="btn-load-timerange" class="action-btn secondary" disabled>Load Time Range</button>
         </div>
         
         <!-- Time Display -->
@@ -84,6 +112,20 @@
                 <input type="range" id="opacity-slider" min="0" max="1" step="0.1" value="0.7">
                 <span id="opacity-value">70%</span>
             </div>
+        </div>
+        
+        <!-- Keyboard Shortcuts Info -->
+        <div class="control-group shortcuts-info">
+            <details>
+                <summary>⌨️ Shortcuts</summary>
+                <div class="shortcuts-list">
+                    <div><kbd>Space</kbd> Play/Pause</div>
+                    <div><kbd>←</kbd> <kbd>→</kbd> Navigate</div>
+                    <div><kbd>Home</kbd> Latest</div>
+                    <div><kbd>L</kbd> Load Latest</div>
+                    <div><kbd>S</kbd> Speed</div>
+                </div>
+            </details>
         </div>
         
         <!-- Status -->
