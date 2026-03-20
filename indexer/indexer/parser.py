@@ -84,12 +84,12 @@ class COGFilenameParser:
             radar_code = groups['radar']
             product_key = groups['product']
 
-            if "DBZH" in product_key:
-                product_key = product_key.replace("DBZH", "TH")
-            if "ZDR" in product_key:
-                product_key = product_key.replace("ZDR", "TDR")
-            if "DBZV" in product_key:
-                product_key = product_key.replace("DBZV", "TV")
+            # if "DBZH" in product_key:
+            #     product_key = product_key.replace("DBZH", "TH")
+            # if "ZDR" in product_key:
+            #     product_key = product_key.replace("ZDR", "TDR")
+            # if "DBZV" in product_key:
+            #     product_key = product_key.replace("DBZV", "TV")
                 
             # Parse datetime (robust to minute/second overflow)
             if 'datetime' in groups:

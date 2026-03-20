@@ -1,6 +1,6 @@
 [
 {
-    "model": "radar_api.radar",
+    "model": "api_radares.radar",
     "pk": "AR5",
     "fields": {
         "title": "Pergamino",
@@ -61,54 +61,6 @@
         "point1_long": "-61.7050590000",
         "point2_lat": "-33.5351190000",
         "point2_long": "-66.6787800000"
-    }
-},
-{
-    "model": "api_radares.radar",
-    "pk": "RMA10",
-    "fields": {
-        "title": "Espora",
-        "description": "RMA Doppler Dual-pol",
-        "center_lat": "-38.73426000",
-        "center_long": "-62.16341000",
-        "img_radio": 240,
-        "is_active": true,
-        "point1_lat": "-36.5500161400",
-        "point1_long": "-59.3292016100",
-        "point2_lat": "-40.8868116300",
-        "point2_long": "-64.9976183900"
-    }
-},
-{
-    "model": "api_radares.radar",
-    "pk": "RMA11",
-    "fields": {
-        "title": "TermasRioHondo",
-        "description": "RMA Doppler Dual-pol",
-        "center_lat": "-27.50260000",
-        "center_long": "-64.90575000",
-        "img_radio": 240,
-        "is_active": true,
-        "point1_lat": "-25.3253197300",
-        "point1_long": "-62.4380372100",
-        "point2_lat": "-29.6590762000",
-        "point2_long": "-67.3734627900"
-    }
-},
-{
-    "model": "api_radares.radar",
-    "pk": "RMA12",
-    "fields": {
-        "title": "Bariloche",
-        "description": "RMA Doppler Dual-pol",
-        "center_lat": "-41.13944000",
-        "center_long": "-71.14944000",
-        "img_radio": 240,
-        "is_active": true,
-        "point1_lat": "-39.8027066300",
-        "point1_long": "-69.3625682900",
-        "point2_lat": "-42.4629364800",
-        "point2_long": "-72.9363117100"
     }
 },
 {
@@ -229,14 +181,174 @@
     "fields": {
         "title": "Rio Grande",
         "description": "RMA Doppler Dual-pol",
-        "center_lat": "-67.74426000",
-        "center_long": "-53.78399000",
+        "center_lat" : "-53.78399000",
+		"center_long" : "-67.74426000",
+		"img_radio" : 240,
+		"is_active" : true,
+		"point1_lat" : "-52.4431039700",
+		"point1_long" : "-65.4422034000",
+		"point2_lat" : "-55.1045875600",
+		"point2_long" : "-70.0463166000"
+    }
+},
+{
+    "model": "api_radares.radar",
+    "pk": "RMA10",
+    "fields": {
+        "title": "Espora",
+        "description": "RMA Doppler Dual-pol",
+        "center_lat": "-38.73426000",
+        "center_long": "-62.16341000",
         "img_radio": 240,
         "is_active": true,
-        "point1_lat": "-52.4431039700",
-        "point1_long": "-65.4422034000",
-        "point2_lat": "-55.1045875600",
-        "point2_long": "-70.0463166000"
+        "point1_lat": "-36.5500161400",
+        "point1_long": "-59.3292016100",
+        "point2_lat": "-40.8868116300",
+        "point2_long": "-64.9976183900"
+    }
+},
+{
+    "model": "api_radares.radar",
+    "pk": "RMA11",
+    "fields": {
+        "title": "TermasRioHondo",
+        "description": "RMA Doppler Dual-pol",
+        "center_lat": "-27.50260000",
+        "center_long": "-64.90575000",
+        "img_radio": 240,
+        "is_active": true,
+        "point1_lat": "-25.3253197300",
+        "point1_long": "-62.4380372100",
+        "point2_lat": "-29.6590762000",
+        "point2_long": "-67.3734627900"
+    }
+},
+{
+    "model": "api_radares.radar",
+    "pk": "RMA12",
+    "fields": {
+        "title": "Las Grutas",
+        "description": "RMA Doppler Dual-pol",
+        "center_lat" : "-40.77221000",
+		"center_long" : "-65.07604000",
+		"img_radio" : 240,
+		"is_active" : true,
+		"point1_lat" : "-38.6328740000",
+		"point1_long" : "-62.2521100000",
+		"point2_lat" : "-42.9115370000",
+		"point2_long" : "-67.8999600000"
+    }
+},
+{
+    "model": "api_radares.radar",
+    "pk" : "RMA13",
+    "fields": {
+        "title" : "Ituzaingo - Corrientes",
+        "description" : "RMA Doppler dual-pol",
+        "center_lat" : "-27.62228900",
+        "center_long" : "-56.84180700",
+        "img_radio" : 240,
+        "is_active" : true,
+        "point1_lat" : "-25.4461800000",
+        "point1_long" : "-54.3773800000",
+        "point2_lat" : "-29.6764700000",
+        "point2_long" : "-59.2154600000"
+    }
+},
+{
+    "model": "api_radares.radar",
+    "pk": "RMA14",
+    "fields": {
+        "title" : "Bolivar",
+        "description" : "Bolivar, Buenos Aieres",
+        "center_lat" : "-36.18902600",
+        "center_long" : "-61.07041300",
+        "img_radio" : 240,
+        "is_active" : true,
+        "point1_lat" : "-34.0600000000",
+        "point1_long" : "-58.2380550000",
+        "point2_lat" : "-38.3944400000",
+        "point2_long" : "-63.7516660000"
+    }
+},
+{
+    "model": "api_radares.radar",
+    "pk" : "RMA15",
+    "fields": {
+        "title" : "Patquia",
+        "description" : "La Rioja RMA Doppler Dual-pol",
+        "center_lat" : "-30.03080000",
+        "center_long" : "-66.87630000",
+        "img_radio" : 240,
+        "is_active" : true,
+        "point1_lat" : "-27.8480000000",
+        "point1_long" : "-64.3725000000",
+        "point2_lat" : "-32.1475000000",
+        "point2_long" : "-69.3605000000"
+    }
+},
+{
+    "model": "api_radares.radar",
+    "pk" : "RMA16",
+    "fields": {
+        "title" : "Villa Reynolds",
+        "description" : "San Luis RMA Doppler Dual-pol",
+        "center_lat" : "-33.71829070",
+        "center_long" : "-65.37546300",
+        "img_radio" : 240,
+        "is_active" : true,
+        "point1_lat" : "-31.5810000000",
+        "point1_long" : "-62.7700000000",
+        "point2_lat" : "-35.8750000000",
+        "point2_long" : "-67.9500000000"
+    }
+},
+{
+    "model": "api_radares.radar",
+    "pk" : "RMA17",
+    "fields": {
+        "title" : "Alejandro Roca",
+        "description" : "Cordoba Sur RMA Doppler Dual-pol",
+        "center_lat" : "-33.35140000",
+        "center_long" : "-63.70360000",
+        "img_radio" : 240,
+        "is_active" : true,
+        "point1_lat" : "-31.1555560000",
+        "point1_long" : "-61.1257260000",
+        "point2_lat" : "-35.4833750000",
+        "point2_long" : "-66.2814740000"
+    }
+},
+{
+    "model": "api_radares.radar",
+    "pk" : "RMA18",
+    "fields": {
+        "title" : "Santa Isabel - La Pampa",
+        "description" : "RMA Doppler Dual-pol",
+        "center_lat" : "-36.22316700",
+        "center_long" : "-66.93638900",
+        "img_radio" : 240,
+        "is_active" : true,
+        "point1_lat" : "-33.9296310000",
+        "point1_long" : "-64.1771720000",
+        "point2_lat" : "-38.2443280000",
+        "point2_long" : "-69.5456140000"
+    }
+},
+{
+    "model": "api_radares.radar",
+    "pk": "RMA00",
+    "fields": {
+        "title" : "Bariloche",
+        "description" : "RMA Doppler Dual-pol",
+        "center_lat" : "-41.13944000",
+        "center_long" : "-71.14944000",
+        "img_radio" : 240,
+        "is_active" : true,
+        "point1_lat" : "-39.8027066300",
+        "point1_long" : "-69.3625682900",
+        "point2_lat" : "-42.4629364800",
+        "point2_long" : "-72.9363117100"
     }
 },
 {
@@ -245,7 +357,7 @@
     "fields": {
         "product_key": "COLMAX",
         "product_title": "COLMAX(Z)",
-        "product_description": "Este es un producto colmax tipo TH",
+        "product_description": "Este es un producto colmax tipo DBZH",
         "enabled": true,
         "see_in_open": true
     }
@@ -257,7 +369,7 @@
         "product_key": "RHOHV",
         "product_title": "RHOHV",
         "product_description": "Coeficiente de correlacion co-polar.",
-        "enabled": false,
+        "enabled": true,
         "see_in_open": false
     }
 },
@@ -265,7 +377,7 @@
     "model": "radar_api.radarproduct",
     "pk": 3,
     "fields": {
-        "product_key": "TH",
+        "product_key": "DBZH",
         "product_title": "Z@0.5",
         "product_description": "Factor de Reflectividad Equivalente",
         "enabled": true,
@@ -287,8 +399,8 @@
     "model": "radar_api.radarproduct",
     "pk": 6,
     "fields": {
-        "product_key": "TV",
-        "product_title": "TV",
+        "product_key": "DBZV",
+        "product_title": "DBZV",
         "product_description": "Factor de Reflectividad Vertical",
         "enabled": false,
         "see_in_open": false
@@ -312,7 +424,7 @@
         "product_key": "WRAD",
         "product_title": "WRAD",
         "product_description": "Ancho Espectral",
-        "enabled": false,
+        "enabled": true,
         "see_in_open": false
     }
 },
@@ -320,10 +432,10 @@
     "model": "radar_api.radarproduct",
     "pk": 16,
     "fields": {
-        "product_key": "THo",
-        "product_title": "TH sf",
-        "product_description": "TH sin filtrar",
-        "enabled": false,
+        "product_key": "DBZHo",
+        "product_title": "DBZH sf",
+        "product_description": "DBZH sin filtrar",
+        "enabled": true,
         "see_in_open": false
     }
 },
@@ -342,9 +454,9 @@
     "model": "radar_api.radarproduct",
     "pk": 18,
     "fields": {
-        "product_key": "TVo",
-        "product_title": "TV sf",
-        "product_description": "TV sin filtrar",
+        "product_key": "DBZVo",
+        "product_title": "DBZV sf",
+        "product_description": "DBZV sin filtrar",
         "enabled": false,
         "see_in_open": false
     }
@@ -356,7 +468,7 @@
         "product_key": "COLMAXo",
         "product_title": "COLMAX sf",
         "product_description": "COLMAX sin filtrar",
-        "enabled": false,
+        "enabled": true,
         "see_in_open": false
     }
 },
@@ -366,7 +478,7 @@
     "fields": {
         "product_key": "RHOHVo",
         "product_title": "RHOHV@0.5",
-        "product_description": "Coeficiente de correlaci\u00f3n co-polar",
+        "product_description": "RHOHV sin filtrar",
         "enabled": true,
         "see_in_open": false
     }
@@ -375,10 +487,10 @@
     "model": "radar_api.radarproduct",
     "pk": 21,
     "fields": {
-        "product_key": "TDRo",
+        "product_key": "ZDRo",
         "product_title": "ZDR sf",
         "product_description": "ZDR sin filtrar",
-        "enabled": false,
+        "enabled": true,
         "see_in_open": false
     }
 },
@@ -441,7 +553,7 @@
     "model": "radar_api.radarproduct",
     "pk": 27,
     "fields": {
-        "product_key": "TDR",
+        "product_key": "ZDR",
         "product_title": "ZDR@0.5",
         "product_description": "Reflectividad diferencial",
         "enabled": true,

@@ -4,13 +4,13 @@ services:
   # ==========================================================================
   radar_db:
     image: postgis/postgis:15-3.5
-    container_name: radar_db
+    container_name: radar_db-gl
     environment: 
       POSTGRES_DB: radar_prod_db
       POSTGRES_USER: radar
       POSTGRES_PASSWORD: radarpass
     volumes:
-      - ./radar_db_data:/var/lib/postgresql/data
+      - ../radar_db_data:/var/lib/postgresql/data
     ports:
       - "5433:5432"
     healthcheck:
@@ -27,7 +27,7 @@ services:
     build:
       context: ./database
       dockerfile: Dockerfile
-    container_name: radar_db_init
+    container_name: radar_db_init-gl
     environment:
       DB_HOST: radar_db
       DB_PORT: 5432
@@ -65,9 +65,9 @@ services:
       FILE_PATTERN: "*.tif"
       COMPUTE_STATS: "true"
       COMPUTE_CHECKSUM: "false"
-      RADAR_CODES: "RMA1, RMA2, RMA3"  # Optional: limit to specific radars
+      RADAR_CODES: "RMA1"  # Optional: limit to specific radars
     volumes:
-      - ./product_output:/product_output:ro
+      - ../product_output:/product_output:ro
     depends_on:
       radar_db:
         condition: service_healthy
@@ -92,7 +92,7 @@ services:
       COG_BASE_PATH: /product_output
       CORS_ORIGINS: "*"
     volumes:
-      - ./product_output:/product_output:ro
+      - ../product_output:/product_output:ro
     ports:
       - "8000:8000"
     depends_on:
