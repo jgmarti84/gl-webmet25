@@ -88,7 +88,10 @@ async def get_product_colormap_info(
             "vmin": vmin,
             "vmax": vmax,
             "colors": hex_colors,
-            "available_colormaps": FIELD_COLORMAP_OPTIONS.get(product_key.upper(), [])
+            # Try exact key first (preserves 'o' suffix), then uppercase fallback
+            "available_colormaps": FIELD_COLORMAP_OPTIONS.get(
+                product_key, FIELD_COLORMAP_OPTIONS.get(product_key.upper(), [])
+            )
         }
     except Exception as e:
         raise HTTPException(

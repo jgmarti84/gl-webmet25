@@ -144,6 +144,82 @@ def get_cmap_grc_rho():
     return LinearSegmentedColormap('grc_rho', grc_rho_data)
 
 
+def get_cmap_nws_vel():
+    """
+    NWS Velocity colormap for Doppler radial velocity (VRAD).
+    Negative values (approaching) are rendered in greens,
+    near-zero in white/grey, and positive values (receding) in reds.
+    Matches the colour table used in standard NWS Level-II displays and
+    closely matches PyART's NWSVel colormap.
+    """
+    from matplotlib.colors import to_rgb
+
+    # (position 0..1, hex_color)  – centred on 0.5 == 0 m/s
+    nwsvel_stops = [
+        (0.000, '#008C00'),  # strong negative – dark green
+        (0.083, '#00A800'),
+        (0.167, '#00CC00'),  # bright green
+        (0.250, '#00FF00'),
+        (0.333, '#66FF66'),  # light green
+        (0.417, '#B3FFB3'),
+        (0.458, '#DFFFDF'),  # near-zero negative
+        (0.500, '#FFFFFF'),  # zero – white
+        (0.542, '#FFDFDF'),  # near-zero positive
+        (0.583, '#FFB3B3'),
+        (0.667, '#FF6666'),  # light red
+        (0.750, '#FF0000'),
+        (0.833, '#CC0000'),  # red
+        (0.917, '#A80000'),
+        (1.000, '#8C0000'),  # strong positive – dark red
+    ]
+    colors = [to_rgb(s[1]) for s in nwsvel_stops]
+    positions = [s[0] for s in nwsvel_stops]
+    n = len(nwsvel_stops)
+    data = {
+        'red':   [(positions[i], colors[i][0], colors[i][0]) for i in range(n)],
+        'green': [(positions[i], colors[i][1], colors[i][1]) for i in range(n)],
+        'blue':  [(positions[i], colors[i][2], colors[i][2]) for i in range(n)],
+    }
+    return LinearSegmentedColormap('NWSVel', data)
+
+
+def get_cmap_theodore16():
+    """
+    Theodore16 colormap for differential phase (PHIDP).
+    A cyclic 16-step colormap designed for phase data (0-360°).
+    Closely matches PyART's Theodore16 colormap.
+    """
+    from matplotlib.colors import to_rgb
+
+    theodore16_colors = [
+        '#800080',  # purple
+        '#0000FF',  # blue
+        '#0080FF',  # dodger blue
+        '#00FFFF',  # cyan
+        '#00FFAA',  # spring green
+        '#00FF00',  # lime
+        '#80FF00',  # chartreuse
+        '#FFFF00',  # yellow
+        '#FFC000',  # amber
+        '#FF8000',  # orange
+        '#FF4000',  # orange-red
+        '#FF0000',  # red
+        '#FF0080',  # rose
+        '#FF00FF',  # magenta
+        '#C000FF',  # violet
+        '#800080',  # purple (close the cycle)
+    ]
+    colors = [to_rgb(c) for c in theodore16_colors]
+    n = len(colors)
+    positions = [i / (n - 1) for i in range(n)]
+    data = {
+        'red':   [(positions[i], colors[i][0], colors[i][0]) for i in range(n)],
+        'green': [(positions[i], colors[i][1], colors[i][1]) for i in range(n)],
+        'blue':  [(positions[i], colors[i][2], colors[i][2]) for i in range(n)],
+    }
+    return LinearSegmentedColormap('Theodore16', data)
+
+
 def get_cmap_grc_zdr2():
     """Green-Red-Cyan colormap for ZDR (differential reflectivity)."""
     from matplotlib.colors import to_rgb
@@ -176,12 +252,15 @@ FIELD_RENDER = {
     "DBZHo": {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"},
     "DBZHF": {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"},
     "DBZV": {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"},
-    "ZDR": {"vmin": -5.0, "vmax": 10.5, "cmap": "grc_zdr2"}, 
-    "RHOHV": {"vmin": 0.0, "vmax": 1.0, "cmap": "grc_rho"}, 
-    "RHOHVo": {"vmin": 0.0, "vmax": 1.0, "cmap": "grc_rho"}, 
+    "ZDR": {"vmin": -5.0, "vmax": 10.5, "cmap": "grc_zdr2"},
+    "ZDRo": {"vmin": -5.0, "vmax": 10.5, "cmap": "grc_zdr2"},
+    "RHOHV": {"vmin": 0.0, "vmax": 1.0, "cmap": "grc_rho"},
+    "RHOHVo": {"vmin": 0.0, "vmax": 1.0, "cmap": "grc_rho"},
     "KDP": {"vmin": 0.0, "vmax": 8.0, "cmap": "grc_rain"},
     "VRAD": {"vmin": -35.0, "vmax": 35.0, "cmap": "NWSVel"},
+    "VRADo": {"vmin": -35.0, "vmax": 35.0, "cmap": "NWSVel"},
     "WRAD": {"vmin": 0.0, "vmax": 10.0, "cmap": "Oranges"},
+    "WRADo": {"vmin": 0.0, "vmax": 10.0, "cmap": "Oranges"},
     "PHIDP": {"vmin": 0.0, "vmax": 360.0, "cmap": "Theodore16"},
     # Generic fallback for other products
     "COLMAX": {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"},
@@ -194,11 +273,14 @@ FIELD_COLORMAP_OPTIONS = {
     "DBZHF": ["grc_th", "grc_th2", "grc_rain", "pyart_NWSRef", "pyart_HomeyerRainbow"],
     "DBZV": ["grc_th", "grc_th2", "grc_rain", "pyart_NWSRef", "pyart_HomeyerRainbow"],
     "ZDR": ["grc_zdr2", "pyart_RefDiff", "pyart_Theodore16"],
+    "ZDRo": ["grc_zdr2", "pyart_RefDiff", "pyart_Theodore16"],
     "RHOHV": ["grc_rho", "pyart_RefDiff", "Greys", "viridis"],
     "RHOHVo": ["grc_rho", "pyart_RefDiff", "Greys", "viridis"],
     "KDP": ["grc_rain", "grc_th", "pyart_Theodore16", "plasma"],
     "VRAD": ["NWSVel", "pyart_BuDRd18", "seismic", "RdBu_r"],
+    "VRADo": ["NWSVel", "pyart_BuDRd18", "seismic", "RdBu_r"],
     "WRAD": ["Oranges", "YlOrRd", "hot", "plasma"],
+    "WRADo": ["Oranges", "YlOrRd", "hot", "plasma"],
     "PHIDP": ["Theodore16", "hsv", "twilight", "twilight_shifted"],
     "COLMAX": ["grc_th", "grc_th2", "grc_rain", "pyart_NWSRef", "pyart_HomeyerRainbow"],
 }
@@ -226,6 +308,12 @@ def get_colormap(cmap_name: str):
         return get_cmap_grc_rho()
     elif cmap_name == "grc_zdr2":
         return get_cmap_grc_zdr2()
+
+    # Built-in colormaps that are also available in PyART but must work without it
+    elif cmap_name == "NWSVel":
+        return get_cmap_nws_vel()
+    elif cmap_name == "Theodore16":
+        return get_cmap_theodore16()
     
     # PyART colormaps
     elif cmap_name.startswith("pyart_") and PYART_AVAILABLE:
@@ -257,10 +345,11 @@ def colormap_for_field(field_key: str, override_cmap: Optional[str] = None) -> T
     Returns:
         Tuple of (cmap_object, vmin, vmax, cmap_name)
     """
-    field_upper = field_key.upper()
-    
-    # Get defaults for this field
-    spec = FIELD_RENDER.get(field_upper, {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"})
+    # Try exact key first (preserves 'o' suffix like 'VRADo', 'RHOHVo'),
+    # then fall back to uppercased version for convenience (e.g. 'dbzh' -> 'DBZH').
+    _fallback = {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"}
+    spec = FIELD_RENDER.get(field_key, FIELD_RENDER.get(field_key.upper(), _fallback))
+    field_upper = field_key.upper()  # kept for FIELD_COLORMAP_OPTIONS lookup below
     vmin, vmax = spec["vmin"], spec["vmax"]
     cmap_name = override_cmap if override_cmap else spec["cmap"]
     

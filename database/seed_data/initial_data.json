@@ -501,7 +501,7 @@
         "product_key": "VRADo",
         "product_title": "VRADo sf",
         "product_description": "VRAD sin filtrar",
-        "enabled": false,
+        "enabled": true,
         "see_in_open": false
     }
 },
@@ -512,7 +512,7 @@
         "product_key": "WRADo",
         "product_title": "WRAD sf",
         "product_description": "WRAD sin filtrar",
-        "enabled": false,
+        "enabled": true,
         "see_in_open": false
     }
 },

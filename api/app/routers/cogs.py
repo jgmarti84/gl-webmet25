@@ -80,9 +80,12 @@ def list_cogs(
         query = query.filter(RadarCOG.radar_code == radar_code)
     
     if product_key:
-        # Join with product or use polarimetric_var
+        # Match exact polarimetric_var, OR the same key with an 'o' suffix
+        # (e.g. 'VRAD' should also match COGs stored as 'VRADo'), OR via the
+        # product relationship for product-linked COGs.
         query = query.filter(
             (RadarCOG.polarimetric_var == product_key) |
+            (RadarCOG.polarimetric_var == product_key + 'o') |
             (RadarCOG.product.has(RadarProduct.product_key == product_key))
         )
     
@@ -123,7 +126,8 @@ def get_latest_cog(
     cog = db.query(RadarCOG)\
         .filter(
             RadarCOG.radar_code == radar_code,
-            RadarCOG.polarimetric_var == product_key,
+            (RadarCOG.polarimetric_var == product_key) |
+            (RadarCOG.polarimetric_var == product_key + 'o'),
             RadarCOG.status == COGStatus.AVAILABLE
         )\
         .order_by(desc(RadarCOG.observation_time))\
@@ -157,7 +161,8 @@ def get_timeline(
     cogs = db.query(RadarCOG.observation_time)\
         .filter(
             RadarCOG.radar_code == radar_code,
-            RadarCOG.polarimetric_var == product_key,
+            (RadarCOG.polarimetric_var == product_key) |
+            (RadarCOG.polarimetric_var == product_key + 'o'),
             RadarCOG.status == COGStatus.AVAILABLE,
             RadarCOG.observation_time >= cutoff_time
         )\
