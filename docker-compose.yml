@@ -41,6 +41,7 @@ services:
       sh -c "
         echo 'Waiting for database...' &&
         python -m radar_db.manage init &&
+        python -m radar_db.manage migrate upgrade -r head &&
         python -m radar_db.manage seed &&
         echo 'Database initialized!'
       "

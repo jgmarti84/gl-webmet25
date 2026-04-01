@@ -108,7 +108,7 @@ export class MapManager {
     /**
      * Set radar layer on the map (supports multiple radars)
      */
-    setRadarLayer(radarCode, cogId, bounds = null, opacity = null) {
+    setRadarLayer(radarCode, cogId, bounds = null, opacity = null, tileParams = {}) {
         if (!cogId) return;
         
         // Use provided opacity or current opacity
@@ -119,8 +119,15 @@ export class MapManager {
             this.map.removeLayer(this.radarLayers[radarCode]);
         }
         
-        // Add new radar layer (zIndex: ZINDEX_RADAR keeps it above basemap)
-        const tileUrl = `/api/v1/tiles/${cogId}/{z}/{x}/{y}.png`;
+        // Build tile URL with optional colormap/vmin/vmax params
+        const queryParams = new URLSearchParams();
+        if (tileParams.cmap) queryParams.append('colormap', tileParams.cmap);
+        if (tileParams.vmin !== null && tileParams.vmin !== undefined) queryParams.append('vmin', tileParams.vmin);
+        if (tileParams.vmax !== null && tileParams.vmax !== undefined) queryParams.append('vmax', tileParams.vmax);
+        const queryStr = queryParams.toString();
+        const tileUrl = queryStr
+            ? `/api/v1/tiles/${cogId}/{z}/{x}/{y}.png?${queryStr}`
+            : `/api/v1/tiles/${cogId}/{z}/{x}/{y}.png`;
         
         this.radarLayers[radarCode] = L.tileLayer(tileUrl, {
             opacity: layerOpacity,
@@ -149,8 +156,9 @@ export class MapManager {
      *
      * @param {Array}    groupedFrames - Array of {timestamp, cogsByRadar: {radarCode: cog}}
      * @param {Function} onLayerLoaded - Optional callback fired each time a layer finishes loading its tiles
+     * @param {Object}   tileParams    - Optional {cmap, vmin, vmax} for tile URL
      */
-    preloadFrames(groupedFrames, onLayerLoaded = null) {
+    preloadFrames(groupedFrames, onLayerLoaded = null, tileParams = {}) {
         this.clearCachedFrames();
 
         // Pre-size the array so indices stay stable while batches fill in
@@ -167,7 +175,14 @@ export class MapManager {
                 const frame = groupedFrames[i];
                 const layerMap = {};
                 Object.entries(frame.cogsByRadar).forEach(([radarCode, cog]) => {
-                    const tileUrl = `/api/v1/tiles/${cog.id}/{z}/{x}/{y}.png`;
+                    const queryParams = new URLSearchParams();
+                    if (tileParams.cmap) queryParams.append('colormap', tileParams.cmap);
+                    if (tileParams.vmin !== null && tileParams.vmin !== undefined) queryParams.append('vmin', tileParams.vmin);
+                    if (tileParams.vmax !== null && tileParams.vmax !== undefined) queryParams.append('vmax', tileParams.vmax);
+                    const queryStr = queryParams.toString();
+                    const tileUrl = queryStr
+                        ? `/api/v1/tiles/${cog.id}/{z}/{x}/{y}.png?${queryStr}`
+                        : `/api/v1/tiles/${cog.id}/{z}/{x}/{y}.png`;
                     const layer = L.tileLayer(tileUrl, {
                         opacity: 0, // hidden until this frame is active
                         maxZoom: 18,
