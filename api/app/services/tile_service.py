@@ -1,20 +1,74 @@
 # api/app/services/tile_service.py
+import io
 import logging
 from pathlib import Path
 from typing import Optional, Dict, Tuple, List
-from functools import lru_cache
-import numpy as np
 
+import numpy as np
 import rasterio
-from rasterio.warp import calculate_default_transform, reproject, Resampling
+from PIL import Image
 from rio_tiler.io import Reader
 from rio_tiler.errors import TileOutsideBounds
-from rio_tiler.colormap import cmap as rio_cmap
 
 from ..config import settings
-from ..utils.colormaps import colormap_for_field, colormap_to_rio_tiler
+from ..utils.colormaps import colormap_for_field, colormap_to_rio_tiler, get_colormap
 
 logger = logging.getLogger(__name__)
+
+
+def detect_cog_type(file_path: str) -> str:
+    """
+    Detect whether a COG file is raw_float, rgba, or unknown.
+
+    Reads the ``radarlib_data_type`` tag if present; otherwise falls back to
+    a heuristic based on band count and dtype.
+    """
+    try:
+        with rasterio.open(file_path) as src:
+            tags = src.tags() or {}
+            data_type_tag = tags.get("radarlib_data_type", "")
+
+            if data_type_tag == "raw_float":
+                return "raw_float"
+            if data_type_tag == "rgba":
+                return "rgba"
+
+            if src.count >= 3 and str(src.dtypes[0]) == "uint8":
+                return "rgba"
+            if src.count == 1 and str(src.dtypes[0]) in ("float32", "float64"):
+                return "raw_float"
+    except Exception as e:
+        logger.warning(f"Could not detect COG type for {file_path}: {e}")
+
+    return "unknown"
+
+
+def read_cog_metadata(file_path: str) -> Dict:
+    """
+    Read rendering metadata stored in COG tags (radarlib_* tags).
+
+    Returns a dict with keys: data_type, cmap, vmin, vmax, nodata.
+    """
+    result = {"data_type": "unknown", "cmap": None, "vmin": None, "vmax": None, "nodata": None}
+    try:
+        with rasterio.open(file_path) as src:
+            tags = src.tags() or {}
+            result["data_type"] = tags.get("radarlib_data_type", detect_cog_type(file_path))
+            result["cmap"] = tags.get("radarlib_cmap")
+            result["nodata"] = src.nodata
+            try:
+                if tags.get("radarlib_vmin") is not None:
+                    result["vmin"] = float(tags["radarlib_vmin"])
+            except (ValueError, TypeError):
+                pass
+            try:
+                if tags.get("radarlib_vmax") is not None:
+                    result["vmax"] = float(tags["radarlib_vmax"])
+            except (ValueError, TypeError):
+                pass
+    except Exception as e:
+        logger.warning(f"Could not read COG metadata for {file_path}: {e}")
+    return result
 
 
 class TileService:
@@ -26,7 +80,55 @@ class TileService:
     def get_full_path(self, relative_path: str) -> Path:
         """Get full filesystem path for a COG file."""
         return self.base_path / relative_path
-    
+
+    def _generate_raw_float_tile(
+        self,
+        full_path: Path,
+        z: int,
+        x: int,
+        y: int,
+        cmap_name: str,
+        vmin: float,
+        vmax: float,
+        resampling: str = "nearest",
+    ) -> bytes:
+        """
+        Render a tile from a single-band float32 COG by normalising the data
+        and applying a matplotlib colormap, returning a PNG.
+        """
+        with Reader(str(full_path)) as src:
+            img = src.tile(x, y, z, resampling_method=resampling, indexes=1)
+
+        data = img.data[0].astype(np.float32)   # (H, W)
+        mask = img.mask                           # (H, W) - 0 = nodata, 255 = valid
+
+        # Treat NaN as nodata
+        nan_pixels = np.isnan(data)
+
+        # Normalize to [0, 1]
+        drange = vmax - vmin
+        if drange == 0:
+            drange = 1.0
+        normalized = np.clip((data - vmin) / drange, 0.0, 1.0)
+
+        # Apply matplotlib colormap → (H, W, 4) float32 in [0, 1]
+        cmap = get_colormap(cmap_name)
+        rgba_float = cmap(normalized)
+
+        # Convert to uint8
+        rgba_uint8 = (rgba_float * 255).astype(np.uint8)
+
+        # Apply nodata mask: set alpha to 0 for masked or NaN pixels
+        nodata_mask = (mask == 0) | nan_pixels
+        rgba_uint8[:, :, 3] = np.where(nodata_mask, 0, rgba_uint8[:, :, 3])
+
+        # Encode as PNG
+        pil_img = Image.fromarray(rgba_uint8, mode="RGBA")
+        buf = io.BytesIO()
+        pil_img.save(buf, format="PNG")
+        buf.seek(0)
+        return buf.read()
+
     def generate_tile(
         self,
         file_path: str,
@@ -34,69 +136,106 @@ class TileService:
         x: int,
         y: int,
         colormap: Optional[Dict[int, Tuple[int, int, int, int]]] = None,
-        resampling: str = "nearest"
+        resampling: str = "nearest",
+        cmap_name: Optional[str] = None,
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+        cog_data_type: Optional[str] = None,
     ) -> Optional[bytes]:
         """
         Generate a PNG tile from a COG file.
-        
+
+        For raw_float COGs the colormap is applied via numpy normalisation +
+        matplotlib (honouring ``cmap_name``, ``vmin``, ``vmax``).
+        For RGBA COGs the pre-coloured bands are returned as-is.
+        For other / unknown single-band COGs the rio-tiler integer colormap
+        dict (``colormap``) is used as before.
+
         Args:
-            file_path: Relative path to COG file
-            z: Zoom level
-            x: Tile X coordinate
-            y: Tile Y coordinate
-            colormap: Optional colormap dict {value: (r, g, b, a)} - ignored if COG is already RGBA
-            resampling: Resampling method
-            
+            file_path:     Relative path to COG file
+            z, x, y:       Tile coordinates
+            colormap:      Integer-keyed colormap dict for non-raw_float tiles
+            resampling:    Resampling method
+            cmap_name:     Matplotlib/custom colormap name (raw_float only)
+            vmin:          Minimum value for normalisation (raw_float only)
+            vmax:          Maximum value for normalisation (raw_float only)
+            cog_data_type: Pre-determined COG type string (skips re-detection
+                           when already known from the database record)
         Returns:
-            PNG image bytes or transparent tile if tile is outside bounds
+            PNG image bytes or transparent tile for out-of-bounds / errors
         """
         full_path = self.get_full_path(file_path)
         
         if not full_path.exists():
             logger.warning(f"COG file not found: {full_path}")
             return None
-        
+
         try:
+            # Determine COG type (use stored value when available)
+            if cog_data_type is None:
+                cog_data_type = detect_cog_type(str(full_path))
+
+            if cog_data_type == "raw_float":
+                # Use matplotlib colormap pipeline for float data
+                effective_cmap = cmap_name or "grc_th"
+                effective_vmin = vmin if vmin is not None else -30.0
+                effective_vmax = vmax if vmax is not None else 70.0
+
+                return self._generate_raw_float_tile(
+                    full_path, z, x, y,
+                    effective_cmap,
+                    effective_vmin,
+                    effective_vmax,
+                    resampling,
+                )
+
             with Reader(str(full_path)) as src:
                 num_bands = src.dataset.count
-                
-                # Check if the COG is already RGBA (pre-colored)
-                is_rgba_cog = num_bands >= 3  # At minimum RGB
-                
-                if is_rgba_cog:
-                    # Read all available bands (RGB or RGBA)
-                    # rio_tiler will automatically handle the bands correctly
+                dtype = str(src.dataset.dtypes[0])
+
+                if num_bands >= 3:
+                    # Pre-coloured RGBA/RGB COG – passthrough
                     img = src.tile(x, y, z, resampling_method=resampling)
-                    logger.debug(f"COG {file_path} is pre-colored RGBA/RGB, skipping colormap application")
-                    # Render directly without applying a colormap
-                    # The rio_tiler Image.render() will convert bands to PNG properly
-                    rendered = img.render()
-                else:
-                    # Single-band grayscale data - apply colormap
-                    img = src.tile(x, y, z, resampling_method=resampling, indexes=1)
-                    
-                    if colormap:
-                        rendered = img.render(colormap=colormap)
-                    else:
-                        rendered = img.render()
-                
-                return rendered
+                    logger.debug(
+                        f"COG {file_path} is pre-coloured RGBA/RGB, skipping colormap"
+                    )
+                    return img.render()
+
+                if dtype != "uint8":
+                    # Non-uint8 single-band data (float32, int16, …): the integer-keyed
+                    # colormap dict approach only works for 8-bit values (0-255).  Float or
+                    # scaled-integer pixel values would either be clipped to 0 by rio-tiler's
+                    # uint8 cast or simply not found in the dict, producing fully-transparent
+                    # tiles.  Route through the raw_float pipeline instead so values are
+                    # normalised correctly across the full data range.
+                    logger.debug(
+                        f"COG {file_path} is single-band {dtype}, using raw_float pipeline"
+                    )
+                    return self._generate_raw_float_tile(
+                        full_path, z, x, y,
+                        cmap_name or "grc_th",
+                        vmin if vmin is not None else -30.0,
+                        vmax if vmax is not None else 70.0,
+                        resampling,
+                    )
+
+                # 8-bit single-band: use rio-tiler integer colormap
+                img = src.tile(x, y, z, resampling_method=resampling, indexes=1)
+                if colormap:
+                    return img.render(colormap=colormap)
+                return img.render()
                 
         except TileOutsideBounds:
-            # Return transparent tile for areas outside the COG
             logger.debug(f"Tile {z}/{x}/{y} outside bounds for {file_path}")
             return self._generate_transparent_tile()
         except Exception as e:
-            logger.error(f"Error generating tile {z}/{x}/{y} for {file_path}: {e}", exc_info=True)
-            # Return transparent tile on error instead of None
-            # This prevents 404 errors and allows the map to function
+            logger.error(
+                f"Error generating tile {z}/{x}/{y} for {file_path}: {e}", exc_info=True
+            )
             return self._generate_transparent_tile()
     
     def _generate_transparent_tile(self, size: int = 256) -> bytes:
         """Generate a fully transparent PNG tile."""
-        from PIL import Image
-        import io
-        
         img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
         buffer = io.BytesIO()
         img.save(buffer, format='PNG')
@@ -261,3 +400,4 @@ def get_tile_service() -> TileService:
     if _tile_service is None:
         _tile_service = TileService()
     return _tile_service
+

@@ -162,9 +162,22 @@ export const api = {
     },
     
     /**
-     * Get tile URL for a COG
+     * Get tile URL for a COG with optional colormap/range overrides
      */
-    getTileUrl(cogId) {
-        return `${API_BASE}/tiles/${cogId}/{z}/{x}/{y}.png`;
+    getTileUrl(cogId, cmap = null, vmin = null, vmax = null) {
+        const base = `${API_BASE}/tiles/${cogId}/{z}/{x}/{y}.png`;
+        const params = new URLSearchParams();
+        if (cmap) params.append('colormap', cmap);
+        if (vmin !== null && vmin !== undefined) params.append('vmin', vmin);
+        if (vmax !== null && vmax !== undefined) params.append('vmax', vmax);
+        const query = params.toString();
+        return query ? `${base}?${query}` : base;
+    },
+
+    /**
+     * Get rendering metadata for a specific COG (data_type, cmap, vmin, vmax)
+     */
+    async getCogRenderingMetadata(cogId) {
+        return this.get(`/tiles/${cogId}/metadata`);
     },
 };

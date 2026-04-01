@@ -62,6 +62,30 @@
             </div>
         </div>
         
+        <!-- Colormap Selection -->
+        <div class="control-group" id="colormap-group" style="display:none;">
+            <label for="colormap-select">Colormap:</label>
+            <select id="colormap-select">
+                <option value="">Default</option>
+            </select>
+        </div>
+        
+        <!-- Value Range (vmin/vmax) -->
+        <div class="control-group" id="range-group" style="display:none;">
+            <label>Value Range:</label>
+            <div class="range-control">
+                <div class="range-row">
+                    <span class="range-label">Min</span>
+                    <input type="number" id="vmin-input" class="range-input" step="any">
+                </div>
+                <div class="range-row">
+                    <span class="range-label">Max</span>
+                    <input type="number" id="vmax-input" class="range-input" step="any">
+                </div>
+                <button id="btn-apply-range" class="small-btn apply-btn">Apply</button>
+            </div>
+        </div>
+        
         <!-- Time Range Selection -->
         <div class="control-group">
             <label>Time Range:</label>

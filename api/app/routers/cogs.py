@@ -51,6 +51,10 @@ def cog_to_response(cog: RadarCOG, base_url: str = "") -> COGResponse:
         data_max=cog.data_max,
         bbox=bbox,
         tile_url=tile_url,
+        cog_data_type=cog.cog_data_type,
+        cog_cmap=cog.cog_cmap,
+        cog_vmin=cog.cog_vmin,
+        cog_vmax=cog.cog_vmax,
     )
 
 

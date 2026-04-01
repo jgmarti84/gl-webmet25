@@ -29,6 +29,11 @@ const state = {
     selectedRadars: [], // Changed from selectedRadar to support multiple
     selectedProduct: null,
     showUnfilteredProducts: false, // Filter state for products
+
+    // Colormap / range overrides (null = use server defaults)
+    selectedColormap: null,
+    currentVmin: null,
+    currentVmax: null,
     
     // Module instances
     mapManager: null,
@@ -210,6 +215,14 @@ const app = {
         // Product selection
         document.getElementById('product-select').addEventListener('change', (e) => {
             state.selectedProduct = e.target.value;
+            // Reset colormap/range state when product changes
+            state.selectedColormap = null;
+            state.currentVmin = null;
+            state.currentVmax = null;
+            // Reset vmin/vmax inputs when product changes so loadColormapOptions
+            // always fills them from the new product's defaults
+            document.getElementById('vmin-input').value = '';
+            document.getElementById('vmax-input').value = '';
             this.onSelectionChange();
         });
         
@@ -319,6 +332,25 @@ const app = {
             state.mapManager.setOpacity(opacity);
             state.ui.updateOpacityDisplay(opacity);
         });
+
+        // Colormap selection
+        document.getElementById('colormap-select').addEventListener('change', (e) => {
+            state.selectedColormap = e.target.value || null;
+            this.applyColormapChange();
+        });
+
+        // vmin/vmax apply button
+        document.getElementById('btn-apply-range').addEventListener('click', () => {
+            const vminVal = parseFloat(document.getElementById('vmin-input').value);
+            const vmaxVal = parseFloat(document.getElementById('vmax-input').value);
+            if (!isNaN(vminVal) && !isNaN(vmaxVal) && isFinite(vminVal) && isFinite(vmaxVal) && vminVal < vmaxVal) {
+                state.currentVmin = vminVal;
+                state.currentVmax = vmaxVal;
+                this.applyColormapChange();
+            } else {
+                state.ui.setStatus('Invalid range: min must be less than max', 'error');
+            }
+        });
         
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
@@ -405,6 +437,7 @@ const app = {
     async onSelectionChange() {
         // If in time-range mode and product is valid, reload seamlessly
         if (state.animationMode === 'timerange' && state.selectedProduct) {
+            await this.loadColormapOptions();
             await this.loadTimeRangeCogs();
             return;
         }
@@ -416,6 +449,7 @@ const app = {
         state.legend.clear();
         state.cogs = [];
         state.animator.stop();
+        state.ui.updatePlayButton(false);
         state.animator.setFrames([]);
         state.hasZoomedToBounds = false;
         state.animationMode = null;
@@ -423,6 +457,9 @@ const app = {
         // Update load latest button state
         this.onRadarSelectionChange();
         
+        // Load colormap options for new product
+        await this.loadColormapOptions();
+
         // For now, disable animation until user loads data
         state.ui.enableNavButtons(false);
         state.ui.enableAnimationControls(false);
@@ -438,6 +475,10 @@ const app = {
         }
         
         state.ui.setStatus('Loading latest images...', 'loading');
+        
+        // Stop any running animation before reloading
+        state.animator.stop();
+        state.ui.updatePlayButton(false);
         
         try {
             // Get latest COGs for all selected radars
@@ -463,10 +504,10 @@ const app = {
                 console.warn(`No data available for: ${unavailableRadars}`);
             }
             
-            // Load colormap using new API
+            // Load colormap using new API — pass current colormap override so colors match tiles
             let colormap = null;
             try {
-                colormap = await api.getColormapInfo(state.selectedProduct);
+                colormap = await api.getColormapInfo(state.selectedProduct, state.selectedColormap);
             } catch (error) {
                 console.warn('Failed to load colormap:', error);
                 // Fallback to old API if new one fails
@@ -498,8 +539,8 @@ const app = {
                     state.hasZoomedToBounds = true;
                 }
                 
-                // Display on map
-                state.mapManager.setRadarLayer(radarCode, cog.id, bounds);
+                // Display on map with colormap/range params
+                state.mapManager.setRadarLayer(radarCode, cog.id, bounds, null, this.getTileParams());
                 
                 // Store first radar's time for display
                 if (!firstRadarTime) {
@@ -512,8 +553,10 @@ const app = {
                 state.ui.setTimeDisplay(firstRadarTime);
             }
             
-            // Render legend if available
+            // Render legend if available — honour user-set vmin/vmax overrides
             if (colormap) {
+                if (state.currentVmin !== null) colormap.vmin = state.currentVmin;
+                if (state.currentVmax !== null) colormap.vmax = state.currentVmax;
                 state.legend.render(colormap);
                 state.legend.show();
             }
@@ -587,10 +630,10 @@ const app = {
             // Group COGs from all radars into per-timestamp frames
             const groupedFrames = groupCogsByTimestamp(cogs);
 
-            // Load colormap
+            // Load colormap — pass current colormap override so colors match tiles
             let colormap = null;
             try {
-                colormap = await api.getColormapInfo(state.selectedProduct);
+                colormap = await api.getColormapInfo(state.selectedProduct, state.selectedColormap);
             } catch (error) {
                 console.warn('Failed to load colormap:', error);
                 try {
@@ -604,6 +647,7 @@ const app = {
             state.mapManager.clearCachedFrames();
             state.mapManager.clearRadarLayer();
             state.animator.stop();
+            state.ui.updatePlayButton(false);
             state.hasZoomedToBounds = false;
             state.animationMode = 'timerange';
 
@@ -623,7 +667,7 @@ const app = {
                 } else {
                     state.ui.setStatus('All frames cached – ready to play ✓', 'success');
                 }
-            });
+            }, this.getTileParams());
 
             // Zoom to bounds using any radar from the loaded frames
             const anyFrame = groupedFrames[0];
@@ -646,8 +690,10 @@ const app = {
             state.animator.setFrames(groupedFrames);
             state.animator.goToFrame(0); // oldest frame first; fires onFrameChange(0, …)
 
-            // Render legend
+            // Render legend — honour user-set vmin/vmax overrides
             if (colormap) {
+                if (state.currentVmin !== null) colormap.vmin = state.currentVmin;
+                if (state.currentVmax !== null) colormap.vmax = state.currentVmax;
                 state.legend.render(colormap);
                 state.legend.show();
             }
@@ -705,13 +751,85 @@ const app = {
         }
 
         state.mapManager.clearRadarLayer();
-        state.mapManager.setRadarLayer(frame.radar_code, frame.id, bounds);
+        state.mapManager.setRadarLayer(frame.radar_code, frame.id, bounds, null, this.getTileParams());
 
         state.ui.setTimeDisplay(frame.observation_time);
         state.ui.updateFrameCounter(index, state.animator.getFrameCount());
         state.ui.updateAnimationSlider(index, state.animator.getFrameCount());
     },
     
+    /**
+     * Load available colormap options for the selected product and show
+     * the colormap / range controls.
+     */
+    async loadColormapOptions() {
+        if (!state.selectedProduct) {
+            document.getElementById('colormap-group').style.display = 'none';
+            document.getElementById('range-group').style.display = 'none';
+            return;
+        }
+
+        try {
+            const info = await api.getColormapInfo(state.selectedProduct);
+
+            // Populate colormap dropdown
+            const select = document.getElementById('colormap-select');
+            select.innerHTML = '<option value="">Default</option>';
+            const options = info.available_colormaps || [];
+            options.forEach(cmap => {
+                const opt = document.createElement('option');
+                opt.value = cmap;
+                opt.textContent = cmap;
+                if (cmap === info.colormap) opt.selected = true;
+                select.appendChild(opt);
+            });
+            // Restore previous selection if still valid
+            if (state.selectedColormap && options.includes(state.selectedColormap)) {
+                select.value = state.selectedColormap;
+            } else {
+                state.selectedColormap = null;
+                select.value = '';
+            }
+
+            // Set vmin/vmax inputs to product defaults (only when not already overridden)
+            if (state.currentVmin === null) {
+                document.getElementById('vmin-input').value = info.vmin ?? '';
+            }
+            if (state.currentVmax === null) {
+                document.getElementById('vmax-input').value = info.vmax ?? '';
+            }
+
+            document.getElementById('colormap-group').style.display = 'block';
+            document.getElementById('range-group').style.display = 'block';
+        } catch (err) {
+            console.warn('Failed to load colormap options:', err);
+        }
+    },
+
+    /**
+     * Re-apply the current colormap / range when the user changes the controls
+     * while data is already loaded.
+     */
+    async applyColormapChange() {
+        if (state.animationMode === 'latest') {
+            await this.loadLatestCogs();
+        } else if (state.animationMode === 'timerange') {
+            await this.loadTimeRangeCogs();
+        }
+    },
+
+    /**
+     * Return the current tile rendering parameters as a plain object.
+     * Null values mean "use server defaults".
+     */
+    getTileParams() {
+        return {
+            cmap: state.selectedColormap || null,
+            vmin: state.currentVmin,
+            vmax: state.currentVmax,
+        };
+    },
+
     /**
      * Cycle through animation speeds
      */

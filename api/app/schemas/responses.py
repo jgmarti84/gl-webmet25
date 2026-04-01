@@ -102,6 +102,12 @@ class COGResponse(BaseModel):
     
     # Tile URL template
     tile_url: Optional[str] = None
+
+    # COG rendering metadata
+    cog_data_type: Optional[str] = None
+    cog_cmap: Optional[str] = None
+    cog_vmin: Optional[float] = None
+    cog_vmax: Optional[float] = None
     
     class Config:
         from_attributes = True
