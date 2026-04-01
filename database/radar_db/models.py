@@ -188,6 +188,12 @@ class RadarCOG(Base):
     # Spatial (PostGIS)
     bbox = Column(Geometry('POLYGON', srid=4326))
     
+    # COG data type metadata (raw_float / rgba / unknown)
+    cog_data_type = Column(String(16), nullable=True, comment="COG data type: raw_float, rgba, or unknown")
+    cog_cmap = Column(String(64), nullable=True, comment="Default colormap stored in COG metadata")
+    cog_vmin = Column(Float, nullable=True, comment="Default vmin stored in COG metadata")
+    cog_vmax = Column(Float, nullable=True, comment="Default vmax stored in COG metadata")
+
     # Status
     status = Column(SQLEnum(COGStatus), default=COGStatus.AVAILABLE, index=True)
     error_message = Column(Text)

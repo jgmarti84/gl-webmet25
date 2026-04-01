@@ -45,6 +45,28 @@ class COGRegistrar:
         """Get product ID from key, using cache."""
         return self._product_cache.get(product_key)
     
+    def _detect_cog_type(self, src) -> str:
+        """
+        Determine COG data type from rasterio dataset metadata/tags.
+
+        Returns 'raw_float', 'rgba', or 'unknown'.
+        """
+        tags = src.tags() or {}
+        data_type_tag = tags.get("radarlib_data_type", "")
+
+        if data_type_tag == "raw_float":
+            return "raw_float"
+        if data_type_tag == "rgba":
+            return "rgba"
+
+        # Fallback heuristic based on band count and dtype
+        if src.count >= 3 and str(src.dtypes[0]) == "uint8":
+            return "rgba"
+        if src.count == 1 and str(src.dtypes[0]) in ("float32", "float64"):
+            return "raw_float"
+
+        return "unknown"
+
     def extract_cog_metadata(self, file_path: Path) -> Dict[str, Any]:
         """Extract metadata from a COG file using rasterio."""
         metadata = {}
@@ -60,6 +82,22 @@ class COGRegistrar:
                 metadata['resolution_x'] = src.res[0]
                 metadata['resolution_y'] = src.res[1]
                 metadata['compression'] = src.profile.get('compress')
+
+                # Detect COG type and extract rendering metadata from tags
+                metadata['cog_data_type'] = self._detect_cog_type(src)
+                tags = src.tags() or {}
+                if tags.get("radarlib_cmap"):
+                    metadata['cog_cmap'] = tags["radarlib_cmap"]
+                if tags.get("radarlib_vmin"):
+                    try:
+                        metadata['cog_vmin'] = float(tags["radarlib_vmin"])
+                    except (ValueError, TypeError):
+                        pass
+                if tags.get("radarlib_vmax"):
+                    try:
+                        metadata['cog_vmax'] = float(tags["radarlib_vmax"])
+                    except (ValueError, TypeError):
+                        pass
                 
                 # Bounding box in WGS84
                 if src.crs:
