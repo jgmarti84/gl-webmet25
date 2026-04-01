@@ -219,6 +219,10 @@ const app = {
             state.selectedColormap = null;
             state.currentVmin = null;
             state.currentVmax = null;
+            // Reset vmin/vmax inputs when product changes so loadColormapOptions
+            // always fills them from the new product's defaults
+            document.getElementById('vmin-input').value = '';
+            document.getElementById('vmax-input').value = '';
             this.onSelectionChange();
         });
         
@@ -339,7 +343,7 @@ const app = {
         document.getElementById('btn-apply-range').addEventListener('click', () => {
             const vminVal = parseFloat(document.getElementById('vmin-input').value);
             const vmaxVal = parseFloat(document.getElementById('vmax-input').value);
-            if (!isNaN(vminVal) && !isNaN(vmaxVal) && vminVal < vmaxVal) {
+            if (!isNaN(vminVal) && !isNaN(vmaxVal) && isFinite(vminVal) && isFinite(vmaxVal) && vminVal < vmaxVal) {
                 state.currentVmin = vminVal;
                 state.currentVmax = vmaxVal;
                 this.applyColormapChange();
@@ -445,6 +449,7 @@ const app = {
         state.legend.clear();
         state.cogs = [];
         state.animator.stop();
+        state.ui.updatePlayButton(false);
         state.animator.setFrames([]);
         state.hasZoomedToBounds = false;
         state.animationMode = null;
@@ -471,6 +476,10 @@ const app = {
         
         state.ui.setStatus('Loading latest images...', 'loading');
         
+        // Stop any running animation before reloading
+        state.animator.stop();
+        state.ui.updatePlayButton(false);
+        
         try {
             // Get latest COGs for all selected radars
             const latestCogs = await api.getLatestCogsForRadars(state.selectedRadars, state.selectedProduct);
@@ -495,10 +504,10 @@ const app = {
                 console.warn(`No data available for: ${unavailableRadars}`);
             }
             
-            // Load colormap using new API
+            // Load colormap using new API — pass current colormap override so colors match tiles
             let colormap = null;
             try {
-                colormap = await api.getColormapInfo(state.selectedProduct);
+                colormap = await api.getColormapInfo(state.selectedProduct, state.selectedColormap);
             } catch (error) {
                 console.warn('Failed to load colormap:', error);
                 // Fallback to old API if new one fails
@@ -544,8 +553,10 @@ const app = {
                 state.ui.setTimeDisplay(firstRadarTime);
             }
             
-            // Render legend if available
+            // Render legend if available — honour user-set vmin/vmax overrides
             if (colormap) {
+                if (state.currentVmin !== null) colormap.vmin = state.currentVmin;
+                if (state.currentVmax !== null) colormap.vmax = state.currentVmax;
                 state.legend.render(colormap);
                 state.legend.show();
             }
@@ -619,10 +630,10 @@ const app = {
             // Group COGs from all radars into per-timestamp frames
             const groupedFrames = groupCogsByTimestamp(cogs);
 
-            // Load colormap
+            // Load colormap — pass current colormap override so colors match tiles
             let colormap = null;
             try {
-                colormap = await api.getColormapInfo(state.selectedProduct);
+                colormap = await api.getColormapInfo(state.selectedProduct, state.selectedColormap);
             } catch (error) {
                 console.warn('Failed to load colormap:', error);
                 try {
@@ -636,6 +647,7 @@ const app = {
             state.mapManager.clearCachedFrames();
             state.mapManager.clearRadarLayer();
             state.animator.stop();
+            state.ui.updatePlayButton(false);
             state.hasZoomedToBounds = false;
             state.animationMode = 'timerange';
 
@@ -678,8 +690,10 @@ const app = {
             state.animator.setFrames(groupedFrames);
             state.animator.goToFrame(0); // oldest frame first; fires onFrameChange(0, …)
 
-            // Render legend
+            // Render legend — honour user-set vmin/vmax overrides
             if (colormap) {
+                if (state.currentVmin !== null) colormap.vmin = state.currentVmin;
+                if (state.currentVmax !== null) colormap.vmax = state.currentVmax;
                 state.legend.render(colormap);
                 state.legend.show();
             }

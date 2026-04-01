@@ -100,7 +100,7 @@ class TileService:
             img = src.tile(x, y, z, resampling_method=resampling, indexes=1)
 
         data = img.data[0].astype(np.float32)   # (H, W)
-        mask = img.mask                           # (H, W) – 0 = nodata, 255 = valid
+        mask = img.mask                           # (H, W) - 0 = nodata, 255 = valid
 
         # Treat NaN as nodata
         nan_pixels = np.isnan(data)
@@ -191,6 +191,7 @@ class TileService:
 
             with Reader(str(full_path)) as src:
                 num_bands = src.dataset.count
+                dtype = str(src.dataset.dtypes[0])
 
                 if num_bands >= 3:
                     # Pre-coloured RGBA/RGB COG – passthrough
@@ -200,7 +201,25 @@ class TileService:
                     )
                     return img.render()
 
-                # Single-band data with rio-tiler integer colormap
+                if dtype != "uint8":
+                    # Non-uint8 single-band data (float32, int16, …): the integer-keyed
+                    # colormap dict approach only works for 8-bit values (0-255).  Float or
+                    # scaled-integer pixel values would either be clipped to 0 by rio-tiler's
+                    # uint8 cast or simply not found in the dict, producing fully-transparent
+                    # tiles.  Route through the raw_float pipeline instead so values are
+                    # normalised correctly across the full data range.
+                    logger.debug(
+                        f"COG {file_path} is single-band {dtype}, using raw_float pipeline"
+                    )
+                    return self._generate_raw_float_tile(
+                        full_path, z, x, y,
+                        cmap_name or "grc_th",
+                        vmin if vmin is not None else -30.0,
+                        vmax if vmax is not None else 70.0,
+                        resampling,
+                    )
+
+                # 8-bit single-band: use rio-tiler integer colormap
                 img = src.tile(x, y, z, resampling_method=resampling, indexes=1)
                 if colormap:
                     return img.render(colormap=colormap)
