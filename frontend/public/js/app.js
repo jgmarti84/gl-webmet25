@@ -16,6 +16,13 @@ import { UIControls } from './controls.js';
 import { LegendRenderer } from './legend.js';
 
 // =============================================================================
+// CONSTANTS
+// =============================================================================
+
+const MS_PER_HOUR = 3600 * 1000;
+const LIVE_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+// =============================================================================
 // APPLICATION STATE
 // =============================================================================
 
@@ -44,6 +51,10 @@ const state = {
     // Flags
     hasZoomedToBounds: false,
     animationMode: null, // 'latest' | 'timerange' | null
+
+    // Live N-hours mode
+    liveHours: null,             // N when a preset button was last used; null = not in live mode
+    liveRefreshInterval: null,   // setInterval handle for 5-minute polling
 };
 
 // =============================================================================
@@ -269,14 +280,11 @@ const app = {
             }
         });
         
-        // Time range preset buttons
+        // Time range preset buttons – anchor to the most recent available COG and start live mode
         document.querySelectorAll('.preset-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const hours = parseInt(e.target.dataset.hours);
-                const endDate = new Date();
-                const startDate = new Date(endDate.getTime() - hours * 60 * 60 * 1000);
-                state.ui.setTimeRangeValues(startDate, endDate);
-                this.onTimeRangeChange();
+                this.loadLastNHours(hours);
             });
         });
         
@@ -291,11 +299,13 @@ const app = {
         
         // Load latest button
         document.getElementById('btn-load-latest').addEventListener('click', () => {
+            this.stopLiveRefresh();
             this.loadLatestCogs();
         });
         
         // Load time range button
         document.getElementById('btn-load-timerange').addEventListener('click', () => {
+            this.stopLiveRefresh();
             this.loadTimeRangeCogs();
         });
         
@@ -435,6 +445,9 @@ const app = {
      * clip continues without requiring a manual button press.
      */
     async onSelectionChange() {
+        // Stop any live refresh whenever the user changes their selection
+        this.stopLiveRefresh();
+
         // If in time-range mode and product is valid, reload seamlessly
         if (state.animationMode === 'timerange' && state.selectedProduct) {
             await this.loadColormapOptions();
@@ -712,8 +725,24 @@ const app = {
             )];
             const loadedRadars = radarCodes.map(code => code.toUpperCase()).join(', ');
             const radarText = radarCodes.length === 1 ? 'radar' : 'radars';
+
+            // In live mode, warn when the actual data span is shorter than requested
+            let liveNote = '';
+            if (state.liveHours !== null && groupedFrames.length > 0) {
+                const oldestFrameTime = new Date(groupedFrames[0].timestamp);
+                const newestFrameTime = new Date(groupedFrames[groupedFrames.length - 1].timestamp);
+                const requestedStart = state.ui.getTimeRangeValues().start;
+                if (requestedStart) {
+                    const gapHours = (oldestFrameTime - requestedStart) / MS_PER_HOUR;
+                    if (gapHours > 0.5) {
+                        const availableHours = ((newestFrameTime - oldestFrameTime) / MS_PER_HOUR).toFixed(1);
+                        liveNote = ` ⚠️ Only ${availableHours}h of data available (${state.liveHours}h requested)`;
+                    }
+                }
+            }
+
             state.ui.setStatus(
-                `✓ Loaded ${groupedFrames.length} frames from ${radarCodes.length} ${radarText}: ${loadedRadars} — tiles caching in background`,
+                `✓ Loaded ${groupedFrames.length} frames from ${radarCodes.length} ${radarText}: ${loadedRadars} — tiles caching in background${liveNote}`,
                 'success'
             );
 
@@ -723,6 +752,156 @@ const app = {
         }
     },
     
+    /**
+     * Load the last N hours of data anchored to the most recent available COG.
+     *
+     * Unlike the old preset behaviour (which anchored to wall-clock "now"), this
+     * finds the newest COG in the database for the current product/radar
+     * selection and uses that as the end of the window.  After a successful
+     * load it starts a 5-minute polling interval that shifts the window forward
+     * whenever newer COGs appear.
+     *
+     * @param {number} hours - Number of hours to look back from the latest COG.
+     */
+    async loadLastNHours(hours) {
+        if (state.selectedRadars.length === 0 || !state.selectedProduct) {
+            state.ui.setStatus('Select radar(s) and product first', 'error');
+            return;
+        }
+
+        this.stopLiveRefresh();
+        state.ui.setStatus('Finding latest data…', 'loading');
+
+        // Open the time-range panel so the user can see the loaded window
+        const trContainer = document.getElementById('timerange-container');
+        const trToggleBtn = document.getElementById('btn-toggle-timerange');
+        if (trContainer) {
+            const isHidden = trContainer.style.display === 'none' ||
+                window.getComputedStyle(trContainer).display === 'none';
+            if (isHidden) {
+                trContainer.style.display = 'block';
+                if (trToggleBtn) trToggleBtn.textContent = 'Hide Time Range ▲';
+            }
+        }
+
+        try {
+            // Determine the most recent COG time across all selected radars
+            const latestItems = await api.getLatestCogsForRadars(
+                state.selectedRadars, state.selectedProduct
+            );
+
+            if (latestItems.length === 0) {
+                const radarList = state.selectedRadars.join(', ').toUpperCase();
+                const productName = state.products.find(
+                    p => p.product_key === state.selectedProduct
+                )?.product_title || state.selectedProduct;
+                state.ui.setStatus(
+                    `⚠️ No data available for ${radarList} with product "${productName}". Try a different product or radar.`,
+                    'error'
+                );
+                return;
+            }
+
+            const endTime = latestItems.reduce((max, { cog }) => {
+                const t = new Date(cog.observation_time);
+                return t > max ? t : max;
+            }, new Date(0));
+
+            const startTime = new Date(endTime.getTime() - hours * MS_PER_HOUR);
+
+            // Populate time-range inputs with the computed window
+            state.ui.setTimeRangeValues(startTime, endTime);
+            this.onTimeRangeChange();
+
+            // Mark live mode before calling loadTimeRangeCogs so it can detect it
+            state.liveHours = hours;
+
+            await this.loadTimeRangeCogs();
+
+            // Start periodic refresh only if the load succeeded (liveHours is still set)
+            if (state.liveHours !== null) {
+                this.startLiveRefresh(hours);
+            }
+        } catch (err) {
+            console.error('loadLastNHours error:', err);
+            state.ui.setStatus(`Error: ${err.message}`, 'error');
+            state.liveHours = null;
+        }
+    },
+
+    /**
+     * Start a 5-minute polling interval that refreshes the live N-hours window
+     * whenever newer COGs appear in the database.
+     *
+     * @param {number} hours - N hours to maintain.
+     */
+    startLiveRefresh(hours) {
+        this.stopLiveRefresh();
+        state.liveHours = hours;
+        state.liveRefreshInterval = setInterval(() => {
+            this.refreshLiveWindow();
+        }, LIVE_REFRESH_INTERVAL_MS);
+        console.log(`Live refresh started: checking every 5 min for new COGs (${hours}h window)`);
+    },
+
+    /**
+     * Cancel the live polling interval and clear live-mode state.
+     */
+    stopLiveRefresh() {
+        if (state.liveRefreshInterval !== null) {
+            clearInterval(state.liveRefreshInterval);
+            state.liveRefreshInterval = null;
+        }
+        state.liveHours = null;
+    },
+
+    /**
+     * Called every 5 minutes while live mode is active.
+     *
+     * Checks whether new COGs have been published beyond the current window
+     * end.  If so, shifts the window forward by the same N hours and reloads.
+     * COGs that have fallen behind the new start time are automatically
+     * discarded because loadTimeRangeCogs fetches a fresh time slice.
+     */
+    async refreshLiveWindow() {
+        if (!state.liveHours || !state.selectedRadars.length || !state.selectedProduct) return;
+
+        try {
+            const latestItems = await api.getLatestCogsForRadars(
+                state.selectedRadars, state.selectedProduct
+            );
+            if (!latestItems.length) return;
+
+            const newEndTime = latestItems.reduce((max, { cog }) => {
+                const t = new Date(cog.observation_time);
+                return t > max ? t : max;
+            }, new Date(0));
+
+            // Only shift the window when genuinely new data has arrived
+            const currentRange = state.ui.getTimeRangeValues();
+            if (currentRange.end && newEndTime <= currentRange.end) {
+                // No new data yet – keep waiting on the existing interval
+                console.log('Live refresh: no new COGs yet, window unchanged');
+                return;
+            }
+
+            console.log('New COGs detected, refreshing live window…');
+            const hours = state.liveHours;
+            const newStartTime = new Date(newEndTime.getTime() - hours * MS_PER_HOUR);
+
+            state.ui.setTimeRangeValues(newStartTime, newEndTime);
+            this.onTimeRangeChange();
+
+            // Preserve live mode across the reload (loadTimeRangeCogs does not reset it)
+            state.liveHours = hours;
+            await this.loadTimeRangeCogs();
+            // The existing setInterval continues on its original schedule –
+            // no need to restart it, which would cause timing drift.
+        } catch (err) {
+            console.warn('Live refresh error:', err);
+        }
+    },
+
     /**
      * Handle frame change from animator.
      *
