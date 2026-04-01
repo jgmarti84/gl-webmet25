@@ -1,19 +1,14 @@
 # indexer/Dockerfile
-FROM python:3.11-slim
+FROM python:3.11-alpine
 
 WORKDIR /app
 
-# Install GDAL and dependencies
-RUN apt-get update && apt-get install -y \
-    libpq-dev \
-    gcc \
-    gdal-bin \
-    libgdal-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set GDAL environment
-ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
-ENV C_INCLUDE_PATH=/usr/include/gdal
+# Install system dependencies for rasterio and PostgreSQL
+RUN apk add --no-cache \
+    postgresql-client \
+    gdal-dev \
+    build-base \
+    && pip install --upgrade pip setuptools wheel
 
 COPY indexer/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
