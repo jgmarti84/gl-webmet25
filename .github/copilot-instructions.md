@@ -224,18 +224,141 @@ tests/ # Automated tests
 
 ---
 
+## Testing Strategy & Structure
+> All tests live in the `tests/` folder.
+> Tests run inside the `tests` Docker service defined in 
+> `docker-compose.devcontainer.yml`.
+> Never add test dependencies to api or indexer requirements.
+
+### Folder Structure
+```
+tests/
+├── api/        # API contract tests using httpx
+├── indexer/    # Indexer unit tests
+└── e2e/        # Browser tests using Playwright
+```
+
+### Running Tests
+```bash
+# Exec into the tests container
+docker exec -it radar_tests bash
+
+# Run all tests
+pytest
+
+# Run only API tests
+pytest tests/api/ -v
+
+# Run only a specific test file
+pytest tests/api/test_health.py -v
+
+# Run E2E tests
+pytest tests/e2e/ -v
+```
+
+### Test Layers
+| Layer | Location | Tool | What it tests |
+|-------|----------|------|---------------|
+| API Contract | `tests/api/` | pytest + httpx | Every endpoint in the API Contract |
+| Indexer | `tests/indexer/` | pytest | File parsing, DB transactions |
+| E2E | `tests/e2e/` | pytest + Playwright | Frontend behavior in real browser |
+
+### File Naming
+- One test file per router file
+- Test file name must match the router it tests
+- Examples:
+  - `api/app/routers/radars.py` → `tests/api/test_radars.py`
+  - `api/app/routers/cogs.py` → `tests/api/test_cogs.py`
+
+### Required Test Pattern
+Every test file must follow this exact pattern:
+```python
+import pytest
+import httpx
+import os
+
+API_BASE_URL = os.getenv("API_BASE_URL", "http://api:8000")
+```
+
+### Required Tests Per Endpoint
+Every endpoint must have ALL of the following tests:
+
+1. **HTTP status code test**
+   - Happy path must return the correct 2xx status code
+   - Example: `test_radars_returns_200`
+
+2. **Response fields test**
+   - Response must contain all fields defined in the API Contract
+   - Example: `test_radars_response_has_required_fields`
+
+3. **Content type test**
+   - Response must return `application/json`
+   - Example: `test_radars_returns_json`
+
+4. **Error path test**
+   - Invalid inputs must return correct 4xx status codes
+   - Never assert a 500 error. A 500 is always a bug, not a 
+     valid error response.
+   - Example: `test_radar_invalid_code_returns_404`
+
+5. **Data type test**
+   - Assert that field types match the contract
+     (e.g., strings are strings, numbers are numbers, 
+     lists are lists)
+   - Example: `test_radars_returns_list`
+
+### Rules
+- Always use `API_BASE_URL` from environment variables
+- Never hardcode URLs or ports in test files
+- Never use pytest fixtures yet, keep tests simple and explicit
+- Always test both the happy path AND the error path
+- A failing test means the API Contract is violated, 
+  not that the test is wrong
+- If a test reveals a bug, document it in the Known Gaps section
+  of this file before fixing it
+- Never skip a test with `@pytest.mark.skip` without adding a 
+  comment explaining why
+
+---
+
+## Rules for Writing E2E Tests
+> Follow these rules when writing Playwright tests in tests/e2e/
+
+### Required Setup
+```python
+import pytest
+from playwright.sync_api import Page
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://frontend:80")
+```
+
+### Required Tests Per Frontend Feature
+1. **Page loads test:** Assert the page loads without errors
+2. **Key element visible test:** Assert critical UI elements are visible
+3. **User interaction test:** Simulate real user interactions
+4. **API integration test:** Assert the frontend correctly displays 
+   data from the API
+
+### Rules
+- Always use `FRONTEND_URL` from environment variables
+- Test real user flows, not implementation details
+- Always take a screenshot on failure for debugging:
+```python
+page.screenshot(path="tests/e2e/screenshots/failure.png")
+```
+---
+
 ## SDD Workflow — Follow This Every Time
 When I give you a task, strictly follow this cycle:
 
-### 1. PROPOSAL
+### 1. PROPOSAL ⚠️
 - Read this file fully
-- Read the relevant section of `docs/webmet25_EN.md`
 - Read the relevant source files
-- Propose the code changes
-- Flag any conflict with the radarlib Output Contract immediately
-- Do not violate the coding conventions above
-- Always flag any task that touches security, transactions, 
-  or file path handling as HIGH RISK before proposing code
+- **DO NOT create, modify, or delete any files yet**
+- Show me the code you would write in the chat only
+- Explain your decisions and flag any risks
+- Wait for my explicit message saying "approved" or "apply" 
+  before touching any files
 
 ### 2. APPLY
 - Wait for my approval or feedback
@@ -244,7 +367,6 @@ When I give you a task, strictly follow this cycle:
 
 ### 3. ARCHIVE
 - After code is applied, explicitly tell me:
-  - Does `docs/webmet25_EN.md` need to be updated?
+  - Does the documentation need to be updated?
   - Does this `copilot-instructions.md` need to be updated?
-  - Does the radarlib Output Contract need to be updated?
-  - Does the radarlib `copilot-instructions.md` need to be updated?
+  - Does the API Contract need to be updated?

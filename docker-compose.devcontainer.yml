@@ -2,12 +2,45 @@ version: "3.8"
 services:
   # db-init:
   #   command: ["tail", "-f", "/dev/null"]
-  genpro25:
-    command: ["tail", "-f", "/dev/null"]
+  # genpro25:
+  #   command: ["tail", "-f", "/dev/null"]
   indexer:
     command: ["tail", "-f", "/dev/null"]
-  api:
-    command: ["tail", "-f", "/dev/null"]
   
-  # webmet25:
+  # api:
   #   command: ["tail", "-f", "/dev/null"]
+  
+  frontend:
+    command: ["tail", "-f", "/dev/null"]
+
+  # ==========================================================================
+  # TESTING SERVICE (devcontainer only)
+  # ==========================================================================
+  tests:
+    build:
+      context: ./
+      dockerfile: tests/Dockerfile
+    container_name: radar_tests
+    environment:
+      # API connection
+      API_BASE_URL: http://api:8000
+      # FRONTEND connection
+      FRONTEND_URL: http://frontend:80
+      # Database connection (for direct DB tests)
+      DB_HOST: radar_db
+      DB_PORT: 5432
+      DB_NAME: radar_prod_db
+      DB_USER: radar
+      DB_PASSWORD: radarpass
+      # Pytest settings
+      PYTHONPATH: /app
+    volumes:
+      # Mount tests folder so changes reflect immediately
+      - ./tests:/app/tests
+      # Mount product_output so indexer tests can access files
+      - ../product_output:/product_output:ro
+    depends_on:
+      - api
+      - radar_db
+    # Keep container alive so we can exec into it and run tests
+    command: ["tail", "-f", "/dev/null"]
