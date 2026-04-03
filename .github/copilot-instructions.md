@@ -348,6 +348,33 @@ page.screenshot(path="tests/e2e/screenshots/failure.png")
 ```
 ---
 
+## Rules for Writing Indexer Tests
+> Follow these rules when writing tests in tests/indexer/
+
+### Test File Structure
+\```
+tests/indexer/
+├── test_filename_parser.py  # Pure unit tests for COGFilenameParser
+├── test_registrar.py        # DB integration tests for COGRegistrar  
+└── test_watcher.py          # Scan logic and error resilience tests
+\```
+
+### Rules
+- test_filename_parser.py must NEVER connect to the database
+- test_filename_parser.py must test every filename variation 
+  defined in the Output Contract
+- Always test both valid AND invalid filenames
+- Always test the [o] suffix (raw/non-filtered) separately
+- test_registrar.py must verify transaction rollback on failure
+- test_watcher.py must verify that one bad file does not stop 
+  the entire scan
+- Never mock the filename parser in registrar tests, use real 
+  filenames from the Output Contract
+
+### Additional Indexer Testing Rules
+- Use `@pytest.mark.parametrize` for filename parser tests
+---
+
 ## SDD Workflow — Follow This Every Time
 When I give you a task, strictly follow this cycle:
 
