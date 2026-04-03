@@ -8,13 +8,14 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     gdal-bin \
     libgdal-dev \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/utilities/*
 
 # Install database package dependencies
 COPY database/requirements.txt /tmp/db_requirements.txt
 RUN pip install --no-cache-dir -r /tmp/db_requirements.txt
 
 # Install api dependencies
+# Note: includes rasterio and numpy needed for fake tif generation
 COPY api/requirements.txt /tmp/api_requirements.txt
 RUN pip install --no-cache-dir -r /tmp/api_requirements.txt
 
@@ -30,7 +31,7 @@ RUN pip install --no-cache-dir -r /tmp/test_requirements.txt
 RUN playwright install chromium
 RUN playwright install-deps chromium
 
-# Copy database package (no pip install, just like other services)
+# Copy database package
 COPY database/radar_db/ /app/radar_db/
 
 # Copy api source
@@ -42,7 +43,6 @@ COPY indexer/indexer/ /app/indexer/
 # Copy tests
 COPY tests/ /app/tests/
 
-# Set PYTHONPATH exactly like other services do
 ENV PYTHONPATH=/app
 
 WORKDIR /app

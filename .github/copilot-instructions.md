@@ -397,3 +397,7 @@ When I give you a task, strictly follow this cycle:
   - Does the documentation need to be updated?
   - Does this `copilot-instructions.md` need to be updated?
   - Does the API Contract need to be updated?
+
+## Known Gaps
+- ❌ Pydantic V2 class-based config deprecated in indexer/config.py 
+  and radar_db/config.py. Must migrate to ConfigDict before Pydantic V3.

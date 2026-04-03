@@ -14,6 +14,50 @@ services:
     command: ["tail", "-f", "/dev/null"]
 
   # ==========================================================================
+  # TEST DATABASE (devcontainer only, never used in production)
+  # ==========================================================================
+  radar_db_test:
+    image: postgis/postgis:15-3.5
+    container_name: radar_db_test
+    environment:
+      POSTGRES_DB: radar_test_db
+      POSTGRES_USER: radar
+      POSTGRES_PASSWORD: radarpass
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U radar -d radar_test_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # TEST DATABASE INITIALIZATION (devcontainer only)
+  # ==========================================================================
+  db-init-test:
+    build:
+      context: ./database
+      dockerfile: Dockerfile
+    container_name: radar_db_init_test
+    environment:
+      DB_HOST: radar_db_test
+      DB_PORT: 5432
+      DB_NAME: radar_test_db
+      DB_USER: radar
+      DB_PASSWORD: radarpass
+    depends_on:
+      radar_db_test:
+        condition: service_healthy    # ← this was missing
+    command: >
+      sh -c "
+        echo 'Initializing test database...' &&
+        python -m radar_db.manage init &&
+        python -m radar_db.manage seed &&
+        echo 'Test database ready!'
+      "
+    restart: "no"
+
+  # ==========================================================================
   # TESTING SERVICE (devcontainer only)
   # ==========================================================================
   tests:
@@ -24,23 +68,28 @@ services:
     environment:
       # API connection
       API_BASE_URL: http://api:8000
-      # FRONTEND connection
       FRONTEND_URL: http://frontend:80
-      # Database connection (for direct DB tests)
+      # Production database (read only reference, never written by tests)
       DB_HOST: radar_db
       DB_PORT: 5432
       DB_NAME: radar_prod_db
       DB_USER: radar
       DB_PASSWORD: radarpass
-      # Pytest settings
+      # Test database (used by registrar and watcher tests)
+      TEST_DB_HOST: radar_db_test
+      TEST_DB_PORT: 5432
+      TEST_DB_NAME: radar_test_db
+      TEST_DB_USER: radar
+      TEST_DB_PASSWORD: radarpass
       PYTHONPATH: /app
     volumes:
-      # Mount tests folder so changes reflect immediately
       - ./tests:/app/tests
-      # Mount product_output so indexer tests can access files
       - ../product_output:/product_output:ro
     depends_on:
-      - api
-      - radar_db
-    # Keep container alive so we can exec into it and run tests
+      api:
+        condition: service_started
+      radar_db_test:
+        condition: service_healthy
+      db-init-test:
+        condition: service_completed_successfully
     command: ["tail", "-f", "/dev/null"]
