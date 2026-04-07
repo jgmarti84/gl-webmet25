@@ -6,6 +6,8 @@ from typing import Optional, Dict, Tuple, List
 
 import numpy as np
 import rasterio
+from cachetools import LRUCache
+from cachetools.keys import hashkey
 from PIL import Image
 from rio_tiler.io import Reader
 from rio_tiler.errors import TileOutsideBounds
@@ -14,6 +16,33 @@ from ..config import settings
 from ..utils.colormaps import colormap_for_field, colormap_to_rio_tiler, get_colormap
 
 logger = logging.getLogger(__name__)
+
+# In-process tile cache — keyed by (file_path, z, x, y, cmap_name, vmin, vmax).
+# Transparent tiles (out-of-bounds) are also cached since they are valid responses.
+# None values (file not found on disk) are NOT cached to allow re-indexing.
+# ~2 000 tiles × ~20 KB PNG ≈ 40 MB max resident size.
+_tile_cache: LRUCache = LRUCache(maxsize=2000)
+
+
+def _tile_cache_key(
+    file_path: str,
+    z: int,
+    x: int,
+    y: int,
+    cmap_name: Optional[str],
+    vmin: Optional[float],
+    vmax: Optional[float],
+) -> tuple:
+    """Build a hashable cache key for a rendered tile."""
+    return hashkey(
+        file_path,
+        z,
+        x,
+        y,
+        cmap_name or "",
+        round(vmin, 4) if vmin is not None else None,
+        round(vmax, 4) if vmax is not None else None,
+    )
 
 
 def detect_cog_type(file_path: str) -> str:
@@ -165,22 +194,66 @@ class TileService:
             PNG image bytes or transparent tile for out-of-bounds / errors
         """
         full_path = self.get_full_path(file_path)
-        
+
         if not full_path.exists():
             logger.warning(f"COG file not found: {full_path}")
             return None
 
+        # Resolve effective rendering parameters before checking cache so the
+        # key reflects what will actually be rendered.
+        if cog_data_type is None:
+            cog_data_type = detect_cog_type(str(full_path))
+
+        effective_cmap = cmap_name or "grc_th"
+        effective_vmin = vmin if vmin is not None else -30.0
+        effective_vmax = vmax if vmax is not None else 70.0
+
+        cache_key = _tile_cache_key(
+            file_path, z, x, y, effective_cmap, effective_vmin, effective_vmax
+        )
+        cached = _tile_cache.get(cache_key)
+        if cached is not None:
+            logger.debug(f"Tile cache hit: {file_path} {z}/{x}/{y}")
+            return cached
+
+        result = self._render_tile(
+            full_path,
+            file_path,
+            z,
+            x,
+            y,
+            colormap,
+            resampling,
+            effective_cmap,
+            effective_vmin,
+            effective_vmax,
+            cog_data_type,
+        )
+
+        # Cache every successful result, including transparent tiles.
+        # Do not cache None (file not found) so re-indexed files are picked up.
+        if result is not None:
+            _tile_cache[cache_key] = result
+
+        return result
+
+    def _render_tile(
+        self,
+        full_path: Path,
+        file_path: str,
+        z: int,
+        x: int,
+        y: int,
+        colormap: Optional[Dict[int, Tuple[int, int, int, int]]],
+        resampling: str,
+        effective_cmap: str,
+        effective_vmin: float,
+        effective_vmax: float,
+        cog_data_type: str,
+    ) -> bytes:
+        """Render a tile without consulting the cache. Called by ``generate_tile``."""
         try:
-            # Determine COG type (use stored value when available)
-            if cog_data_type is None:
-                cog_data_type = detect_cog_type(str(full_path))
-
             if cog_data_type == "raw_float":
-                # Use matplotlib colormap pipeline for float data
-                effective_cmap = cmap_name or "grc_th"
-                effective_vmin = vmin if vmin is not None else -30.0
-                effective_vmax = vmax if vmax is not None else 70.0
-
                 return self._generate_raw_float_tile(
                     full_path, z, x, y,
                     effective_cmap,
@@ -213,9 +286,9 @@ class TileService:
                     )
                     return self._generate_raw_float_tile(
                         full_path, z, x, y,
-                        cmap_name or "grc_th",
-                        vmin if vmin is not None else -30.0,
-                        vmax if vmax is not None else 70.0,
+                        effective_cmap,
+                        effective_vmin,
+                        effective_vmax,
                         resampling,
                     )
 
@@ -224,7 +297,7 @@ class TileService:
                 if colormap:
                     return img.render(colormap=colormap)
                 return img.render()
-                
+
         except TileOutsideBounds:
             logger.debug(f"Tile {z}/{x}/{y} outside bounds for {file_path}")
             return self._generate_transparent_tile()

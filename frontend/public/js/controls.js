@@ -294,6 +294,66 @@ export class UIControls {
     }
     
     /**
+     * Show a semi-transparent loading overlay on top of the map.
+     * The overlay is created dynamically on first call and reused thereafter.
+     * @param {string} message - Text shown inside the overlay
+     */
+    showMapOverlay(message = 'Loading\u2026') {
+        let overlay = document.getElementById('map-loading-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'map-loading-overlay';
+            overlay.style.cssText = [
+                'position:absolute',
+                'top:0',
+                'left:0',
+                'width:100%',
+                'height:100%',
+                'background:rgba(0,0,0,0.45)',
+                'display:flex',
+                'align-items:center',
+                'justify-content:center',
+                'z-index:1000',
+                'color:#fff',
+                'font-size:1.1rem',
+                'font-weight:600',
+                'pointer-events:none',
+                'border-radius:inherit',
+            ].join(';');
+            const mapEl = document.getElementById('map');
+            if (mapEl) {
+                if (window.getComputedStyle(mapEl).position === 'static') {
+                    mapEl.style.position = 'relative';
+                }
+                mapEl.appendChild(overlay);
+            }
+        }
+        overlay.textContent = message;
+        overlay.style.display = 'flex';
+    }
+
+    /**
+     * Update the text of a visible map overlay without showing/hiding it.
+     * @param {string} message - New text to display
+     */
+    updateMapOverlay(message) {
+        const overlay = document.getElementById('map-loading-overlay');
+        if (overlay && overlay.style.display !== 'none') {
+            overlay.textContent = message;
+        }
+    }
+
+    /**
+     * Hide the map loading overlay.
+     */
+    hideMapOverlay() {
+        const overlay = document.getElementById('map-loading-overlay');
+        if (overlay) {
+            overlay.style.display = 'none';
+        }
+    }
+
+    /**
      * Get selected value from dropdown
      */
     getSelectedValue(selectId) {

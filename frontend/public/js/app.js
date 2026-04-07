@@ -988,13 +988,64 @@ const app = {
     /**
      * Re-apply the current colormap / range when the user changes the controls
      * while data is already loaded.
+     *
+     * In time-range mode the new tiles are preloaded in the background so the
+     * current animation keeps playing until the swap is ready.
      */
     async applyColormapChange() {
+        if (!state.animationMode) return;
+
+        // In latest mode (single frame per radar) there is no animation cache
+        // to preserve, so just reload normally.
         if (state.animationMode === 'latest') {
             await this.loadLatestCogs();
-        } else if (state.animationMode === 'timerange') {
-            await this.loadTimeRangeCogs();
+            return;
         }
+
+        // In time-range mode, reuse the existing groupedFrames (same timestamps
+        // and COG IDs) but regenerate tile URLs with the new colormap params.
+        // Preload in the background so the current animation remains visible.
+        if (!state.cogs || !state.cogs.length) {
+            await this.loadTimeRangeCogs();
+            return;
+        }
+
+        const groupedFrames = state.cogs;
+        const tileParams = this.getTileParams();
+
+        state.ui.showMapOverlay('Applying colormap\u2026');
+
+        // Update legend immediately without waiting for tiles
+        try {
+            const colormap = await api.getColormapInfo(state.selectedProduct, state.selectedColormap);
+            if (colormap) {
+                if (state.currentVmin !== null) colormap.vmin = state.currentVmin;
+                if (state.currentVmax !== null) colormap.vmax = state.currentVmax;
+                state.legend.render(colormap);
+            }
+        } catch (e) {
+            console.warn('Failed to update legend during colormap change:', e);
+        }
+
+        state.mapManager.preloadFramesBackground(
+            groupedFrames,
+            (loaded, total) => {
+                state.ui.updateMapOverlay(`Applying colormap\u2026 ${loaded}\u202f/\u202f${total}`);
+            },
+            (pendingLayers) => {
+                const prevIndex = state.animator.getCurrentIndex();
+                const wasPlaying = state.animator.getIsPlaying();
+                state.animator.stop();
+                state.mapManager.commitPendingFrames(pendingLayers);
+                // Show the frame that was active when the swap completes
+                const targetIndex = Math.min(prevIndex, pendingLayers.length - 1);
+                state.mapManager.showCachedFrame(targetIndex);
+                state.ui.hideMapOverlay();
+                state.ui.setStatus('Colormap updated \u2713', 'success');
+                if (wasPlaying) state.animator.play();
+            },
+            tileParams
+        );
     },
 
     /**
