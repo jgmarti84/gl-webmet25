@@ -17,11 +17,20 @@ from ..utils.colormaps import colormap_for_field, colormap_to_rio_tiler, get_col
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Cache tuning constants
+# ---------------------------------------------------------------------------
+# ~2 000 tiles × ~20 KB PNG ≈ 40 MB max resident size.
+TILE_CACHE_MAX_SIZE: int = 2000
+# Number of decimal places used when rounding vmin/vmax for cache-key comparison.
+# 4 decimal places (0.0001 precision) eliminates floating-point noise while still
+# distinguishing intentionally different range settings.
+CACHE_KEY_FLOAT_PRECISION: int = 4
+
 # In-process tile cache — keyed by (file_path, z, x, y, cmap_name, vmin, vmax).
 # Transparent tiles (out-of-bounds) are also cached since they are valid responses.
 # None values (file not found on disk) are NOT cached to allow re-indexing.
-# ~2 000 tiles × ~20 KB PNG ≈ 40 MB max resident size.
-_tile_cache: LRUCache = LRUCache(maxsize=2000)
+_tile_cache: LRUCache = LRUCache(maxsize=TILE_CACHE_MAX_SIZE)
 
 
 def _tile_cache_key(
@@ -40,8 +49,8 @@ def _tile_cache_key(
         x,
         y,
         cmap_name or "",
-        round(vmin, 4) if vmin is not None else None,
-        round(vmax, 4) if vmax is not None else None,
+        round(vmin, CACHE_KEY_FLOAT_PRECISION) if vmin is not None else None,
+        round(vmax, CACHE_KEY_FLOAT_PRECISION) if vmax is not None else None,
     )
 
 

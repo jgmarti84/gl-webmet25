@@ -18,12 +18,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tiles", tags=["Tiles"])
 
 # ---------------------------------------------------------------------------
+# Cache tuning constants
+# ---------------------------------------------------------------------------
+# Maximum number of RadarCOG metadata entries to keep in memory.
+COG_METADATA_CACHE_MAX_SIZE: int = 500
+# Seconds before a cached metadata entry is evicted (5 minutes).
+COG_METADATA_CACHE_TTL: int = 300
+# Observation age (in minutes) above which a tile is considered immutable.
+# Tiles older than this threshold receive a 24-hour browser/proxy cache.
+RECENT_OBSERVATION_THRESHOLD_MINUTES: int = 10
+
+# ---------------------------------------------------------------------------
 # Priority 3 — COG metadata cache
 # Cache RadarCOG records for 5 minutes. Metadata is stable between indexer
 # runs; TTL ensures stale entries are evicted automatically.
 # This cache is READ-ONLY and must NOT be used by any write (indexer) path.
 # ---------------------------------------------------------------------------
-_cog_metadata_cache: TTLCache = TTLCache(maxsize=500, ttl=300)
+_cog_metadata_cache: TTLCache = TTLCache(
+    maxsize=COG_METADATA_CACHE_MAX_SIZE,
+    ttl=COG_METADATA_CACHE_TTL,
+)
 
 
 def _get_cog_by_id(cog_id: int, db: Session) -> Optional[RadarCOG]:
@@ -44,7 +58,16 @@ def _get_cog_by_id(cog_id: int, db: Session) -> Optional[RadarCOG]:
 # ---------------------------------------------------------------------------
 # Priority 1 — Cache-Control / ETag helpers
 # ---------------------------------------------------------------------------
-_RECENT_THRESHOLD = timedelta(minutes=10)
+_RECENT_THRESHOLD = timedelta(minutes=RECENT_OBSERVATION_THRESHOLD_MINUTES)
+
+# Match the float precision used in the tile-service cache key so that the
+# ETag stays consistent with the server-side cache lookup.
+_ETAG_FLOAT_FORMAT = f".{4}f"  # 4 decimal places
+
+
+def _fmt_float(value: float) -> str:
+    """Format a float consistently for ETag generation."""
+    return format(value, _ETAG_FLOAT_FORMAT)
 
 
 def _build_tile_headers(
@@ -60,11 +83,12 @@ def _build_tile_headers(
     """
     Build HTTP caching headers for a tile response.
 
-    Past observations (> 10 min old) get a 24-hour immutable cache.
-    Recent observations get a 60-second cache with must-revalidate.
-    An ETag is always included so clients can send If-None-Match for 304s.
+    Past observations (> RECENT_OBSERVATION_THRESHOLD_MINUTES old) get a
+    24-hour immutable cache.  Recent observations get a 60-second cache
+    with must-revalidate.  An ETag is always included so clients can send
+    If-None-Match for 304 responses.
     """
-    etag_raw = f"{cog_id}-{z}-{x}-{y}-{cmap}-{vmin:.4f}-{vmax:.4f}"
+    etag_raw = f"{cog_id}-{z}-{x}-{y}-{cmap}-{_fmt_float(vmin)}-{_fmt_float(vmax)}"
     etag = f'"{hashlib.sha256(etag_raw.encode()).hexdigest()[:32]}"'
 
     if observation_time is not None:

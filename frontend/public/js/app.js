@@ -1030,16 +1030,24 @@ const app = {
         state.mapManager.preloadFramesBackground(
             groupedFrames,
             (loaded, total) => {
-                state.ui.updateMapOverlay(`Applying colormap\u2026 ${loaded}\u202f/\u202f${total}`);
+                state.ui.updateMapOverlay(`Applying colormap\u2026 ${loaded}\u00a0/\u00a0${total}`);
             },
             (pendingLayers) => {
                 const prevIndex = state.animator.getCurrentIndex();
                 const wasPlaying = state.animator.getIsPlaying();
                 state.animator.stop();
                 state.mapManager.commitPendingFrames(pendingLayers);
-                // Show the frame that was active when the swap completes
-                const targetIndex = Math.min(prevIndex, pendingLayers.length - 1);
-                state.mapManager.showCachedFrame(targetIndex);
+                // Show the frame that was active when the swap completes;
+                // clamp in case any pending layer slots are null (edge case
+                // where a batch was cancelled mid-flight before all frames
+                // were allocated).
+                const safeIndex = Math.min(
+                    prevIndex,
+                    pendingLayers.filter(Boolean).length - 1
+                );
+                if (safeIndex >= 0) {
+                    state.mapManager.showCachedFrame(safeIndex);
+                }
                 state.ui.hideMapOverlay();
                 state.ui.setStatus('Colormap updated \u2713', 'success');
                 if (wasPlaying) state.animator.play();
