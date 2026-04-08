@@ -168,3 +168,39 @@ def test_tile_metadata_404_has_detail_field():
         response = client.get(f"{TILES_PREFIX}/999999999/metadata")
     data = response.json()
     assert "detail" in data
+
+
+def test_tile_returns_cache_control_header():
+    cog_id = _get_first_available_cog_id()
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.get(f"{TILES_PREFIX}/{cog_id}/7/50/40.png")
+    assert response.status_code == 200
+    assert "Cache-Control" in response.headers
+    assert "max-age" in response.headers["Cache-Control"]
+
+
+def test_tile_returns_etag_header():
+    cog_id = _get_first_available_cog_id()
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.get(f"{TILES_PREFIX}/{cog_id}/7/50/40.png")
+    assert "ETag" in response.headers
+
+
+def test_tile_304_on_matching_etag():
+    cog_id = _get_first_available_cog_id()
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        r1 = client.get(f"{TILES_PREFIX}/{cog_id}/7/50/40.png")
+        etag = r1.headers["ETag"]
+        r2 = client.get(
+            f"{TILES_PREFIX}/{cog_id}/7/50/40.png",
+            headers={"If-None-Match": etag}
+        )
+    assert r2.status_code == 304
+
+
+def test_different_colormap_produces_different_etag():
+    cog_id = _get_first_available_cog_id()
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        r1 = client.get(f"{TILES_PREFIX}/{cog_id}/7/50/40.png?colormap=viridis")
+        r2 = client.get(f"{TILES_PREFIX}/{cog_id}/7/50/40.png?colormap=grc_th")
+    assert r1.headers["ETag"] != r2.headers["ETag"]
