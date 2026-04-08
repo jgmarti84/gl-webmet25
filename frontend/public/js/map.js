@@ -58,6 +58,8 @@ export class MapManager {
         // Pre-cached layers for smooth animation
         this.cachedFrameLayers = []; // Array of {radarCode: L.tileLayer}
         this.currentCachedFrameIndex = -1;
+        // Background preload state (used for colormap-change UX)
+        this._cancelBackgroundPreload = null;
     }
     
     /**
@@ -205,6 +207,127 @@ export class MapManager {
         };
 
         loadBatch(0);
+    }
+
+    /**
+     * Pre-load new frame layers in the background WITHOUT clearing the current
+     * visible layers.  Used for colormap-change UX: the current animation
+     * keeps playing while the new tiles are fetched, then `commitPendingFrames`
+     * is called to do a seamless swap.
+     *
+     * Cancels any previous background preload that has not yet completed.
+     *
+     * @param {Array}    groupedFrames - Same structure as accepted by preloadFrames
+     * @param {Function} onProgress   - Called with (loadedCount, totalLayers) on each layer load
+     * @param {Function} onComplete   - Called with (pendingLayers) when all layers have loaded
+     * @param {Object}   tileParams   - Optional {cmap, vmin, vmax} for tile URL
+     * @returns {Function} cancel     - Call to abort the background preload
+     */
+    preloadFramesBackground(groupedFrames, onProgress, onComplete, tileParams = {}) {
+        // Cancel any previous in-flight background preload
+        if (this._cancelBackgroundPreload) {
+            this._cancelBackgroundPreload();
+            this._cancelBackgroundPreload = null;
+        }
+
+        if (!groupedFrames.length) {
+            if (onComplete) onComplete([]);
+            return () => {};
+        }
+
+        let cancelled = false;
+        const pendingLayers = new Array(groupedFrames.length).fill(null);
+
+        const totalLayers = groupedFrames.reduce(
+            (sum, f) => sum + Object.keys(f.cogsByRadar).length, 0
+        );
+
+        if (totalLayers === 0) {
+            if (onComplete) setTimeout(() => onComplete(pendingLayers), 0);
+            return () => {};
+        }
+
+        let loadedCount = 0;
+
+        const checkComplete = () => {
+            if (loadedCount >= totalLayers && onComplete && !cancelled) {
+                onComplete(pendingLayers);
+            }
+        };
+
+        const loadBatch = (startIdx) => {
+            if (cancelled || startIdx >= groupedFrames.length) return;
+            const endIdx = Math.min(startIdx + PRELOAD_BATCH_SIZE, groupedFrames.length);
+
+            for (let i = startIdx; i < endIdx; i++) {
+                if (cancelled) return;
+                const frame = groupedFrames[i];
+                const layerMap = {};
+                Object.entries(frame.cogsByRadar).forEach(([radarCode, cog]) => {
+                    const queryParams = new URLSearchParams();
+                    if (tileParams.cmap) queryParams.append('colormap', tileParams.cmap);
+                    if (tileParams.vmin !== null && tileParams.vmin !== undefined) queryParams.append('vmin', tileParams.vmin);
+                    if (tileParams.vmax !== null && tileParams.vmax !== undefined) queryParams.append('vmax', tileParams.vmax);
+                    const queryStr = queryParams.toString();
+                    const tileUrl = queryStr
+                        ? `/api/v1/tiles/${cog.id}/{z}/{x}/{y}.png?${queryStr}`
+                        : `/api/v1/tiles/${cog.id}/{z}/{x}/{y}.png`;
+                    const layer = L.tileLayer(tileUrl, {
+                        opacity: 0,
+                        maxZoom: 18,
+                        tms: false,
+                        keepBuffer: 2,
+                        zIndex: ZINDEX_RADAR,
+                    });
+                    layer.once('load', () => {
+                        if (cancelled) return;
+                        loadedCount++;
+                        if (onProgress) onProgress(loadedCount, totalLayers);
+                        checkComplete();
+                    });
+                    layer.addTo(this.map);
+                    layerMap[radarCode] = layer;
+                });
+                pendingLayers[i] = layerMap;
+            }
+
+            if (endIdx < groupedFrames.length) {
+                setTimeout(() => loadBatch(endIdx), PRELOAD_BATCH_DELAY);
+            }
+        };
+
+        loadBatch(0);
+
+        const cancel = () => {
+            cancelled = true;
+            pendingLayers.forEach(frameLayerMap => {
+                if (frameLayerMap) {
+                    Object.values(frameLayerMap).forEach(layer => {
+                        if (this.map && this.map.hasLayer(layer)) {
+                            this.map.removeLayer(layer);
+                        }
+                    });
+                }
+            });
+        };
+
+        this._cancelBackgroundPreload = cancel;
+        return cancel;
+    }
+
+    /**
+     * Swap the current cached frame layers for the pending layers produced by
+     * `preloadFramesBackground`.  The old layers are removed from the map.
+     * The caller is responsible for showing the correct frame afterwards
+     * (e.g. via `showCachedFrame`).
+     *
+     * @param {Array} pendingLayers - Array produced by preloadFramesBackground
+     */
+    commitPendingFrames(pendingLayers) {
+        this._cancelBackgroundPreload = null;
+        // Clear old layers; resets currentCachedFrameIndex to -1
+        this.clearCachedFrames();
+        this.cachedFrameLayers = pendingLayers;
     }
 
     /**

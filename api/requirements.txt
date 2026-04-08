@@ -17,3 +17,6 @@ numpy>=1.24.0
 
 # Colormap utilities
 matplotlib>=3.7.0
+
+# Caching utilities
+cachetools>=5.0.0

@@ -1,12 +1,15 @@
 # api/app/routers/tiles.py
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from fastapi.responses import Response as FastAPIResponse
-from sqlalchemy.orm import Session, joinedload
-from typing import Optional
-from pathlib import Path
+import hashlib
 import logging
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 
-from radar_db import get_db, RadarCOG, RadarProduct
+from cachetools import TTLCache
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from sqlalchemy.orm import Session, joinedload
+
+from radar_db import get_db, RadarCOG
 from ..services import get_tile_service, TileService
 from ..services.tile_service import read_cog_metadata
 from ..utils.colormaps import colormap_for_field
@@ -16,8 +19,141 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tiles", tags=["Tiles"])
 
 
+@dataclass(frozen=True)
+class CogSnapshot:
+    """
+    Immutable snapshot of the RadarCOG fields needed for tile rendering.
+
+    Stored in the TTL metadata cache instead of the live ORM object so that
+    cached entries remain valid after the originating DB session is closed.
+    """
+
+    id: int
+    file_path: str
+    observation_time: Optional[datetime]
+    polarimetric_var: Optional[str]
+    # Flattened from RadarCOG.product.product_key (eager-loaded once)
+    product_key: Optional[str]
+    cog_data_type: Optional[str]
+    cog_cmap: Optional[str]
+    cog_vmin: Optional[float]
+    cog_vmax: Optional[float]
+
+# ---------------------------------------------------------------------------
+# Cache tuning constants
+# ---------------------------------------------------------------------------
+# Maximum number of RadarCOG metadata entries to keep in memory.
+COG_METADATA_CACHE_MAX_SIZE: int = 500
+# Seconds before a cached metadata entry is evicted (5 minutes).
+COG_METADATA_CACHE_TTL: int = 300
+# Observation age (in minutes) above which a tile is considered immutable.
+# Tiles older than this threshold receive a 24-hour browser/proxy cache.
+RECENT_OBSERVATION_THRESHOLD_MINUTES: int = 10
+
+# ---------------------------------------------------------------------------
+# Priority 3 — COG metadata cache
+# Cache RadarCOG records for 5 minutes. Metadata is stable between indexer
+# runs; TTL ensures stale entries are evicted automatically.
+# This cache is READ-ONLY and must NOT be used by any write (indexer) path.
+# ---------------------------------------------------------------------------
+_cog_metadata_cache: TTLCache = TTLCache(
+    maxsize=COG_METADATA_CACHE_MAX_SIZE,
+    ttl=COG_METADATA_CACHE_TTL,
+)
+
+
+def _get_cog_by_id(cog_id: int, db: Session) -> Optional[CogSnapshot]:
+    """Return a CogSnapshot (with product key) by ID, using the TTL metadata cache.
+
+    The cache stores plain dataclass instances — not SQLAlchemy ORM objects —
+    so entries remain valid after the originating DB session is closed.
+    """
+    cached: Optional[CogSnapshot] = _cog_metadata_cache.get(cog_id)
+    if cached is not None:
+        return cached
+    orm_cog = (
+        db.query(RadarCOG)
+        .options(joinedload(RadarCOG.product))
+        .filter(RadarCOG.id == cog_id)
+        .first()
+    )
+    if orm_cog is None:
+        return None
+    snapshot = CogSnapshot(
+        id=orm_cog.id,
+        file_path=orm_cog.file_path,
+        observation_time=orm_cog.observation_time,
+        polarimetric_var=orm_cog.polarimetric_var,
+        product_key=orm_cog.product.product_key if orm_cog.product else None,
+        cog_data_type=orm_cog.cog_data_type,
+        cog_cmap=orm_cog.cog_cmap,
+        cog_vmin=orm_cog.cog_vmin,
+        cog_vmax=orm_cog.cog_vmax,
+    )
+    _cog_metadata_cache[cog_id] = snapshot
+    return snapshot
+
+
+# ---------------------------------------------------------------------------
+# Priority 1 — Cache-Control / ETag helpers
+# ---------------------------------------------------------------------------
+_RECENT_THRESHOLD = timedelta(minutes=RECENT_OBSERVATION_THRESHOLD_MINUTES)
+
+# Match the float precision used in the tile-service cache key so that the
+# ETag stays consistent with the server-side cache lookup.
+_ETAG_FLOAT_FORMAT = f".{4}f"  # 4 decimal places
+
+
+def _fmt_float(value: float) -> str:
+    """Format a float consistently for ETag generation."""
+    return format(value, _ETAG_FLOAT_FORMAT)
+
+
+def _build_tile_headers(
+    observation_time: Optional[datetime],
+    cog_id: int,
+    z: int,
+    x: int,
+    y: int,
+    cmap: str,
+    vmin: float,
+    vmax: float,
+) -> dict:
+    """
+    Build HTTP caching headers for a tile response.
+
+    Past observations (> RECENT_OBSERVATION_THRESHOLD_MINUTES old) get a
+    24-hour immutable cache.  Recent observations get a 60-second cache
+    with must-revalidate.  An ETag is always included so clients can send
+    If-None-Match for 304 responses.
+    """
+    etag_raw = f"{cog_id}-{z}-{x}-{y}-{cmap}-{_fmt_float(vmin)}-{_fmt_float(vmax)}"
+    etag = f'"{hashlib.sha256(etag_raw.encode()).hexdigest()[:32]}"'
+
+    if observation_time is not None:
+        obs_utc = (
+            observation_time.replace(tzinfo=timezone.utc)
+            if observation_time.tzinfo is None
+            else observation_time
+        )
+        age = datetime.now(timezone.utc) - obs_utc
+        if age > _RECENT_THRESHOLD:
+            cache_control = "public, max-age=86400, immutable"
+        else:
+            cache_control = "public, max-age=60, must-revalidate"
+    else:
+        cache_control = "public, max-age=300"
+
+    return {
+        "Cache-Control": cache_control,
+        "ETag": etag,
+        "Access-Control-Allow-Origin": "*",
+    }
+
+
 @router.get("/{cog_id}/{z}/{x}/{y}.png")
 async def get_tile(
+    request: Request,
     cog_id: int,
     z: int,
     x: int,
@@ -39,18 +175,15 @@ async def get_tile(
     - **vmin**: Optional minimum value override for colormap scaling
     - **vmax**: Optional maximum value override for colormap scaling
     """
-    # Get COG record
-    cog = db.query(RadarCOG)\
-        .options(joinedload(RadarCOG.product))\
-        .filter(RadarCOG.id == cog_id)\
-        .first()
-    
+    # Priority 3: use metadata cache for DB lookup
+    cog = _get_cog_by_id(cog_id, db)
+
     if not cog:
         raise HTTPException(status_code=404, detail=f"COG with ID {cog_id} not found")
-    
+
     logger.info(f"Requesting tile for COG {cog_id}: {cog.file_path}")
-    
-    product_key = cog.polarimetric_var or (cog.product.product_key if cog.product else None)
+
+    product_key = cog.polarimetric_var or cog.product_key
     cog_data_type = cog.cog_data_type  # may be None for legacy records
 
     # Resolve effective cmap name, vmin, vmax
@@ -63,6 +196,15 @@ async def get_tile(
     effective_vmin = vmin if vmin is not None else (cog.cog_vmin if cog.cog_vmin is not None else default_vmin)
     effective_vmax = vmax if vmax is not None else (cog.cog_vmax if cog.cog_vmax is not None else default_vmax)
 
+    # Priority 1: build caching headers and check ETag for conditional GET
+    headers = _build_tile_headers(
+        cog.observation_time, cog_id, z, x, y,
+        effective_cmap, effective_vmin, effective_vmax,
+    )
+    if_none_match = request.headers.get("if-none-match")
+    if if_none_match and if_none_match == headers["ETag"]:
+        return Response(status_code=304, headers=headers)
+
     # Build integer colormap dict (used for non-raw_float paths)
     colormap_dict = None
     if product_key:
@@ -72,7 +214,7 @@ async def get_tile(
         logger.warning(f"No product key found for COG {cog_id}. Using default colormap.")
         colormap_dict = tile_service._get_default_radar_colormap()
     
-    # Generate tile
+    # Generate tile (Priority 2: served from LRU cache when available)
     tile_data = tile_service.generate_tile(
         file_path=cog.file_path,
         z=z,
@@ -96,10 +238,7 @@ async def get_tile(
     return Response(
         content=tile_data,
         media_type="image/png",
-        headers={
-            "Cache-Control": "public, max-age=300",
-            "Access-Control-Allow-Origin": "*",
-        }
+        headers=headers,
     )
 
 
@@ -179,14 +318,15 @@ async def get_tile_by_params(
     
     if tile_data is None:
         raise HTTPException(status_code=404, detail="Tile not found")
-    
+
+    headers = _build_tile_headers(
+        cog.observation_time, cog.id, z, x, y,
+        effective_cmap, effective_vmin, effective_vmax,
+    )
     return Response(
         content=tile_data,
         media_type="image/png",
-        headers={
-            "Cache-Control": "public, max-age=60",
-            "Access-Control-Allow-Origin": "*",
-        }
+        headers=headers,
     )
 
 
@@ -205,15 +345,13 @@ async def get_cog_rendering_metadata(
     """
     from ..utils.colormaps import FIELD_COLORMAP_OPTIONS
 
-    cog = db.query(RadarCOG)\
-        .options(joinedload(RadarCOG.product))\
-        .filter(RadarCOG.id == cog_id)\
-        .first()
+    # Priority 3: use metadata cache for DB lookup
+    cog = _get_cog_by_id(cog_id, db)
 
     if not cog:
         raise HTTPException(status_code=404, detail=f"COG with ID {cog_id} not found")
 
-    product_key = cog.polarimetric_var or (cog.product.product_key if cog.product else None)
+    product_key = cog.polarimetric_var or cog.product_key
 
     # Fall back to file-level detection when the DB column is not yet populated
     cog_data_type = cog.cog_data_type
