@@ -21,6 +21,7 @@ import { LegendRenderer } from './legend.js';
 
 const MS_PER_HOUR = 3600 * 1000;
 const LIVE_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const BUCKET_TOLERANCE_MINUTES = 5; // COG grouping bucket size – must match groupCogsByTimestamp default
 
 // =============================================================================
 // APPLICATION STATE
@@ -62,17 +63,30 @@ const state = {
 // =============================================================================
 
 /**
+ * Return the rounded-epoch bucket key for a COG timestamp using the same
+ * bucket size as groupCogsByTimestamp.
+ *
+ * @param {string|Date} timestamp
+ * @returns {number} bucket key (ms since epoch, rounded to BUCKET_TOLERANCE_MINUTES)
+ */
+function getCogBucketKey(timestamp) {
+    const bucketMs = BUCKET_TOLERANCE_MINUTES * 60 * 1000;
+    const t = new Date(timestamp).getTime();
+    return Math.round(t / bucketMs) * bucketMs;
+}
+
+/**
  * Group a flat list of COGs (from multiple radars) into animation frames.
  *
  * COGs that fall within the same `toleranceMinutes` window are merged into one
  * frame so all selected radars are rendered simultaneously at each step.
  *
  * @param {Array}  cogs             - Raw COG objects (sorted newest-first)
- * @param {number} toleranceMinutes - Bucket size in minutes (default 5)
+ * @param {number} toleranceMinutes - Bucket size in minutes (default BUCKET_TOLERANCE_MINUTES)
  * @returns {Array} groupedFrames   - [{timestamp, cogsByRadar: {code: cog}}, …]
  *                                    sorted newest-first
  */
-function groupCogsByTimestamp(cogs, toleranceMinutes = 5) {
+function groupCogsByTimestamp(cogs, toleranceMinutes = BUCKET_TOLERANCE_MINUTES) {
     const bucketMs = toleranceMinutes * 60 * 1000;
 
     const buckets = new Map(); // rounded-epoch → frame object
@@ -417,6 +431,7 @@ const app = {
      * Handle radar selection changes
      */
     onRadarSelectionChange() {
+        const prevRadars = [...state.selectedRadars];
         state.selectedRadars = state.ui.getSelectedRadars();
         
         // Enable/disable load latest button
@@ -425,6 +440,29 @@ const app = {
         
         // Also update time range button state
         this.onTimeRangeChange();
+
+        // When a time-range animation is already running, apply changes incrementally
+        // so existing tile cache is preserved and playback is not interrupted.
+        // Skip if the initial batch preload is still in flight to avoid index mismatches.
+        if (
+            state.animationMode === 'timerange' &&
+            state.cogs && state.cogs.length > 0 &&
+            !state.mapManager._preloadInProgress
+        ) {
+            const added   = state.selectedRadars.filter(r => !prevRadars.includes(r));
+            const removed = prevRadars.filter(r => !state.selectedRadars.includes(r));
+
+            // Removals are synchronous – process all before any async additions
+            removed.forEach(radarCode => this.removeRadarIncremental(radarCode));
+
+            // Additions are async – chain them sequentially to keep state consistent
+            if (added.length > 0) {
+                added.reduce(
+                    (p, radarCode) => p.then(() => this.addRadarIncremental(radarCode)),
+                    Promise.resolve()
+                );
+            }
+        }
     },
     
     /**
@@ -477,7 +515,223 @@ const app = {
         state.ui.enableNavButtons(false);
         state.ui.enableAnimationControls(false);
     },
-    
+
+    /**
+     * Incrementally add a radar to a running time-range animation.
+     *
+     * Fetches only the new radar's COGs for the current time window, merges
+     * them into the existing grouped frames, creates tile layers for the new
+     * radar, and adjusts the current frame index if new frames were inserted
+     * before it.  Playback is never stopped.
+     *
+     * @param {string} radarCode - Radar to add (e.g. 'rma1')
+     */
+    async addRadarIncremental(radarCode) {
+        if (state.animationMode !== 'timerange' || !state.cogs || state.cogs.length === 0) return;
+
+        const timeRange = state.ui.getTimeRangeValues();
+        if (!timeRange.start || !timeRange.end) return;
+
+        state.ui.setStatus(`Adding ${radarCode.toUpperCase()} to animation…`, 'loading');
+
+        try {
+            const newCogs = await api.getCogsForTimeRange(
+                [radarCode], state.selectedProduct, timeRange.start, timeRange.end, 100
+            );
+
+            if (newCogs.length === 0) {
+                state.ui.setStatus(
+                    `⚠️ No data for ${radarCode.toUpperCase()} in current time range`,
+                    'error'
+                );
+                return;
+            }
+
+            const tileParams = this.getTileParams();
+
+            // Rebuild the bucket→index map AFTER the await so concurrent updates are safe
+            const existingBucketToIdx = new Map();
+            state.cogs.forEach((frame, idx) => {
+                existingBucketToIdx.set(getCogBucketKey(frame.timestamp), idx);
+            });
+
+            // Deduplicate new COGs by bucket key (keep first per bucket)
+            const newBucketToCog = new Map();
+            newCogs.forEach(cog => {
+                const key = getCogBucketKey(cog.observation_time);
+                if (!newBucketToCog.has(key)) newBucketToCog.set(key, cog);
+            });
+
+            const currentIndex = state.animator.getCurrentIndex();
+            let indexAdjustment = 0;
+
+            const sortedNewBuckets = [...newBucketToCog.entries()].sort((a, b) => a[0] - b[0]);
+
+            for (const [key, cog] of sortedNewBuckets) {
+                if (existingBucketToIdx.has(key)) {
+                    // Merge into existing frame
+                    const frameIdx = existingBucketToIdx.get(key);
+                    state.cogs[frameIdx].cogsByRadar[radarCode] = cog;
+
+                    // Ensure the layer map exists (batch preload may still be running)
+                    if (!state.mapManager.cachedFrameLayers[frameIdx]) {
+                        state.mapManager.cachedFrameLayers[frameIdx] = {};
+                    }
+                    state.mapManager.cachedFrameLayers[frameIdx][radarCode] =
+                        state.mapManager.createHiddenTileLayer(cog.id, tileParams);
+                } else {
+                    // Insert a brand-new frame at the correct sorted position
+                    let insertIdx = state.cogs.length;
+                    for (let i = 0; i < state.cogs.length; i++) {
+                        if (getCogBucketKey(state.cogs[i].timestamp) > key) {
+                            insertIdx = i;
+                            break;
+                        }
+                    }
+
+                    const newFrame    = { timestamp: cog.observation_time, cogsByRadar: { [radarCode]: cog } };
+                    const newLayerMap = { [radarCode]: state.mapManager.createHiddenTileLayer(cog.id, tileParams) };
+
+                    state.cogs.splice(insertIdx, 0, newFrame);
+                    state.mapManager.cachedFrameLayers.splice(insertIdx, 0, newLayerMap);
+
+                    // Adjust the map manager's internal visible-frame pointer
+                    if (
+                        state.mapManager.currentCachedFrameIndex >= 0 &&
+                        insertIdx <= state.mapManager.currentCachedFrameIndex
+                    ) {
+                        state.mapManager.currentCachedFrameIndex++;
+                    }
+
+                    // Track how many new frames landed before/at the current position
+                    if (insertIdx <= currentIndex + indexAdjustment) {
+                        indexAdjustment++;
+                    }
+
+                    // Shift all existing bucket indices that are >= insertIdx
+                    existingBucketToIdx.forEach((existingIdx, existingKey) => {
+                        if (existingIdx >= insertIdx) {
+                            existingBucketToIdx.set(existingKey, existingIdx + 1);
+                        }
+                    });
+                    existingBucketToIdx.set(key, insertIdx);
+                }
+            }
+
+            const newCurrentIndex = Math.min(currentIndex + indexAdjustment, state.cogs.length - 1);
+
+            // Update animator frames and index without interrupting playback
+            state.animator.updateFrames(state.cogs, newCurrentIndex);
+
+            // Re-show the current frame so the newly added radar appears immediately
+            // if it belongs to the currently visible frame
+            state.mapManager.showCachedFrame(newCurrentIndex);
+
+            state.ui.updateFrameCounter(newCurrentIndex, state.cogs.length);
+            state.ui.updateAnimationSlider(newCurrentIndex, state.cogs.length);
+            state.ui.setStatus(`✓ Added ${radarCode.toUpperCase()} — ${state.cogs.length} frames`, 'success');
+
+        } catch (err) {
+            console.error('addRadarIncremental error:', err);
+            state.ui.setStatus(`Error adding ${radarCode.toUpperCase()}: ${err.message}`, 'error');
+        }
+    },
+
+    /**
+     * Incrementally remove a radar from a running time-range animation.
+     *
+     * Removes only the tile layers belonging to the radar from every frame in
+     * cachedFrameLayers.  Frames that become empty (no radars left) are
+     * discarded.  The current frame index is adjusted to compensate for any
+     * removed frames.  Playback is never stopped.
+     *
+     * @param {string} radarCode - Radar to remove (e.g. 'rma1')
+     */
+    removeRadarIncremental(radarCode) {
+        if (state.animationMode !== 'timerange' || !state.cogs || state.cogs.length === 0) return;
+
+        const originalIndex = state.animator.getCurrentIndex();
+
+        // Temporarily hide the currently visible frame to avoid visual glitches
+        // while we restructure the layer arrays.
+        const currentLayerMap = state.mapManager.cachedFrameLayers[originalIndex];
+        if (currentLayerMap) {
+            Object.values(currentLayerMap).forEach(layer => layer.setOpacity(0));
+        }
+
+        const newFrames      = [];
+        const newLayerFrames = [];
+        let removedBeforeOriginal = 0;
+        let originalFrameRemoved  = false;
+
+        state.cogs.forEach((frame, i) => {
+            const layerMap = state.mapManager.cachedFrameLayers[i];
+
+            // Remove this radar's tile layer from the map
+            if (layerMap) {
+                const layer = layerMap[radarCode];
+                if (layer && state.mapManager.map.hasLayer(layer)) {
+                    state.mapManager.map.removeLayer(layer);
+                }
+                delete layerMap[radarCode];
+            }
+
+            // Remove from the frame's data object
+            delete frame.cogsByRadar[radarCode];
+
+            // Discard the frame entirely if it is now empty
+            if (Object.keys(frame.cogsByRadar).length === 0) {
+                if (i < originalIndex)  removedBeforeOriginal++;
+                if (i === originalIndex) originalFrameRemoved = true;
+                return;
+            }
+
+            newFrames.push(frame);
+            newLayerFrames.push(layerMap || null);
+        });
+
+        // Replace the arrays with the compacted versions
+        state.mapManager.cachedFrameLayers = newLayerFrames;
+        state.cogs = newFrames;
+
+        if (newFrames.length === 0) {
+            // All frames were emptied — fall back to an idle state
+            state.mapManager.currentCachedFrameIndex = -1;
+            state.animator.setFrames([]);
+            state.animationMode = null;
+            state.ui.enableAnimationControls(false);
+            state.ui.enableNavButtons(false);
+            state.ui.setStatus(`All frames empty after removing ${radarCode.toUpperCase()}`, 'error');
+            return;
+        }
+
+        // Compute the new visible-frame index
+        let newCurrentIndex = originalIndex - removedBeforeOriginal;
+        if (originalFrameRemoved) {
+            // The active frame was removed — stay at the same numeric position (clamped)
+            newCurrentIndex = Math.min(originalIndex - removedBeforeOriginal, newFrames.length - 1);
+        }
+        newCurrentIndex = Math.max(0, Math.min(newCurrentIndex, newFrames.length - 1));
+
+        // Update the map manager's pointer to account for the compacted array
+        if (originalFrameRemoved) {
+            state.mapManager.currentCachedFrameIndex = -1; // will be set by showCachedFrame
+        } else {
+            state.mapManager.currentCachedFrameIndex = newCurrentIndex;
+        }
+
+        // Update animator frames and index without interrupting playback
+        state.animator.updateFrames(newFrames, newCurrentIndex);
+
+        // Show the (possibly new) current frame
+        state.mapManager.showCachedFrame(newCurrentIndex);
+
+        state.ui.updateFrameCounter(newCurrentIndex, newFrames.length);
+        state.ui.updateAnimationSlider(newCurrentIndex, newFrames.length);
+        state.ui.setTimeDisplay(newFrames[newCurrentIndex].timestamp);
+        state.ui.setStatus(`✓ Removed ${radarCode.toUpperCase()} from animation`, 'success');
+    },
+
     /**
      * Load latest COGs for selected radars and product
      */
@@ -859,12 +1113,16 @@ const app = {
      * Called every 5 minutes while live mode is active.
      *
      * Checks whether new COGs have been published beyond the current window
-     * end.  If so, shifts the window forward by the same N hours and reloads.
-     * COGs that have fallen behind the new start time are automatically
-     * discarded because loadTimeRangeCogs fetches a fresh time slice.
+     * end.  If so:
+     *   – Fetches only the new COGs (current end → new end), not the full window
+     *   – Appends new frames to the end of the animation
+     *   – Expires frames that have fallen before the new start time
+     *   – Adjusts the current frame index to account for removed frames
+     *   – Does NOT stop or reset the animation
      */
     async refreshLiveWindow() {
         if (!state.liveHours || !state.selectedRadars.length || !state.selectedProduct) return;
+        if (state.animationMode !== 'timerange' || !state.cogs || state.cogs.length === 0) return;
 
         try {
             const latestItems = await api.getLatestCogsForRadars(
@@ -880,23 +1138,101 @@ const app = {
             // Only shift the window when genuinely new data has arrived
             const currentRange = state.ui.getTimeRangeValues();
             if (currentRange.end && newEndTime <= currentRange.end) {
-                // No new data yet – keep waiting on the existing interval
                 console.log('Live refresh: no new COGs yet, window unchanged');
                 return;
             }
 
-            console.log('New COGs detected, refreshing live window…');
-            const hours = state.liveHours;
+            console.log('New COGs detected, incrementally refreshing live window…');
+            const hours        = state.liveHours;
             const newStartTime = new Date(newEndTime.getTime() - hours * MS_PER_HOUR);
+            const currentEndTime = currentRange.end;
 
+            // Fetch only the new portion of the time window
+            const newCogs = await api.getCogsForTimeRange(
+                state.selectedRadars, state.selectedProduct,
+                currentEndTime, newEndTime, 100
+            );
+
+            // Group new COGs into frames and remove duplicates already in the animation
+            const rawNewFrames = groupCogsByTimestamp(newCogs);
+            const existingBucketKeys = new Set(state.cogs.map(f => getCogBucketKey(f.timestamp)));
+            const newGroupedFrames   = rawNewFrames.filter(
+                f => !existingBucketKeys.has(getCogBucketKey(f.timestamp))
+            );
+
+            // Determine how many existing frames have expired (before newStartTime)
+            const expiredCount = state.cogs.filter(
+                f => new Date(f.timestamp) < newStartTime
+            ).length;
+
+            const currentIndex = state.animator.getCurrentIndex();
+            const tileParams   = this.getTileParams();
+
+            // Build tile layers for new frames before modifying shared state
+            const newLayerFrames = newGroupedFrames.map(frame => {
+                const layerMap = {};
+                Object.entries(frame.cogsByRadar).forEach(([radarCode, cog]) => {
+                    layerMap[radarCode] = state.mapManager.createHiddenTileLayer(cog.id, tileParams);
+                });
+                return layerMap;
+            });
+
+            // Remove expired frames from the beginning
+            let indexAfterExpiry = currentIndex;
+            if (expiredCount > 0) {
+                // Clean up tile layers for expired frames
+                for (let i = 0; i < expiredCount; i++) {
+                    const layerMap = state.mapManager.cachedFrameLayers[i];
+                    if (layerMap) {
+                        Object.values(layerMap).forEach(layer => {
+                            if (state.mapManager.map.hasLayer(layer)) {
+                                state.mapManager.map.removeLayer(layer);
+                            }
+                        });
+                    }
+                }
+                state.cogs.splice(0, expiredCount);
+                state.mapManager.cachedFrameLayers.splice(0, expiredCount);
+
+                // Shift the map manager's internal visible-frame pointer
+                const prevCachedIdx = state.mapManager.currentCachedFrameIndex;
+                if (prevCachedIdx >= 0) {
+                    state.mapManager.currentCachedFrameIndex =
+                        prevCachedIdx >= expiredCount ? prevCachedIdx - expiredCount : -1;
+                }
+
+                indexAfterExpiry = Math.max(0, currentIndex - expiredCount);
+            }
+
+            // Append new frames to the end
+            if (newGroupedFrames.length > 0) {
+                state.cogs.push(...newGroupedFrames);
+                state.mapManager.cachedFrameLayers.push(...newLayerFrames);
+            }
+
+            // Update time-range UI to reflect the new window
             state.ui.setTimeRangeValues(newStartTime, newEndTime);
             this.onTimeRangeChange();
-
-            // Preserve live mode across the reload (loadTimeRangeCogs does not reset it)
             state.liveHours = hours;
-            await this.loadTimeRangeCogs();
-            // The existing setInterval continues on its original schedule –
-            // no need to restart it, which would cause timing drift.
+
+            const newLength       = state.cogs.length;
+            const newCurrentIndex = Math.min(indexAfterExpiry, newLength - 1);
+
+            // Update animator without resetting playback
+            state.animator.updateFrames(state.cogs, newCurrentIndex);
+
+            // If the visible cached frame was in the expired range, show the new position
+            if (state.mapManager.currentCachedFrameIndex < 0) {
+                state.mapManager.showCachedFrame(newCurrentIndex);
+            }
+
+            state.ui.updateFrameCounter(newCurrentIndex, newLength);
+            state.ui.updateAnimationSlider(newCurrentIndex, newLength);
+
+            console.log(
+                `Live refresh: +${newGroupedFrames.length} new frames, ` +
+                `-${expiredCount} expired, ${newLength} total`
+            );
         } catch (err) {
             console.warn('Live refresh error:', err);
         }

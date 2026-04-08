@@ -60,6 +60,8 @@ export class MapManager {
         this.currentCachedFrameIndex = -1;
         // Background preload state (used for colormap-change UX)
         this._cancelBackgroundPreload = null;
+        // True while the initial batch preload started by preloadFrames() is still running
+        this._preloadInProgress = false;
     }
     
     /**
@@ -161,6 +163,7 @@ export class MapManager {
      * @param {Object}   tileParams    - Optional {cmap, vmin, vmax} for tile URL
      */
     preloadFrames(groupedFrames, onLayerLoaded = null, tileParams = {}) {
+        this._preloadInProgress = true;
         this.clearCachedFrames();
 
         // Pre-size the array so indices stay stable while batches fill in
@@ -203,6 +206,8 @@ export class MapManager {
 
             if (endIdx < groupedFrames.length) {
                 setTimeout(() => loadBatch(endIdx), BATCH_DELAY);
+            } else {
+                this._preloadInProgress = false;
             }
         };
 
@@ -363,6 +368,7 @@ export class MapManager {
      * Remove all pre-cached animation layers from the map and reset state.
      */
     clearCachedFrames() {
+        this._preloadInProgress = false;
         this.cachedFrameLayers.forEach(frameLayerMap => {
             if (frameLayerMap) {
                 Object.values(frameLayerMap).forEach(layer => {
@@ -374,6 +380,34 @@ export class MapManager {
         });
         this.cachedFrameLayers = [];
         this.currentCachedFrameIndex = -1;
+    }
+
+    /**
+     * Create a tile layer for the given COG, add it to the map at opacity 0,
+     * and return it.  Used for incremental radar add and live window updates.
+     *
+     * @param {number|string} cogId      - COG ID
+     * @param {Object}        tileParams - Optional {cmap, vmin, vmax}
+     * @returns {L.TileLayer}
+     */
+    createHiddenTileLayer(cogId, tileParams = {}) {
+        const queryParams = new URLSearchParams();
+        if (tileParams.cmap) queryParams.append('colormap', tileParams.cmap);
+        if (tileParams.vmin !== null && tileParams.vmin !== undefined) queryParams.append('vmin', tileParams.vmin);
+        if (tileParams.vmax !== null && tileParams.vmax !== undefined) queryParams.append('vmax', tileParams.vmax);
+        const queryStr = queryParams.toString();
+        const tileUrl = queryStr
+            ? `/api/v1/tiles/${cogId}/{z}/{x}/{y}.png?${queryStr}`
+            : `/api/v1/tiles/${cogId}/{z}/{x}/{y}.png`;
+        const layer = L.tileLayer(tileUrl, {
+            opacity: 0,
+            maxZoom: 18,
+            tms: false,
+            keepBuffer: 2,
+            zIndex: ZINDEX_RADAR,
+        });
+        layer.addTo(this.map);
+        return layer;
     }
 
     /**
