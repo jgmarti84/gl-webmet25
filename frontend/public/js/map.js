@@ -30,7 +30,7 @@ const BASEMAPS = {
     },
     'osm': {
         name: 'OpenStreetMap',
-        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        url: '/osm-tiles/{z}/{x}/{y}.png',
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19
     },
