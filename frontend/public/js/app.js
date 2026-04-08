@@ -555,66 +555,65 @@ const app = {
                 existingBucketToIdx.set(getCogBucketKey(frame.timestamp), idx);
             });
 
-            // Deduplicate new COGs by bucket key (keep first per bucket)
+            // Deduplicate new COGs by bucket key (keep first/newest per bucket).
+            // getCogsForTimeRange returns COGs newest-first so Map insertion order is
+            // newest-first; reversing the entries converts to oldest-first cheaply.
             const newBucketToCog = new Map();
             newCogs.forEach(cog => {
                 const key = getCogBucketKey(cog.observation_time);
                 if (!newBucketToCog.has(key)) newBucketToCog.set(key, cog);
             });
+            const sortedNewBuckets = Array.from(newBucketToCog.entries()).reverse(); // oldest-first
 
-            const currentIndex = state.animator.getCurrentIndex();
-            let indexAdjustment = 0;
-
-            const sortedNewBuckets = [...newBucketToCog.entries()].sort((a, b) => a[0] - b[0]);
-
+            // Pass 1 — merge into existing frames (no array index changes)
+            const toInsert = []; // [{key, cog}] buckets that need a new frame
             for (const [key, cog] of sortedNewBuckets) {
                 if (existingBucketToIdx.has(key)) {
-                    // Merge into existing frame
                     const frameIdx = existingBucketToIdx.get(key);
                     state.cogs[frameIdx].cogsByRadar[radarCode] = cog;
-
-                    // Ensure the layer map exists (batch preload may still be running)
+                    // Ensure the layer map exists (batch preload may still be filling slots)
                     if (!state.mapManager.cachedFrameLayers[frameIdx]) {
                         state.mapManager.cachedFrameLayers[frameIdx] = {};
                     }
                     state.mapManager.cachedFrameLayers[frameIdx][radarCode] =
                         state.mapManager.createHiddenTileLayer(cog.id, tileParams);
                 } else {
-                    // Insert a brand-new frame at the correct sorted position
-                    let insertIdx = state.cogs.length;
-                    for (let i = 0; i < state.cogs.length; i++) {
-                        if (getCogBucketKey(state.cogs[i].timestamp) > key) {
-                            insertIdx = i;
-                            break;
-                        }
-                    }
+                    toInsert.push({ key, cog });
+                }
+            }
 
-                    const newFrame    = { timestamp: cog.observation_time, cogsByRadar: { [radarCode]: cog } };
-                    const newLayerMap = { [radarCode]: state.mapManager.createHiddenTileLayer(cog.id, tileParams) };
+            // Pass 2 — insert brand-new frames using binary search so earlier insertions
+            // do not corrupt the position of later ones.  toInsert is already oldest-first.
+            const currentIndex = state.animator.getCurrentIndex();
+            let indexAdjustment = 0;
 
-                    state.cogs.splice(insertIdx, 0, newFrame);
-                    state.mapManager.cachedFrameLayers.splice(insertIdx, 0, newLayerMap);
+            for (const { key, cog } of toInsert) {
+                // Binary search for the correct sorted insertion position
+                let lo = 0, hi = state.cogs.length;
+                while (lo < hi) {
+                    const mid = (lo + hi) >>> 1;
+                    if (getCogBucketKey(state.cogs[mid].timestamp) < key) lo = mid + 1;
+                    else hi = mid;
+                }
+                const insertIdx = lo;
 
-                    // Adjust the map manager's internal visible-frame pointer
-                    if (
-                        state.mapManager.currentCachedFrameIndex >= 0 &&
-                        insertIdx <= state.mapManager.currentCachedFrameIndex
-                    ) {
-                        state.mapManager.currentCachedFrameIndex++;
-                    }
+                const newFrame    = { timestamp: cog.observation_time, cogsByRadar: { [radarCode]: cog } };
+                const newLayerMap = { [radarCode]: state.mapManager.createHiddenTileLayer(cog.id, tileParams) };
 
-                    // Track how many new frames landed before/at the current position
-                    if (insertIdx <= currentIndex + indexAdjustment) {
-                        indexAdjustment++;
-                    }
+                state.cogs.splice(insertIdx, 0, newFrame);
+                state.mapManager.cachedFrameLayers.splice(insertIdx, 0, newLayerMap);
 
-                    // Shift all existing bucket indices that are >= insertIdx
-                    existingBucketToIdx.forEach((existingIdx, existingKey) => {
-                        if (existingIdx >= insertIdx) {
-                            existingBucketToIdx.set(existingKey, existingIdx + 1);
-                        }
-                    });
-                    existingBucketToIdx.set(key, insertIdx);
+                // Adjust the map manager's internal visible-frame pointer
+                if (
+                    state.mapManager.currentCachedFrameIndex >= 0 &&
+                    insertIdx <= state.mapManager.currentCachedFrameIndex
+                ) {
+                    state.mapManager.currentCachedFrameIndex++;
+                }
+
+                // Track how many new frames landed before/at the current position
+                if (insertIdx <= currentIndex + indexAdjustment) {
+                    indexAdjustment++;
                 }
             }
 
@@ -705,13 +704,13 @@ const app = {
             return;
         }
 
-        // Compute the new visible-frame index
+        // Compute the new visible-frame index.
+        // By construction removedBeforeOriginal <= originalIndex so the subtraction >= 0.
         let newCurrentIndex = originalIndex - removedBeforeOriginal;
         if (originalFrameRemoved) {
-            // The active frame was removed — stay at the same numeric position (clamped)
-            newCurrentIndex = Math.min(originalIndex - removedBeforeOriginal, newFrames.length - 1);
+            // The active frame was removed — stay at the same numeric position (clamped to array end)
+            newCurrentIndex = Math.min(newCurrentIndex, newFrames.length - 1);
         }
-        newCurrentIndex = Math.max(0, Math.min(newCurrentIndex, newFrames.length - 1));
 
         // Update the map manager's pointer to account for the compacted array
         if (originalFrameRemoved) {
@@ -1160,9 +1159,11 @@ const app = {
                 f => !existingBucketKeys.has(getCogBucketKey(f.timestamp))
             );
 
-            // Determine how many existing frames have expired (before newStartTime)
+            // Determine how many existing frames have expired (before newStartTime).
+            // Use a pre-computed numeric timestamp to avoid one Date object per frame.
+            const newStartMs   = newStartTime.getTime();
             const expiredCount = state.cogs.filter(
-                f => new Date(f.timestamp) < newStartTime
+                f => new Date(f.timestamp).getTime() < newStartMs
             ).length;
 
             const currentIndex = state.animator.getCurrentIndex();
