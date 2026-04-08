@@ -1,6 +1,7 @@
 # api/app/routers/tiles.py
 import hashlib
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -16,6 +17,27 @@ from ..utils.colormaps import colormap_for_field
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tiles", tags=["Tiles"])
+
+
+@dataclass(frozen=True)
+class CogSnapshot:
+    """
+    Immutable snapshot of the RadarCOG fields needed for tile rendering.
+
+    Stored in the TTL metadata cache instead of the live ORM object so that
+    cached entries remain valid after the originating DB session is closed.
+    """
+
+    id: int
+    file_path: str
+    observation_time: Optional[datetime]
+    polarimetric_var: Optional[str]
+    # Flattened from RadarCOG.product.product_key (eager-loaded once)
+    product_key: Optional[str]
+    cog_data_type: Optional[str]
+    cog_cmap: Optional[str]
+    cog_vmin: Optional[float]
+    cog_vmax: Optional[float]
 
 # ---------------------------------------------------------------------------
 # Cache tuning constants
@@ -40,19 +62,36 @@ _cog_metadata_cache: TTLCache = TTLCache(
 )
 
 
-def _get_cog_by_id(cog_id: int, db: Session) -> Optional[RadarCOG]:
-    """Return a RadarCOG (with product) by ID, using the TTL metadata cache."""
-    if cog_id in _cog_metadata_cache:
-        return _cog_metadata_cache[cog_id]
-    cog = (
+def _get_cog_by_id(cog_id: int, db: Session) -> Optional[CogSnapshot]:
+    """Return a CogSnapshot (with product key) by ID, using the TTL metadata cache.
+
+    The cache stores plain dataclass instances — not SQLAlchemy ORM objects —
+    so entries remain valid after the originating DB session is closed.
+    """
+    cached: Optional[CogSnapshot] = _cog_metadata_cache.get(cog_id)
+    if cached is not None:
+        return cached
+    orm_cog = (
         db.query(RadarCOG)
         .options(joinedload(RadarCOG.product))
         .filter(RadarCOG.id == cog_id)
         .first()
     )
-    if cog:
-        _cog_metadata_cache[cog_id] = cog
-    return cog
+    if orm_cog is None:
+        return None
+    snapshot = CogSnapshot(
+        id=orm_cog.id,
+        file_path=orm_cog.file_path,
+        observation_time=orm_cog.observation_time,
+        polarimetric_var=orm_cog.polarimetric_var,
+        product_key=orm_cog.product.product_key if orm_cog.product else None,
+        cog_data_type=orm_cog.cog_data_type,
+        cog_cmap=orm_cog.cog_cmap,
+        cog_vmin=orm_cog.cog_vmin,
+        cog_vmax=orm_cog.cog_vmax,
+    )
+    _cog_metadata_cache[cog_id] = snapshot
+    return snapshot
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +183,7 @@ async def get_tile(
 
     logger.info(f"Requesting tile for COG {cog_id}: {cog.file_path}")
 
-    product_key = cog.polarimetric_var or (cog.product.product_key if cog.product else None)
+    product_key = cog.polarimetric_var or cog.product_key
     cog_data_type = cog.cog_data_type  # may be None for legacy records
 
     # Resolve effective cmap name, vmin, vmax
@@ -312,7 +351,7 @@ async def get_cog_rendering_metadata(
     if not cog:
         raise HTTPException(status_code=404, detail=f"COG with ID {cog_id} not found")
 
-    product_key = cog.polarimetric_var or (cog.product.product_key if cog.product else None)
+    product_key = cog.polarimetric_var or cog.product_key
 
     # Fall back to file-level detection when the DB column is not yet populated
     cog_data_type = cog.cog_data_type
