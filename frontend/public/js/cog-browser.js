@@ -418,7 +418,7 @@ const app = {
 
         Object.keys(tree).sort((a, b) => b - a).forEach(year => {
             const yearKey = year;
-            const yearExpanded = state.expandedNodes[yearKey] !== false; // default open
+            const yearExpanded = (state.expandedNodes[yearKey] ?? true);
 
             const yearEl = this._makeFolderNode(`📅 ${year}`, yearExpanded, () => {
                 state.expandedNodes[yearKey] = !yearExpanded;
@@ -434,7 +434,7 @@ const app = {
 
             Object.keys(tree[year]).sort((a, b) => b - a).forEach(month => {
                 const monthKey = `${yearKey}/${month}`;
-                const monthExpanded = state.expandedNodes[monthKey] !== false; // default open
+                const monthExpanded = (state.expandedNodes[monthKey] ?? true);
 
                 const monthEl = this._makeFolderNode(`📂 ${year}/${month}`, monthExpanded, () => {
                     state.expandedNodes[monthKey] = !monthExpanded;
@@ -450,7 +450,7 @@ const app = {
 
                 Object.keys(tree[year][month]).sort((a, b) => b - a).forEach(dayStr => {
                     const dayKey = `${monthKey}/${dayStr}`;
-                    const dayExpanded = state.expandedNodes[dayKey] !== false; // default open
+                    const dayExpanded = (state.expandedNodes[dayKey] ?? true);
                     const dayCogs = tree[year][month][dayStr];
 
                     const dayEl = this._makeFolderNode(
@@ -487,7 +487,8 @@ const app = {
                                 second: '2-digit',
                                 hour12: false,
                                 timeZone: 'UTC',
-                            }) + ' UTC';
+                                timeZoneName: 'short',
+                            });
 
                             item.innerHTML = `
                                 <div class="cog-item-time">${timeStr}</div>
