@@ -167,4 +167,17 @@ export class AnimationController {
     getIsPlaying() {
         return this.isPlaying;
     }
+
+    /**
+     * Update frames and current index without stopping or resetting playback.
+     * Used for incremental radar add/remove and live window updates.
+     *
+     * @param {Array}  frames   - New frames array
+     * @param {number} newIndex - Caller-adjusted index into the new frames array
+     */
+    updateFrames(frames, newIndex) {
+        this.frames = frames;
+        this.currentIndex = Math.max(0, Math.min(newIndex, frames.length - 1));
+        // Intentionally does NOT stop or restart the animation interval
+    }
 }
