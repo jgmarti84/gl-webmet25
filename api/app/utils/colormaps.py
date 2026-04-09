@@ -266,23 +266,27 @@ FIELD_RENDER = {
     "COLMAX": {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"},
 }
 
-# Available colormap options for each field
+# Available colormap options for each field.
+# Only colormaps that are always available (custom GRC/NWSVel/Theodore16 or
+# standard matplotlib) are listed here.  PyART colormaps (pyart_*) have been
+# removed because pyart is not installed in this environment and selecting
+# them caused server-side errors.
 FIELD_COLORMAP_OPTIONS = {
-    "DBZH": ["grc_th", "grc_th2", "grc_rain", "pyart_NWSRef", "pyart_HomeyerRainbow"],
-    "DBZHo": ["grc_th", "grc_th2", "grc_rain", "pyart_NWSRef", "pyart_HomeyerRainbow"],
-    "DBZHF": ["grc_th", "grc_th2", "grc_rain", "pyart_NWSRef", "pyart_HomeyerRainbow"],
-    "DBZV": ["grc_th", "grc_th2", "grc_rain", "pyart_NWSRef", "pyart_HomeyerRainbow"],
-    "ZDR": ["grc_zdr2", "pyart_RefDiff", "pyart_Theodore16"],
-    "ZDRo": ["grc_zdr2", "pyart_RefDiff", "pyart_Theodore16"],
-    "RHOHV": ["grc_rho", "pyart_RefDiff", "Greys", "viridis"],
-    "RHOHVo": ["grc_rho", "pyart_RefDiff", "Greys", "viridis"],
-    "KDP": ["grc_rain", "grc_th", "pyart_Theodore16", "plasma"],
-    "VRAD": ["NWSVel", "pyart_BuDRd18", "seismic", "RdBu_r"],
-    "VRADo": ["NWSVel", "pyart_BuDRd18", "seismic", "RdBu_r"],
+    "DBZH": ["grc_th", "grc_th2", "grc_rain"],
+    "DBZHo": ["grc_th", "grc_th2", "grc_rain"],
+    "DBZHF": ["grc_th", "grc_th2", "grc_rain"],
+    "DBZV": ["grc_th", "grc_th2", "grc_rain"],
+    "ZDR": ["grc_zdr2", "Theodore16"],
+    "ZDRo": ["grc_zdr2", "Theodore16"],
+    "RHOHV": ["grc_rho", "Greys", "viridis"],
+    "RHOHVo": ["grc_rho", "Greys", "viridis"],
+    "KDP": ["grc_rain", "grc_th", "plasma"],
+    "VRAD": ["NWSVel", "seismic", "RdBu_r"],
+    "VRADo": ["NWSVel", "seismic", "RdBu_r"],
     "WRAD": ["Oranges", "YlOrRd", "hot", "plasma"],
     "WRADo": ["Oranges", "YlOrRd", "hot", "plasma"],
     "PHIDP": ["Theodore16", "hsv", "twilight", "twilight_shifted"],
-    "COLMAX": ["grc_th", "grc_th2", "grc_rain", "pyart_NWSRef", "pyart_HomeyerRainbow"],
+    "COLMAX": ["grc_th", "grc_th2", "grc_rain"],
 }
 
 
