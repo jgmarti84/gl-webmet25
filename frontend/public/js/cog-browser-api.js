@@ -36,17 +36,23 @@ export const cogBrowserApi = {
     },
     
     /**
-     * Get COGs with filters
-     * Returns array of COG objects
+     * Get COGs with filters and pagination.
+     * Returns { cogs, total, page, page_size }.
      */
-    async getCogs(radarCode, productKey) {
+    async getCogs(radarCode, productKey, page = 1, pageSize = 50) {
         const params = new URLSearchParams({
             radar_code: radarCode,
             product_key: productKey,
-            page_size: 100,  // Get more COGs
+            page,
+            page_size: pageSize,
         });
         const data = await this.get(`/cogs?${params}`);
-        return data.cogs || [];
+        return {
+            cogs: data.cogs || [],
+            total: data.total || 0,
+            page: data.page || page,
+            page_size: data.page_size || pageSize,
+        };
     },
     
     /**
