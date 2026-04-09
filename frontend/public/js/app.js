@@ -147,9 +147,9 @@ function getSettingRefreshIntervalMs() {
     const stored = localStorage.getItem(SETTINGS_KEY_REFRESH_INTERVAL);
     if (stored === null) return DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS;
     const minutes = parseFloat(stored);
-    return isNaN(minutes) || minutes <= 0
-        ? DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS
-        : minutes * 60 * 1000;
+    if (isNaN(minutes) || minutes <= 0) return DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS;
+    const capped = Math.min(minutes, 60); // cap at 60 minutes
+    return capped * 60 * 1000;
 }
 
 function setSettingRefreshIntervalMin(minutes) {
@@ -685,7 +685,7 @@ const app = {
         const refreshIntervalSave = document.getElementById('settings-refresh-save');
         if (refreshIntervalInput && refreshIntervalSave) {
             refreshIntervalSave.addEventListener('click', () => {
-                const minutes = parseFloat(refreshIntervalInput.value);
+                const minutes = Math.min(parseFloat(refreshIntervalInput.value), 60);
                 if (!isNaN(minutes) && minutes > 0) {
                     setSettingRefreshIntervalMin(minutes);
                     this.startRadarStatusRefresh(); // restart with new interval
