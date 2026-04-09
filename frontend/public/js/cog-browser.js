@@ -18,6 +18,14 @@ const state = {
     allColormapOptions: {},
     cogs: [],
     
+    // Pagination
+    currentPage: 1,
+    pageSize: 50,
+    totalCogs: 0,
+
+    // Date tree: tracks which date groups are expanded { 'YYYY': bool, 'YYYY/MM': bool, 'YYYY/MM/DD': bool }
+    expandedNodes: {},
+
     // UI State
     selectedRadar: null,
     selectedProduct: null,
@@ -308,7 +316,7 @@ const app = {
 
     
     /**
-     * Load COGs for selected radar and product
+     * Load COGs for selected radar and product (first page).
      */
     async loadCogs() {
         if (!state.selectedRadar || !state.selectedProduct) {
@@ -316,82 +324,223 @@ const app = {
             return;
         }
         
+        // Reset pagination and previously loaded COGs on a fresh load
+        state.currentPage = 1;
+        state.cogs = [];
+        state.expandedNodes = {};
+        
         this.setStatus('Loading COGs...', 'loading');
         
         try {
-            state.cogs = await cogBrowserApi.getCogs(state.selectedRadar, state.selectedProduct);
-            
+            const result = await cogBrowserApi.getCogs(
+                state.selectedRadar,
+                state.selectedProduct,
+                state.currentPage,
+                state.pageSize
+            );
+
+            state.cogs = result.cogs;
+            state.totalCogs = result.total;
+
             if (state.cogs.length === 0) {
                 this.setStatus('No COGs available for this selection', 'info');
-                this.renderCogList([]);
+                this.renderCogList();
                 return;
             }
             
-            // Sort by observation_time descending (newest first)
-            state.cogs.sort((a, b) => 
-                new Date(b.observation_time) - new Date(a.observation_time)
-            );
-            
-            this.renderCogList(state.cogs);
-            this.setStatus(`Loaded ${state.cogs.length} COGs`, 'success');
+            this.renderCogList();
+            this.setStatus(`Loaded ${state.cogs.length} of ${state.totalCogs} COGs`, 'success');
             
         } catch (error) {
             console.error('Load COGs error:', error);
             this.setStatus(`Error loading COGs: ${error.message}`, 'error');
-            this.renderCogList([]);
+            this.renderCogList();
+        }
+    },
+
+    /**
+     * Load the next page of COGs and append them to the existing list.
+     */
+    async loadMoreCogs() {
+        if (!state.selectedRadar || !state.selectedProduct) return;
+
+        state.currentPage += 1;
+        this.setStatus('Loading more COGs...', 'loading');
+
+        try {
+            const result = await cogBrowserApi.getCogs(
+                state.selectedRadar,
+                state.selectedProduct,
+                state.currentPage,
+                state.pageSize
+            );
+
+            state.cogs = state.cogs.concat(result.cogs);
+            state.totalCogs = result.total;
+
+            this.renderCogList();
+            this.setStatus(`Loaded ${state.cogs.length} of ${state.totalCogs} COGs`, 'success');
+
+        } catch (error) {
+            console.error('Load more COGs error:', error);
+            state.currentPage -= 1; // roll back on failure
+            this.setStatus(`Error loading COGs: ${error.message}`, 'error');
         }
     },
     
     /**
-     * Render COG list in the UI
+     * Render COG list grouped by date (YYYY → MM → DD hierarchy).
+     * Expanding/collapsing a node preserves state in state.expandedNodes.
      */
-    renderCogList(cogs) {
+    renderCogList() {
         const cogList = document.getElementById('cog-list');
         
-        if (cogs.length === 0) {
+        if (state.cogs.length === 0) {
             cogList.innerHTML = '<div class="cog-list-empty">No COGs available.</div>';
             return;
         }
-        
-        cogList.innerHTML = '';
-        
-        cogs.forEach(cog => {
-            const item = document.createElement('div');
-            item.className = 'cog-item';
-            if (state.activeCoGId === cog.id) {
-                item.classList.add('active');
-            }
-            
-            const date = new Date(cog.observation_time);
-            const timeStr = date.toLocaleString('en-US', {
-                year: '2-digit',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-            });
-            
-            item.innerHTML = `
-                <div class="cog-item-time">${timeStr}</div>
-                <div class="cog-item-info">Elev: ${cog.elevation_angle.toFixed(1)}°</div>
-            `;
-            
-            item.addEventListener('click', () => this.onCogItemClick(cog));
-            cogList.appendChild(item);
+
+        // Build date tree: { year: { month: { day: [cog, …] } } }
+        const tree = {};
+        state.cogs.forEach(cog => {
+            const d = new Date(cog.observation_time);
+            const y = String(d.getUTCFullYear());
+            const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(d.getUTCDate()).padStart(2, '0');
+
+            if (!tree[y]) tree[y] = {};
+            if (!tree[y][m]) tree[y][m] = {};
+            if (!tree[y][m][day]) tree[y][m][day] = [];
+            tree[y][m][day].push(cog);
         });
+
+        cogList.innerHTML = '';
+
+        Object.keys(tree).sort((a, b) => b - a).forEach(year => {
+            const yearKey = year;
+            const yearExpanded = (state.expandedNodes[yearKey] ?? true);
+
+            const yearEl = this._makeFolderNode(`📅 ${year}`, yearExpanded, () => {
+                state.expandedNodes[yearKey] = !yearExpanded;
+                this.renderCogList();
+            });
+            cogList.appendChild(yearEl);
+
+            if (!yearExpanded) return;
+
+            const yearChildren = document.createElement('div');
+            yearChildren.className = 'cog-tree-children';
+            cogList.appendChild(yearChildren);
+
+            Object.keys(tree[year]).sort((a, b) => b - a).forEach(month => {
+                const monthKey = `${yearKey}/${month}`;
+                const monthExpanded = (state.expandedNodes[monthKey] ?? true);
+
+                const monthEl = this._makeFolderNode(`📂 ${year}/${month}`, monthExpanded, () => {
+                    state.expandedNodes[monthKey] = !monthExpanded;
+                    this.renderCogList();
+                }, 1);
+                yearChildren.appendChild(monthEl);
+
+                if (!monthExpanded) return;
+
+                const monthChildren = document.createElement('div');
+                monthChildren.className = 'cog-tree-children';
+                yearChildren.appendChild(monthChildren);
+
+                Object.keys(tree[year][month]).sort((a, b) => b - a).forEach(dayStr => {
+                    const dayKey = `${monthKey}/${dayStr}`;
+                    const dayExpanded = (state.expandedNodes[dayKey] ?? true);
+                    const dayCogs = tree[year][month][dayStr];
+
+                    const dayEl = this._makeFolderNode(
+                        `📁 ${year}/${month}/${dayStr} (${dayCogs.length})`,
+                        dayExpanded,
+                        () => {
+                            state.expandedNodes[dayKey] = !dayExpanded;
+                            this.renderCogList();
+                        },
+                        2
+                    );
+                    monthChildren.appendChild(dayEl);
+
+                    if (!dayExpanded) return;
+
+                    const dayChildren = document.createElement('div');
+                    dayChildren.className = 'cog-tree-children';
+                    monthChildren.appendChild(dayChildren);
+
+                    // Sort COGs newest-first within each day
+                    dayCogs
+                        .slice()
+                        .sort((a, b) => new Date(b.observation_time) - new Date(a.observation_time))
+                        .forEach(cog => {
+                            const item = document.createElement('div');
+                            item.className = 'cog-item';
+                            if (state.activeCoGId === cog.id) item.classList.add('active');
+                            item.style.marginLeft = '48px';
+
+                            const d = new Date(cog.observation_time);
+                            const timeStr = d.toLocaleTimeString('en-US', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: false,
+                                timeZone: 'UTC',
+                                timeZoneName: 'short',
+                            });
+
+                            item.innerHTML = `
+                                <div class="cog-item-time">${timeStr}</div>
+                                <div class="cog-item-info">Elev: ${cog.elevation_angle.toFixed(1)}°</div>
+                            `;
+
+                            item.addEventListener('click', () => this.onCogItemClick(cog, item));
+                            dayChildren.appendChild(item);
+                        });
+                });
+            });
+        });
+
+        // Append "Load More" button if there are more COGs on the server
+        if (state.cogs.length < state.totalCogs) {
+            const remaining = state.totalCogs - state.cogs.length;
+            const loadMoreBtn = document.createElement('button');
+            loadMoreBtn.className = 'action-btn';
+            loadMoreBtn.style.marginTop = '8px';
+            loadMoreBtn.textContent = `Load ${Math.min(state.pageSize, remaining)} more…`;
+            loadMoreBtn.addEventListener('click', () => this.loadMoreCogs());
+            cogList.appendChild(loadMoreBtn);
+        }
+    },
+
+    /**
+     * Create a collapsible folder node for the date tree.
+     * @param {string} label - Display text
+     * @param {boolean} expanded - Whether the node starts expanded
+     * @param {Function} onToggle - Called when the user clicks the node
+     * @param {number} indent - Indentation level (0, 1, 2)
+     */
+    _makeFolderNode(label, expanded, onToggle, indent = 0) {
+        const el = document.createElement('div');
+        el.className = 'cog-date-node';
+        el.style.paddingLeft = `${indent * 16}px`;
+        el.innerHTML = `<span class="cog-date-arrow">${expanded ? '▾' : '▸'}</span> ${label}`;
+        el.addEventListener('click', onToggle);
+        return el;
     },
     
     /**
      * Handle COG item click
      */
-    async onCogItemClick(cog) {
+    async onCogItemClick(cog, itemEl) {
         state.activeCoGId = cog.id;
         
         // Update UI
         document.querySelectorAll('.cog-item').forEach(item => {
             item.classList.remove('active');
         });
-        event.currentTarget.classList.add('active');
+        itemEl.classList.add('active');
         
         // Display on map
         this.displayCogOnMap(cog);

@@ -423,6 +423,16 @@ const app = {
                         this.cycleSpeed();
                     }
                     break;
+
+                case 'D': // Ctrl+Shift+D — reveal hidden COG Browser link (developer shortcut)
+                    if (e.ctrlKey && e.shiftKey) {
+                        e.preventDefault();
+                        const cogLink = document.getElementById('cog-browser-link');
+                        if (cogLink) {
+                            cogLink.style.display = cogLink.style.display === 'none' ? '' : 'none';
+                        }
+                    }
+                    break;
             }
         });
     },
