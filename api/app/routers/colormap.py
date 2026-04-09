@@ -10,7 +10,8 @@ from ..utils.colormaps import (
     FIELD_COLORMAP_OPTIONS,
     FIELD_RENDER,
     get_colormap_colors,
-    colormap_for_field
+    colormap_for_field,
+    colormap_options_for_field,
 )
 
 router = APIRouter(prefix="/colormap", tags=["Colormaps"])
@@ -88,10 +89,7 @@ async def get_product_colormap_info(
             "vmin": vmin,
             "vmax": vmax,
             "colors": hex_colors,
-            # Try exact key first (preserves 'o' suffix), then uppercase fallback
-            "available_colormaps": FIELD_COLORMAP_OPTIONS.get(
-                product_key, FIELD_COLORMAP_OPTIONS.get(product_key.upper(), [])
-            )
+            "available_colormaps": colormap_options_for_field(product_key),
         }
     except Exception as e:
         raise HTTPException(

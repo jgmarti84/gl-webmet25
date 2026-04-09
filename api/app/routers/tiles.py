@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 from radar_db import get_db, RadarCOG
 from ..services import get_tile_service, TileService
 from ..services.tile_service import read_cog_metadata
-from ..utils.colormaps import colormap_for_field
+from ..utils.colormaps import colormap_for_field, colormap_options_for_field
 
 logger = logging.getLogger(__name__)
 
@@ -187,14 +187,18 @@ async def get_tile(
     cog_data_type = cog.cog_data_type  # may be None for legacy records
 
     # Resolve effective cmap name, vmin, vmax
-    # Priority: query param > COG metadata tags > product defaults
+    # Priority: query param > product defaults
+    # Note: cog.cog_cmap (radarlib metadata) is intentionally NOT used as a
+    # fallback here, so the legend (which uses product defaults) always matches
+    # the tile renderer.  A query-param override is the correct way to change
+    # the colormap interactively.
     _, default_vmin, default_vmax, default_cmap_name = colormap_for_field(
         product_key or "DBZH"
     )
 
-    effective_cmap = colormap or cog.cog_cmap or default_cmap_name
-    effective_vmin = vmin if vmin is not None else (cog.cog_vmin if cog.cog_vmin is not None else default_vmin)
-    effective_vmax = vmax if vmax is not None else (cog.cog_vmax if cog.cog_vmax is not None else default_vmax)
+    effective_cmap = colormap or default_cmap_name
+    effective_vmin = vmin if vmin is not None else default_vmin
+    effective_vmax = vmax if vmax is not None else default_vmax
 
     # Priority 1: build caching headers and check ETag for conditional GET
     headers = _build_tile_headers(
@@ -208,7 +212,7 @@ async def get_tile(
     # Build integer colormap dict (used for non-raw_float paths)
     colormap_dict = None
     if product_key:
-        colormap_dict = tile_service.build_colormap_for_product(product_key, override_cmap=colormap)
+        colormap_dict = tile_service.build_colormap_for_product(product_key, override_cmap=effective_cmap)
         logger.info(f"Built colormap '{effective_cmap}' for product '{product_key}' (COG {cog_id})")
     else:
         logger.warning(f"No product key found for COG {cog_id}. Using default colormap.")
@@ -297,12 +301,14 @@ async def get_tile_by_params(
     cog_data_type = cog.cog_data_type
 
     # Resolve effective rendering parameters
+    # Priority: query param > product defaults (cog_cmap is not used so that
+    # the tile renderer stays consistent with the legend endpoint)
     _, default_vmin, default_vmax, default_cmap_name = colormap_for_field(product_key)
-    effective_cmap = colormap or cog.cog_cmap or default_cmap_name
-    effective_vmin = vmin if vmin is not None else (cog.cog_vmin if cog.cog_vmin is not None else default_vmin)
-    effective_vmax = vmax if vmax is not None else (cog.cog_vmax if cog.cog_vmax is not None else default_vmax)
+    effective_cmap = colormap or default_cmap_name
+    effective_vmin = vmin if vmin is not None else default_vmin
+    effective_vmax = vmax if vmax is not None else default_vmax
 
-    colormap_dict = tile_service.build_colormap_for_product(product_key, override_cmap=colormap)
+    colormap_dict = tile_service.build_colormap_for_product(product_key, override_cmap=effective_cmap)
     
     tile_data = tile_service.generate_tile(
         file_path=cog.file_path,
@@ -343,8 +349,6 @@ async def get_cog_rendering_metadata(
     vmin, vmax, and the list of available colormaps for the product.
     This is used by the frontend to populate colormap/range controls.
     """
-    from ..utils.colormaps import FIELD_COLORMAP_OPTIONS
-
     # Priority 3: use metadata cache for DB lookup
     cog = _get_cog_by_id(cog_id, db)
 
@@ -368,11 +372,9 @@ async def get_cog_rendering_metadata(
     return {
         "cog_id": cog_id,
         "data_type": cog_data_type or "unknown",
-        "cmap": cog.cog_cmap or default_cmap_name,
-        "vmin": cog.cog_vmin if cog.cog_vmin is not None else default_vmin,
-        "vmax": cog.cog_vmax if cog.cog_vmax is not None else default_vmax,
+        "cmap": default_cmap_name,
+        "vmin": default_vmin,
+        "vmax": default_vmax,
         "product_key": product_key,
-        "available_colormaps": FIELD_COLORMAP_OPTIONS.get(
-            product_key, FIELD_COLORMAP_OPTIONS.get((product_key or "").upper(), [])
-        ),
+        "available_colormaps": colormap_options_for_field(product_key or ""),
     }

@@ -38,7 +38,10 @@
         <!-- Radar Selection (Checkboxes) -->
         <div class="control-group">
             <label>Radars:</label>
-            <button id="btn-toggle-radars" class="toggle-btn">Show Radars ▼</button>
+            <div class="radar-header-row">
+                <button id="btn-toggle-radars" class="toggle-btn">Show Radars ▼</button>
+                <button id="btn-toggle-active-only" class="active-only-btn active" title="Showing active radars only">Active only</button>
+            </div>
             <div id="radar-checkboxes" class="checkbox-container" style="display: none;">
                 <div class="checkbox-actions">
                     <button id="btn-select-all-radars" class="small-btn">All</button>
@@ -159,6 +162,23 @@
     
     <!-- Legend Container (Bottom Left) -->
     <div id="legend-container"></div>
+    
+    <!-- Settings Panel (Bottom Left, above legend) -->
+    <button id="btn-settings" title="Settings" aria-label="Open settings">⚙</button>
+    <div id="settings-panel" style="display: none;">
+        <div class="settings-header">
+            <span>⚙ Settings</span>
+            <button id="settings-close" title="Close" aria-label="Close settings">✕</button>
+        </div>
+        <div class="settings-row">
+            <label for="settings-refresh-interval">Radar status refresh (min):</label>
+            <input type="number" id="settings-refresh-interval" min="1" max="60" step="1" value="10">
+            <button id="settings-refresh-save" class="small-btn">Save</button>
+        </div>
+        <div class="settings-row settings-info">
+            <span>Radar activity threshold (h) is set on the indexer via <code>RADAR_ACTIVE_THRESHOLD_HOURS</code> env var.</span>
+        </div>
+    </div>
     
     <!-- Animation Controls (Bottom Center) -->
     <div id="animation-controls">

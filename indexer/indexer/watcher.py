@@ -6,7 +6,7 @@ import time
 import logging
 from pathlib import Path
 from typing import Set, Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from indexer.config import settings
 from indexer.registrar import COGRegistrar
@@ -80,6 +80,34 @@ class COGWatcher:
         
         return new_files
     
+    def update_radar_activity(self, session) -> None:
+        """
+        Update the is_active flag on every Radar based on recent COG availability.
+
+        A radar is considered active if it has at least one RadarCOG with
+        observation_time within the last RADAR_ACTIVE_THRESHOLD_HOURS hours.
+        This is called at the end of every scan cycle.
+        """
+        from radar_db.models import Radar, RadarCOG, COGStatus
+
+        threshold_hours = settings.radar_active_threshold_hours
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=threshold_hours)
+
+        radars = session.query(Radar).all()
+        for radar in radars:
+            has_recent = session.query(RadarCOG).filter(
+                RadarCOG.radar_code == radar.code,
+                RadarCOG.status == COGStatus.AVAILABLE,
+                RadarCOG.observation_time >= cutoff,
+            ).first() is not None
+
+            if radar.is_active != has_recent:
+                radar.is_active = has_recent
+                logger.info(
+                    f"Radar {radar.code} is_active set to {has_recent} "
+                    f"(threshold: {threshold_hours}h)"
+                )
+
     def run_scan(self, session) -> int:
         """
         Run a single scan for new files.
@@ -123,6 +151,9 @@ class COGWatcher:
             # Only do this when no new files (to avoid overhead)
             registrar.mark_missing_files()
         
+        # Update radar activity status at the end of every scan cycle
+        self.update_radar_activity(session)
+
         return indexed_count
     
     def run_forever(self, get_session_func):
