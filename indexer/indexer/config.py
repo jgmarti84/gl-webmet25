@@ -68,6 +68,9 @@ class IndexerSettings(BaseSettings):
     compute_stats: bool = Field(default=True, alias="COMPUTE_STATS")
     compute_checksum: bool = Field(default=False, alias="COMPUTE_CHECKSUM")
     
+    # Radar activity detection
+    radar_active_threshold_hours: int = Field(default=2, alias="RADAR_ACTIVE_THRESHOLD_HOURS")
+
     # Cleanup
     mark_missing_files: bool = Field(default=True, alias="MARK_MISSING_FILES")
     

@@ -179,8 +179,10 @@ export class UIControls {
     
     /**
      * Populate radar checkboxes
+     * @param {Array} radars - Array of radar objects (must include is_active field)
+     * @param {boolean} showInactive - If true, inactive radars are visible but dimmed
      */
-    populateRadarCheckboxes(radars) {
+    populateRadarCheckboxes(radars, showInactive = false) {
         const container = document.getElementById('radar-list');
         if (!container) return;
         
@@ -189,6 +191,9 @@ export class UIControls {
         radars.forEach(radar => {
             const item = document.createElement('div');
             item.className = 'radar-checkbox-item';
+            if (!radar.is_active) {
+                item.classList.add('radar-inactive');
+            }
             
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
@@ -196,11 +201,16 @@ export class UIControls {
             checkbox.value = radar.code;
             checkbox.className = 'radar-checkbox';
             
+            const dot = document.createElement('span');
+            dot.className = `radar-status-dot ${radar.is_active ? 'radar-status-active' : 'radar-status-inactive'}`;
+            dot.title = radar.is_active ? 'Active' : 'Inactive';
+            
             const label = document.createElement('label');
             label.htmlFor = `radar-${radar.code}`;
             label.textContent = radar.title;
             
             item.appendChild(checkbox);
+            item.appendChild(dot);
             item.appendChild(label);
             container.appendChild(item);
         });
