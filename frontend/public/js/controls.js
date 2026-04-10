@@ -80,7 +80,7 @@ export class UIControls {
         // Check for uppercase letter followed by lowercase 'o' at the end (e.g., RHOHVo, COLMAXo)
         const filteredProducts = allProducts.filter(product => {
             const productKey = product.product_key;
-            const isUnfiltered = /[A-Z]o$/.test(productKey); // Uppercase letter + lowercase 'o' at end
+            const isUnfiltered = /o$/.test(productKey); // product_key ends with 'o' = raw/unfiltered data
             return showUnfiltered ? isUnfiltered : !isUnfiltered;
         });
         

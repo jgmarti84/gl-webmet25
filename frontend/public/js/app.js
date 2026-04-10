@@ -139,6 +139,11 @@ function groupCogsByTimestamp(cogs, toleranceMinutes = BUCKET_TOLERANCE_MINUTES)
 
 // Current localStorage keys
 const SETTINGS_KEY_SHOW_INACTIVE = 'webmet25_show_inactive_radars';
+// The key 'webmet25_show_filtered_fields' stores the value of `state.showUnfilteredProducts`.
+// Naming note: per the problem statement, the UI toggle is labelled "Filtered" and when ON
+// it shows the raw/unfiltered data variants (product_key ending in 'o').  The internal state
+// variable is called `showUnfilteredProducts` because 'o'-suffix fields are the *unfiltered*
+// (raw) radar measurements — the naming follows the radarlib convention, not the UI label.
 const SETTINGS_KEY_SHOW_FILTERED = 'webmet25_show_filtered_fields';
 const SETTINGS_KEY_REFRESH_INTERVAL = 'webmet25_radar_refresh_interval_min';
 
@@ -464,8 +469,10 @@ const app = {
             }
             if (!selectedProduct) return;
 
-            // Switch to unfiltered view if needed
-            const isUnfiltered = /[A-Z]o$/.test(selectedProduct);
+            // Switch to unfiltered (raw) view if needed.
+            // /o$/ detects any product_key ending with 'o', matching all radarlib
+            // raw-data variants (e.g., DBZHo, ZDRo, COLMAXo, VRADo).
+            const isUnfiltered = /o$/.test(selectedProduct);
             if (isUnfiltered !== state.showUnfilteredProducts) {
                 state.showUnfilteredProducts = isUnfiltered;
                 state.ui.populateProductSelect(state.products, state.showUnfilteredProducts);
@@ -647,8 +654,9 @@ const app = {
                     if (optionValues.includes(currentSelection)) {
                         select.value = currentSelection;
                     } else {
-                        // Derive the equivalent key in the new variant set
-                        const hasO = /[A-Z]o$/.test(currentSelection);
+                        // Derive the equivalent key in the new variant set.
+                        // /o$/ matches all radarlib raw-data keys (e.g., DBZHo, ZDRo).
+                        const hasO = /o$/.test(currentSelection);
                         const equivalent = hasO
                             ? currentSelection.replace(/o$/, '')   // 'o' → non-'o'
                             : currentSelection + 'o';               // non-'o' → 'o'
@@ -1888,7 +1896,7 @@ const app = {
         // Also update Module C badge
         const badgeC = document.getElementById('badge-module-c');
         if (badgeC) {
-            badgeC.textContent = state.liveHours !== null ? `${state.liveHours}h` : 'cst';
+            badgeC.textContent = state.liveHours !== null ? `${state.liveHours}h` : '—';
         }
     },
     

@@ -193,6 +193,9 @@ class TileService:
         # Apply data-filter: pixels outside [filter_vmin, filter_vmax] → transparent.
         # This is intentionally separate from colormap scaling so that the color
         # legend (which reflects the full cmap range) always matches the tile colors.
+        # Note: NaN pixels are already transparent via nodata_mask above.
+        # NumPy comparisons with NaN always return False, so NaN pixels will NOT be
+        # incorrectly added to out_of_range — they remain transparent via nodata_mask.
         if filter_vmin is not None or filter_vmax is not None:
             out_of_range = np.zeros_like(data, dtype=bool)
             if filter_vmin is not None:

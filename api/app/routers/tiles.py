@@ -172,6 +172,10 @@ async def get_tile(
     x: int,
     y: int,
     colormap: Optional[str] = Query(None, description="Override colormap name (e.g., grc_th, viridis, pyart_NWSRef)"),
+    # TODO: In a future version, consider renaming `vmin`/`vmax` to `filter_min`/`filter_max`
+    #       to reflect their new role as data-filter bounds (not colormap-scaling limits).
+    #       The colormap always spans the full product range (product defaults), not these values.
+    #       Any rename must update the API contract and all frontend call sites in map.js.
     vmin: Optional[float] = Query(
         None,
         description=(
