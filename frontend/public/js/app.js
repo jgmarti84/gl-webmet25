@@ -34,6 +34,9 @@ const GEOLOCATION_AUTO_LOAD_HOURS = 3;
 // Product to prefer on auto-init (unfiltered DBZH)
 const GEOLOCATION_AUTO_PRODUCT = 'DBZHo';
 
+// Default time window for the preset buttons (in hours)
+const DEFAULT_TIME_WINDOW_HOURS = 3;
+
 // =============================================================================
 // APPLICATION STATE
 // =============================================================================
@@ -47,8 +50,11 @@ const state = {
     // Selections
     selectedRadars: [], // Changed from selectedRadar to support multiple
     selectedProduct: null,
-    showUnfilteredProducts: false, // Filter state for products
-    showInactiveRadars: false, // Feature 2: show/hide inactive radars
+    showUnfilteredProducts: false, // Filter state for products (true = show 'o' / raw-data variants)
+    showInactiveRadars: false,     // Whether to include inactive radars in the list
+
+    // Active time window preset (hours); null when custom range is active
+    activeTimeWindowHours: DEFAULT_TIME_WINDOW_HOURS,
 
     // Colormap / range overrides (null = use server defaults)
     selectedColormap: null,
@@ -131,16 +137,40 @@ function groupCogsByTimestamp(cogs, toleranceMinutes = BUCKET_TOLERANCE_MINUTES)
 // SETTINGS HELPERS (localStorage)
 // =============================================================================
 
-const SETTINGS_KEY_ACTIVE_ONLY = 'webmet25_active_only';
+// Current localStorage keys
+const SETTINGS_KEY_SHOW_INACTIVE = 'webmet25_show_inactive_radars';
+const SETTINGS_KEY_SHOW_FILTERED = 'webmet25_show_filtered_fields';
 const SETTINGS_KEY_REFRESH_INTERVAL = 'webmet25_radar_refresh_interval_min';
 
-function getSettingActiveOnly() {
-    const stored = localStorage.getItem(SETTINGS_KEY_ACTIVE_ONLY);
-    return stored === null ? true : stored === 'true';
+// Legacy key – kept for one-time migration only
+const SETTINGS_KEY_ACTIVE_ONLY_LEGACY = 'webmet25_active_only';
+
+/**
+ * Read the persisted "show inactive" preference.
+ * Migrates from the legacy `webmet25_active_only` key on first read.
+ */
+function getSettingShowInactive() {
+    const stored = localStorage.getItem(SETTINGS_KEY_SHOW_INACTIVE);
+    if (stored !== null) return stored === 'true';
+
+    // One-time migration from old key: active_only=true → show_inactive=false
+    const legacy = localStorage.getItem(SETTINGS_KEY_ACTIVE_ONLY_LEGACY);
+    if (legacy !== null) {
+        const showInactive = legacy === 'false';
+        localStorage.setItem(SETTINGS_KEY_SHOW_INACTIVE, String(showInactive));
+        return showInactive;
+    }
+
+    return false; // default: active-only (don't show inactive)
 }
 
-function setSettingActiveOnly(value) {
-    localStorage.setItem(SETTINGS_KEY_ACTIVE_ONLY, String(value));
+/**
+ * Read the persisted "show filtered products" preference.
+ * Returns false by default (show unfiltered / processed-data fields).
+ */
+function getSettingShowFiltered() {
+    const stored = localStorage.getItem(SETTINGS_KEY_SHOW_FILTERED);
+    return stored === 'true';
 }
 
 function getSettingRefreshIntervalMs() {
@@ -220,7 +250,8 @@ const app = {
         state.ui.setStatus('Initializing...', 'loading');
         
         // Restore persisted settings
-        state.showInactiveRadars = !getSettingActiveOnly(); // activeOnly=true → showInactive=false
+        state.showInactiveRadars = getSettingShowInactive();
+        state.showUnfilteredProducts = getSettingShowFiltered();
         
         try {
             // Wait for Leaflet to be loaded
@@ -291,31 +322,22 @@ const app = {
         state.radars = await api.getRadars(!state.showInactiveRadars);
         state.ui.populateRadarCheckboxes(state.radars, state.showInactiveRadars);
 
-        // Sync the toggle button to persisted state
+        // Sync the toggle checkboxes to persisted state
         this.updateActiveOnlyToggle();
-        
-        // Load products
+
+        // Load products and sync the filtered-products toggle
         state.products = await api.getProducts();
-        // Populate with filtered products by default
         state.ui.populateProductSelect(state.products, state.showUnfilteredProducts);
-        state.ui.updateFilterButton(state.showUnfilteredProducts);
+        state.ui.updateFilterToggle(state.showUnfilteredProducts);
     },
     
     /**
-     * Feature 2: Update the "Active only" toggle button appearance.
+     * Change 1: Sync the "Show inactive" toggle checkbox to application state.
+     * The checkbox id is toggle-show-inactive; checked = show inactive radars.
      */
     updateActiveOnlyToggle() {
-        const btn = document.getElementById('btn-toggle-active-only');
-        if (!btn) return;
-        if (state.showInactiveRadars) {
-            btn.classList.remove('active');
-            btn.title = 'Showing all radars (including inactive)';
-            btn.textContent = 'Show all';
-        } else {
-            btn.classList.add('active');
-            btn.title = 'Showing active radars only';
-            btn.textContent = 'Active only';
-        }
+        const toggle = document.getElementById('toggle-show-inactive');
+        if (toggle) toggle.checked = state.showInactiveRadars;
     },
 
     /**
@@ -447,7 +469,7 @@ const app = {
             if (isUnfiltered !== state.showUnfilteredProducts) {
                 state.showUnfilteredProducts = isUnfiltered;
                 state.ui.populateProductSelect(state.products, state.showUnfilteredProducts);
-                state.ui.updateFilterButton(state.showUnfilteredProducts);
+                state.ui.updateFilterToggle(state.showUnfilteredProducts);
             }
 
             const productSelect = document.getElementById('product-select');
@@ -470,214 +492,47 @@ const app = {
      * Setup all event listeners
      */
     setupEventListeners() {
-        // Basemap selection
-        document.getElementById('basemap-select').addEventListener('change', (e) => {
-            state.mapManager.setBasemap(e.target.value);
+        // -----------------------------------------------------------------
+        // Icon bar: module panel toggle
+        // Maps each icon-bar button to its corresponding floating panel.
+        // Opening one panel closes all others (accordion behaviour).
+        // -----------------------------------------------------------------
+        const PANEL_MAP = {
+            'btn-module-a': 'panel-module-a',
+            'btn-module-b': 'panel-module-b',
+            'btn-module-c': 'panel-module-c',
+            'btn-settings':  'settings-panel',
+        };
+
+        Object.entries(PANEL_MAP).forEach(([btnId, panelId]) => {
+            const btn = document.getElementById(btnId);
+            if (!btn) return;
+            btn.addEventListener('click', () => this.togglePanel(panelId));
         });
-        
-        // Radar checkboxes toggle
-        document.getElementById('btn-toggle-radars').addEventListener('click', () => {
-            const container = document.getElementById('radar-checkboxes');
-            const btn = document.getElementById('btn-toggle-radars');
-            // Check if hidden by inline style or initial CSS
-            const isHidden = container.style.display === 'none' || 
-                           window.getComputedStyle(container).display === 'none';
-            
-            if (isHidden) {
-                container.style.display = 'block';
-                btn.textContent = 'Hide Radars ▲';
-            } else {
-                container.style.display = 'none';
-                btn.textContent = 'Show Radars ▼';
+
+        // Close buttons inside floating panels
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('panel-close')) {
+                const panelId = e.target.dataset.close;
+                if (panelId) this.closePanel(panelId);
             }
         });
-        
-        // Feature 2: Active-only toggle
-        const activeOnlyBtn = document.getElementById('btn-toggle-active-only');
-        if (activeOnlyBtn) {
-            activeOnlyBtn.addEventListener('click', async () => {
-                state.showInactiveRadars = !state.showInactiveRadars;
-                setSettingActiveOnly(!state.showInactiveRadars);
-                this.updateActiveOnlyToggle();
-                await this.refreshRadarList();
-                this.onRadarSelectionChange();
-            });
+
+        // -----------------------------------------------------------------
+        // Change 3: Camera / snapshot button
+        // -----------------------------------------------------------------
+        const snapshotBtn = document.getElementById('btn-snapshot');
+        if (snapshotBtn) {
+            snapshotBtn.addEventListener('click', () => this.captureMapSnapshot());
         }
 
-        // Select all radars
-        document.getElementById('btn-select-all-radars').addEventListener('click', () => {
-            state.ui.selectAllRadars();
-            this.onRadarSelectionChange();
-        });
-        
-        // Clear all radars
-        document.getElementById('btn-clear-all-radars').addEventListener('click', () => {
-            state.ui.clearAllRadars();
-            this.onRadarSelectionChange();
-        });
-        
-        // Radar checkbox changes
-        document.addEventListener('change', (e) => {
-            if (e.target.classList.contains('radar-checkbox')) {
-                this.onRadarSelectionChange();
-            }
-        });
-        
-        // Product selection
-        document.getElementById('product-select').addEventListener('change', (e) => {
-            state.selectedProduct = e.target.value;
-            // Reset colormap/range state when product changes
-            state.selectedColormap = null;
-            state.currentVmin = null;
-            state.currentVmax = null;
-            // Reset vmin/vmax inputs when product changes so loadColormapOptions
-            // always fills them from the new product's defaults
-            document.getElementById('vmin-input').value = '';
-            document.getElementById('vmax-input').value = '';
-            this.onSelectionChange();
-        });
-        
-        // Product filter toggle
-        document.getElementById('btn-toggle-filter').addEventListener('click', () => {
-            state.showUnfilteredProducts = !state.showUnfilteredProducts;
-            
-            // Remember current selection
-            const currentSelection = state.selectedProduct;
-            
-            // Update product list
-            state.ui.populateProductSelect(state.products, state.showUnfilteredProducts);
-            state.ui.updateFilterButton(state.showUnfilteredProducts);
-            
-            // Try to restore selection if it exists in the new list
-            const productSelect = document.getElementById('product-select');
-            if (currentSelection && productSelect) {
-                const optionExists = Array.from(productSelect.options).some(opt => opt.value === currentSelection);
-                if (optionExists) {
-                    productSelect.value = currentSelection;
-                } else {
-                    // Clear selection if product not in new list
-                    state.selectedProduct = null;
-                    productSelect.value = ''; // Reset dropdown to placeholder
-                    this.onSelectionChange();
-                }
-            }
-        });
-        
-        // Time range toggle
-        document.getElementById('btn-toggle-timerange').addEventListener('click', () => {
-            const container = document.getElementById('timerange-container');
-            const btn = document.getElementById('btn-toggle-timerange');
-            // Check if hidden by inline style or initial CSS
-            const isHidden = container.style.display === 'none' || 
-                           window.getComputedStyle(container).display === 'none';
-            
-            if (isHidden) {
-                container.style.display = 'block';
-                btn.textContent = 'Hide Time Range ▲';
-            } else {
-                container.style.display = 'none';
-                btn.textContent = 'Select Time Range ▼';
-            }
-        });
-        
-        // Time range preset buttons – anchor to the most recent available COG and start live mode
-        document.querySelectorAll('.preset-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const hours = parseInt(e.target.dataset.hours);
-                this.loadLastNHours(hours);
-            });
-        });
-        
-        // Time range inputs change
-        document.getElementById('start-date').addEventListener('change', () => {
-            this.onTimeRangeChange();
-        });
-        
-        document.getElementById('end-date').addEventListener('change', () => {
-            this.onTimeRangeChange();
-        });
-        
-        // Load latest button
-        document.getElementById('btn-load-latest').addEventListener('click', () => {
-            this.stopLiveRefresh();
-            this.loadLatestCogs();
-        });
-        
-        // Load time range button
-        document.getElementById('btn-load-timerange').addEventListener('click', () => {
-            this.stopLiveRefresh();
-            this.loadTimeRangeCogs();
-        });
-        
-        // Navigation buttons
-        document.getElementById('btn-prev').addEventListener('click', () => {
-            state.animator.previous();
-        });
-        
-        document.getElementById('btn-next').addEventListener('click', () => {
-            state.animator.next();
-        });
-        
-        document.getElementById('btn-latest').addEventListener('click', () => {
-            state.animator.goToLatest();
-        });
-        
-        // Animation controls
-        document.getElementById('btn-play-pause').addEventListener('click', () => {
-            state.animator.toggle();
-            state.ui.updatePlayButton(state.animator.getIsPlaying());
-        });
-        
-        document.getElementById('btn-speed').addEventListener('click', () => {
-            this.cycleSpeed();
-        });
-        
-        document.getElementById('animation-slider').addEventListener('input', (e) => {
-            state.animator.goToFrame(parseInt(e.target.value));
-        });
-        
-        // Opacity control
-        document.getElementById('opacity-slider').addEventListener('input', (e) => {
-            const opacity = parseFloat(e.target.value);
-            state.mapManager.setOpacity(opacity);
-            state.ui.updateOpacityDisplay(opacity);
-        });
-
-        // Colormap selection
-        document.getElementById('colormap-select').addEventListener('change', (e) => {
-            state.selectedColormap = e.target.value || null;
-            this.applyColormapChange();
-        });
-
-        // vmin/vmax apply button
-        document.getElementById('btn-apply-range').addEventListener('click', () => {
-            const vminVal = parseFloat(document.getElementById('vmin-input').value);
-            const vmaxVal = parseFloat(document.getElementById('vmax-input').value);
-            if (!isNaN(vminVal) && !isNaN(vmaxVal) && isFinite(vminVal) && isFinite(vmaxVal) && vminVal < vmaxVal) {
-                state.currentVmin = vminVal;
-                state.currentVmax = vmaxVal;
-                this.applyColormapChange();
-            } else {
-                state.ui.setStatus('Invalid range: min must be less than max', 'error');
-            }
-        });
-        
-        // Feature 1b: Settings panel
-        const gearBtn = document.getElementById('btn-settings');
-        const settingsPanel = document.getElementById('settings-panel');
-        const settingsClose = document.getElementById('settings-close');
-
-        if (gearBtn && settingsPanel) {
-            gearBtn.addEventListener('click', () => {
-                settingsPanel.style.display =
-                    settingsPanel.style.display === 'none' || !settingsPanel.style.display
-                        ? 'block'
-                        : 'none';
-            });
-        }
-        if (settingsClose && settingsPanel) {
-            settingsClose.addEventListener('click', () => {
-                settingsPanel.style.display = 'none';
+        // -----------------------------------------------------------------
+        // Settings panel controls
+        // -----------------------------------------------------------------
+        const basemapSelect = document.getElementById('basemap-select');
+        if (basemapSelect) {
+            basemapSelect.addEventListener('change', (e) => {
+                state.mapManager.setBasemap(e.target.value);
             });
         }
 
@@ -694,14 +549,240 @@ const app = {
             });
         }
 
+        // Opacity slider (now in settings panel)
+        const opacitySlider = document.getElementById('opacity-slider');
+        if (opacitySlider) {
+            opacitySlider.addEventListener('input', (e) => {
+                const opacity = parseFloat(e.target.value);
+                state.mapManager.setOpacity(opacity);
+                state.ui.updateOpacityDisplay(opacity);
+            });
+        }
+
+        // -----------------------------------------------------------------
+        // Module A: Radar Selection
+        // -----------------------------------------------------------------
+
+        // Change 1: Active/Inactive toggle switch (checkbox)
+        const toggleInactive = document.getElementById('toggle-show-inactive');
+        if (toggleInactive) {
+            toggleInactive.addEventListener('change', async (e) => {
+                state.showInactiveRadars = e.target.checked;
+                localStorage.setItem(SETTINGS_KEY_SHOW_INACTIVE, String(state.showInactiveRadars));
+                await this.refreshRadarList();
+                this.onRadarSelectionChange();
+            });
+        }
+
+        // Select all / clear all radars
+        const selectAllBtn = document.getElementById('btn-select-all-radars');
+        if (selectAllBtn) {
+            selectAllBtn.addEventListener('click', () => {
+                state.ui.selectAllRadars();
+                this.onRadarSelectionChange();
+            });
+        }
+
+        const clearAllBtn = document.getElementById('btn-clear-all-radars');
+        if (clearAllBtn) {
+            clearAllBtn.addEventListener('click', () => {
+                state.ui.clearAllRadars();
+                this.onRadarSelectionChange();
+            });
+        }
+
+        // Radar checkbox changes (event-delegated on document)
+        document.addEventListener('change', (e) => {
+            if (e.target.classList.contains('radar-checkbox')) {
+                this.onRadarSelectionChange();
+            }
+        });
+
+        // Load Latest button
+        const loadLatestBtn = document.getElementById('btn-load-latest');
+        if (loadLatestBtn) {
+            loadLatestBtn.addEventListener('click', () => {
+                this.stopLiveRefresh();
+                this.loadLatestCogs();
+            });
+        }
+
+        // -----------------------------------------------------------------
+        // Module B: Field/Product Selection
+        // -----------------------------------------------------------------
+
+        // Product dropdown
+        const productSelect = document.getElementById('product-select');
+        if (productSelect) {
+            productSelect.addEventListener('change', (e) => {
+                state.selectedProduct = e.target.value;
+                // Reset colormap/range state when product changes
+                state.selectedColormap = null;
+                state.currentVmin = null;
+                state.currentVmax = null;
+                // Clear vmin/vmax inputs so loadColormapOptions fills them from defaults
+                const vminInput = document.getElementById('vmin-input');
+                const vmaxInput = document.getElementById('vmax-input');
+                if (vminInput) vminInput.value = '';
+                if (vmaxInput) vmaxInput.value = '';
+                state.ui.updateModuleBadges(state.selectedRadars.length, state.selectedProduct);
+                this.onSelectionChange();
+            });
+        }
+
+        // Change 2: Filtered/Unfiltered toggle switch
+        const toggleFiltered = document.getElementById('toggle-show-filtered');
+        if (toggleFiltered) {
+            toggleFiltered.addEventListener('change', (e) => {
+                state.showUnfilteredProducts = e.target.checked;
+                localStorage.setItem(SETTINGS_KEY_SHOW_FILTERED, String(state.showUnfilteredProducts));
+
+                const currentSelection = state.selectedProduct;
+                state.ui.populateProductSelect(state.products, state.showUnfilteredProducts);
+
+                const select = document.getElementById('product-select');
+                if (currentSelection && select) {
+                    // Try to keep the same key, or auto-select the equivalent base/o variant
+                    const optionValues = Array.from(select.options).map(o => o.value);
+                    if (optionValues.includes(currentSelection)) {
+                        select.value = currentSelection;
+                    } else {
+                        // Derive the equivalent key in the new variant set
+                        const hasO = /[A-Z]o$/.test(currentSelection);
+                        const equivalent = hasO
+                            ? currentSelection.replace(/o$/, '')   // 'o' → non-'o'
+                            : currentSelection + 'o';               // non-'o' → 'o'
+                        if (optionValues.includes(equivalent)) {
+                            select.value = equivalent;
+                            state.selectedProduct = equivalent;
+                        } else if (select.options.length > 1) {
+                            select.selectedIndex = 1;
+                            state.selectedProduct = select.value;
+                        } else {
+                            select.value = '';
+                            state.selectedProduct = null;
+                        }
+                        this.onSelectionChange();
+                    }
+                }
+                state.ui.updateModuleBadges(state.selectedRadars.length, state.selectedProduct);
+            });
+        }
+
+        // Colormap selection
+        const colormapSelect = document.getElementById('colormap-select');
+        if (colormapSelect) {
+            colormapSelect.addEventListener('change', (e) => {
+                state.selectedColormap = e.target.value || null;
+                this.applyColormapChange();
+            });
+        }
+
+        // vmin/vmax apply button
+        const applyRangeBtn = document.getElementById('btn-apply-range');
+        if (applyRangeBtn) {
+            applyRangeBtn.addEventListener('click', () => {
+                const vminVal = parseFloat(document.getElementById('vmin-input').value);
+                const vmaxVal = parseFloat(document.getElementById('vmax-input').value);
+                if (!isNaN(vminVal) && !isNaN(vmaxVal) && isFinite(vminVal) && isFinite(vmaxVal) && vminVal < vmaxVal) {
+                    state.currentVmin = vminVal;
+                    state.currentVmax = vmaxVal;
+                    this.applyColormapChange();
+                } else {
+                    state.ui.setStatus('Invalid range: min must be less than max', 'error');
+                }
+            });
+        }
+
+        // -----------------------------------------------------------------
+        // Module C: Time Window Selection
+        // -----------------------------------------------------------------
+
+        // Predefined time window buttons (1.5h, 3h, 4.5h, 6h)
+        document.querySelectorAll('.time-window-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const hours = parseFloat(e.target.dataset.hours);
+                // Set active class on the clicked button only
+                document.querySelectorAll('.time-window-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                state.activeTimeWindowHours = hours;
+                // Hide custom range section when a preset is selected
+                const trContainer = document.getElementById('timerange-container');
+                if (trContainer) trContainer.style.display = 'none';
+                this.loadLastNHours(hours);
+            });
+        });
+
+        // "Custom range..." link — reveals the datetime inputs inline
+        const customRangeBtn = document.getElementById('btn-custom-range');
+        if (customRangeBtn) {
+            customRangeBtn.addEventListener('click', () => {
+                const container = document.getElementById('timerange-container');
+                if (!container) return;
+                const isHidden = container.style.display === 'none' || !container.style.display;
+                container.style.display = isHidden ? 'block' : 'none';
+                // Deactivate all preset buttons when revealing custom range
+                if (isHidden) {
+                    document.querySelectorAll('.time-window-btn').forEach(b => b.classList.remove('active'));
+                    state.activeTimeWindowHours = null;
+                }
+            });
+        }
+
+        // Custom date range inputs
+        const startDateInput = document.getElementById('start-date');
+        const endDateInput = document.getElementById('end-date');
+        if (startDateInput) startDateInput.addEventListener('change', () => this.onTimeRangeChange());
+        if (endDateInput) endDateInput.addEventListener('change', () => this.onTimeRangeChange());
+
+        // Load time range button
+        const loadTimeRangeBtn = document.getElementById('btn-load-timerange');
+        if (loadTimeRangeBtn) {
+            loadTimeRangeBtn.addEventListener('click', () => {
+                this.stopLiveRefresh();
+                this.loadTimeRangeCogs();
+            });
+        }
+
+        // -----------------------------------------------------------------
+        // Animation controls
+        // -----------------------------------------------------------------
+        const prevBtn = document.getElementById('btn-prev');
+        const nextBtn = document.getElementById('btn-next');
+        const latestBtn = document.getElementById('btn-latest');
+        const playBtn = document.getElementById('btn-play-pause');
+        const speedBtn = document.getElementById('btn-speed');
+        const slider = document.getElementById('animation-slider');
+
+        if (prevBtn) prevBtn.addEventListener('click', () => state.animator.previous());
+        if (nextBtn) nextBtn.addEventListener('click', () => state.animator.next());
+        if (latestBtn) latestBtn.addEventListener('click', () => state.animator.goToLatest());
+
+        if (playBtn) {
+            playBtn.addEventListener('click', () => {
+                state.animator.toggle();
+                state.ui.updatePlayButton(state.animator.getIsPlaying());
+            });
+        }
+
+        if (speedBtn) speedBtn.addEventListener('click', () => this.cycleSpeed());
+
+        if (slider) {
+            slider.addEventListener('input', (e) => {
+                state.animator.goToFrame(parseInt(e.target.value));
+            });
+        }
+
+        // -----------------------------------------------------------------
         // Keyboard shortcuts
+        // -----------------------------------------------------------------
         document.addEventListener('keydown', (e) => {
             // Ignore if user is typing in an input field
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') {
                 return;
             }
-            
-            switch(e.key) {
+
+            switch (e.key) {
                 case ' ': // Space - play/pause
                     e.preventDefault();
                     if (state.animator.getFrameCount() > 1) {
@@ -709,40 +790,36 @@ const app = {
                         state.ui.updatePlayButton(state.animator.getIsPlaying());
                     }
                     break;
-                    
-                case 'ArrowLeft': // Previous frame
+
+                case 'ArrowLeft':
                     e.preventDefault();
                     state.animator.previous();
                     break;
-                    
-                case 'ArrowRight': // Next frame
+
+                case 'ArrowRight':
                     e.preventDefault();
                     state.animator.next();
                     break;
-                    
-                case 'Home': // Go to latest
+
+                case 'Home':
                     e.preventDefault();
                     state.animator.goToLatest();
                     break;
-                    
-                case 'l': // Load latest
+
+                case 'l':
                 case 'L':
                     e.preventDefault();
                     const loadBtn = document.getElementById('btn-load-latest');
-                    if (loadBtn && !loadBtn.disabled) {
-                        this.loadLatestCogs();
-                    }
-                    break;
-                    
-                case 's': // Cycle speed
-                case 'S':
-                    e.preventDefault();
-                    if (state.animator.getFrameCount() > 1) {
-                        this.cycleSpeed();
-                    }
+                    if (loadBtn && !loadBtn.disabled) this.loadLatestCogs();
                     break;
 
-                case 'D': // Ctrl+Shift+D — reveal hidden COG Browser link (developer shortcut)
+                case 's':
+                case 'S':
+                    e.preventDefault();
+                    if (state.animator.getFrameCount() > 1) this.cycleSpeed();
+                    break;
+
+                case 'D': // Ctrl+Shift+D — reveal hidden COG Browser link
                     if (e.ctrlKey && e.shiftKey) {
                         e.preventDefault();
                         const cogLink = document.getElementById('cog-browser-link');
@@ -754,6 +831,189 @@ const app = {
             }
         });
     },
+
+    // -----------------------------------------------------------------
+    // Panel management helpers
+    // -----------------------------------------------------------------
+
+    /**
+     * Map from floating panel ID to icon-bar button ID.
+     */
+    _panelButtonMap: {
+        'panel-module-a': 'btn-module-a',
+        'panel-module-b': 'btn-module-b',
+        'panel-module-c': 'btn-module-c',
+        'settings-panel': 'btn-settings',
+    },
+
+    /**
+     * Toggle the target panel open/closed, closing all others first.
+     * @param {string} panelId - Element ID of the panel to toggle
+     */
+    togglePanel(panelId) {
+        const ALL_PANELS = ['panel-module-a', 'panel-module-b', 'panel-module-c', 'settings-panel'];
+        ALL_PANELS.forEach(id => {
+            const panel = document.getElementById(id);
+            const btnId = this._panelButtonMap[id];
+            const btn = btnId ? document.getElementById(btnId) : null;
+            if (id === panelId) {
+                const isOpen = panel && panel.style.display !== 'none';
+                if (panel) panel.style.display = isOpen ? 'none' : 'block';
+                if (btn) btn.classList.toggle('is-active', !isOpen);
+            } else {
+                if (panel) panel.style.display = 'none';
+                if (btn) btn.classList.remove('is-active');
+            }
+        });
+    },
+
+    /**
+     * Close a specific panel.
+     * @param {string} panelId - Element ID of the panel to close
+     */
+    closePanel(panelId) {
+        const panel = document.getElementById(panelId);
+        if (panel) panel.style.display = 'none';
+        const btnId = this._panelButtonMap[panelId];
+        const btn = btnId ? document.getElementById(btnId) : null;
+        if (btn) btn.classList.remove('is-active');
+    },
+
+    // -----------------------------------------------------------------
+    // Change 3: Map Snapshot
+    // -----------------------------------------------------------------
+
+    /**
+     * Capture the current Leaflet map viewport as a PNG and trigger download.
+     *
+     * Implementation note: Leaflet 1.9.4 renders tile layers as <img> elements
+     * inside .leaflet-tile-pane and .leaflet-overlay-pane.  Drawing these onto
+     * a canvas requires that the images were loaded with crossOrigin="anonymous"
+     * (configured in map.js on every L.tileLayer call).  CartoDB, ArcGIS Esri,
+     * and OpenStreetMap tile servers all return CORS headers, so this works in
+     * practice for the basemaps used by this application.
+     *
+     * LIMITATION: If a tile server does not return CORS headers, that tile will
+     * taint the canvas and be silently skipped.  If ALL tiles are tainted the
+     * capture fails with an informative error prompting the user to use their
+     * browser's built-in screenshot instead.
+     */
+    async captureMapSnapshot() {
+        const btn = document.getElementById('btn-snapshot');
+        const errorEl = document.getElementById('snapshot-error');
+
+        if (btn) btn.classList.add('is-capturing');
+        if (errorEl) errorEl.style.display = 'none';
+
+        try {
+            await this._doMapSnapshot();
+        } catch (err) {
+            console.error('Snapshot failed:', err);
+            if (errorEl) {
+                errorEl.textContent = `Snapshot: ${err.message}`;
+                errorEl.style.display = 'block';
+                setTimeout(() => { errorEl.style.display = 'none'; }, 6000);
+            }
+        } finally {
+            if (btn) btn.classList.remove('is-capturing');
+        }
+    },
+
+    async _doMapSnapshot() {
+        const mapEl = document.getElementById('map');
+        if (!mapEl) throw new Error('Map element not found');
+
+        // Wait for all currently-visible tiles to finish loading (max 3 s)
+        await this._waitForTiles(3000);
+
+        const rect = mapEl.getBoundingClientRect();
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(rect.width);
+        canvas.height = Math.round(rect.height);
+        const ctx = canvas.getContext('2d');
+
+        // Dark background matching the app theme
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Collect tile images from Leaflet panes in rendering order
+        // (tile pane = basemap, overlay pane = radar)
+        const paneSelector = [
+            '.leaflet-tile-pane img.leaflet-tile',
+            '.leaflet-overlay-pane img.leaflet-tile',
+        ].join(', ');
+        const imgs = Array.from(mapEl.querySelectorAll(paneSelector));
+
+        let drawnCount = 0;
+        for (const img of imgs) {
+            if (!img.complete || img.naturalWidth === 0) continue;
+            const imgRect = img.getBoundingClientRect();
+            const x = Math.round(imgRect.left - rect.left);
+            const y = Math.round(imgRect.top - rect.top);
+            try {
+                ctx.drawImage(img, x, y, Math.round(imgRect.width), Math.round(imgRect.height));
+                drawnCount++;
+            } catch (e) {
+                // Cross-origin restriction – skip this tile
+                console.debug('Snapshot: CORS-restricted tile skipped', e.message);
+            }
+        }
+
+        if (drawnCount === 0) {
+            throw new Error(
+                'No tiles could be captured (CORS restriction). ' +
+                'Use your browser\'s built-in screenshot (e.g., PrintScreen) instead.'
+            );
+        }
+
+        // Build UTC-timestamp filename: webmet25_snapshot_YYYYMMDD_HHMMSS.png
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const filename =
+            `webmet25_snapshot_` +
+            `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}_` +
+            `${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}.png`;
+
+        await new Promise((resolve, reject) => {
+            canvas.toBlob((blob) => {
+                if (!blob) { reject(new Error('Canvas toBlob returned null')); return; }
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.download = filename;
+                a.href = url;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                resolve();
+            }, 'image/png');
+        });
+    },
+
+    /**
+     * Wait until all visible Leaflet tile images are loaded, or until
+     * `maxMs` milliseconds have elapsed (whichever comes first).
+     * @param {number} maxMs - Maximum wait time in milliseconds
+     */
+    _waitForTiles(maxMs = 3000) {
+        return new Promise(resolve => {
+            const start = Date.now();
+            const check = () => {
+                const allLoaded = Array.from(
+                    document.querySelectorAll(
+                        '#map .leaflet-tile-pane img.leaflet-tile, ' +
+                        '#map .leaflet-overlay-pane img.leaflet-tile'
+                    )
+                ).every(img => img.complete);
+                if (allLoaded || Date.now() - start > maxMs) {
+                    resolve();
+                } else {
+                    setTimeout(check, 200);
+                }
+            };
+            check();
+        });
+    },
     
     /**
      * Handle radar selection changes
@@ -761,6 +1021,9 @@ const app = {
     onRadarSelectionChange() {
         const prevRadars = [...state.selectedRadars];
         state.selectedRadars = state.ui.getSelectedRadars();
+
+        // Update Module A badge
+        state.ui.updateModuleBadges(state.selectedRadars.length, state.selectedProduct);
         
         // Enable/disable load latest button
         const canLoad = state.selectedRadars.length > 0 && state.selectedProduct;
@@ -1353,18 +1616,6 @@ const app = {
         this.stopLiveRefresh();
         state.ui.setStatus('Finding latest data…', 'loading');
 
-        // Open the time-range panel so the user can see the loaded window
-        const trContainer = document.getElementById('timerange-container');
-        const trToggleBtn = document.getElementById('btn-toggle-timerange');
-        if (trContainer) {
-            const isHidden = trContainer.style.display === 'none' ||
-                window.getComputedStyle(trContainer).display === 'none';
-            if (isHidden) {
-                trContainer.style.display = 'block';
-                if (trToggleBtn) trToggleBtn.textContent = 'Hide Time Range ▲';
-            }
-        }
-
         try {
             // Determine the most recent COG time across all selected radars
             const latestItems = await api.getLatestCogsForRadars(
@@ -1577,6 +1828,9 @@ const app = {
     onFrameChange(index, frame) {
         if (!frame) return;
 
+        // Update the time-window label in the animation bar on every frame change
+        this.updateTimeWindowLabel();
+
         // Animation mode: grouped frame – use pre-cached layers
         if (frame.cogsByRadar) {
             state.mapManager.showCachedFrame(index);
@@ -1600,6 +1854,42 @@ const app = {
         state.ui.setTimeDisplay(frame.observation_time);
         state.ui.updateFrameCounter(index, state.animator.getFrameCount());
         state.ui.updateAnimationSlider(index, state.animator.getFrameCount());
+    },
+
+    /**
+     * Update the #time-window-label element in the animation bar.
+     * Shows the active preset label or a custom date range string.
+     */
+    updateTimeWindowLabel() {
+        const label = document.getElementById('time-window-label');
+        if (!label) return;
+
+        if (state.liveHours !== null) {
+            // Map 1.5 → "1.5 hrs", 3 → "3 hrs", etc.
+            label.textContent = `Last ${state.liveHours} hrs`;
+        } else if (state.animationMode === 'timerange') {
+            const range = state.ui.getTimeRangeValues();
+            if (range.start && range.end) {
+                const fmt = (d) => {
+                    const mm = String(d.getDate()).padStart(2, '0');
+                    const mo = String(d.getMonth() + 1).padStart(2, '0');
+                    const hh = String(d.getHours()).padStart(2, '0');
+                    const mi = String(d.getMinutes()).padStart(2, '0');
+                    return `${mm}/${mo} ${hh}:${mi}`;
+                };
+                label.textContent = `${fmt(range.start)} → ${fmt(range.end)}`;
+            } else {
+                label.textContent = 'Custom range';
+            }
+        } else {
+            label.textContent = '—';
+        }
+
+        // Also update Module C badge
+        const badgeC = document.getElementById('badge-module-c');
+        if (badgeC) {
+            badgeC.textContent = state.liveHours !== null ? `${state.liveHours}h` : 'cst';
+        }
     },
     
     /**
