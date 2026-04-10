@@ -23,6 +23,17 @@ const MS_PER_HOUR = 3600 * 1000;
 const LIVE_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const BUCKET_TOLERANCE_MINUTES = 5; // COG grouping bucket size – must match groupCogsByTimestamp default
 
+// Radar status refresh: how often to re-fetch the radar list to update is_active dots.
+// Can be overridden by the settings panel (stored in localStorage).
+const DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+
+// Number of closest radars to auto-select on geolocation init
+const GEOLOCATION_AUTO_SELECT_COUNT = 3;
+// Hours to load automatically on geolocation init
+const GEOLOCATION_AUTO_LOAD_HOURS = 3;
+// Product to prefer on auto-init (unfiltered DBZH)
+const GEOLOCATION_AUTO_PRODUCT = 'DBZHo';
+
 // =============================================================================
 // APPLICATION STATE
 // =============================================================================
@@ -37,6 +48,7 @@ const state = {
     selectedRadars: [], // Changed from selectedRadar to support multiple
     selectedProduct: null,
     showUnfilteredProducts: false, // Filter state for products
+    showInactiveRadars: false, // Feature 2: show/hide inactive radars
 
     // Colormap / range overrides (null = use server defaults)
     selectedColormap: null,
@@ -56,6 +68,9 @@ const state = {
     // Live N-hours mode
     liveHours: null,             // N when a preset button was last used; null = not in live mode
     liveRefreshInterval: null,   // setInterval handle for 5-minute polling
+
+    // Radar status refresh
+    radarStatusRefreshInterval: null, // setInterval handle for periodic radar-list refresh
 };
 
 // =============================================================================
@@ -113,6 +128,85 @@ function groupCogsByTimestamp(cogs, toleranceMinutes = BUCKET_TOLERANCE_MINUTES)
 }
 
 // =============================================================================
+// SETTINGS HELPERS (localStorage)
+// =============================================================================
+
+const SETTINGS_KEY_ACTIVE_ONLY = 'webmet25_active_only';
+const SETTINGS_KEY_REFRESH_INTERVAL = 'webmet25_radar_refresh_interval_min';
+
+function getSettingActiveOnly() {
+    const stored = localStorage.getItem(SETTINGS_KEY_ACTIVE_ONLY);
+    return stored === null ? true : stored === 'true';
+}
+
+function setSettingActiveOnly(value) {
+    localStorage.setItem(SETTINGS_KEY_ACTIVE_ONLY, String(value));
+}
+
+function getSettingRefreshIntervalMs() {
+    const stored = localStorage.getItem(SETTINGS_KEY_REFRESH_INTERVAL);
+    if (stored === null) return DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS;
+    const minutes = parseFloat(stored);
+    if (isNaN(minutes) || minutes <= 0) return DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS;
+    const capped = Math.min(minutes, 60); // cap at 60 minutes
+    return capped * 60 * 1000;
+}
+
+function setSettingRefreshIntervalMin(minutes) {
+    localStorage.setItem(SETTINGS_KEY_REFRESH_INTERVAL, String(minutes));
+}
+
+// =============================================================================
+// GEOLOCATION HELPERS
+// =============================================================================
+
+/**
+ * Haversine distance between two lat/lon points in km.
+ */
+function haversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(lat1 * Math.PI / 180) *
+              Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * Try to get user location via the browser Geolocation API.
+ * Returns a Promise<{lat, lon}> or rejects on error/denial.
+ */
+function getBrowserGeolocation() {
+    return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+            reject(new Error('Geolocation not supported'));
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            pos => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+            err => reject(err),
+            { timeout: 8000, maximumAge: 60000 }
+        );
+    });
+}
+
+/**
+ * Try to get user location via IP geolocation (ipapi.co).
+ * TODO: This uses a third-party public API (ipapi.co). Before production
+ * deployment, consider replacing with a self-hosted geolocation service
+ * or a paid API with an appropriate usage agreement.
+ */
+async function getIPGeolocation() {
+    const resp = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(6000) });
+    if (!resp.ok) throw new Error(`IP geo failed: ${resp.status}`);
+    const data = await resp.json();
+    if (!data.latitude || !data.longitude) throw new Error('No coordinates in IP geo response');
+    return { lat: data.latitude, lon: data.longitude };
+}
+
+// =============================================================================
 // MAIN APPLICATION
 // =============================================================================
 
@@ -124,6 +218,9 @@ const app = {
         // Initialize modules
         state.ui = new UIControls();
         state.ui.setStatus('Initializing...', 'loading');
+        
+        // Restore persisted settings
+        state.showInactiveRadars = !getSettingActiveOnly(); // activeOnly=true → showInactive=false
         
         try {
             // Wait for Leaflet to be loaded
@@ -148,11 +245,20 @@ const app = {
             // Setup event listeners
             this.setupEventListeners();
             
+            // Initialise settings panel UI values
+            this.initSettingsPanel();
+
             // Disable animation controls initially
             state.ui.enableAnimationControls(false);
             state.ui.enableNavButtons(false);
             
             state.ui.setStatus('Ready', 'success');
+
+            // Start periodic radar-status refresh
+            this.startRadarStatusRefresh();
+
+            // Feature 3: geolocation auto-init (runs asynchronously, does not block UI)
+            this.tryGeolocationAutoInit();
             
         } catch (error) {
             console.error('Init error:', error);
@@ -181,9 +287,12 @@ const app = {
      * Load radars and products from API
      */
     async loadInitialData() {
-        // Load radars
-        state.radars = await api.getRadars();
-        state.ui.populateRadarCheckboxes(state.radars);
+        // Load radars (respect the show-inactive toggle)
+        state.radars = await api.getRadars(!state.showInactiveRadars);
+        state.ui.populateRadarCheckboxes(state.radars, state.showInactiveRadars);
+
+        // Sync the toggle button to persisted state
+        this.updateActiveOnlyToggle();
         
         // Load products
         state.products = await api.getProducts();
@@ -192,6 +301,171 @@ const app = {
         state.ui.updateFilterButton(state.showUnfilteredProducts);
     },
     
+    /**
+     * Feature 2: Update the "Active only" toggle button appearance.
+     */
+    updateActiveOnlyToggle() {
+        const btn = document.getElementById('btn-toggle-active-only');
+        if (!btn) return;
+        if (state.showInactiveRadars) {
+            btn.classList.remove('active');
+            btn.title = 'Showing all radars (including inactive)';
+            btn.textContent = 'Show all';
+        } else {
+            btn.classList.add('active');
+            btn.title = 'Showing active radars only';
+            btn.textContent = 'Active only';
+        }
+    },
+
+    /**
+     * Refresh the radar list from the API and re-render checkboxes.
+     * Preserves existing checkbox selections.
+     */
+    async refreshRadarList() {
+        try {
+            const prevSelected = new Set(state.ui.getSelectedRadars());
+            state.radars = await api.getRadars(!state.showInactiveRadars);
+            state.ui.populateRadarCheckboxes(state.radars, state.showInactiveRadars);
+            // Restore previous selections
+            prevSelected.forEach(code => {
+                const cb = document.getElementById(`radar-${code}`);
+                if (cb) cb.checked = true;
+            });
+        } catch (err) {
+            console.warn('Failed to refresh radar list:', err);
+        }
+    },
+
+    /**
+     * Feature 1b: Start the periodic radar-status refresh timer.
+     */
+    startRadarStatusRefresh() {
+        if (state.radarStatusRefreshInterval !== null) {
+            clearInterval(state.radarStatusRefreshInterval);
+        }
+        const intervalMs = getSettingRefreshIntervalMs();
+        state.radarStatusRefreshInterval = setInterval(() => {
+            this.refreshRadarList();
+        }, intervalMs);
+        console.log(`Radar status refresh: every ${intervalMs / 60000} min`);
+    },
+
+    /**
+     * Feature 1b: Initialise the settings panel with values from localStorage.
+     */
+    initSettingsPanel() {
+        const intervalInput = document.getElementById('settings-refresh-interval');
+        if (intervalInput) {
+            const stored = localStorage.getItem(SETTINGS_KEY_REFRESH_INTERVAL);
+            intervalInput.value = stored !== null
+                ? stored
+                : String(DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS / 60000);
+        }
+    },
+
+    /**
+     * Feature 3: Try geolocation auto-init; silently falls back to manual mode.
+     *
+     * Execution order:
+     *  1. Browser Geolocation API
+     *  2. IP-based geolocation (ipapi.co)
+     *  3. Fall back to manual mode (show subtle hint)
+     *
+     * NOTE: A user confirmation prompt could be inserted here before calling
+     * runGeolocationAutoInit() if needed in the future.
+     */
+    async tryGeolocationAutoInit() {
+        let location = null;
+
+        // Step 1: browser geolocation
+        try {
+            location = await getBrowserGeolocation();
+            console.log('Geolocation: browser GPS', location);
+        } catch (e) {
+            console.log('Geolocation: browser denied or unavailable, trying IP…');
+        }
+
+        // Step 2: IP-based fallback
+        if (!location) {
+            try {
+                location = await getIPGeolocation();
+                console.log('Geolocation: IP-based', location);
+            } catch (e) {
+                console.log('Geolocation: IP lookup failed:', e.message);
+            }
+        }
+
+        // Step 3: fall back to manual mode
+        if (!location) {
+            state.ui.setStatus('Select radar(s) and product to start', '');
+            return;
+        }
+
+        // [Confirmation prompt insertion point: prompt the user here if desired]
+        await this.runGeolocationAutoInit(location.lat, location.lon);
+    },
+
+    /**
+     * Auto-initialise the viewer for the GEOLOCATION_AUTO_SELECT_COUNT
+     * closest active radars to the given coordinates.
+     */
+    async runGeolocationAutoInit(userLat, userLon) {
+        try {
+            // Fetch active radars (use the current filter setting)
+            const activeRadars = await api.getRadars(true);
+            if (!activeRadars.length) return;
+
+            // Compute distances and pick the N closest
+            const sorted = activeRadars.map(r => ({
+                radar: r,
+                dist: haversineKm(userLat, userLon, r.center_lat, r.center_long),
+            })).sort((a, b) => a.dist - b.dist);
+
+            const closest = sorted.slice(0, GEOLOCATION_AUTO_SELECT_COUNT).map(x => x.radar);
+
+            // Check the corresponding checkboxes
+            closest.forEach(r => {
+                const cb = document.getElementById(`radar-${r.code}`);
+                if (cb) cb.checked = true;
+            });
+            this.onRadarSelectionChange();
+
+            // Select product: DBZHo if available, otherwise DBZH
+            const preferredProducts = [GEOLOCATION_AUTO_PRODUCT, 'DBZH'];
+            let selectedProduct = null;
+            for (const key of preferredProducts) {
+                if (state.products.find(p => p.product_key === key)) {
+                    selectedProduct = key;
+                    break;
+                }
+            }
+            if (!selectedProduct) return;
+
+            // Switch to unfiltered view if needed
+            const isUnfiltered = /[A-Z]o$/.test(selectedProduct);
+            if (isUnfiltered !== state.showUnfilteredProducts) {
+                state.showUnfilteredProducts = isUnfiltered;
+                state.ui.populateProductSelect(state.products, state.showUnfilteredProducts);
+                state.ui.updateFilterButton(state.showUnfilteredProducts);
+            }
+
+            const productSelect = document.getElementById('product-select');
+            if (productSelect) productSelect.value = selectedProduct;
+            state.selectedProduct = selectedProduct;
+            await this.loadColormapOptions();
+
+            // Load last N hours and start animation
+            await this.loadLastNHours(GEOLOCATION_AUTO_LOAD_HOURS);
+            if (state.animator.getFrameCount() > 1) {
+                state.animator.play();
+                state.ui.updatePlayButton(true);
+            }
+        } catch (err) {
+            console.warn('Geolocation auto-init failed:', err);
+        }
+    },
+
     /**
      * Setup all event listeners
      */
@@ -218,6 +492,18 @@ const app = {
             }
         });
         
+        // Feature 2: Active-only toggle
+        const activeOnlyBtn = document.getElementById('btn-toggle-active-only');
+        if (activeOnlyBtn) {
+            activeOnlyBtn.addEventListener('click', async () => {
+                state.showInactiveRadars = !state.showInactiveRadars;
+                setSettingActiveOnly(!state.showInactiveRadars);
+                this.updateActiveOnlyToggle();
+                await this.refreshRadarList();
+                this.onRadarSelectionChange();
+            });
+        }
+
         // Select all radars
         document.getElementById('btn-select-all-radars').addEventListener('click', () => {
             state.ui.selectAllRadars();
@@ -376,6 +662,38 @@ const app = {
             }
         });
         
+        // Feature 1b: Settings panel
+        const gearBtn = document.getElementById('btn-settings');
+        const settingsPanel = document.getElementById('settings-panel');
+        const settingsClose = document.getElementById('settings-close');
+
+        if (gearBtn && settingsPanel) {
+            gearBtn.addEventListener('click', () => {
+                settingsPanel.style.display =
+                    settingsPanel.style.display === 'none' || !settingsPanel.style.display
+                        ? 'block'
+                        : 'none';
+            });
+        }
+        if (settingsClose && settingsPanel) {
+            settingsClose.addEventListener('click', () => {
+                settingsPanel.style.display = 'none';
+            });
+        }
+
+        const refreshIntervalInput = document.getElementById('settings-refresh-interval');
+        const refreshIntervalSave = document.getElementById('settings-refresh-save');
+        if (refreshIntervalInput && refreshIntervalSave) {
+            refreshIntervalSave.addEventListener('click', () => {
+                const minutes = Math.min(parseFloat(refreshIntervalInput.value), 60);
+                if (!isNaN(minutes) && minutes > 0) {
+                    setSettingRefreshIntervalMin(minutes);
+                    this.startRadarStatusRefresh(); // restart with new interval
+                    state.ui.setStatus(`Radar refresh interval set to ${minutes} min`, 'success');
+                }
+            });
+        }
+
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             // Ignore if user is typing in an input field

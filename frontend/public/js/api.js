@@ -20,9 +20,10 @@ export const api = {
     
     /**
      * Get all radars
+     * @param {boolean} activeOnly - If true, only return active radars (default: true)
      */
-    async getRadars() {
-        const data = await this.get('/radars');
+    async getRadars(activeOnly = true) {
+        const data = await this.get(`/radars?active_only=${activeOnly}`);
         return data.radars || [];
     },
     

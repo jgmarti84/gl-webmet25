@@ -264,6 +264,7 @@ FIELD_RENDER = {
     "PHIDP": {"vmin": 0.0, "vmax": 360.0, "cmap": "Theodore16"},
     # Generic fallback for other products
     "COLMAX": {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"},
+    "COLMAXo": {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"},
 }
 
 # Available colormap options for each field.
@@ -287,6 +288,7 @@ FIELD_COLORMAP_OPTIONS = {
     "WRADo": ["Oranges", "YlOrRd", "hot", "plasma"],
     "PHIDP": ["Theodore16", "hsv", "twilight", "twilight_shifted"],
     "COLMAX": ["grc_th", "grc_th2", "grc_rain"],
+    "COLMAXo": ["grc_th", "grc_th2", "grc_rain"],
 }
 
 
@@ -349,11 +351,19 @@ def colormap_for_field(field_key: str, override_cmap: Optional[str] = None) -> T
     Returns:
         Tuple of (cmap_object, vmin, vmax, cmap_name)
     """
-    # Try exact key first (preserves 'o' suffix like 'VRADo', 'RHOHVo'),
-    # then fall back to uppercased version for convenience (e.g. 'dbzh' -> 'DBZH').
+    # Lookup order:
+    #   1. Exact key (preserves 'o' suffix like 'VRADo', 'RHOHVo')
+    #   2. Uppercase version (e.g. 'dbzh' -> 'DBZH')
+    #   3. Strip trailing 'o' and look up base key (e.g. 'COLMAXo' -> 'COLMAX')
     _fallback = {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"}
-    spec = FIELD_RENDER.get(field_key, FIELD_RENDER.get(field_key.upper(), _fallback))
-    field_upper = field_key.upper()  # kept for FIELD_COLORMAP_OPTIONS lookup below
+    spec = FIELD_RENDER.get(field_key)
+    if spec is None:
+        spec = FIELD_RENDER.get(field_key.upper())
+    if spec is None and field_key.endswith('o'):
+        base_key = field_key[:-1]
+        spec = FIELD_RENDER.get(base_key, FIELD_RENDER.get(base_key.upper()))
+    if spec is None:
+        spec = _fallback
     vmin, vmax = spec["vmin"], spec["vmax"]
     cmap_name = override_cmap if override_cmap else spec["cmap"]
     
@@ -361,6 +371,24 @@ def colormap_for_field(field_key: str, override_cmap: Optional[str] = None) -> T
     cmap = get_colormap(cmap_name)
     
     return cmap, vmin, vmax, cmap_name
+
+
+def colormap_options_for_field(field_key: str) -> list:
+    """
+    Get available colormap options for a field key.
+
+    Lookup order mirrors colormap_for_field:
+      1. Exact key
+      2. Uppercase key
+      3. Strip trailing 'o' and look up base key
+    """
+    options = FIELD_COLORMAP_OPTIONS.get(field_key)
+    if options is None:
+        options = FIELD_COLORMAP_OPTIONS.get(field_key.upper())
+    if options is None and field_key.endswith('o'):
+        base_key = field_key[:-1]
+        options = FIELD_COLORMAP_OPTIONS.get(base_key, FIELD_COLORMAP_OPTIONS.get(base_key.upper()))
+    return options or []
 
 
 def colormap_to_rio_tiler(cmap, vmin: float, vmax: float, steps: int = 256) -> Dict[int, Tuple[int, int, int, int]]:

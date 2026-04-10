@@ -1087,3 +1087,196 @@ body {
 .apply-btn:hover {
     background: rgba(79, 195, 247, 0.35);
 }
+
+/* ============================================
+   RADAR STATUS DOT (Feature 1)
+   ============================================ */
+
+.radar-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: inline-block;
+}
+
+.radar-status-active {
+    background-color: #66bb6a;
+    box-shadow: 0 0 4px rgba(102, 187, 106, 0.6);
+}
+
+.radar-status-inactive {
+    background-color: #ef5350;
+    box-shadow: none;
+}
+
+/* Dim inactive radar rows (Feature 2) */
+.radar-inactive {
+    opacity: 0.5;
+}
+
+/* ============================================
+   RADAR HEADER ROW (Feature 2 toggle)
+   ============================================ */
+
+.radar-header-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.radar-header-row .toggle-btn {
+    flex: 1;
+}
+
+.active-only-btn {
+    padding: 6px 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #aaa;
+    font-size: 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+
+.active-only-btn.active {
+    background: rgba(102, 187, 106, 0.2);
+    border-color: #66bb6a;
+    color: #66bb6a;
+}
+
+.active-only-btn:hover {
+    background: rgba(79, 195, 247, 0.15);
+    border-color: #4fc3f7;
+    color: #4fc3f7;
+}
+
+/* ============================================
+   SETTINGS GEAR BUTTON (Feature 1b)
+   ============================================ */
+
+#btn-settings {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    z-index: 1001;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(26, 26, 46, 0.95);
+    color: #aaa;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+#btn-settings:hover {
+    background: rgba(79, 195, 247, 0.2);
+    border-color: #4fc3f7;
+    color: #4fc3f7;
+}
+
+/* ============================================
+   SETTINGS PANEL (Feature 1b)
+   ============================================ */
+
+#settings-panel {
+    position: absolute;
+    bottom: 52px;
+    left: 10px;
+    z-index: 1001;
+    background: rgba(26, 26, 46, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    padding: 12px;
+    min-width: 260px;
+    max-width: 320px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+}
+
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 13px;
+    font-weight: 600;
+    color: #4fc3f7;
+}
+
+.settings-header button {
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 3px;
+    transition: color 0.2s;
+}
+
+.settings-header button:hover {
+    color: #ef5350;
+}
+
+.settings-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    font-size: 12px;
+}
+
+.settings-row label {
+    color: #aaa;
+    flex: 1;
+    white-space: nowrap;
+}
+
+.settings-row input[type="number"] {
+    width: 56px;
+    padding: 4px 6px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 12px;
+    text-align: center;
+}
+
+.settings-row input[type="number"]:focus {
+    outline: none;
+    border-color: #4fc3f7;
+}
+
+.settings-info {
+    font-size: 10px;
+    color: #777;
+    line-height: 1.4;
+    display: block;
+    margin-top: 4px;
+}
+
+.settings-info span {
+    display: block;
+}
+
+.settings-info code {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    color: #81d4fa;
+}
