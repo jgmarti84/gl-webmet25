@@ -116,8 +116,10 @@ def _build_tile_headers(
     x: int,
     y: int,
     cmap: str,
-    vmin: float,
-    vmax: float,
+    cmap_vmin: float,
+    cmap_vmax: float,
+    filter_vmin: Optional[float],
+    filter_vmax: Optional[float],
 ) -> dict:
     """
     Build HTTP caching headers for a tile response.
@@ -126,8 +128,19 @@ def _build_tile_headers(
     24-hour immutable cache.  Recent observations get a 60-second cache
     with must-revalidate.  An ETag is always included so clients can send
     If-None-Match for 304 responses.
+
+    The ETag encodes both the colormap range (cmap_vmin/cmap_vmax, from
+    product defaults) and the optional data-filter range (filter_vmin/
+    filter_vmax, from query params) so that different filter values produce
+    distinct cache entries.
     """
-    etag_raw = f"{cog_id}-{z}-{x}-{y}-{cmap}-{_fmt_float(vmin)}-{_fmt_float(vmax)}"
+    fv_min = _fmt_float(filter_vmin) if filter_vmin is not None else "none"
+    fv_max = _fmt_float(filter_vmax) if filter_vmax is not None else "none"
+    etag_raw = (
+        f"{cog_id}-{z}-{x}-{y}-{cmap}"
+        f"-{_fmt_float(cmap_vmin)}-{_fmt_float(cmap_vmax)}"
+        f"-{fv_min}-{fv_max}"
+    )
     etag = f'"{hashlib.sha256(etag_raw.encode()).hexdigest()[:32]}"'
 
     if observation_time is not None:
@@ -159,8 +172,26 @@ async def get_tile(
     x: int,
     y: int,
     colormap: Optional[str] = Query(None, description="Override colormap name (e.g., grc_th, viridis, pyart_NWSRef)"),
-    vmin: Optional[float] = Query(None, description="Override minimum data value for colormap scaling"),
-    vmax: Optional[float] = Query(None, description="Override maximum data value for colormap scaling"),
+    # TODO: In a future version, consider renaming `vmin`/`vmax` to `filter_min`/`filter_max`
+    #       to reflect their new role as data-filter bounds (not colormap-scaling limits).
+    #       The colormap always spans the full product range (product defaults), not these values.
+    #       Any rename must update the API contract and all frontend call sites in map.js.
+    vmin: Optional[float] = Query(
+        None,
+        description=(
+            "Data-filter lower bound. Pixels with values BELOW this threshold are rendered "
+            "transparent. The colormap gradient always spans the full product value range "
+            "(product defaults), not this filter bound."
+        ),
+    ),
+    vmax: Optional[float] = Query(
+        None,
+        description=(
+            "Data-filter upper bound. Pixels with values ABOVE this threshold are rendered "
+            "transparent. The colormap gradient always spans the full product value range "
+            "(product defaults), not this filter bound."
+        ),
+    ),
     db: Session = Depends(get_db),
     tile_service: TileService = Depends(get_tile_service)
 ):
@@ -172,8 +203,8 @@ async def get_tile(
     - **x**: Tile X coordinate
     - **y**: Tile Y coordinate
     - **colormap**: Optional colormap name override
-    - **vmin**: Optional minimum value override for colormap scaling
-    - **vmax**: Optional maximum value override for colormap scaling
+    - **vmin**: Optional data-filter lower bound (pixels below are transparent)
+    - **vmax**: Optional data-filter upper bound (pixels above are transparent)
     """
     # Priority 3: use metadata cache for DB lookup
     cog = _get_cog_by_id(cog_id, db)
@@ -186,8 +217,8 @@ async def get_tile(
     product_key = cog.polarimetric_var or cog.product_key
     cog_data_type = cog.cog_data_type  # may be None for legacy records
 
-    # Resolve effective cmap name, vmin, vmax
-    # Priority: query param > product defaults
+    # Colormap scaling range — always uses product defaults so that the tile
+    # colors remain consistent with the legend regardless of filter values.
     # Note: cog.cog_cmap (radarlib metadata) is intentionally NOT used as a
     # fallback here, so the legend (which uses product defaults) always matches
     # the tile renderer.  A query-param override is the correct way to change
@@ -197,13 +228,17 @@ async def get_tile(
     )
 
     effective_cmap = colormap or default_cmap_name
-    effective_vmin = vmin if vmin is not None else default_vmin
-    effective_vmax = vmax if vmax is not None else default_vmax
+    # cmap_vmin / cmap_vmax are the COLORMAP scaling range (always product defaults).
+    # filter_vmin / filter_vmax are the DATA FILTER range (from query params, may be None).
+    cmap_vmin = default_vmin
+    cmap_vmax = default_vmax
+    filter_vmin = vmin   # None means no filter on this side
+    filter_vmax = vmax   # None means no filter on this side
 
     # Priority 1: build caching headers and check ETag for conditional GET
     headers = _build_tile_headers(
         cog.observation_time, cog_id, z, x, y,
-        effective_cmap, effective_vmin, effective_vmax,
+        effective_cmap, cmap_vmin, cmap_vmax, filter_vmin, filter_vmax,
     )
     if_none_match = request.headers.get("if-none-match")
     if if_none_match and if_none_match == headers["ETag"]:
@@ -226,8 +261,10 @@ async def get_tile(
         y=y,
         colormap=colormap_dict,
         cmap_name=effective_cmap,
-        vmin=effective_vmin,
-        vmax=effective_vmax,
+        cmap_vmin=cmap_vmin,
+        cmap_vmax=cmap_vmax,
+        filter_vmin=filter_vmin,
+        filter_vmax=filter_vmax,
         cog_data_type=cog_data_type,
     )
     
@@ -300,13 +337,15 @@ async def get_tile_by_params(
 
     cog_data_type = cog.cog_data_type
 
-    # Resolve effective rendering parameters
-    # Priority: query param > product defaults (cog_cmap is not used so that
-    # the tile renderer stays consistent with the legend endpoint)
+    # Resolve effective rendering parameters.
+    # Colormap scaling is always from product defaults (cmap_vmin/cmap_vmax).
+    # User-supplied vmin/vmax are data-filter bounds (filter_vmin/filter_vmax).
     _, default_vmin, default_vmax, default_cmap_name = colormap_for_field(product_key)
     effective_cmap = colormap or default_cmap_name
-    effective_vmin = vmin if vmin is not None else default_vmin
-    effective_vmax = vmax if vmax is not None else default_vmax
+    cmap_vmin = default_vmin
+    cmap_vmax = default_vmax
+    filter_vmin = vmin   # None means no filter on this side
+    filter_vmax = vmax   # None means no filter on this side
 
     colormap_dict = tile_service.build_colormap_for_product(product_key, override_cmap=effective_cmap)
     
@@ -317,8 +356,10 @@ async def get_tile_by_params(
         y=y,
         colormap=colormap_dict,
         cmap_name=effective_cmap,
-        vmin=effective_vmin,
-        vmax=effective_vmax,
+        cmap_vmin=cmap_vmin,
+        cmap_vmax=cmap_vmax,
+        filter_vmin=filter_vmin,
+        filter_vmax=filter_vmax,
         cog_data_type=cog_data_type,
     )
     
@@ -327,7 +368,7 @@ async def get_tile_by_params(
 
     headers = _build_tile_headers(
         cog.observation_time, cog.id, z, x, y,
-        effective_cmap, effective_vmin, effective_vmax,
+        effective_cmap, cmap_vmin, cmap_vmax, filter_vmin, filter_vmax,
     )
     return Response(
         content=tile_data,

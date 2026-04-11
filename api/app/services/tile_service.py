@@ -27,7 +27,8 @@ TILE_CACHE_MAX_SIZE: int = 2000
 # distinguishing intentionally different range settings.
 CACHE_KEY_FLOAT_PRECISION: int = 4
 
-# In-process tile cache — keyed by (file_path, z, x, y, cmap_name, vmin, vmax).
+# In-process tile cache — keyed by (file_path, z, x, y, cmap_name, cmap_vmin,
+# cmap_vmax, filter_vmin, filter_vmax).
 # Transparent tiles (out-of-bounds) are also cached since they are valid responses.
 # None values (file not found on disk) are NOT cached to allow re-indexing.
 _tile_cache: LRUCache = LRUCache(maxsize=TILE_CACHE_MAX_SIZE)
@@ -39,18 +40,29 @@ def _tile_cache_key(
     x: int,
     y: int,
     cmap_name: Optional[str],
-    vmin: Optional[float],
-    vmax: Optional[float],
+    cmap_vmin: Optional[float],
+    cmap_vmax: Optional[float],
+    filter_vmin: Optional[float],
+    filter_vmax: Optional[float],
 ) -> tuple:
-    """Build a hashable cache key for a rendered tile."""
+    """Build a hashable cache key for a rendered tile.
+
+    The key encodes both the colormap range (cmap_vmin/cmap_vmax, derived from
+    product defaults) and the optional data-filter range (filter_vmin/filter_vmax,
+    supplied by the client).  Both affect the pixel output and must therefore be
+    part of the cache key.
+    """
+    rnd = CACHE_KEY_FLOAT_PRECISION
     return hashkey(
         file_path,
         z,
         x,
         y,
         cmap_name or "",
-        round(vmin, CACHE_KEY_FLOAT_PRECISION) if vmin is not None else None,
-        round(vmax, CACHE_KEY_FLOAT_PRECISION) if vmax is not None else None,
+        round(cmap_vmin, rnd) if cmap_vmin is not None else None,
+        round(cmap_vmax, rnd) if cmap_vmax is not None else None,
+        round(filter_vmin, rnd) if filter_vmin is not None else None,
+        round(filter_vmax, rnd) if filter_vmax is not None else None,
     )
 
 
@@ -126,13 +138,29 @@ class TileService:
         x: int,
         y: int,
         cmap_name: str,
-        vmin: float,
-        vmax: float,
+        cmap_vmin: float,
+        cmap_vmax: float,
+        filter_vmin: Optional[float] = None,
+        filter_vmax: Optional[float] = None,
         resampling: str = "nearest",
     ) -> bytes:
         """
         Render a tile from a single-band float32 COG by normalising the data
         and applying a matplotlib colormap, returning a PNG.
+
+        Colormap scaling vs. data filtering
+        ------------------------------------
+        ``cmap_vmin`` / ``cmap_vmax``   – The full product value range used to map
+            data values onto the colormap gradient.  These always come from product
+            defaults (or COG metadata) so that the colormap is consistent with the
+            legend displayed in the UI.
+
+        ``filter_vmin`` / ``filter_vmax`` – Optional data-filter bounds supplied by
+            the client.  Pixels whose value is BELOW ``filter_vmin`` or ABOVE
+            ``filter_vmax`` are rendered as fully transparent (alpha=0).  Pixels
+            within the filter range are colored normally using the full colormap
+            range above.  Passing ``None`` for either bound disables that side of
+            the filter.
         """
         with Reader(str(full_path)) as src:
             img = src.tile(x, y, z, resampling_method=resampling, indexes=1)
@@ -143,11 +171,13 @@ class TileService:
         # Treat NaN as nodata
         nan_pixels = np.isnan(data)
 
-        # Normalize to [0, 1]
-        drange = vmax - vmin
+        # Normalize to [0, 1] using the COLORMAP range (product defaults).
+        # This keeps the color scale consistent with the legend regardless of
+        # any client-supplied filter values.
+        drange = cmap_vmax - cmap_vmin
         if drange == 0:
             drange = 1.0
-        normalized = np.clip((data - vmin) / drange, 0.0, 1.0)
+        normalized = np.clip((data - cmap_vmin) / drange, 0.0, 1.0)
 
         # Apply matplotlib colormap → (H, W, 4) float32 in [0, 1]
         cmap = get_colormap(cmap_name)
@@ -159,6 +189,20 @@ class TileService:
         # Apply nodata mask: set alpha to 0 for masked or NaN pixels
         nodata_mask = (mask == 0) | nan_pixels
         rgba_uint8[:, :, 3] = np.where(nodata_mask, 0, rgba_uint8[:, :, 3])
+
+        # Apply data-filter: pixels outside [filter_vmin, filter_vmax] → transparent.
+        # This is intentionally separate from colormap scaling so that the color
+        # legend (which reflects the full cmap range) always matches the tile colors.
+        # Note: NaN pixels are already transparent via nodata_mask above.
+        # NumPy comparisons with NaN always return False, so NaN pixels will NOT be
+        # incorrectly added to out_of_range — they remain transparent via nodata_mask.
+        if filter_vmin is not None or filter_vmax is not None:
+            out_of_range = np.zeros_like(data, dtype=bool)
+            if filter_vmin is not None:
+                out_of_range |= data < filter_vmin
+            if filter_vmax is not None:
+                out_of_range |= data > filter_vmax
+            rgba_uint8[:, :, 3] = np.where(out_of_range, 0, rgba_uint8[:, :, 3])
 
         # Encode as PNG
         pil_img = Image.fromarray(rgba_uint8, mode="RGBA")
@@ -176,18 +220,31 @@ class TileService:
         colormap: Optional[Dict[int, Tuple[int, int, int, int]]] = None,
         resampling: str = "nearest",
         cmap_name: Optional[str] = None,
-        vmin: Optional[float] = None,
-        vmax: Optional[float] = None,
+        cmap_vmin: Optional[float] = None,
+        cmap_vmax: Optional[float] = None,
+        filter_vmin: Optional[float] = None,
+        filter_vmax: Optional[float] = None,
         cog_data_type: Optional[str] = None,
     ) -> Optional[bytes]:
         """
         Generate a PNG tile from a COG file.
 
         For raw_float COGs the colormap is applied via numpy normalisation +
-        matplotlib (honouring ``cmap_name``, ``vmin``, ``vmax``).
+        matplotlib (honouring ``cmap_name``, ``cmap_vmin``, ``cmap_vmax``).
         For RGBA COGs the pre-coloured bands are returned as-is.
         For other / unknown single-band COGs the rio-tiler integer colormap
         dict (``colormap``) is used as before.
+
+        Colormap vs. filter parameters
+        --------------------------------
+        ``cmap_vmin`` / ``cmap_vmax`` control how data values map onto the
+            colormap gradient.  These should always be the product's default
+            range so the rendered colors match the legend.
+
+        ``filter_vmin`` / ``filter_vmax`` are optional data-filter bounds.
+            Pixels whose value falls outside this range are rendered as fully
+            transparent regardless of their colormap color.  Passing ``None``
+            disables that side of the filter (no filtering on that side).
 
         Args:
             file_path:     Relative path to COG file
@@ -195,8 +252,10 @@ class TileService:
             colormap:      Integer-keyed colormap dict for non-raw_float tiles
             resampling:    Resampling method
             cmap_name:     Matplotlib/custom colormap name (raw_float only)
-            vmin:          Minimum value for normalisation (raw_float only)
-            vmax:          Maximum value for normalisation (raw_float only)
+            cmap_vmin:     Colormap range minimum — product default value
+            cmap_vmax:     Colormap range maximum — product default value
+            filter_vmin:   Optional data-filter lower bound (transparent if data < this)
+            filter_vmax:   Optional data-filter upper bound (transparent if data > this)
             cog_data_type: Pre-determined COG type string (skips re-detection
                            when already known from the database record)
         Returns:
@@ -214,11 +273,13 @@ class TileService:
             cog_data_type = detect_cog_type(str(full_path))
 
         effective_cmap = cmap_name or "grc_th"
-        effective_vmin = vmin if vmin is not None else -30.0
-        effective_vmax = vmax if vmax is not None else 70.0
+        effective_cmap_vmin = cmap_vmin if cmap_vmin is not None else -30.0
+        effective_cmap_vmax = cmap_vmax if cmap_vmax is not None else 70.0
 
         cache_key = _tile_cache_key(
-            file_path, z, x, y, effective_cmap, effective_vmin, effective_vmax
+            file_path, z, x, y, effective_cmap,
+            effective_cmap_vmin, effective_cmap_vmax,
+            filter_vmin, filter_vmax,
         )
         cached = _tile_cache.get(cache_key)
         if cached is not None:
@@ -234,8 +295,10 @@ class TileService:
             colormap,
             resampling,
             effective_cmap,
-            effective_vmin,
-            effective_vmax,
+            effective_cmap_vmin,
+            effective_cmap_vmax,
+            filter_vmin,
+            filter_vmax,
             cog_data_type,
         )
 
@@ -256,8 +319,10 @@ class TileService:
         colormap: Optional[Dict[int, Tuple[int, int, int, int]]],
         resampling: str,
         effective_cmap: str,
-        effective_vmin: float,
-        effective_vmax: float,
+        effective_cmap_vmin: float,
+        effective_cmap_vmax: float,
+        filter_vmin: Optional[float],
+        filter_vmax: Optional[float],
         cog_data_type: str,
     ) -> bytes:
         """Render a tile without consulting the cache. Called by ``generate_tile``."""
@@ -266,8 +331,10 @@ class TileService:
                 return self._generate_raw_float_tile(
                     full_path, z, x, y,
                     effective_cmap,
-                    effective_vmin,
-                    effective_vmax,
+                    effective_cmap_vmin,
+                    effective_cmap_vmax,
+                    filter_vmin,
+                    filter_vmax,
                     resampling,
                 )
 
@@ -296,8 +363,10 @@ class TileService:
                     return self._generate_raw_float_tile(
                         full_path, z, x, y,
                         effective_cmap,
-                        effective_vmin,
-                        effective_vmax,
+                        effective_cmap_vmin,
+                        effective_cmap_vmax,
+                        filter_vmin,
+                        filter_vmax,
                         resampling,
                     )
 
