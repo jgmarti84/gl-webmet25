@@ -14,7 +14,18 @@ export class UIControls {
         const status = document.getElementById('status');
         if (status) {
             status.textContent = message;
-            status.className = `status ${type}`;
+            // Clear old type classes and apply the new one
+            status.className = 'status-notification';
+            if (type) status.classList.add(type);
+            // Auto-clear success messages after 4 seconds
+            if (type === 'success') {
+                setTimeout(() => {
+                    if (status.textContent === message) {
+                        status.textContent = '';
+                        status.className = 'status-notification';
+                    }
+                }, 4000);
+            }
         }
     }
     
@@ -69,7 +80,7 @@ export class UIControls {
         // Check for uppercase letter followed by lowercase 'o' at the end (e.g., RHOHVo, COLMAXo)
         const filteredProducts = allProducts.filter(product => {
             const productKey = product.product_key;
-            const isUnfiltered = /[A-Z]o$/.test(productKey); // Uppercase letter + lowercase 'o' at end
+            const isUnfiltered = /o$/.test(productKey); // product_key ends with 'o' = raw/unfiltered data
             return showUnfiltered ? isUnfiltered : !isUnfiltered;
         });
         
@@ -78,23 +89,34 @@ export class UIControls {
     }
     
     /**
-     * Update filter button appearance
+     * Change 2: Sync the "Filtered" toggle checkbox to application state.
+     * Replaces the old button-based updateFilterButton().
+     *
+     * @param {boolean} showFiltered - true = show 'o'-suffix (raw) products
      */
-    updateFilterButton(showUnfiltered) {
-        const btn = document.getElementById('btn-toggle-filter');
-        const statusSpan = document.getElementById('filter-status');
-        
-        if (!btn || !statusSpan) return;
-        
-        if (showUnfiltered) {
-            btn.classList.add('active');
-            statusSpan.textContent = 'Unfiltered';
-            btn.title = 'Showing unfiltered products (ending with "o")';
-        } else {
-            btn.classList.remove('active');
-            statusSpan.textContent = 'Filtered';
-            btn.title = 'Showing filtered products';
-        }
+    updateFilterToggle(showFiltered) {
+        const toggle = document.getElementById('toggle-show-filtered');
+        if (toggle) toggle.checked = showFiltered;
+    }
+
+    /**
+     * @deprecated Use updateFilterToggle() instead.
+     * Kept as a no-op alias to avoid runtime errors from any missed call sites.
+     */
+    updateFilterButton() {}
+
+    /**
+     * Update Module A and Module B icon-bar badges.
+     *
+     * @param {number} selectedRadarCount - How many radars are currently checked
+     * @param {string|null} selectedProduct - Currently selected product_key (or null)
+     */
+    updateModuleBadges(selectedRadarCount, selectedProduct) {
+        const badgeA = document.getElementById('badge-module-a');
+        if (badgeA) badgeA.textContent = String(selectedRadarCount || 0);
+
+        const badgeB = document.getElementById('badge-module-b');
+        if (badgeB) badgeB.textContent = selectedProduct || '—';
     }
     
     /**

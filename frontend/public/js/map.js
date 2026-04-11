@@ -104,6 +104,7 @@ export class MapManager {
             attribution: basemap.attribution,
             maxZoom: basemap.maxZoom,
             zIndex: ZINDEX_BASEMAP,
+            crossOrigin: 'anonymous', // required for canvas snapshot (Change 3)
         }).addTo(this.map);
         
         this.currentBasemap = basemapKey;
@@ -138,6 +139,7 @@ export class MapManager {
             maxZoom: 18,
             tms: false,
             zIndex: ZINDEX_RADAR,
+            crossOrigin: 'anonymous', // required for canvas snapshot (Change 3)
         }).addTo(this.map);
         
         // Fit to bounds if provided (only once for the first radar)
@@ -194,6 +196,7 @@ export class MapManager {
                         tms: false,
                         keepBuffer: 2,
                         zIndex: ZINDEX_RADAR,
+                        crossOrigin: 'anonymous', // required for canvas snapshot (Change 3)
                     });
                     if (onLayerLoaded) {
                         layer.once('load', onLayerLoaded);
@@ -283,6 +286,7 @@ export class MapManager {
                         tms: false,
                         keepBuffer: 2,
                         zIndex: ZINDEX_RADAR,
+                        crossOrigin: 'anonymous', // required for canvas snapshot (Change 3)
                     });
                     layer.once('load', () => {
                         if (cancelled) return;
@@ -405,6 +409,7 @@ export class MapManager {
             tms: false,
             keepBuffer: 2,
             zIndex: ZINDEX_RADAR,
+            crossOrigin: 'anonymous', // required for canvas snapshot (Change 3)
         });
         layer.addTo(this.map);
         return layer;

@@ -14,86 +14,154 @@
 <body>
     <!-- Map Container -->
     <div id="map"></div>
-    
-    <!-- Control Panel (Top Right) -->
-    <div id="control-panel">
-        <div class="nav-header">
-            <h3>🌧️ Radar Viewer</h3>
-            <!-- COG Browser link: hidden by default; reveal with Ctrl+Shift+D -->
-            <a id="cog-browser-link" href="cog-browser.html" class="nav-link" style="display:none;">Go to COG Browser →</a>
+
+    <!-- ===== ICON BAR (top-right) ===== -->
+    <!-- All module + action icons grouped in a vertical bar.
+         Positioned to the right of the map, above Leaflet's attribution. -->
+    <div id="icon-bar">
+        <!-- Module A – Radar Selection -->
+        <button id="btn-module-a" class="icon-btn" title="Radar Selection" aria-label="Radar Selection">
+            <span class="icon-glyph">📡</span>
+            <span class="icon-badge" id="badge-module-a">0</span>
+        </button>
+
+        <!-- Module B – Field/Product Selection -->
+        <button id="btn-module-b" class="icon-btn" title="Field Selection" aria-label="Field Selection">
+            <span class="icon-glyph">⊞</span>
+            <span class="icon-badge" id="badge-module-b">—</span>
+        </button>
+
+        <!-- Module C – Time Window -->
+        <button id="btn-module-c" class="icon-btn" title="Time Window" aria-label="Time Window">
+            <span class="icon-glyph">🕐</span>
+            <span class="icon-badge" id="badge-module-c">3h</span>
+        </button>
+
+        <!-- Camera – Map Snapshot -->
+        <button id="btn-snapshot" class="icon-btn" title="Take map snapshot" aria-label="Take map snapshot">
+            <span class="icon-glyph">📷</span>
+        </button>
+
+        <!-- Gear – Settings -->
+        <button id="btn-settings" class="icon-btn" title="Settings" aria-label="Open settings">
+            <span class="icon-glyph">⚙</span>
+        </button>
+    </div>
+
+    <!-- Snapshot error message (shown near icon bar) -->
+    <div id="snapshot-error" class="snapshot-error" style="display:none;"></div>
+
+    <!-- Status notification (floating, near icon bar) -->
+    <div id="status" class="status-notification"></div>
+
+    <!-- ===== MODULE A – Radar Selection ===== -->
+    <div id="panel-module-a" class="floating-panel" style="display:none;">
+        <div class="panel-header">
+            <span>📡 Radar Selection</span>
+            <button class="panel-close" data-close="panel-module-a" aria-label="Close panel">✕</button>
         </div>
-        
-        <!-- Basemap Selection -->
-        <div class="control-group">
-            <label for="basemap-select">Basemap:</label>
-            <select id="basemap-select">
-                <option value="dark">Dark</option>
-                <option value="light">Light</option>
-                <option value="osm">OpenStreetMap</option>
-                <option value="satellite">Satellite</option>
-                <option value="terrain">Terrain</option>
-            </select>
-        </div>
-        
-        <!-- Radar Selection (Checkboxes) -->
-        <div class="control-group">
-            <label>Radars:</label>
-            <div class="radar-header-row">
-                <button id="btn-toggle-radars" class="toggle-btn">Show Radars ▼</button>
-                <button id="btn-toggle-active-only" class="active-only-btn active" title="Showing active radars only">Active only</button>
+        <div class="panel-body">
+            <!-- Active/Inactive toggle switch (Change 1) -->
+            <div class="control-group toggle-row">
+                <label class="toggle-switch-wrapper" for="toggle-show-inactive">
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="toggle-show-inactive">
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span class="toggle-label">Show inactive</span>
+                </label>
             </div>
-            <div id="radar-checkboxes" class="checkbox-container" style="display: none;">
-                <div class="checkbox-actions">
-                    <button id="btn-select-all-radars" class="small-btn">All</button>
-                    <button id="btn-clear-all-radars" class="small-btn">None</button>
-                </div>
+            <!-- Select / clear actions -->
+            <div class="checkbox-actions">
+                <button id="btn-select-all-radars" class="small-btn">All</button>
+                <button id="btn-clear-all-radars" class="small-btn">None</button>
+            </div>
+            <!-- Radar checkbox list -->
+            <div id="radar-checkboxes" class="checkbox-container">
                 <div id="radar-list">
-                    <!-- Checkboxes will be populated dynamically -->
+                    <!-- Populated dynamically -->
                 </div>
             </div>
+            <!-- Load Latest action -->
+            <div class="action-buttons" style="margin-top: 10px;">
+                <button id="btn-load-latest" class="action-btn" disabled>Load Latest</button>
+            </div>
         </div>
-        
-        <!-- Product Selection -->
-        <div class="control-group">
-            <label for="product-select">Product:</label>
-            <div class="product-controls">
+    </div>
+
+    <!-- ===== MODULE B – Field/Product Selection ===== -->
+    <div id="panel-module-b" class="floating-panel" style="display:none;">
+        <div class="panel-header">
+            <span>⊞ Field Selection</span>
+            <button class="panel-close" data-close="panel-module-b" aria-label="Close panel">✕</button>
+        </div>
+        <div class="panel-body">
+            <!-- Field dropdown -->
+            <div class="control-group">
+                <label for="product-select">Field:</label>
                 <select id="product-select">
-                    <option value="">Select product...</option>
+                    <option value="">Select field...</option>
                 </select>
-                <button id="btn-toggle-filter" class="filter-toggle-btn" title="Toggle filtered/unfiltered products">
-                    <span id="filter-status">Filtered</span>
-                </button>
+            </div>
+            <!-- Filtered/Unfiltered toggle switch (Change 2)
+                 OFF = show unfiltered fields (no 'o' suffix, processed data)
+                 ON  = show filtered fields ('o' suffix, raw data) -->
+            <div class="control-group toggle-row">
+                <label class="toggle-switch-wrapper" for="toggle-show-filtered">
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="toggle-show-filtered">
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span class="toggle-label">Filtered</span>
+                </label>
+            </div>
+            <!-- Colormap Selection (hidden until product selected) -->
+            <div class="control-group" id="colormap-group" style="display:none;">
+                <label for="colormap-select">Colormap:</label>
+                <select id="colormap-select">
+                    <option value="">Default</option>
+                </select>
+            </div>
+            <!-- Value Filter (vmin/vmax) – hidden until product selected.
+                 vmin/vmax now act as DATA FILTERS: pixels outside the range
+                 are rendered transparent.  The colormap gradient always
+                 spans the full product range (see tile_service.py). -->
+            <div class="control-group" id="range-group" style="display:none;">
+                <label>Value Filter:</label>
+                <div class="range-control">
+                    <div class="range-row">
+                        <span class="range-label">Min</span>
+                        <input type="number" id="vmin-input" class="range-input" step="any">
+                    </div>
+                    <div class="range-row">
+                        <span class="range-label">Max</span>
+                        <input type="number" id="vmax-input" class="range-input" step="any">
+                    </div>
+                    <button id="btn-apply-range" class="small-btn apply-btn">Apply</button>
+                </div>
             </div>
         </div>
-        
-        <!-- Colormap Selection -->
-        <div class="control-group" id="colormap-group" style="display:none;">
-            <label for="colormap-select">Colormap:</label>
-            <select id="colormap-select">
-                <option value="">Default</option>
-            </select>
+    </div>
+
+    <!-- ===== MODULE C – Time Selection ===== -->
+    <div id="panel-module-c" class="floating-panel" style="display:none;">
+        <div class="panel-header">
+            <span>🕐 Time Window</span>
+            <button class="panel-close" data-close="panel-module-c" aria-label="Close panel">✕</button>
         </div>
-        
-        <!-- Value Range (vmin/vmax) -->
-        <div class="control-group" id="range-group" style="display:none;">
-            <label>Value Range:</label>
-            <div class="range-control">
-                <div class="range-row">
-                    <span class="range-label">Min</span>
-                    <input type="number" id="vmin-input" class="range-input" step="any">
-                </div>
-                <div class="range-row">
-                    <span class="range-label">Max</span>
-                    <input type="number" id="vmax-input" class="range-input" step="any">
-                </div>
-                <button id="btn-apply-range" class="small-btn apply-btn">Apply</button>
+        <div class="panel-body">
+            <!-- Predefined time window buttons (always one active) -->
+            <div class="time-window-buttons">
+                <button class="time-window-btn" data-hours="1.5">Last 1.5 hrs</button>
+                <button class="time-window-btn active" data-hours="3">Last 3 hrs</button>
+                <button class="time-window-btn" data-hours="4.5">Last 4.5 hrs</button>
+                <button class="time-window-btn" data-hours="6">Last 6 hrs</button>
             </div>
-        </div>
-        
-        <!-- Time Range Selection -->
-        <div class="control-group">
-            <label>Time Range:</label>
-            <button id="btn-toggle-timerange" class="toggle-btn">Select Time Range ▼</button>
+            <!-- Custom range reveal link -->
+            <div class="custom-range-toggle">
+                <button id="btn-custom-range" class="link-btn">Custom range…</button>
+            </div>
+            <!-- Custom datetime range (hidden by default, slides in) -->
             <div id="timerange-container" class="timerange-container" style="display: none;">
                 <div class="timerange-inputs">
                     <div class="input-group">
@@ -104,101 +172,94 @@
                         <label for="end-date" class="input-label">To:</label>
                         <input type="datetime-local" id="end-date" class="datetime-input">
                     </div>
-                    <div class="timerange-presets">
-                        <button class="preset-btn" data-hours="3">Last 3h</button>
-                        <button class="preset-btn" data-hours="6">Last 6h</button>
-                        <button class="preset-btn" data-hours="12">Last 12h</button>
-                        <button class="preset-btn" data-hours="24">Last 24h</button>
-                    </div>
+                    <button id="btn-load-timerange" class="action-btn secondary" disabled>Load Range</button>
                 </div>
             </div>
         </div>
-        
-        <!-- Action Buttons -->
-        <div class="control-group action-buttons">
-            <button id="btn-load-latest" class="action-btn" disabled>Load Latest</button>
-            <button id="btn-load-timerange" class="action-btn secondary" disabled>Load Time Range</button>
-        </div>
-        
-        <!-- Time Display -->
-        <div class="control-group">
-            <label>Time:</label>
-            <div id="time-display">--:--</div>
-        </div>
-        
-        <!-- Navigation Buttons -->
-        <div class="control-group nav-buttons">
-            <button id="btn-prev" title="Previous">◀</button>
-            <button id="btn-latest" title="Latest">⟲</button>
-            <button id="btn-next" title="Next">▶</button>
-        </div>
-        
-        <!-- Opacity Control -->
-        <div class="control-group">
-            <label for="opacity-slider">Opacity:</label>
-            <div class="opacity-control">
-                <input type="range" id="opacity-slider" min="0" max="1" step="0.1" value="0.7">
-                <span id="opacity-value">70%</span>
-            </div>
-        </div>
-        
-        <!-- Keyboard Shortcuts Info -->
-        <div class="control-group shortcuts-info">
-            <details>
-                <summary>⌨️ Shortcuts</summary>
-                <div class="shortcuts-list">
-                    <div><kbd>Space</kbd> Play/Pause</div>
-                    <div><kbd>←</kbd> <kbd>→</kbd> Navigate</div>
-                    <div><kbd>Home</kbd> Latest</div>
-                    <div><kbd>L</kbd> Load Latest</div>
-                    <div><kbd>S</kbd> Speed</div>
-                </div>
-            </details>
-        </div>
-        
-        <!-- Status -->
-        <div id="status" class="status">Ready</div>
     </div>
-    
-    <!-- Legend Container (Bottom Left) -->
+
+    <!-- ===== SETTINGS PANEL ===== -->
+    <div id="settings-panel" class="floating-panel" style="display:none;">
+        <div class="panel-header">
+            <span>⚙ Settings</span>
+            <button class="panel-close" data-close="settings-panel" aria-label="Close settings">✕</button>
+        </div>
+        <div class="panel-body">
+            <!-- Basemap -->
+            <div class="control-group">
+                <label for="basemap-select">Basemap:</label>
+                <select id="basemap-select">
+                    <option value="dark">Dark</option>
+                    <option value="light">Light</option>
+                    <option value="osm">OpenStreetMap</option>
+                    <option value="satellite">Satellite</option>
+                    <option value="terrain">Terrain</option>
+                </select>
+            </div>
+            <!-- Opacity -->
+            <div class="control-group">
+                <label for="opacity-slider">Radar opacity:</label>
+                <div class="opacity-control">
+                    <input type="range" id="opacity-slider" min="0" max="1" step="0.1" value="0.7">
+                    <span id="opacity-value">70%</span>
+                </div>
+            </div>
+            <!-- Radar status refresh -->
+            <div class="settings-row">
+                <label for="settings-refresh-interval">Radar refresh (min):</label>
+                <input type="number" id="settings-refresh-interval" min="1" max="60" step="1" value="10">
+                <button id="settings-refresh-save" class="small-btn">Save</button>
+            </div>
+            <div class="settings-row settings-info">
+                <span>Radar activity threshold is set on the indexer via <code>RADAR_ACTIVE_THRESHOLD_HOURS</code>.</span>
+            </div>
+            <!-- Keyboard shortcuts -->
+            <div class="shortcuts-info">
+                <details>
+                    <summary>⌨️ Shortcuts</summary>
+                    <div class="shortcuts-list">
+                        <div><kbd>Space</kbd> Play/Pause</div>
+                        <div><kbd>←</kbd> <kbd>→</kbd> Navigate</div>
+                        <div><kbd>Home</kbd> Latest</div>
+                        <div><kbd>L</kbd> Load Latest</div>
+                        <div><kbd>S</kbd> Speed</div>
+                    </div>
+                </details>
+            </div>
+            <!-- COG Browser link: hidden by default; reveal with Ctrl+Shift+D -->
+            <a id="cog-browser-link" href="cog-browser.html" class="nav-link" style="display:none; margin-top:10px;">Go to COG Browser →</a>
+        </div>
+    </div>
+
+    <!-- ===== LEGEND (Bottom Left) ===== -->
     <div id="legend-container"></div>
     
-    <!-- Settings Panel (Bottom Left, above legend) -->
-    <button id="btn-settings" title="Settings" aria-label="Open settings">⚙</button>
-    <div id="settings-panel" style="display: none;">
-        <div class="settings-header">
-            <span>⚙ Settings</span>
-            <button id="settings-close" title="Close" aria-label="Close settings">✕</button>
-        </div>
-        <div class="settings-row">
-            <label for="settings-refresh-interval">Radar status refresh (min):</label>
-            <input type="number" id="settings-refresh-interval" min="1" max="60" step="1" value="10">
-            <button id="settings-refresh-save" class="small-btn">Save</button>
-        </div>
-        <div class="settings-row settings-info">
-            <span>Radar activity threshold (h) is set on the indexer via <code>RADAR_ACTIVE_THRESHOLD_HOURS</code> env var.</span>
-        </div>
-    </div>
-    
-    <!-- Animation Controls (Bottom Center) -->
+    <!-- ===== ANIMATION CONTROLS (Bottom Center) ===== -->
     <div id="animation-controls">
-        <!-- Animation Slider -->
+        <!-- Top row: time window label + current frame time -->
+        <div class="animation-info-row">
+            <span id="time-window-label" class="time-window-label">—</span>
+            <span id="time-display" class="frame-time-display">—</span>
+        </div>
+        <!-- Slider -->
         <div class="animation-slider-container">
             <input type="range" id="animation-slider" min="0" max="0" value="0" step="1">
         </div>
-        
-        <!-- Control Buttons -->
+        <!-- Control buttons + nav + frame counter -->
         <div class="animation-buttons">
-            <button id="btn-play-pause" title="Play">▶</button>
-            <button id="btn-speed" title="Speed: 1x">1x</button>
-            <span id="frame-counter">-- / --</span>
+            <button id="btn-prev" title="Previous frame" aria-label="Previous frame">◀</button>
+            <button id="btn-play-pause" title="Play" aria-label="Play/Pause">▶</button>
+            <button id="btn-next" title="Next frame" aria-label="Next frame">▶▶</button>
+            <button id="btn-latest" title="Go to latest frame" aria-label="Go to latest frame">⟲</button>
+            <button id="btn-speed" title="Speed: 1x" aria-label="Cycle speed">1x</button>
+            <span id="frame-counter">— / —</span>
         </div>
     </div>
     
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
-    <!-- Our JS Modules (with built-in Leaflet loading check) -->
+    <!-- Our JS Modules -->
     <script type="module" src="js/app.js"></script>
 </body>
 </html>
