@@ -224,9 +224,20 @@ body {
 .toggle-switch-wrapper {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     cursor: pointer;
     user-select: none;
+}
+
+/* .control-group label sets display:block which would break the flex layout;
+   this rule restores flex for any toggle wrapper that lives inside a control-group. */
+.control-group .toggle-switch-wrapper {
+    display: flex;
+    margin-bottom: 0;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: inherit;
+    color: inherit;
 }
 
 /* The visible switch track */
@@ -247,7 +258,7 @@ body {
 .toggle-slider {
     position: absolute;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(255,255,255,0.2);
+    background: #4a4a5e;   /* clearly-visible dark-indigo track; contrast with thumb */
     border-radius: 20px;
     transition: background 0.25s ease;
 }
