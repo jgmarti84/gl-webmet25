@@ -5,7 +5,7 @@
  * - Modular architecture with separate concerns
  * - Animation controls with play/pause/speed
  * - Color legend with API integration
- * - Opacity slider
+ * - Opacity slider (Fix 2: per-field, in Module B)
  * - Improved UI/UX matching webmet.ohmc.ar
  */
 
@@ -20,8 +20,12 @@ import { LegendRenderer } from './legend.js';
 // =============================================================================
 
 const MS_PER_HOUR = 3600 * 1000;
-const LIVE_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const BUCKET_TOLERANCE_MINUTES = 5; // COG grouping bucket size – must match groupCogsByTimestamp default
+
+// Fix 1: Live COG refresh interval — authoritative default (5 min).
+// The actual setInterval() call in startLiveRefresh() always uses getLiveRefreshIntervalMs(),
+// which reads from localStorage (webmet25_live_refresh_interval_ms) and falls back to this.
+const DEFAULT_LIVE_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 // Radar status refresh: how often to re-fetch the radar list to update is_active dots.
 // Can be overridden by the settings panel (stored in localStorage).
@@ -36,6 +40,12 @@ const GEOLOCATION_AUTO_PRODUCT = 'DBZHo';
 
 // Default time window for the preset buttons (in hours)
 const DEFAULT_TIME_WINDOW_HOURS = 3;
+
+// Fix 2: default per-field opacity
+const DEFAULT_FIELD_OPACITY = 0.7;
+
+// Fix 6: coverage circle defaults
+const DEFAULT_COVERAGE_OPACITY = 0.4;
 
 // =============================================================================
 // APPLICATION STATE
@@ -60,6 +70,15 @@ const state = {
     selectedColormap: null,
     currentVmin: null,
     currentVmax: null,
+
+    // Fix 2: Per-field opacity map (keyed by product_key).
+    // Each entry holds the opacity for that field's tile layers (0–1).
+    // Design: per-field so future multi-field support can bind each field
+    // panel's slider to its own entry independently.
+    // TODO: Multi-field – each active field will have its own entry updated
+    // by its own opacity slider; applyFieldOpacity() will need to filter
+    // cachedFrameLayers by field identity.
+    fieldOpacity: {},
     
     // Module instances
     mapManager: null,
@@ -73,10 +92,14 @@ const state = {
 
     // Live N-hours mode
     liveHours: null,             // N when a preset button was last used; null = not in live mode
-    liveRefreshInterval: null,   // setInterval handle for 5-minute polling
+    liveRefreshInterval: null,   // setInterval handle for live COG polling
 
     // Radar status refresh
     radarStatusRefreshInterval: null, // setInterval handle for periodic radar-list refresh
+
+    // Fix 6: coverage circles
+    coverageVisible: false,
+    coverageOpacity: DEFAULT_COVERAGE_OPACITY,
 };
 
 // =============================================================================
@@ -146,6 +169,12 @@ const SETTINGS_KEY_SHOW_INACTIVE = 'webmet25_show_inactive_radars';
 // (raw) radar measurements — the naming follows the radarlib convention, not the UI label.
 const SETTINGS_KEY_SHOW_FILTERED = 'webmet25_show_filtered_fields';
 const SETTINGS_KEY_REFRESH_INTERVAL = 'webmet25_radar_refresh_interval_min';
+// Fix 1: Separate key for live COG refresh interval (in ms) to avoid confusion with
+// the radar STATUS refresh interval above.  Default is DEFAULT_LIVE_REFRESH_INTERVAL_MS.
+const SETTINGS_KEY_LIVE_REFRESH_INTERVAL = 'webmet25_live_refresh_interval_ms';
+// Fix 6: Coverage circle localStorage keys
+const SETTINGS_KEY_COVERAGE_VISIBLE = 'webmet25_coverage_visible';
+const SETTINGS_KEY_COVERAGE_OPACITY = 'webmet25_coverage_opacity';
 
 // Legacy key – kept for one-time migration only
 const SETTINGS_KEY_ACTIVE_ONLY_LEGACY = 'webmet25_active_only';
@@ -189,6 +218,23 @@ function getSettingRefreshIntervalMs() {
 
 function setSettingRefreshIntervalMin(minutes) {
     localStorage.setItem(SETTINGS_KEY_REFRESH_INTERVAL, String(minutes));
+}
+
+// Fix 1: Live COG refresh interval helpers.
+// Uses webmet25_live_refresh_interval_ms (stored in ms) for precision.
+// Allowed range: 1–30 minutes.
+function getLiveRefreshIntervalMs() {
+    const stored = localStorage.getItem(SETTINGS_KEY_LIVE_REFRESH_INTERVAL);
+    if (stored === null) return DEFAULT_LIVE_REFRESH_INTERVAL_MS;
+    const ms = parseInt(stored, 10);
+    if (isNaN(ms) || ms <= 0) return DEFAULT_LIVE_REFRESH_INTERVAL_MS;
+    const minMs = 1 * 60 * 1000;   // 1 minute minimum
+    const maxMs = 30 * 60 * 1000;  // 30 minutes maximum
+    return Math.min(Math.max(ms, minMs), maxMs);
+}
+
+function setLiveRefreshIntervalMs(ms) {
+    localStorage.setItem(SETTINGS_KEY_LIVE_REFRESH_INTERVAL, String(ms));
 }
 
 // =============================================================================
@@ -257,6 +303,13 @@ const app = {
         // Restore persisted settings
         state.showInactiveRadars = getSettingShowInactive();
         state.showUnfilteredProducts = getSettingShowFiltered();
+        // Fix 6: restore coverage settings before map init so circles can be drawn
+        const storedCoverageVisible = localStorage.getItem(SETTINGS_KEY_COVERAGE_VISIBLE);
+        state.coverageVisible = storedCoverageVisible === 'true';
+        const storedCoverageOpacity = localStorage.getItem(SETTINGS_KEY_COVERAGE_OPACITY);
+        state.coverageOpacity = storedCoverageOpacity !== null
+            ? parseFloat(storedCoverageOpacity)
+            : DEFAULT_COVERAGE_OPACITY;
         
         try {
             // Wait for Leaflet to be loaded
@@ -382,6 +435,7 @@ const app = {
      * Feature 1b: Initialise the settings panel with values from localStorage.
      */
     initSettingsPanel() {
+        // Radar status refresh interval
         const intervalInput = document.getElementById('settings-refresh-interval');
         if (intervalInput) {
             const stored = localStorage.getItem(SETTINGS_KEY_REFRESH_INTERVAL);
@@ -389,6 +443,34 @@ const app = {
                 ? stored
                 : String(DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS / 60000);
         }
+        // Fix 1: Live refresh interval (default 5 min)
+        const liveIntervalInput = document.getElementById('settings-live-refresh-interval');
+        if (liveIntervalInput) {
+            const stored = localStorage.getItem(SETTINGS_KEY_LIVE_REFRESH_INTERVAL);
+            liveIntervalInput.value = stored !== null
+                ? String(parseInt(stored, 10) / 60000)
+                : String(DEFAULT_LIVE_REFRESH_INTERVAL_MS / 60000);
+        }
+        // Fix 6: Coverage toggle and opacity
+        const coverageToggle = document.getElementById('toggle-coverage');
+        if (coverageToggle) {
+            const visible = localStorage.getItem(SETTINGS_KEY_COVERAGE_VISIBLE) === 'true';
+            coverageToggle.checked = visible;
+            state.coverageVisible = visible;
+            const opacityGroup = document.getElementById('coverage-opacity-group');
+            if (opacityGroup) opacityGroup.style.display = visible ? 'block' : 'none';
+        }
+        const coverageOpacitySlider = document.getElementById('coverage-opacity-slider');
+        if (coverageOpacitySlider) {
+            const stored = localStorage.getItem(SETTINGS_KEY_COVERAGE_OPACITY);
+            const opacity = stored !== null ? parseFloat(stored) : DEFAULT_COVERAGE_OPACITY;
+            coverageOpacitySlider.value = opacity;
+            state.coverageOpacity = opacity;
+            const display = document.getElementById('coverage-opacity-value');
+            if (display) display.textContent = `${Math.round(opacity * 100)}%`;
+        }
+        // Fix 2: Field opacity slider — initialise to default (product not selected yet)
+        this._syncFieldOpacitySlider();
     },
 
     /**
@@ -556,13 +638,71 @@ const app = {
             });
         }
 
-        // Opacity slider (now in settings panel)
-        const opacitySlider = document.getElementById('opacity-slider');
-        if (opacitySlider) {
-            opacitySlider.addEventListener('input', (e) => {
+        // Fix 1: Live refresh interval — read/write webmet25_live_refresh_interval_ms.
+        // Restart the live refresh immediately with the new value if currently active.
+        const liveRefreshInput = document.getElementById('settings-live-refresh-interval');
+        const liveRefreshSave = document.getElementById('settings-live-refresh-save');
+        if (liveRefreshInput && liveRefreshSave) {
+            liveRefreshSave.addEventListener('click', () => {
+                const minutes = parseFloat(liveRefreshInput.value);
+                if (!isNaN(minutes) && minutes >= 1 && minutes <= 30) {
+                    const ms = Math.round(minutes * 60 * 1000);
+                    setLiveRefreshIntervalMs(ms);
+                    // Restart immediately if live mode is active
+                    if (state.liveHours !== null) {
+                        this.startLiveRefresh(state.liveHours);
+                    }
+                    state.ui.setStatus(`Live refresh interval set to ${minutes} min`, 'success');
+                } else {
+                    state.ui.setStatus('Live refresh: enter a value between 1 and 30 min', 'error');
+                }
+            });
+        }
+
+        // Fix 6: Coverage circles toggle
+        const coverageToggle = document.getElementById('toggle-coverage');
+        if (coverageToggle) {
+            coverageToggle.addEventListener('change', (e) => {
+                state.coverageVisible = e.target.checked;
+                localStorage.setItem(SETTINGS_KEY_COVERAGE_VISIBLE, String(state.coverageVisible));
+                const opacityGroup = document.getElementById('coverage-opacity-group');
+                if (opacityGroup) opacityGroup.style.display = state.coverageVisible ? 'block' : 'none';
+                if (state.coverageVisible) {
+                    // Draw circles for all currently selected radars
+                    state.selectedRadars.forEach(code => {
+                        const radar = state.radars.find(r => r.code === code);
+                        if (radar) state.mapManager.addCoverageCircle(radar, state.coverageOpacity);
+                    });
+                } else {
+                    state.mapManager.clearCoverageCircles();
+                }
+            });
+        }
+
+        // Fix 6: Coverage opacity slider
+        const coverageOpacitySlider = document.getElementById('coverage-opacity-slider');
+        if (coverageOpacitySlider) {
+            coverageOpacitySlider.addEventListener('input', (e) => {
                 const opacity = parseFloat(e.target.value);
+                state.coverageOpacity = opacity;
+                localStorage.setItem(SETTINGS_KEY_COVERAGE_OPACITY, String(opacity));
+                const display = document.getElementById('coverage-opacity-value');
+                if (display) display.textContent = `${Math.round(opacity * 100)}%`;
+                state.mapManager.updateCoverageOpacity(opacity);
+            });
+        }
+
+        // Fix 2: Field opacity slider (in Module B)
+        const fieldOpacitySlider = document.getElementById('field-opacity-slider');
+        if (fieldOpacitySlider) {
+            fieldOpacitySlider.addEventListener('input', (e) => {
+                const opacity = parseFloat(e.target.value);
+                if (state.selectedProduct) {
+                    state.fieldOpacity[state.selectedProduct] = opacity;
+                }
                 state.mapManager.setOpacity(opacity);
-                state.ui.updateOpacityDisplay(opacity);
+                const display = document.getElementById('field-opacity-value');
+                if (display) display.textContent = `${Math.round(opacity * 100)}%`;
             });
         }
 
@@ -677,11 +817,12 @@ const app = {
             });
         }
 
-        // Colormap selection
+        // Colormap selection — Fix 5: value is always a real colormap name, never ''
         const colormapSelect = document.getElementById('colormap-select');
         if (colormapSelect) {
             colormapSelect.addEventListener('change', (e) => {
-                state.selectedColormap = e.target.value || null;
+                // Only assign if the selected value is a non-empty string
+                state.selectedColormap = e.target.value || state.selectedColormap;
                 this.applyColormapChange();
             });
         }
@@ -1040,6 +1181,17 @@ const app = {
         // Also update time range button state
         this.onTimeRangeChange();
 
+        // Fix 6: update coverage circles incrementally
+        if (state.coverageVisible) {
+            const added   = state.selectedRadars.filter(r => !prevRadars.includes(r));
+            const removed = prevRadars.filter(r => !state.selectedRadars.includes(r));
+            removed.forEach(code => state.mapManager.removeCoverageCircle(code));
+            added.forEach(code => {
+                const radar = state.radars.find(r => r.code === code);
+                if (radar) state.mapManager.addCoverageCircle(radar, state.coverageOpacity);
+            });
+        }
+
         // When a time-range animation is already running, apply changes incrementally
         // so existing tile cache is preserved and playback is not interrupted.
         // Skip if the initial batch preload is still in flight to avoid index mismatches.
@@ -1084,6 +1236,9 @@ const app = {
     async onSelectionChange() {
         // Stop any live refresh whenever the user changes their selection
         this.stopLiveRefresh();
+
+        // Fix 2: sync opacity slider whenever product changes
+        this._syncFieldOpacitySlider();
 
         // If in time-range mode and product is valid, reload seamlessly
         if (state.animationMode === 'timerange' && state.selectedProduct) {
@@ -1670,18 +1825,20 @@ const app = {
     },
 
     /**
-     * Start a 5-minute polling interval that refreshes the live N-hours window
-     * whenever newer COGs appear in the database.
+     * Fix 1: Start the live COG polling interval using the user-configured interval
+     * (from localStorage) instead of a hardcoded constant.  Restart immediately
+     * if a previous interval is still active.
      *
      * @param {number} hours - N hours to maintain.
      */
     startLiveRefresh(hours) {
         this.stopLiveRefresh();
         state.liveHours = hours;
+        const intervalMs = getLiveRefreshIntervalMs();
         state.liveRefreshInterval = setInterval(() => {
             this.refreshLiveWindow();
-        }, LIVE_REFRESH_INTERVAL_MS);
-        console.log(`Live refresh started: checking every 5 min for new COGs (${hours}h window)`);
+        }, intervalMs);
+        console.log(`Live refresh started: checking every ${intervalMs / 60000} min for new COGs (${hours}h window)`);
     },
 
     /**
@@ -1696,21 +1853,30 @@ const app = {
     },
 
     /**
-     * Called every 5 minutes while live mode is active.
+     * Fix 1: Full-window diff live refresh.
      *
-     * Checks whether new COGs have been published beyond the current window
-     * end.  If so:
-     *   – Fetches only the new COGs (current end → new end), not the full window
-     *   – Appends new frames to the end of the animation
-     *   – Expires frames that have fallen before the new start time
-     *   – Adjusts the current frame index to account for removed frames
-     *   – Does NOT stop or reset the animation
+     * Called at every live refresh cycle.  Queries ALL selected radars for ALL
+     * COGs in the current time window (not just the newest or the new portion).
+     * This guarantees that COGs missing from the MIDDLE of the window due to a
+     * previous failed cycle are recovered on the next successful one.
+     *
+     * Algorithm:
+     *  1. Compute new window bounds (anchor end to the latest available COG).
+     *  2. Fetch ALL COGs for ALL selected radars in [newStart, newEnd].
+     *  3. Build a Set of COG IDs from cachedFrameLayers (source of truth).
+     *  4. Diff:
+     *     a. COG IDs in API response but NOT in cache → add.
+     *     b. Frames with observation_time BEFORE newStart → expire and remove.
+     *  5. Apply diff incrementally — no full reload, no animation stop.
      */
     async refreshLiveWindow() {
         if (!state.liveHours || !state.selectedRadars.length || !state.selectedProduct) return;
         if (state.animationMode !== 'timerange' || !state.cogs || state.cogs.length === 0) return;
 
         try {
+            const hours = state.liveHours;
+
+            // Step 1: anchor end to the most recently available COG across all radars
             const latestItems = await api.getLatestCogsForRadars(
                 state.selectedRadars, state.selectedProduct
             );
@@ -1720,82 +1886,137 @@ const app = {
                 const t = new Date(cog.observation_time);
                 return t > max ? t : max;
             }, new Date(0));
-
-            // Only shift the window when genuinely new data has arrived
-            const currentRange = state.ui.getTimeRangeValues();
-            if (currentRange.end && newEndTime <= currentRange.end) {
-                console.log('Live refresh: no new COGs yet, window unchanged');
-                return;
-            }
-
-            console.log('New COGs detected, incrementally refreshing live window…');
-            const hours        = state.liveHours;
             const newStartTime = new Date(newEndTime.getTime() - hours * MS_PER_HOUR);
-            const currentEndTime = currentRange.end;
 
-            // Fetch only the new portion of the time window
-            const newCogs = await api.getCogsForTimeRange(
+            // Step 2: Query the FULL window for ALL selected radars.
+            // Using 200 as a generous limit; the API is paginated but live windows
+            // are bounded so this should always be sufficient.
+            const allCogs = await api.getCogsForTimeRange(
                 state.selectedRadars, state.selectedProduct,
-                currentEndTime, newEndTime, 100
+                newStartTime, newEndTime, 200
             );
 
-            // Group new COGs into frames and remove duplicates already in the animation
-            const rawNewFrames = groupCogsByTimestamp(newCogs);
-            const existingBucketKeys = new Set(state.cogs.map(f => getCogBucketKey(f.timestamp)));
-            const newGroupedFrames   = rawNewFrames.filter(
-                f => !existingBucketKeys.has(getCogBucketKey(f.timestamp))
-            );
+            // Step 3: Build Set of COG IDs currently in the cache
+            const cachedCogIds = new Set();
+            state.cogs.forEach(frame => {
+                Object.values(frame.cogsByRadar).forEach(cog => cachedCogIds.add(cog.id));
+            });
 
-            // Determine how many existing frames have expired (before newStartTime).
-            // Use a pre-computed numeric timestamp to avoid one Date object per frame.
-            const newStartMs   = newStartTime.getTime();
-            const expiredCount = state.cogs.filter(
-                f => new Date(f.timestamp).getTime() < newStartMs
-            ).length;
+            // Step 4a: COGs from API NOT in cache → new or previously missing
+            const cogsToAdd = allCogs.filter(c => !cachedCogIds.has(c.id));
 
+            // Step 4b: Expire frames whose observation_time is before newStart
+            const newStartMs  = newStartTime.getTime();
             const currentIndex = state.animator.getCurrentIndex();
             const tileParams   = this.getTileParams();
 
-            // Build tile layers for new frames before modifying shared state
-            const newLayerFrames = newGroupedFrames.map(frame => {
-                const layerMap = {};
-                Object.entries(frame.cogsByRadar).forEach(([radarCode, cog]) => {
-                    layerMap[radarCode] = state.mapManager.createHiddenTileLayer(cog.id, tileParams);
-                });
-                return layerMap;
+            let removedBeforeCurrent = 0;
+            const expiredIndices = [];
+            state.cogs.forEach((frame, i) => {
+                if (new Date(frame.timestamp).getTime() < newStartMs) {
+                    expiredIndices.push(i);
+                    if (i < currentIndex) removedBeforeCurrent++;
+                }
             });
 
-            // Remove expired frames from the beginning
-            let indexAfterExpiry = currentIndex;
-            if (expiredCount > 0) {
-                // Clean up tile layers for expired frames
-                for (let i = 0; i < expiredCount; i++) {
-                    const layerMap = state.mapManager.cachedFrameLayers[i];
-                    if (layerMap) {
-                        Object.values(layerMap).forEach(layer => {
-                            if (state.mapManager.map.hasLayer(layer)) {
-                                state.mapManager.map.removeLayer(layer);
-                            }
-                        });
-                    }
+            // Remove expired frames in reverse order so splices don't shift indices
+            for (let i = expiredIndices.length - 1; i >= 0; i--) {
+                const idx = expiredIndices[i];
+                const layerMap = state.mapManager.cachedFrameLayers[idx];
+                if (layerMap) {
+                    Object.values(layerMap).forEach(layer => {
+                        if (state.mapManager.map.hasLayer(layer)) state.mapManager.map.removeLayer(layer);
+                    });
                 }
-                state.cogs.splice(0, expiredCount);
-                state.mapManager.cachedFrameLayers.splice(0, expiredCount);
-
-                // Shift the map manager's internal visible-frame pointer
-                const prevCachedIdx = state.mapManager.currentCachedFrameIndex;
-                if (prevCachedIdx >= 0) {
-                    state.mapManager.currentCachedFrameIndex =
-                        prevCachedIdx >= expiredCount ? prevCachedIdx - expiredCount : -1;
-                }
-
-                indexAfterExpiry = Math.max(0, currentIndex - expiredCount);
+                state.cogs.splice(idx, 1);
+                state.mapManager.cachedFrameLayers.splice(idx, 1);
             }
 
-            // Append new frames to the end
-            if (newGroupedFrames.length > 0) {
-                state.cogs.push(...newGroupedFrames);
-                state.mapManager.cachedFrameLayers.push(...newLayerFrames);
+            // Adjust the map manager's internal visible-frame pointer
+            const prevCachedIdx = state.mapManager.currentCachedFrameIndex;
+            if (prevCachedIdx >= 0 && expiredIndices.length > 0) {
+                const removedBeforeCached = expiredIndices.filter(i => i < prevCachedIdx).length;
+                state.mapManager.currentCachedFrameIndex =
+                    prevCachedIdx - removedBeforeCached >= 0
+                        ? prevCachedIdx - removedBeforeCached
+                        : -1;
+            }
+
+            let indexAfterExpiry = Math.max(0, currentIndex - removedBeforeCurrent);
+
+            // Step 5: Add new / recovered COGs incrementally
+            let insertionAdjustment = 0;
+            if (cogsToAdd.length > 0) {
+                // Build bucket→frameIndex map for current (post-expiry) frames
+                const existingBucketToIdx = new Map();
+                state.cogs.forEach((frame, idx) => {
+                    existingBucketToIdx.set(getCogBucketKey(frame.timestamp), idx);
+                });
+
+                // Group new COGs by bucket, keeping the first (newest) per radar per bucket
+                const newBucketMap = new Map(); // bucketKey → { radarCode: cog }
+                cogsToAdd.forEach(cog => {
+                    const key = getCogBucketKey(cog.observation_time);
+                    if (!newBucketMap.has(key)) newBucketMap.set(key, {});
+                    const byRadar = newBucketMap.get(key);
+                    if (!byRadar[cog.radar_code]) byRadar[cog.radar_code] = cog;
+                });
+
+                // Process buckets in oldest-first order
+                const sortedBuckets = Array.from(newBucketMap.entries()).sort((a, b) => a[0] - b[0]);
+
+                for (const [key, cogsByRadar] of sortedBuckets) {
+                    if (existingBucketToIdx.has(key)) {
+                        // Merge into existing frame
+                        const frameIdx = existingBucketToIdx.get(key);
+                        Object.entries(cogsByRadar).forEach(([radarCode, cog]) => {
+                            state.cogs[frameIdx].cogsByRadar[radarCode] = cog;
+                            if (!state.mapManager.cachedFrameLayers[frameIdx]) {
+                                state.mapManager.cachedFrameLayers[frameIdx] = {};
+                            }
+                            state.mapManager.cachedFrameLayers[frameIdx][radarCode] =
+                                state.mapManager.createHiddenTileLayer(cog.id, tileParams);
+                        });
+                    } else {
+                        // Binary-search for sorted insertion position
+                        let lo = 0, hi = state.cogs.length;
+                        while (lo < hi) {
+                            const mid = (lo + hi) >>> 1;
+                            if (getCogBucketKey(state.cogs[mid].timestamp) < key) lo = mid + 1;
+                            else hi = mid;
+                        }
+                        const insertIdx = lo;
+
+                        // Use observation_time from the first COG in this bucket
+                        const representativeCog = Object.values(cogsByRadar)[0];
+                        const newFrame    = { timestamp: representativeCog.observation_time, cogsByRadar };
+                        const newLayerMap = {};
+                        Object.entries(cogsByRadar).forEach(([radarCode, cog]) => {
+                            newLayerMap[radarCode] = state.mapManager.createHiddenTileLayer(cog.id, tileParams);
+                        });
+
+                        state.cogs.splice(insertIdx, 0, newFrame);
+                        state.mapManager.cachedFrameLayers.splice(insertIdx, 0, newLayerMap);
+
+                        // Adjust map-manager visible-frame pointer
+                        if (
+                            state.mapManager.currentCachedFrameIndex >= 0 &&
+                            insertIdx <= state.mapManager.currentCachedFrameIndex
+                        ) {
+                            state.mapManager.currentCachedFrameIndex++;
+                        }
+
+                        if (insertIdx <= indexAfterExpiry + insertionAdjustment) {
+                            insertionAdjustment++;
+                        }
+
+                        // Shift existing bucket index so later insertions stay correct
+                        existingBucketToIdx.forEach((idx, k) => {
+                            if (idx >= insertIdx) existingBucketToIdx.set(k, idx + 1);
+                        });
+                        existingBucketToIdx.set(key, insertIdx);
+                    }
+                }
             }
 
             // Update time-range UI to reflect the new window
@@ -1803,26 +2024,34 @@ const app = {
             this.onTimeRangeChange();
             state.liveHours = hours;
 
-            const newLength       = state.cogs.length;
-            const newCurrentIndex = Math.min(indexAfterExpiry, newLength - 1);
+            const newLength = state.cogs.length;
+            if (newLength === 0) return;
 
-            // Update animator without resetting playback
+            const newCurrentIndex = Math.min(
+                indexAfterExpiry + insertionAdjustment,
+                newLength - 1
+            );
+
+            // Update animator without stopping playback
             state.animator.updateFrames(state.cogs, newCurrentIndex);
 
-            // If the visible cached frame was in the expired range, show the new position
+            // Show the current frame if the map manager lost track of it
             if (state.mapManager.currentCachedFrameIndex < 0) {
                 state.mapManager.showCachedFrame(newCurrentIndex);
             }
 
             state.ui.updateFrameCounter(newCurrentIndex, newLength);
             state.ui.updateAnimationSlider(newCurrentIndex, newLength);
+            this.updateTimeWindowLabel();
 
             console.log(
-                `Live refresh: +${newGroupedFrames.length} new frames, ` +
-                `-${expiredCount} expired, ${newLength} total`
+                `Live refresh: +${cogsToAdd.length} new/recovered COGs, ` +
+                `-${expiredIndices.length} expired frames, ${newLength} total frames`
             );
         } catch (err) {
-            console.warn('Live refresh error:', err);
+            // Transient errors are logged but do NOT break live mode.
+            // The full-window diff on the next cycle will recover any missed COGs.
+            console.warn('Live refresh error (will retry next cycle):', err);
         }
     },
 
@@ -1903,34 +2132,59 @@ const app = {
     /**
      * Load available colormap options for the selected product and show
      * the colormap / range controls.
+     *
+     * Fix 5: Rebuild the dropdown with optgroups:
+     *   - First optgroup "Default": contains only the product's actual default colormap
+     *   - Second optgroup "Other": all remaining colormaps alphabetically
+     * The selected value is always a real colormap name (never the string "Default").
      */
     async loadColormapOptions() {
         if (!state.selectedProduct) {
             document.getElementById('colormap-group').style.display = 'none';
             document.getElementById('range-group').style.display = 'none';
+            document.getElementById('field-opacity-group').style.display = 'none';
             return;
         }
 
         try {
             const info = await api.getColormapInfo(state.selectedProduct);
+            const defaultCmap = info.colormap; // actual default for this product
+            const options = (info.available_colormaps || []).slice(); // copy
 
-            // Populate colormap dropdown
+            // Build optgroup-based dropdown (Fix 5)
             const select = document.getElementById('colormap-select');
-            select.innerHTML = '<option value="">Default</option>';
-            const options = info.available_colormaps || [];
-            options.forEach(cmap => {
-                const opt = document.createElement('option');
-                opt.value = cmap;
-                opt.textContent = cmap;
-                if (cmap === info.colormap) opt.selected = true;
-                select.appendChild(opt);
-            });
-            // Restore previous selection if still valid
+            select.innerHTML = '';
+
+            // First optgroup: "Default" — contains only the actual default colormap
+            const grpDefault = document.createElement('optgroup');
+            grpDefault.label = 'Default';
+            const defaultOpt = document.createElement('option');
+            defaultOpt.value = defaultCmap;
+            defaultOpt.textContent = defaultCmap;
+            grpDefault.appendChild(defaultOpt);
+            select.appendChild(grpDefault);
+
+            // Second optgroup: "Other" — all remaining colormaps alphabetically
+            const others = options.filter(c => c !== defaultCmap).sort();
+            if (others.length > 0) {
+                const grpOther = document.createElement('optgroup');
+                grpOther.label = 'Other';
+                others.forEach(cmap => {
+                    const opt = document.createElement('option');
+                    opt.value = cmap;
+                    opt.textContent = cmap;
+                    grpOther.appendChild(opt);
+                });
+                select.appendChild(grpOther);
+            }
+
+            // Restore previously selected colormap if still available, else fall back to default
             if (state.selectedColormap && options.includes(state.selectedColormap)) {
                 select.value = state.selectedColormap;
             } else {
-                state.selectedColormap = null;
-                select.value = '';
+                // Fall back to the field's actual default colormap (Fix 5)
+                state.selectedColormap = defaultCmap;
+                select.value = defaultCmap;
             }
 
             // Set vmin/vmax inputs to product defaults (only when not already overridden)
@@ -1943,6 +2197,9 @@ const app = {
 
             document.getElementById('colormap-group').style.display = 'block';
             document.getElementById('range-group').style.display = 'block';
+            document.getElementById('field-opacity-group').style.display = 'block';
+            // Fix 2: sync opacity slider for this field
+            this._syncFieldOpacitySlider();
         } catch (err) {
             console.warn('Failed to load colormap options:', err);
         }
@@ -2022,6 +2279,8 @@ const app = {
     /**
      * Return the current tile rendering parameters as a plain object.
      * Null values mean "use server defaults".
+     * Note: Tile opacity is managed by MapManager.currentOpacity, which is
+     * updated via _syncFieldOpacitySlider() → mapManager.setOpacity().
      */
     getTileParams() {
         return {
@@ -2029,6 +2288,24 @@ const app = {
             vmin: state.currentVmin,
             vmax: state.currentVmax,
         };
+    },
+
+    /**
+     * Fix 2: Synchronise the field-opacity slider with the current product's opacity.
+     * Called whenever the selected product changes or the Module B panel is shown.
+     */
+    _syncFieldOpacitySlider() {
+        const slider = document.getElementById('field-opacity-slider');
+        const display = document.getElementById('field-opacity-value');
+        if (!slider) return;
+        const opacity = state.selectedProduct !== null
+            ? (state.fieldOpacity[state.selectedProduct] ?? DEFAULT_FIELD_OPACITY)
+            : DEFAULT_FIELD_OPACITY;
+        slider.value = opacity;
+        if (display) display.textContent = `${Math.round(opacity * 100)}%`;
+        // Apply to map so new layers immediately get the right opacity.
+        // Guard against null map manager during early init.
+        if (state.mapManager) state.mapManager.setOpacity(opacity);
     },
 
     /**

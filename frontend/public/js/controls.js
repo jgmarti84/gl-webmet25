@@ -2,30 +2,95 @@
  * Controls Module - Handles UI control interactions
  */
 
+// Fix 3: message queue constants
+const MSG_AUTO_CLEAR_MS  = 8000; // non-error messages auto-clear after 8 s
+const MSG_MIN_DISPLAY_MS = 2000; // minimum time each message stays visible
+
 export class UIControls {
     constructor() {
         this.handlers = {};
+
+        // Fix 3: queue-based status message system
+        this._msgQueue  = [];      // pending messages
+        this._msgTimer  = null;    // setInterval for advancing the queue
+        this._clearTimer = null;   // setTimeout for auto-clearing the current message
+        this._msgShownAt = 0;      // timestamp when the current message was shown
     }
-    
+
+    // -------------------------------------------------------------------------
+    // Fix 3: Status message system
+    // Messages are shown in a dedicated fixed-height area below the animation
+    // controls at the bottom centre of the page.  Each message stays visible for
+    // at least MSG_MIN_DISPLAY_MS so rapid successive messages do not flash.
+    // Non-error messages are auto-cleared after MSG_AUTO_CLEAR_MS.
+    // Error messages persist until replaced.
+    // -------------------------------------------------------------------------
+
     /**
-     * Set status message
+     * Queue a status message.
+     *
+     * @param {string} message - Text to display
+     * @param {string} type    - '' | 'loading' | 'error' | 'success'
      */
     setStatus(message, type = '') {
-        const status = document.getElementById('status');
-        if (status) {
-            status.textContent = message;
-            // Clear old type classes and apply the new one
-            status.className = 'status-notification';
-            if (type) status.classList.add(type);
-            // Auto-clear success messages after 4 seconds
-            if (type === 'success') {
-                setTimeout(() => {
-                    if (status.textContent === message) {
-                        status.textContent = '';
-                        status.className = 'status-notification';
-                    }
-                }, 4000);
+        this._msgQueue.push({ message, type });
+        this._drainQueue();
+    }
+
+    /** Advance the message queue if possible. */
+    _drainQueue() {
+        if (this._msgQueue.length === 0) return;
+
+        const now = Date.now();
+        const elapsed = now - this._msgShownAt;
+
+        if (this._msgShownAt > 0 && elapsed < MSG_MIN_DISPLAY_MS) {
+            // Current message hasn't been visible long enough — schedule a retry
+            if (!this._msgTimer) {
+                this._msgTimer = setTimeout(() => {
+                    this._msgTimer = null;
+                    this._drainQueue();
+                }, MSG_MIN_DISPLAY_MS - elapsed);
             }
+            return;
+        }
+
+        // Show the next message
+        const { message, type } = this._msgQueue.shift();
+        this._showMessage(message, type);
+    }
+
+    /** Render a message into the #message-area element. */
+    _showMessage(message, type) {
+        if (this._clearTimer) {
+            clearTimeout(this._clearTimer);
+            this._clearTimer = null;
+        }
+
+        const area = document.getElementById('message-area');
+        const text = document.getElementById('message-text');
+        if (!area || !text) return;
+
+        text.textContent = message;
+        // Remove old type classes and apply new one
+        area.className = 'message-area';
+        if (type) area.classList.add(type);
+        area.classList.add('visible');
+
+        this._msgShownAt = Date.now();
+
+        // Auto-clear non-error messages after MSG_AUTO_CLEAR_MS
+        if (type !== 'error') {
+            this._clearTimer = setTimeout(() => {
+                this._clearTimer = null;
+                // If there's another queued message show it; otherwise fade out
+                if (this._msgQueue.length > 0) {
+                    this._drainQueue();
+                } else {
+                    area.classList.remove('visible');
+                    this._msgShownAt = 0;
+                }
+            }, MSG_AUTO_CLEAR_MS);
         }
     }
     

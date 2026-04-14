@@ -3,7 +3,21 @@
  */
 
 // Configuration constants
-const MAX_LEGEND_STOPS = 15;  // Maximum number of color stops to display in legend
+// Max discrete color stops shown in legend (Fix 4: reduce for readability)
+const MAX_LEGEND_STOPS = 8;
+
+/**
+ * Choose the number of decimal places for legend value labels based on range.
+ * Fix 4: Smart decimal logic — integers for wide ranges, 1-2 decimals for narrow.
+ *
+ * @param {number} range - vmax - vmin
+ * @returns {number} decimal places (0, 1, or 2)
+ */
+function legendDecimalPlaces(range) {
+    if (range >= 10) return 0;
+    if (range >= 1)  return 1;
+    return 2;
+}
 
 export class LegendRenderer {
     constructor(containerId) {
@@ -19,15 +33,6 @@ export class LegendRenderer {
         if (!this.container) return;
         
         this.currentColormap = colormapData;
-        
-        console.log('[Legend] Rendering with data:', {
-            product_key: colormapData?.product_key,
-            colormap: colormapData?.colormap,
-            vmin: colormapData?.vmin,
-            vmax: colormapData?.vmax,
-            colors_count: colormapData?.colors?.length,
-            has_entries: !!colormapData?.entries
-        });
         
         // Clear existing content
         this.container.innerHTML = '';
@@ -49,20 +54,21 @@ export class LegendRenderer {
         // Handle new format (colors array with vmin/vmax)
         if (colormapData.colors && Array.isArray(colormapData.colors)) {
             const colors = colormapData.colors;
-            const vmin = colormapData.vmin || 0;
-            const vmax = colormapData.vmax || 100;
+            const vmin = colormapData.vmin ?? 0;
+            const vmax = colormapData.vmax ?? 100;
+            const range = vmax - vmin;
+            const decimals = legendDecimalPlaces(range);
             
-            console.log('[Legend] Using new format with vmin:', vmin, 'vmax:', vmax);
-            
-            // Show approximately 10-15 color stops for the legend
+            // Fix 4: Use at most MAX_LEGEND_STOPS evenly-spaced stops.
+            // High values appear at the top; low values at the bottom.
             const numStops = Math.min(MAX_LEGEND_STOPS, colors.length);
             
-            // Reverse to show high values at top
+            // Iterate from high (top) to low (bottom): i goes numStops-1 → 0
             for (let i = numStops - 1; i >= 0; i--) {
-                // Calculate position as a fraction from 0 to 1
-                const fraction = i / (numStops - 1);  // This ensures we go from 0 to 1
-                const colorIndex = Math.round(fraction * (colors.length - 1));  // Map to color array index
-                const value = vmin + fraction * (vmax - vmin);  // Map to actual data value
+                // fraction goes 1 → 0 as i goes numStops-1 → 0
+                const fraction = (numStops === 1) ? 1 : i / (numStops - 1);
+                const colorIndex = Math.round(fraction * (colors.length - 1));
+                const value = vmin + fraction * range;
                 
                 const item = document.createElement('div');
                 item.className = 'legend-item';
@@ -72,10 +78,10 @@ export class LegendRenderer {
                 colorBox.className = 'legend-color';
                 colorBox.style.backgroundColor = colors[colorIndex];
                 
-                // Value label
+                // Value label — smart decimal formatting (Fix 4)
                 const valueLabel = document.createElement('div');
                 valueLabel.className = 'legend-value';
-                valueLabel.textContent = value.toFixed(1);
+                valueLabel.textContent = value.toFixed(decimals);
                 
                 item.appendChild(colorBox);
                 item.appendChild(valueLabel);
@@ -84,7 +90,12 @@ export class LegendRenderer {
         }
         // Handle old format (entries array) - for backwards compatibility
         else if (colormapData.entries && colormapData.entries.length > 0) {
-            const entries = [...colormapData.entries].reverse();
+            // Fix 4: subsample entries to MAX_LEGEND_STOPS for readability
+            const allEntries = [...colormapData.entries].reverse();
+            const step = allEntries.length <= MAX_LEGEND_STOPS
+                ? 1
+                : Math.ceil(allEntries.length / MAX_LEGEND_STOPS);
+            const entries = allEntries.filter((_, idx) => idx % step === 0);
             
             entries.forEach(entry => {
                 const item = document.createElement('div');
