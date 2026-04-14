@@ -56,6 +56,11 @@ export class LegendRenderer {
             const colors = colormapData.colors;
             const vmin = colormapData.vmin ?? 0;
             const vmax = colormapData.vmax ?? 100;
+            // Fallback values (0 / 100) are generic defaults used only when
+            // the API response is missing vmin/vmax — this should not happen in
+            // normal operation since the API always returns these values.  If
+            // they are missing, the legend will still render but colour-to-value
+            // mapping will be approximate until real data is loaded.
             const range = vmax - vmin;
             const decimals = legendDecimalPlaces(range);
             

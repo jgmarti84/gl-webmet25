@@ -31,8 +31,16 @@ const DEFAULT_LIVE_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 // Can be overridden by the settings panel (stored in localStorage).
 const DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
+// Fix 1: Maximum COG count per full-window query.
+// Tuned for a 3-hour window at 5-min scan intervals across up to 4 radars:
+//  3 h × 60 min/h ÷ 5 min × 4 radars = 144 items → 200 gives comfortable headroom.
+// For longer windows or higher-frequency products, pagination would be required.
+// Fix 1: Maximum COG count per full-window query.
+// Tuned for a 3-hour window at 5-min scan intervals across up to 4 radars:
+//   3 h × 12 scans/h × 4 radars = 144 items → 200 gives comfortable headroom.
+// For longer windows or higher-frequency products, pagination would be required.
+const LIVE_REFRESH_MAX_COGS = 200;
 // Number of closest radars to auto-select on geolocation init
-const GEOLOCATION_AUTO_SELECT_COUNT = 3;
 // Hours to load automatically on geolocation init
 const GEOLOCATION_AUTO_LOAD_HOURS = 3;
 // Product to prefer on auto-init (unfiltered DBZH)
@@ -1889,11 +1897,11 @@ const app = {
             const newStartTime = new Date(newEndTime.getTime() - hours * MS_PER_HOUR);
 
             // Step 2: Query the FULL window for ALL selected radars.
-            // Using 200 as a generous limit; the API is paginated but live windows
-            // are bounded so this should always be sufficient.
+            // LIVE_REFRESH_MAX_COGS is sized for a 3-hour window at 5-min intervals
+            // across up to 4 radars; increase or add pagination for longer windows.
             const allCogs = await api.getCogsForTimeRange(
                 state.selectedRadars, state.selectedProduct,
-                newStartTime, newEndTime, 200
+                newStartTime, newEndTime, LIVE_REFRESH_MAX_COGS
             );
 
             // Step 3: Build Set of COG IDs currently in the cache
@@ -1981,7 +1989,7 @@ const app = {
                         // Binary-search for sorted insertion position
                         let lo = 0, hi = state.cogs.length;
                         while (lo < hi) {
-                            const mid = (lo + hi) >>> 1;
+                            const mid = Math.floor((lo + hi) / 2);
                             if (getCogBucketKey(state.cogs[mid].timestamp) < key) lo = mid + 1;
                             else hi = mid;
                         }
@@ -2298,9 +2306,7 @@ const app = {
         const slider = document.getElementById('field-opacity-slider');
         const display = document.getElementById('field-opacity-value');
         if (!slider) return;
-        const opacity = state.selectedProduct !== null
-            ? (state.fieldOpacity[state.selectedProduct] ?? DEFAULT_FIELD_OPACITY)
-            : DEFAULT_FIELD_OPACITY;
+        const opacity = state.fieldOpacity[state.selectedProduct] ?? DEFAULT_FIELD_OPACITY;
         slider.value = opacity;
         if (display) display.textContent = `${Math.round(opacity * 100)}%`;
         // Apply to map so new layers immediately get the right opacity.

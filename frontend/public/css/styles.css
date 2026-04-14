@@ -578,9 +578,17 @@ code {
    Fix 3: MESSAGE AREA — fixed strip below the animation controls
    Never causes layout shifts; uses absolute positioning.
    ============================================================ */
+/* CSS custom property for the animation controls height, used to
+   position the message area precisely above it. */
+:root {
+    --animation-controls-height: 88px;
+    --animation-controls-bottom: 10px;
+}
+
 #message-area {
     position: absolute;
-    bottom: calc(10px + 88px + 4px); /* above #animation-controls which is bottom:10px */
+    /* Position just above #animation-controls which sits at bottom:10px */
+    bottom: calc(var(--animation-controls-bottom) + var(--animation-controls-height) + 4px);
     left: 50%;
     transform: translateX(-50%);
     z-index: 999;
