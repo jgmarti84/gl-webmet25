@@ -470,6 +470,37 @@ body {
 }
 
 /* ============================================================
+   Fix 6: COVERAGE CONTROLS GROUP (inside settings panel)
+   ============================================================ */
+.coverage-controls {
+    border-top: 1px solid rgba(255,255,255,0.08);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    padding: 8px 0;
+    margin-bottom: 10px;
+}
+
+/* ============================================================
+   Fix 7: COG BROWSER CONTROL PANEL
+   Restores positioning lost during frontend restructuring.
+   ============================================================ */
+#control-panel {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 1050;
+    width: 280px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    background: rgba(26, 26, 46, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    padding: 12px;
+}
+
+/* ============================================================
    SETTINGS PANEL (floating, same base as .floating-panel)
    ============================================================ */
 .settings-row {
@@ -544,7 +575,50 @@ code {
 }
 
 /* ============================================================
-   STATUS NOTIFICATION  (floating, below icon bar)
+   Fix 3: MESSAGE AREA — fixed strip below the animation controls
+   Never causes layout shifts; uses absolute positioning.
+   ============================================================ */
+/* CSS custom property for the animation controls height, used to
+   position the message area precisely above it.
+   --animation-controls-height: derived from #animation-controls padding + rows:
+     info-row (~20px) + slider container (~14px) + buttons-row (~48px) + padding (2×10px) ≈ 102px.
+     88px is the empirically measured rendered height with the current layout.
+     Update this value if the animation controls layout changes. */
+:root {
+    --animation-controls-height: 88px;
+    --animation-controls-bottom: 10px;
+}
+
+#message-area {
+    position: absolute;
+    /* Position just above #animation-controls which sits at bottom:10px */
+    bottom: calc(var(--animation-controls-bottom) + var(--animation-controls-height) + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 999;
+    /* Fixed height ensures the animation bar never shifts */
+    min-width: 320px;
+    max-width: 640px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    text-align: center;
+    pointer-events: none;
+    /* Hidden by default — revealed by .visible class */
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    background: rgba(26, 26, 46, 0.90);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    color: #aaa;
+}
+
+#message-area.visible  { opacity: 1; }
+#message-area.loading  { color: #ffa726; border-color: rgba(255,167,38,0.3); }
+#message-area.error    { color: #ef5350; border-color: rgba(239,83,80,0.3); background: rgba(244,67,54,0.15); }
+#message-area.success  { color: #66bb6a; border-color: rgba(102,187,106,0.3); }
+
+/* ============================================================
+   STATUS NOTIFICATION (legacy element; now hidden)
    ============================================================ */
 .status-notification {
     position: absolute;
