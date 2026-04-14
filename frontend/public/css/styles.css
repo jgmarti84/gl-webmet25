@@ -579,7 +579,11 @@ code {
    Never causes layout shifts; uses absolute positioning.
    ============================================================ */
 /* CSS custom property for the animation controls height, used to
-   position the message area precisely above it. */
+   position the message area precisely above it.
+   --animation-controls-height: derived from #animation-controls padding + rows:
+     info-row (~20px) + slider container (~14px) + buttons-row (~48px) + padding (2×10px) ≈ 102px.
+     88px is the empirically measured rendered height with the current layout.
+     Update this value if the animation controls layout changes. */
 :root {
     --animation-controls-height: 88px;
     --animation-controls-bottom: 10px;

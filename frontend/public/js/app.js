@@ -33,14 +33,11 @@ const DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
 // Fix 1: Maximum COG count per full-window query.
 // Tuned for a 3-hour window at 5-min scan intervals across up to 4 radars:
-//  3 h × 60 min/h ÷ 5 min × 4 radars = 144 items → 200 gives comfortable headroom.
-// For longer windows or higher-frequency products, pagination would be required.
-// Fix 1: Maximum COG count per full-window query.
-// Tuned for a 3-hour window at 5-min scan intervals across up to 4 radars:
 //   3 h × 12 scans/h × 4 radars = 144 items → 200 gives comfortable headroom.
 // For longer windows or higher-frequency products, pagination would be required.
 const LIVE_REFRESH_MAX_COGS = 200;
 // Number of closest radars to auto-select on geolocation init
+const GEOLOCATION_AUTO_SELECT_COUNT = 3;
 // Hours to load automatically on geolocation init
 const GEOLOCATION_AUTO_LOAD_HOURS = 3;
 // Product to prefer on auto-init (unfiltered DBZH)
