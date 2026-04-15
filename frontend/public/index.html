@@ -224,20 +224,24 @@
                     </div>
                 </div>
             </div>
-            <!-- Radar status refresh — item 11: renamed label + tooltip -->
-            <div class="settings-row">
-                <label for="settings-refresh-interval"
-                       title="How often to re-check which radars are online. Only updates the status indicator; does not reload images.">Radar status check (min):</label>
-                <input type="number" id="settings-refresh-interval" min="1" max="60" step="1" value="10">
-                <button id="settings-refresh-save" class="small-btn">Save</button>
-                <!-- Item 9: Refresh now button for radar status -->
-                <button id="btn-radar-refresh-now" class="small-btn" title="Re-check radar status now">↻ Now</button>
+            <!-- Radar status refresh — 2-row layout to avoid horizontal overflow -->
+            <div class="settings-section-header">
+                <span title="How often to re-check which radars are online. Only updates the status indicator; does not reload images.">Radar Status Check</span>
+                <button id="btn-radar-refresh-now" class="icon-refresh-btn" title="Re-check radar status now">↻</button>
             </div>
-            <!-- Fix 1: Live refresh interval — item 11: renamed label + tooltip -->
-            <div class="settings-row">
-                <label for="settings-live-refresh-interval"
-                       title="How often to fetch new radar images when a time window (e.g. Last 3h) is active. Lower values mean more up-to-date data but more server load.">Live window update (min):</label>
+            <div class="settings-row-sub">
+                <input type="number" id="settings-refresh-interval" min="1" max="60" step="1" value="10">
+                <span class="settings-unit">min</span>
+                <button id="settings-refresh-save" class="small-btn">Save</button>
+            </div>
+            <!-- Live window update — 2-row layout; ↻ is the COG refresh-now button -->
+            <div class="settings-section-header">
+                <span title="How often to fetch new radar images when a time window (e.g. Last 3h) is active. Lower values mean more up-to-date data but more server load.">Live Window Update</span>
+                <button id="btn-settings-cog-refresh-now" class="icon-refresh-btn" title="Fetch latest COGs now">↻</button>
+            </div>
+            <div class="settings-row-sub">
                 <input type="number" id="settings-live-refresh-interval" min="1" max="30" step="1" value="5">
+                <span class="settings-unit">min</span>
                 <button id="settings-live-refresh-save" class="small-btn">Save</button>
             </div>
             <div class="settings-row settings-info">

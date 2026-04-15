@@ -728,6 +728,18 @@ const app = {
             });
         }
 
+        // COG refresh now button in settings (next to "Live Window Update")
+        const settingsCogRefreshBtn = document.getElementById('btn-settings-cog-refresh-now');
+        if (settingsCogRefreshBtn) {
+            settingsCogRefreshBtn.addEventListener('click', () => {
+                if (state.liveHours !== null) {
+                    this.refreshLiveWindow();
+                } else {
+                    state.ui.setStatus('Live mode is not active', 'error');
+                }
+            });
+        }
+
         // -----------------------------------------------------------------
         // Module A: Radar Selection
         // -----------------------------------------------------------------
@@ -1156,10 +1168,12 @@ const app = {
 
         // Item 7: Draw coverage circles (SVG) if coverage is visible.
         // Leaflet renders L.circle as SVG paths inside the custom pane div.
-        // We serialise each coverage-pane SVG element to a data URI and draw
-        // it onto the canvas at the same position as the SVG element on screen.
-        if (state.coverageVisible) {
-            const svgEls = Array.from(mapEl.querySelectorAll('.leaflet-coveragePane svg'));
+        // We use getPane() — the authoritative Leaflet API — rather than a CSS
+        // class selector, which depends on Leaflet's internal naming convention
+        // (e.g. 'coveragePane' → 'leaflet-coverage-pane') and can silently fail.
+        if (state.coverageVisible && state.mapManager.getMap()) {
+            const coveragePane = state.mapManager.getMap().getPane('coveragePane');
+            const svgEls = coveragePane ? Array.from(coveragePane.querySelectorAll('svg')) : [];
             for (const svg of svgEls) {
                 try {
                     const svgRect = svg.getBoundingClientRect();
@@ -1168,8 +1182,11 @@ const app = {
                     const svgW = Math.round(svgRect.width);
                     const svgH = Math.round(svgRect.height);
                     if (svgW === 0 || svgH === 0) continue;
+                    // Clone so we can safely set xmlns without mutating the live DOM
+                    const svgClone = svg.cloneNode(true);
+                    svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
                     const serializer = new XMLSerializer();
-                    const svgStr = serializer.serializeToString(svg);
+                    const svgStr = serializer.serializeToString(svgClone);
                     const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
                     const url = URL.createObjectURL(blob);
                     await new Promise((res) => {
