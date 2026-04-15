@@ -1171,8 +1171,9 @@ const app = {
         // We use getPane() — the authoritative Leaflet API — rather than a CSS
         // class selector, which depends on Leaflet's internal naming convention
         // (e.g. 'coveragePane' → 'leaflet-coverage-pane') and can silently fail.
-        if (state.coverageVisible && state.mapManager.getMap()) {
-            const coveragePane = state.mapManager.getMap().getPane('coveragePane');
+        if (state.coverageVisible) {
+            const leafletMap = state.mapManager.getMap();
+            const coveragePane = leafletMap ? leafletMap.getPane('coveragePane') : null;
             const svgEls = coveragePane ? Array.from(coveragePane.querySelectorAll('svg')) : [];
             for (const svg of svgEls) {
                 try {
