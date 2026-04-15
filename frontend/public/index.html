@@ -81,10 +81,7 @@
                     <!-- Populated dynamically -->
                 </div>
             </div>
-            <!-- Load Latest action -->
-            <div class="action-buttons" style="margin-top: 10px;">
-                <button id="btn-load-latest" class="action-btn" disabled>Load Latest</button>
-            </div>
+            <!-- Fix 6: "Load Latest" button removed — loading is driven by time-window presets and live mode -->
         </div>
     </div>
 
@@ -215,28 +212,31 @@
                             <input type="checkbox" id="toggle-coverage">
                             <span class="toggle-slider"></span>
                         </span>
-                        <span class="toggle-label">Coverage</span>
+                        <span class="toggle-label">Radar Coverage</span>
                     </label>
                 </div>
                 <div class="control-group" id="coverage-opacity-group" style="display:none;">
                     <label for="coverage-opacity-slider">Coverage opacity:</label>
                     <div class="opacity-control">
-                        <input type="range" id="coverage-opacity-slider" min="0.1" max="0.9" step="0.05" value="0.4">
-                        <span id="coverage-opacity-value">40%</span>
+                        <!-- Range 1%–50%, default 10% (items 2 & 3) -->
+                        <input type="range" id="coverage-opacity-slider" min="0.01" max="0.5" step="0.01" value="0.1">
+                        <span id="coverage-opacity-value">10%</span>
                     </div>
                 </div>
             </div>
-            <!-- Radar status refresh -->
+            <!-- Radar status refresh — item 11: renamed label + tooltip -->
             <div class="settings-row">
-                <label for="settings-refresh-interval">Radar refresh (min):</label>
+                <label for="settings-refresh-interval"
+                       title="How often to re-check which radars are online. Only updates the status indicator; does not reload images.">Radar status check (min):</label>
                 <input type="number" id="settings-refresh-interval" min="1" max="60" step="1" value="10">
                 <button id="settings-refresh-save" class="small-btn">Save</button>
+                <!-- Item 9: Refresh now button for radar status -->
+                <button id="btn-radar-refresh-now" class="small-btn" title="Re-check radar status now">↻ Now</button>
             </div>
-            <!-- Fix 1: Live refresh interval — separate from radar status refresh.
-                 This controls how often refreshLiveWindow() is called while a
-                 live N-hours window is active. Default 5 min, range 1–30 min. -->
+            <!-- Fix 1: Live refresh interval — item 11: renamed label + tooltip -->
             <div class="settings-row">
-                <label for="settings-live-refresh-interval">Live refresh (min):</label>
+                <label for="settings-live-refresh-interval"
+                       title="How often to fetch new radar images when a time window (e.g. Last 3h) is active. Lower values mean more up-to-date data but more server load.">Live window update (min):</label>
                 <input type="number" id="settings-live-refresh-interval" min="1" max="30" step="1" value="5">
                 <button id="settings-live-refresh-save" class="small-btn">Save</button>
             </div>
@@ -266,30 +266,39 @@
     
     <!-- ===== ANIMATION CONTROLS (Bottom Center) ===== -->
     <div id="animation-controls">
-        <!-- Top row: time window label + current frame time -->
+        <!-- Top row: time window label + live indicator + current frame time -->
         <div class="animation-info-row">
             <span id="time-window-label" class="time-window-label">—</span>
+            <!-- Item 8: live mode indicator -->
+            <span id="live-indicator" class="live-indicator live-off" title="Live mode status">○ Live</span>
             <span id="time-display" class="frame-time-display">—</span>
         </div>
         <!-- Slider -->
         <div class="animation-slider-container">
             <input type="range" id="animation-slider" min="0" max="0" value="0" step="1">
         </div>
-        <!-- Control buttons + nav + frame counter -->
+        <!-- Control buttons + nav + frame counter + speed slider -->
         <div class="animation-buttons">
             <button id="btn-prev" title="Previous frame" aria-label="Previous frame">◀</button>
             <button id="btn-play-pause" title="Play" aria-label="Play/Pause">▶</button>
-            <button id="btn-next" title="Next frame" aria-label="Next frame">▶▶</button>
-            <button id="btn-latest" title="Go to latest frame" aria-label="Go to latest frame">⟲</button>
-            <button id="btn-speed" title="Speed: 1x" aria-label="Cycle speed">1x</button>
+            <!-- Item 5: single triangle for next, double triangle for go-to-latest -->
+            <button id="btn-next" title="Next frame" aria-label="Next frame">▶</button>
+            <button id="btn-latest" title="Go to latest frame" aria-label="Go to latest frame">▶▶</button>
+            <!-- Item 10: COG refresh now (only active in live mode) -->
+            <button id="btn-cog-refresh-now" title="Fetch latest COGs now" aria-label="Fetch latest COGs now" disabled>↻</button>
+            <!-- Item 4: continuous speed slider replacing the discrete button -->
+            <div class="speed-control" title="Animation speed">
+                <span class="speed-label">Speed</span>
+                <input type="range" id="speed-slider" min="0.5" max="2" step="0.1" value="1">
+                <span id="speed-value">1.0x</span>
+            </div>
             <span id="frame-counter">— / —</span>
         </div>
-    </div>
-
-    <!-- Fix 3: Status message area — fixed-height strip below the animation bar.
-         Messages appear with a fade-in and are queued so rapid updates don't flash. -->
-    <div id="message-area" class="message-area" role="status" aria-live="polite">
-        <span id="message-text"></span>
+        <!-- Fix 3 (revised): status message area inside the animation panel,
+             always visible, never hidden behind. Uses min-height to prevent layout shifts. -->
+        <div id="message-area" class="message-area" role="status" aria-live="polite">
+            <span id="message-text"></span>
+        </div>
     </div>
     
     <!-- Leaflet JS -->

@@ -49,8 +49,8 @@ const DEFAULT_TIME_WINDOW_HOURS = 3;
 // Fix 2: default per-field opacity
 const DEFAULT_FIELD_OPACITY = 0.7;
 
-// Fix 6: coverage circle defaults
-const DEFAULT_COVERAGE_OPACITY = 0.4;
+// Fix 6: coverage circle defaults (item 2: default 10%)
+const DEFAULT_COVERAGE_OPACITY = 0.1;
 
 // =============================================================================
 // APPLICATION STATE
@@ -474,6 +474,14 @@ const app = {
             const display = document.getElementById('coverage-opacity-value');
             if (display) display.textContent = `${Math.round(opacity * 100)}%`;
         }
+        // Fix 4: Initialise speed slider display
+        const speedSlider = document.getElementById('speed-slider');
+        const speedValue = document.getElementById('speed-value');
+        if (speedSlider && speedValue) {
+            const s = state.animator ? state.animator.getSpeed() : 1.0;
+            speedSlider.value = s;
+            speedValue.textContent = `${s.toFixed(1)}x`;
+        }
         // Fix 2: Field opacity slider — initialise to default (product not selected yet)
         this._syncFieldOpacitySlider();
     },
@@ -711,6 +719,15 @@ const app = {
             });
         }
 
+        // Item 9: Radar refresh now button
+        const radarRefreshNowBtn = document.getElementById('btn-radar-refresh-now');
+        if (radarRefreshNowBtn) {
+            radarRefreshNowBtn.addEventListener('click', () => {
+                this.refreshRadarList();
+                state.ui.setStatus('Radar status refreshed', 'success');
+            });
+        }
+
         // -----------------------------------------------------------------
         // Module A: Radar Selection
         // -----------------------------------------------------------------
@@ -750,14 +767,7 @@ const app = {
             }
         });
 
-        // Load Latest button
-        const loadLatestBtn = document.getElementById('btn-load-latest');
-        if (loadLatestBtn) {
-            loadLatestBtn.addEventListener('click', () => {
-                this.stopLiveRefresh();
-                this.loadLatestCogs();
-            });
-        }
+        // Load Latest button removed (item 6) — no event listener needed
 
         // -----------------------------------------------------------------
         // Module B: Field/Product Selection
@@ -905,7 +915,9 @@ const app = {
         const nextBtn = document.getElementById('btn-next');
         const latestBtn = document.getElementById('btn-latest');
         const playBtn = document.getElementById('btn-play-pause');
-        const speedBtn = document.getElementById('btn-speed');
+        const cogRefreshNowBtn = document.getElementById('btn-cog-refresh-now');
+        const speedSlider = document.getElementById('speed-slider');
+        const speedValueEl = document.getElementById('speed-value');
         const slider = document.getElementById('animation-slider');
 
         if (prevBtn) prevBtn.addEventListener('click', () => state.animator.previous());
@@ -919,7 +931,23 @@ const app = {
             });
         }
 
-        if (speedBtn) speedBtn.addEventListener('click', () => this.cycleSpeed());
+        // Item 10: COG refresh now — triggers a live window refresh on demand
+        if (cogRefreshNowBtn) {
+            cogRefreshNowBtn.addEventListener('click', () => {
+                if (state.liveHours !== null) {
+                    this.refreshLiveWindow();
+                }
+            });
+        }
+
+        // Item 4: Continuous speed slider
+        if (speedSlider) {
+            speedSlider.addEventListener('input', (e) => {
+                const speed = parseFloat(e.target.value);
+                state.animator.setSpeed(speed);
+                if (speedValueEl) speedValueEl.textContent = `${speed.toFixed(1)}x`;
+            });
+        }
 
         if (slider) {
             slider.addEventListener('input', (e) => {
@@ -962,15 +990,25 @@ const app = {
 
                 case 'l':
                 case 'L':
-                    e.preventDefault();
-                    const loadBtn = document.getElementById('btn-load-latest');
-                    if (loadBtn && !loadBtn.disabled) this.loadLatestCogs();
+                    // Load Latest was removed (item 6) — shortcut disabled
                     break;
 
                 case 's':
                 case 'S':
                     e.preventDefault();
-                    if (state.animator.getFrameCount() > 1) this.cycleSpeed();
+                    // Item 4: nudge speed slider by +0.5 (wraps at max back to min)
+                    if (state.animator.getFrameCount() > 1) {
+                        const sl = document.getElementById('speed-slider');
+                        const sv = document.getElementById('speed-value');
+                        if (sl) {
+                            let next = parseFloat(sl.value) + 0.5;
+                            if (next > parseFloat(sl.max) + 0.01) next = parseFloat(sl.min);
+                            next = Math.round(next * 10) / 10;
+                            sl.value = next;
+                            state.animator.setSpeed(next);
+                            if (sv) sv.textContent = `${next.toFixed(1)}x`;
+                        }
+                    }
                     break;
 
                 case 'D': // Ctrl+Shift+D — reveal hidden COG Browser link
@@ -1113,6 +1151,41 @@ const app = {
             }
         }
 
+        // Item 7: Draw coverage circles (SVG) if coverage is visible.
+        // Leaflet renders L.circle as SVG paths inside the custom pane div.
+        // We serialise each coverage-pane SVG element to a data URI and draw
+        // it onto the canvas at the same position as the SVG element on screen.
+        if (state.coverageVisible) {
+            const svgEls = Array.from(mapEl.querySelectorAll('.leaflet-coveragePane svg'));
+            for (const svg of svgEls) {
+                try {
+                    const svgRect = svg.getBoundingClientRect();
+                    const svgX = Math.round(svgRect.left - rect.left);
+                    const svgY = Math.round(svgRect.top - rect.top);
+                    const svgW = Math.round(svgRect.width);
+                    const svgH = Math.round(svgRect.height);
+                    if (svgW === 0 || svgH === 0) continue;
+                    const serializer = new XMLSerializer();
+                    const svgStr = serializer.serializeToString(svg);
+                    const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    await new Promise((res, rej) => {
+                        const svgImg = new Image();
+                        svgImg.onload = () => {
+                            try { ctx.drawImage(svgImg, svgX, svgY, svgW, svgH); } catch (_) {}
+                            URL.revokeObjectURL(url);
+                            res();
+                        };
+                        svgImg.onerror = () => { URL.revokeObjectURL(url); res(); };
+                        svgImg.src = url;
+                    });
+                    drawnCount++;
+                } catch (e) {
+                    console.debug('Snapshot: failed to draw coverage SVG', e.message);
+                }
+            }
+        }
+
         if (drawnCount === 0) {
             throw new Error(
                 'No tiles could be captured (CORS restriction). ' +
@@ -1178,10 +1251,6 @@ const app = {
 
         // Update Module A badge
         state.ui.updateModuleBadges(state.selectedRadars.length, state.selectedProduct);
-        
-        // Enable/disable load latest button
-        const canLoad = state.selectedRadars.length > 0 && state.selectedProduct;
-        state.ui.enableLoadLatestButton(canLoad);
         
         // Also update time range button state
         this.onTimeRangeChange();
@@ -1264,7 +1333,7 @@ const app = {
         state.hasZoomedToBounds = false;
         state.animationMode = null;
         
-        // Update load latest button state
+        // Load colormap options for new product (also re-triggers radar selection update)
         this.onRadarSelectionChange();
         
         // Load colormap options for new product
@@ -1844,6 +1913,7 @@ const app = {
             this.refreshLiveWindow();
         }, intervalMs);
         console.log(`Live refresh started: checking every ${intervalMs / 60000} min for new COGs (${hours}h window)`);
+        this.updateLiveIndicator();
     },
 
     /**
@@ -1855,6 +1925,7 @@ const app = {
             state.liveRefreshInterval = null;
         }
         state.liveHours = null;
+        this.updateLiveIndicator();
     },
 
     /**
@@ -2312,17 +2383,22 @@ const app = {
     },
 
     /**
-     * Cycle through animation speeds
+     * Item 8: Update the live mode indicator badge in the animation panel.
+     * Called whenever live mode starts or stops.
      */
-    cycleSpeed() {
-        const speeds = [0.5, 1.0, 2.0];
-        const currentSpeed = state.animator.getSpeed();
-        const currentIndex = speeds.indexOf(currentSpeed);
-        const nextIndex = (currentIndex + 1) % speeds.length;
-        const nextSpeed = speeds[nextIndex];
-        
-        state.animator.setSpeed(nextSpeed);
-        state.ui.updateSpeedButton(nextSpeed);
+    updateLiveIndicator() {
+        const el = document.getElementById('live-indicator');
+        if (!el) return;
+        if (state.liveHours !== null) {
+            el.textContent = `● LIVE`;
+            el.className = 'live-indicator live-on';
+        } else {
+            el.textContent = `○ Live`;
+            el.className = 'live-indicator live-off';
+        }
+        // Item 10: enable/disable the COG refresh now button
+        const cogRefreshBtn = document.getElementById('btn-cog-refresh-now');
+        if (cogRefreshBtn) cogRefreshBtn.disabled = state.liveHours === null;
     },
 };
 

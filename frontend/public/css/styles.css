@@ -575,47 +575,34 @@ code {
 }
 
 /* ============================================================
-   Fix 3: MESSAGE AREA — fixed strip below the animation controls
-   Never causes layout shifts; uses absolute positioning.
+   Fix 3 (revised): MESSAGE AREA — last row inside #animation-controls.
+   Positioned inside the panel so it is never hidden behind other elements.
+   min-height reserves space so appearing/disappearing messages don't
+   cause the animation bar to shift in height while visible.
    ============================================================ */
-/* CSS custom property for the animation controls height, used to
-   position the message area precisely above it.
-   --animation-controls-height: derived from #animation-controls padding + rows:
-     info-row (~20px) + slider container (~14px) + buttons-row (~48px) + padding (2×10px) ≈ 102px.
-     88px is the empirically measured rendered height with the current layout.
-     Update this value if the animation controls layout changes. */
 :root {
     --animation-controls-height: 88px;
     --animation-controls-bottom: 10px;
 }
 
 #message-area {
-    position: absolute;
-    /* Position just above #animation-controls which sits at bottom:10px */
-    bottom: calc(var(--animation-controls-bottom) + var(--animation-controls-height) + 4px);
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 999;
-    /* Fixed height ensures the animation bar never shifts */
-    min-width: 320px;
-    max-width: 640px;
-    padding: 6px 14px;
-    border-radius: 6px;
-    font-size: 12px;
+    min-height: 20px;
+    margin-top: 6px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
     text-align: center;
-    pointer-events: none;
     /* Hidden by default — revealed by .visible class */
     opacity: 0;
     transition: opacity 0.3s ease;
-    background: rgba(26, 26, 46, 0.90);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    color: #aaa;
+    color: #888;
+    pointer-events: none;
 }
 
 #message-area.visible  { opacity: 1; }
-#message-area.loading  { color: #ffa726; border-color: rgba(255,167,38,0.3); }
-#message-area.error    { color: #ef5350; border-color: rgba(239,83,80,0.3); background: rgba(244,67,54,0.15); }
-#message-area.success  { color: #66bb6a; border-color: rgba(102,187,106,0.3); }
+#message-area.loading  { color: #ffa726; background: rgba(255,167,38,0.08); border-radius: 4px; }
+#message-area.error    { color: #ef5350; background: rgba(244,67,54,0.12); border-radius: 4px; }
+#message-area.success  { color: #66bb6a; }
 
 /* ============================================================
    STATUS NOTIFICATION (legacy element; now hidden)
@@ -1092,21 +1079,74 @@ code {
 #btn-play-pause:active { transform: scale(0.95); }
 #btn-play-pause:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* Speed button */
-#btn-speed {
-    padding: 8px 14px;
-    border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 20px;
-    background: rgba(255,255,255,0.1);
-    color: #fff;
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.2s;
-    min-width: 48px;
+/* Speed slider (item 4: replaces discrete speed button) */
+.speed-control {
+    display: flex;
+    align-items: center;
+    gap: 5px;
 }
 
-#btn-speed:hover  { background: rgba(79,195,247,0.3); border-color: #4fc3f7; }
-#btn-speed:disabled { opacity: 0.5; cursor: not-allowed; }
+.speed-label {
+    font-size: 10px;
+    color: #aaa;
+    white-space: nowrap;
+}
+
+#speed-slider {
+    width: 72px;
+    height: 4px;
+    cursor: pointer;
+    accent-color: #4fc3f7;
+}
+
+#speed-value {
+    font-size: 11px;
+    color: #fff;
+    min-width: 32px;
+    text-align: left;
+    font-family: 'Courier New', monospace;
+}
+
+/* COG refresh now button (item 10) */
+#btn-cog-refresh-now {
+    width: 36px;
+    height: 36px;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 50%;
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#btn-cog-refresh-now:hover:not(:disabled) { background: rgba(79,195,247,0.3); border-color: #4fc3f7; }
+#btn-cog-refresh-now:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Live mode indicator (item 8) */
+.live-indicator {
+    font-size: 10px;
+    font-weight: bold;
+    font-family: 'Courier New', monospace;
+    padding: 2px 6px;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+
+.live-indicator.live-on {
+    color: #66bb6a;
+    background: rgba(102,187,106,0.15);
+    border: 1px solid rgba(102,187,106,0.3);
+}
+
+.live-indicator.live-off {
+    color: #888;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.1);
+}
 
 /* Frame counter */
 #frame-counter {
