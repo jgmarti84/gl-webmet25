@@ -836,7 +836,10 @@ const app = {
         const colormapSelect = document.getElementById('colormap-select');
         if (colormapSelect) {
             colormapSelect.addEventListener('change', (e) => {
-                // Only assign if the selected value is a non-empty string
+                // The dropdown is always populated with real colormap names (Fix 5),
+                // so e.target.value should never be empty in practice.  The fallback
+                // preserves the previous colormap if, for any reason, the value is
+                // momentarily empty (e.g., during a programmatic options rebuild).
                 state.selectedColormap = e.target.value || state.selectedColormap;
                 this.applyColormapChange();
             });
@@ -1002,7 +1005,7 @@ const app = {
                         const sv = document.getElementById('speed-value');
                         if (sl) {
                             let next = parseFloat(sl.value) + 0.5;
-                            if (next > parseFloat(sl.max) + 0.01) next = parseFloat(sl.min);
+                            if (next > parseFloat(sl.max) - 0.001) next = parseFloat(sl.min);
                             next = Math.round(next * 10) / 10;
                             sl.value = next;
                             state.animator.setSpeed(next);
@@ -1169,13 +1172,15 @@ const app = {
                     const svgStr = serializer.serializeToString(svg);
                     const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
                     const url = URL.createObjectURL(blob);
-                    await new Promise((res, rej) => {
+                    await new Promise((res) => {
                         const svgImg = new Image();
                         svgImg.onload = () => {
                             try { ctx.drawImage(svgImg, svgX, svgY, svgW, svgH); } catch (_) {}
                             URL.revokeObjectURL(url);
                             res();
                         };
+                        // SVG draw failures are non-fatal: silently resolve so the rest
+                        // of the snapshot (tiles, other SVGs) can still be saved.
                         svgImg.onerror = () => { URL.revokeObjectURL(url); res(); };
                         svgImg.src = url;
                     });
@@ -2254,10 +2259,12 @@ const app = {
                 select.appendChild(grpOther);
             }
 
-            // Restore previously selected colormap if still available, else fall back to default
+            // Restore previously selected colormap if still available, else fall back to default.
+            // Guard: only assign defaultCmap if it's a non-empty string (defensive against
+            // malformed API responses that omit or return an empty colormap field).
             if (state.selectedColormap && options.includes(state.selectedColormap)) {
                 select.value = state.selectedColormap;
-            } else {
+            } else if (defaultCmap) {
                 // Fall back to the field's actual default colormap (Fix 5)
                 state.selectedColormap = defaultCmap;
                 select.value = defaultCmap;

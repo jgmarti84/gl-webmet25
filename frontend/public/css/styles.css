@@ -580,10 +580,6 @@ code {
    min-height reserves space so appearing/disappearing messages don't
    cause the animation bar to shift in height while visible.
    ============================================================ */
-:root {
-    --animation-controls-height: 88px;
-    --animation-controls-bottom: 10px;
-}
 
 #message-area {
     min-height: 20px;
