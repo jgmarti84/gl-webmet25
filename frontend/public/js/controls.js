@@ -199,7 +199,7 @@ export class UIControls {
      * Enable/disable animation controls
      */
     enableAnimationControls(enabled) {
-        const controls = ['btn-play-pause', 'btn-speed', 'animation-slider'];
+        const controls = ['btn-play-pause', 'speed-slider', 'animation-slider'];
         controls.forEach(id => {
             const element = document.getElementById(id);
             if (element) element.disabled = !enabled;

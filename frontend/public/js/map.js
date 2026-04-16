@@ -494,7 +494,10 @@ export class MapManager {
         const circle = L.circle(
             [radar.center_lat, radar.center_long],
             {
-                radius:      radar.img_radio * 1000, // km → meters
+                // Add 1% to the radius so the coverage circle aligns with the
+                // GeoTIFF tile edges, which include a small border of data
+                // beyond the nominal radar range (item 3).
+                radius:      radar.img_radio * 1000 * 1.01, // km → meters, +1%
                 fillColor:   '#000000',
                 fillOpacity: opacity,
                 stroke:      false,
