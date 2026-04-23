@@ -400,28 +400,6 @@ When executing tasks, building features, or fixing bugs from a `.specs/` file, s
   2. "Should I append these changes to the CHANGELOG.md?"
   3. "Please remember to move the spec file to .specs/archived/."
 
-When I give you a task, strictly follow this cycle:
-
-### 1. PROPOSAL ⚠️
-- Read this file fully
-- Read the relevant source files
-- **DO NOT create, modify, or delete any files yet**
-- Show me the code you would write in the chat only
-- Explain your decisions and flag any risks
-- Wait for my explicit message saying "approved" or "apply" 
-  before touching any files
-
-### 2. APPLY
-- Wait for my approval or feedback
-- Adjust based on my response
-- Provide final code only after I confirm
-
-### 3. ARCHIVE
-- After code is applied, explicitly tell me:
-  - Does the documentation need to be updated?
-  - Does this `copilot-instructions.md` need to be updated?
-  - Does the API Contract need to be updated?
-
 ## Known Gaps
 - ❌ Pydantic V2 class-based config deprecated in indexer/config.py 
   and radar_db/config.py. Must migrate to ConfigDict before Pydantic V3.
