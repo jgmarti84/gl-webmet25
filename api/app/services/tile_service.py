@@ -1,6 +1,8 @@
 # api/app/services/tile_service.py
 import io
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional, Dict, Tuple, List
 
@@ -32,6 +34,34 @@ CACHE_KEY_FLOAT_PRECISION: int = 4
 # Transparent tiles (out-of-bounds) are also cached since they are valid responses.
 # None values (file not found on disk) are NOT cached to allow re-indexing.
 _tile_cache: LRUCache = LRUCache(maxsize=TILE_CACHE_MAX_SIZE)
+
+# Lock that guards all reads and writes to _tile_cache.
+# generate_tile() is offloaded to a ThreadPoolExecutor so multiple threads can
+# access the cache concurrently; cachetools structures are not thread-safe on
+# their own.
+_tile_cache_lock: threading.Lock = threading.Lock()
+
+# ---------------------------------------------------------------------------
+# Thread pool executor for CPU-bound tile rendering
+#
+# Why a thread pool?
+#   Rendering a tile involves rasterio I/O and numpy/matplotlib CPU work.
+#   If run directly on the FastAPI event loop, each render blocks the loop
+#   for its entire duration, serialising *all* concurrent async requests.
+#   By offloading _render_tile() to a ThreadPoolExecutor we let the event
+#   loop remain responsive while up to TILE_RENDER_THREADS renders execute
+#   in parallel.  Python's GIL is released during the C-extension I/O work
+#   performed by rasterio/GDAL, so real concurrency is achieved for the
+#   I/O-heavy portions; numpy/matplotlib sections still benefit from
+#   overlapping with other event-loop work.
+#
+# Note: Redis caching and additional Uvicorn workers are separate planned
+# tasks and are intentionally out of scope here.
+# ---------------------------------------------------------------------------
+_tile_render_executor: ThreadPoolExecutor = ThreadPoolExecutor(
+    max_workers=settings.tile_render_threads,
+    thread_name_prefix="tile-render",
+)
 
 
 def _tile_cache_key(
@@ -281,7 +311,8 @@ class TileService:
             effective_cmap_vmin, effective_cmap_vmax,
             filter_vmin, filter_vmax,
         )
-        cached = _tile_cache.get(cache_key)
+        with _tile_cache_lock:
+            cached = _tile_cache.get(cache_key)
         if cached is not None:
             logger.debug(f"Tile cache hit: {file_path} {z}/{x}/{y}")
             return cached
@@ -305,7 +336,8 @@ class TileService:
         # Cache every successful result, including transparent tiles.
         # Do not cache None (file not found) so re-indexed files are picked up.
         if result is not None:
-            _tile_cache[cache_key] = result
+            with _tile_cache_lock:
+                _tile_cache[cache_key] = result
 
         return result
 

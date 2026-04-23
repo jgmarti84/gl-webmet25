@@ -9,6 +9,7 @@ import time
 from .config import settings
 from .routers import radars_router, products_router, cogs_router, tiles_router, colormap_router
 from .schemas import HealthResponse
+from .services.tile_service import _tile_render_executor
 
 # Setup logging
 logging.basicConfig(
@@ -30,6 +31,8 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down Radar Visualization API...")
+    _tile_render_executor.shutdown(wait=False)
+    logger.info("Tile render executor shut down.")
 
 
 # Create FastAPI app
