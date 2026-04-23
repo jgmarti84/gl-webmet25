@@ -1,4 +1,6 @@
 # api/app/routers/tiles.py
+import asyncio
+import functools
 import hashlib
 import logging
 from dataclasses import dataclass
@@ -10,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session, joinedload
 
 from radar_db import get_db, RadarCOG
-from ..services import get_tile_service, TileService
+from ..services import get_tile_service, TileService, _tile_render_executor
 from ..services.tile_service import read_cog_metadata
 from ..utils.colormaps import colormap_for_field, colormap_options_for_field
 
@@ -254,18 +256,24 @@ async def get_tile(
         colormap_dict = tile_service._get_default_radar_colormap()
     
     # Generate tile (Priority 2: served from LRU cache when available)
-    tile_data = tile_service.generate_tile(
-        file_path=cog.file_path,
-        z=z,
-        x=x,
-        y=y,
-        colormap=colormap_dict,
-        cmap_name=effective_cmap,
-        cmap_vmin=cmap_vmin,
-        cmap_vmax=cmap_vmax,
-        filter_vmin=filter_vmin,
-        filter_vmax=filter_vmax,
-        cog_data_type=cog_data_type,
+    # CPU-bound rendering is offloaded to a thread pool so the event loop
+    # is not blocked while rasterio/numpy/matplotlib work executes.
+    tile_data = await asyncio.get_running_loop().run_in_executor(
+        _tile_render_executor,
+        functools.partial(
+            tile_service.generate_tile,
+            file_path=cog.file_path,
+            z=z,
+            x=x,
+            y=y,
+            colormap=colormap_dict,
+            cmap_name=effective_cmap,
+            cmap_vmin=cmap_vmin,
+            cmap_vmax=cmap_vmax,
+            filter_vmin=filter_vmin,
+            filter_vmax=filter_vmax,
+            cog_data_type=cog_data_type,
+        ),
     )
     
     if tile_data is None:
@@ -349,18 +357,22 @@ async def get_tile_by_params(
 
     colormap_dict = tile_service.build_colormap_for_product(product_key, override_cmap=effective_cmap)
     
-    tile_data = tile_service.generate_tile(
-        file_path=cog.file_path,
-        z=z,
-        x=x,
-        y=y,
-        colormap=colormap_dict,
-        cmap_name=effective_cmap,
-        cmap_vmin=cmap_vmin,
-        cmap_vmax=cmap_vmax,
-        filter_vmin=filter_vmin,
-        filter_vmax=filter_vmax,
-        cog_data_type=cog_data_type,
+    tile_data = await asyncio.get_running_loop().run_in_executor(
+        _tile_render_executor,
+        functools.partial(
+            tile_service.generate_tile,
+            file_path=cog.file_path,
+            z=z,
+            x=x,
+            y=y,
+            colormap=colormap_dict,
+            cmap_name=effective_cmap,
+            cmap_vmin=cmap_vmin,
+            cmap_vmax=cmap_vmax,
+            filter_vmin=filter_vmin,
+            filter_vmax=filter_vmax,
+            cog_data_type=cog_data_type,
+        ),
     )
     
     if tile_data is None:
