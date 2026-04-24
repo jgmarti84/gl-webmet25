@@ -127,8 +127,12 @@ def _get_dataset(file_path: str) -> rasterio.DatasetReader:
         evicted_path, evicted_ds = cache.popitem(last=False)
         try:
             evicted_ds.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                "DATASET failed to close evicted dataset %s: %s",
+                evicted_path,
+                e,
+            )
         logger.debug(
             "DATASET evict file_path=%s thread=%s",
             evicted_path,
@@ -275,6 +279,11 @@ class TileService:
             the filter.
         """
         ds = _get_dataset(str(full_path))
+        # Reader is instantiated with the cached dataset so it does not reopen
+        # the file.  We intentionally do NOT use Reader as a context manager
+        # because __exit__ calls dataset.close(), which would invalidate the
+        # cached handle.  Reader holds no resources beyond the dataset itself,
+        # so garbage collection after this function returns is safe.
         reader = Reader(str(full_path), dataset=ds)
         img = reader.tile(x, y, z, resampling_method=resampling, indexes=1)
 
@@ -454,6 +463,11 @@ class TileService:
                 )
 
             ds = _get_dataset(str(full_path))
+            # Reader is instantiated with the cached dataset so it does not
+            # reopen the file.  We intentionally do NOT use Reader as a context
+            # manager because __exit__ calls dataset.close(), which would
+            # invalidate the cached handle.  Reader holds no resources beyond
+            # the dataset itself, so garbage collection is safe.
             reader = Reader(str(full_path), dataset=ds)
             num_bands = reader.dataset.count
             dtype = str(reader.dataset.dtypes[0])
