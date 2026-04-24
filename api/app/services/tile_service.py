@@ -2,6 +2,7 @@
 import io
 import logging
 import threading
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional, Dict, Tuple, List
@@ -63,6 +64,87 @@ _tile_render_executor: ThreadPoolExecutor = ThreadPoolExecutor(
     thread_name_prefix="tile-render",
 )
 
+# ---------------------------------------------------------------------------
+# Per-thread rasterio DatasetReader LRU cache
+#
+# rasterio.DatasetReader objects are NOT thread-safe — two threads cannot read
+# from the same DatasetReader simultaneously without data corruption.  We
+# therefore use threading.local() so that each executor thread owns an
+# independent cache of open DatasetReaders.  No locking is needed because
+# threads never share dataset objects.
+#
+# On shutdown, threading.local() caches cannot be enumerated globally.
+# Dataset cleanup happens naturally as threads exit — the OS reclaims the
+# underlying file handles.  No explicit shutdown cleanup is required or
+# possible for threading.local() caches.
+# ---------------------------------------------------------------------------
+_thread_local: threading.local = threading.local()
+
+
+def _get_dataset(file_path: str) -> rasterio.DatasetReader:
+    """Return an open rasterio DatasetReader for *file_path*.
+
+    Uses a per-thread LRU cache (OrderedDict) to avoid reopening files on
+    every tile request.  Thread-safe by design: each thread has its own
+    independent cache stored in ``_thread_local``, so no locking is required.
+
+    The cache owns the lifecycle of every DatasetReader it holds; callers
+    must NOT close the returned dataset.  Do NOT use the returned object as
+    a context manager — doing so would close the dataset and invalidate the
+    cached entry.
+    """
+    if not hasattr(_thread_local, "dataset_cache"):
+        _thread_local.dataset_cache = OrderedDict()
+
+    cache: OrderedDict = _thread_local.dataset_cache
+    thread_name = threading.current_thread().name
+    cache_limit: int = settings.dataset_cache_size_per_thread
+
+    if file_path in cache:
+        ds = cache[file_path]
+        if not ds.closed:
+            # Valid hit — promote to most-recently-used position
+            cache.move_to_end(file_path)
+            logger.debug(
+                "DATASET hit file_path=%s thread=%s",
+                file_path,
+                thread_name,
+            )
+            return ds
+        # Stale entry (file was replaced on disk while handle was cached)
+        del cache[file_path]
+        logger.debug(
+            "DATASET stale file_path=%s thread=%s — reopening",
+            file_path,
+            thread_name,
+        )
+
+    # Cache miss — open the file
+    dataset = rasterio.open(file_path)
+
+    # Evict the least-recently-used entry if the cache is at capacity
+    if len(cache) >= cache_limit:
+        evicted_path, evicted_ds = cache.popitem(last=False)
+        try:
+            evicted_ds.close()
+        except Exception:
+            pass
+        logger.debug(
+            "DATASET evict file_path=%s thread=%s",
+            evicted_path,
+            thread_name,
+        )
+
+    cache[file_path] = dataset
+    logger.debug(
+        "DATASET open file_path=%s thread=%s cache_size=%d/%d",
+        file_path,
+        thread_name,
+        len(cache),
+        cache_limit,
+    )
+    return dataset
+
 
 def _tile_cache_key(
     file_path: str,
@@ -104,19 +186,19 @@ def detect_cog_type(file_path: str) -> str:
     a heuristic based on band count and dtype.
     """
     try:
-        with rasterio.open(file_path) as src:
-            tags = src.tags() or {}
-            data_type_tag = tags.get("radarlib_data_type", "")
+        src = _get_dataset(file_path)
+        tags = src.tags() or {}
+        data_type_tag = tags.get("radarlib_data_type", "")
 
-            if data_type_tag == "raw_float":
-                return "raw_float"
-            if data_type_tag == "rgba":
-                return "rgba"
+        if data_type_tag == "raw_float":
+            return "raw_float"
+        if data_type_tag == "rgba":
+            return "rgba"
 
-            if src.count >= 3 and str(src.dtypes[0]) == "uint8":
-                return "rgba"
-            if src.count == 1 and str(src.dtypes[0]) in ("float32", "float64"):
-                return "raw_float"
+        if src.count >= 3 and str(src.dtypes[0]) == "uint8":
+            return "rgba"
+        if src.count == 1 and str(src.dtypes[0]) in ("float32", "float64"):
+            return "raw_float"
     except Exception as e:
         logger.warning(f"Could not detect COG type for {file_path}: {e}")
 
@@ -131,21 +213,21 @@ def read_cog_metadata(file_path: str) -> Dict:
     """
     result = {"data_type": "unknown", "cmap": None, "vmin": None, "vmax": None, "nodata": None}
     try:
-        with rasterio.open(file_path) as src:
-            tags = src.tags() or {}
-            result["data_type"] = tags.get("radarlib_data_type", detect_cog_type(file_path))
-            result["cmap"] = tags.get("radarlib_cmap")
-            result["nodata"] = src.nodata
-            try:
-                if tags.get("radarlib_vmin") is not None:
-                    result["vmin"] = float(tags["radarlib_vmin"])
-            except (ValueError, TypeError):
-                pass
-            try:
-                if tags.get("radarlib_vmax") is not None:
-                    result["vmax"] = float(tags["radarlib_vmax"])
-            except (ValueError, TypeError):
-                pass
+        src = _get_dataset(file_path)
+        tags = src.tags() or {}
+        result["data_type"] = tags.get("radarlib_data_type", detect_cog_type(file_path))
+        result["cmap"] = tags.get("radarlib_cmap")
+        result["nodata"] = src.nodata
+        try:
+            if tags.get("radarlib_vmin") is not None:
+                result["vmin"] = float(tags["radarlib_vmin"])
+        except (ValueError, TypeError):
+            pass
+        try:
+            if tags.get("radarlib_vmax") is not None:
+                result["vmax"] = float(tags["radarlib_vmax"])
+        except (ValueError, TypeError):
+            pass
     except Exception as e:
         logger.warning(f"Could not read COG metadata for {file_path}: {e}")
     return result
@@ -192,8 +274,9 @@ class TileService:
             range above.  Passing ``None`` for either bound disables that side of
             the filter.
         """
-        with Reader(str(full_path)) as src:
-            img = src.tile(x, y, z, resampling_method=resampling, indexes=1)
+        ds = _get_dataset(str(full_path))
+        reader = Reader(str(full_path), dataset=ds)
+        img = reader.tile(x, y, z, resampling_method=resampling, indexes=1)
 
         data = img.data[0].astype(np.float32)   # (H, W)
         mask = img.mask                           # (H, W) - 0 = nodata, 255 = valid
@@ -370,43 +453,44 @@ class TileService:
                     resampling,
                 )
 
-            with Reader(str(full_path)) as src:
-                num_bands = src.dataset.count
-                dtype = str(src.dataset.dtypes[0])
+            ds = _get_dataset(str(full_path))
+            reader = Reader(str(full_path), dataset=ds)
+            num_bands = reader.dataset.count
+            dtype = str(reader.dataset.dtypes[0])
 
-                if num_bands >= 3:
-                    # Pre-coloured RGBA/RGB COG – passthrough
-                    img = src.tile(x, y, z, resampling_method=resampling)
-                    logger.debug(
-                        f"COG {file_path} is pre-coloured RGBA/RGB, skipping colormap"
-                    )
-                    return img.render()
-
-                if dtype != "uint8":
-                    # Non-uint8 single-band data (float32, int16, …): the integer-keyed
-                    # colormap dict approach only works for 8-bit values (0-255).  Float or
-                    # scaled-integer pixel values would either be clipped to 0 by rio-tiler's
-                    # uint8 cast or simply not found in the dict, producing fully-transparent
-                    # tiles.  Route through the raw_float pipeline instead so values are
-                    # normalised correctly across the full data range.
-                    logger.debug(
-                        f"COG {file_path} is single-band {dtype}, using raw_float pipeline"
-                    )
-                    return self._generate_raw_float_tile(
-                        full_path, z, x, y,
-                        effective_cmap,
-                        effective_cmap_vmin,
-                        effective_cmap_vmax,
-                        filter_vmin,
-                        filter_vmax,
-                        resampling,
-                    )
-
-                # 8-bit single-band: use rio-tiler integer colormap
-                img = src.tile(x, y, z, resampling_method=resampling, indexes=1)
-                if colormap:
-                    return img.render(colormap=colormap)
+            if num_bands >= 3:
+                # Pre-coloured RGBA/RGB COG – passthrough
+                img = reader.tile(x, y, z, resampling_method=resampling)
+                logger.debug(
+                    f"COG {file_path} is pre-coloured RGBA/RGB, skipping colormap"
+                )
                 return img.render()
+
+            if dtype != "uint8":
+                # Non-uint8 single-band data (float32, int16, …): the integer-keyed
+                # colormap dict approach only works for 8-bit values (0-255).  Float or
+                # scaled-integer pixel values would either be clipped to 0 by rio-tiler's
+                # uint8 cast or simply not found in the dict, producing fully-transparent
+                # tiles.  Route through the raw_float pipeline instead so values are
+                # normalised correctly across the full data range.
+                logger.debug(
+                    f"COG {file_path} is single-band {dtype}, using raw_float pipeline"
+                )
+                return self._generate_raw_float_tile(
+                    full_path, z, x, y,
+                    effective_cmap,
+                    effective_cmap_vmin,
+                    effective_cmap_vmax,
+                    filter_vmin,
+                    filter_vmax,
+                    resampling,
+                )
+
+            # 8-bit single-band: use rio-tiler integer colormap
+            img = reader.tile(x, y, z, resampling_method=resampling, indexes=1)
+            if colormap:
+                return img.render(colormap=colormap)
+            return img.render()
 
         except TileOutsideBounds:
             logger.debug(f"Tile {z}/{x}/{y} outside bounds for {file_path}")

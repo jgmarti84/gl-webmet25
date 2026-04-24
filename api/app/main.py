@@ -54,6 +54,11 @@ async def lifespan(app: FastAPI):
         logger.info("Shutting down Radar Visualization API...")
         _tile_render_executor.shutdown(wait=False)
         logger.info("Tile render executor shut down.")
+        # Note: per-thread rasterio DatasetReader caches (threading.local) cannot
+        # be enumerated or closed globally.  Dataset cleanup happens naturally as
+        # executor threads exit — the OS reclaims all underlying file handles.
+        # No explicit shutdown cleanup is required or possible for threading.local
+        # caches.
         gdal_env.__exit__(None, None, None)
 
 
