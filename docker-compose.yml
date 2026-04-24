@@ -65,7 +65,7 @@ services:
       FILE_PATTERN: "*.tif"
       COMPUTE_STATS: "true"
       COMPUTE_CHECKSUM: "false"
-      RADAR_CODES: "RMA1, RMA2"  # Optional: limit to specific radars
+      RADAR_CODES: "RMA1, RMA2, RMA16, RMA17, RMA6"  # Optional: limit to specific radars
     volumes:
       - ../product_output:/product_output:ro
     depends_on:

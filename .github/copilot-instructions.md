@@ -1,13 +1,13 @@
 # webmet25 — Copilot Instructions
 
-## Full Project Discovery
-> 📖 A detailed discovery report of this project lives in
-> `docs/DISCOVERY_REPORT.md`. This file contains 
-> the full technical analysis of the codebase including 
-> architecture, modules, database schema, API endpoints, 
-> and identified risks.
-> Always read the relevant section of this report before 
-> writing any code.
+## 🧠 Context & Knowledge Base
+> **CRITICAL:** You are operating in a multi-root workspace alongside the `radarlib` repository. 
+> Before writing code, route your knowledge by reading the appropriate documentation:
+
+- `docs/DISCOVERY_REPORT.md`: Full technical analysis, DB schema, API endpoints, and identified risks.
+- `README.md` (root): High-level purpose, tech stack, and architecture overview.
+- `docs/DATA_FLOW.md`: How `webmet25` ingests, processes, and displays `radarlib` data. **Read this before changing the indexer or API.**
+- `docs/COMPONENTS.md`: Breakdown of UI/frontend modules. **Read this before making frontend/Leaflet changes.**
 
 ---
 
@@ -45,6 +45,7 @@ webmet25 (consumer)
 > `docs/radarlib_EN.md` Output Contract section first.
 > ⚠️ This contract is sourced from radarlib. If radarlib 
 > changes its output format, update this section immediately.
+> In case we are working on a multi-root workspace, you can directly inspect `radarlib` code to verify this.
 
 ### Primary Output Format
 - **GeoTIFF (COG):** This is the primary and current output format.
@@ -375,7 +376,30 @@ tests/indexer/
 - Use `@pytest.mark.parametrize` for filename parser tests
 ---
 
-## SDD Workflow — Follow This Every Time
+## 🚀 Spec-Driven Development (SDD) Workflow — STRICTLY ENFORCED
+When executing tasks, building features, or fixing bugs from a `.specs/` file, strictly follow this execution loop. Do not skip steps.
+
+### Phase 1: Context & Proposal ⚠️
+- Read the specified .specs/ file.
+- Read docs/DATA_FLOW.md or docs/COMPONENTS.md depending on the spec's domain.
+- DO NOT write implementation code yet.
+- Outline your proposed approach in the chat, flag any risks to the radarlib contract, and wait for the user to say "approved".
+
+### Phase 2: Test-First (TDD) 🧪
+- Once approved, write the automated tests FIRST based on the Acceptance Criteria in the spec.
+- Put tests in the appropriate tests/ subdirectory following the Testing Strategy rules above.
+- Do not write the implementation code until the user confirms the tests are ready.
+
+### Phase 3: Implement & Apply 🛠️
+- Write the implementation code to make the tests pass.
+- Ensure strict compatibility with radarlib's contract.
+
+### Phase 4: Archive & Cleanup 🧹
+- After code is applied and tests pass, explicitly ask the user:
+  1. "Should I update any documentation (DATA_FLOW.md, COMPONENTS.md, API Contract)?"
+  2. "Should I append these changes to the CHANGELOG.md?"
+  3. "Please remember to move the spec file to .specs/archived/."
+
 When I give you a task, strictly follow this cycle:
 
 ### 1. PROPOSAL ⚠️

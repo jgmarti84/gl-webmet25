@@ -11,8 +11,8 @@ const ZINDEX_BASEMAP = 1;
 const ZINDEX_RADAR   = 2;
 
 // Frame pre-loading tuning
-const PRELOAD_BATCH_SIZE  = 5;   // frames to add to map per batch
-const PRELOAD_BATCH_DELAY = 100; // ms between batches
+const PRELOAD_BATCH_SIZE  = 20;  // was 5
+const PRELOAD_BATCH_DELAY = 50;  // was 100ms
 
 // Available basemap options
 const BASEMAPS = {
@@ -62,6 +62,8 @@ export class MapManager {
         this._cancelBackgroundPreload = null;
         // True while the initial batch preload started by preloadFrames() is still running
         this._preloadInProgress = false;
+        // Fix 6: radar coverage circles (L.circle), keyed by radar code
+        this.coverageCircles = {};
     }
     
     /**
@@ -77,6 +79,14 @@ export class MapManager {
     init(containerId = 'map', basemapKey = 'dark') {
         // Create map
         this.map = L.map(containerId).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+
+        // Fix 6: Create coverage pane below tile pane but above the base tile layer.
+        // Leaflet's tilePane z-index is 200, overlayPane is 400.
+        // coveragePane at 350 renders radar coverage circles above basemap tiles
+        // but below all radar data tile layers.
+        // NOTE: All new Leaflet panes must be created before any layers are added.
+        this.map.createPane('coveragePane');
+        this.map.getPane('coveragePane').style.zIndex = 350;
         
         // Add initial basemap
         this.setBasemap(basemapKey);
@@ -468,6 +478,70 @@ export class MapManager {
         return Object.keys(this.radarLayers);
     }
     
+    /**
+     * Fix 6: Add a coverage circle for a radar.
+     * The circle uses the 'coveragePane' so it renders below radar tile layers.
+     *
+     * @param {Object} radar      - Radar object with center_lat, center_long, img_radio
+     * @param {number} opacity    - fillOpacity (0–1)
+     */
+    addCoverageCircle(radar, opacity = 0.4) {
+        if (!radar || !radar.code) return;
+        // Remove existing circle for this radar before adding
+        this.removeCoverageCircle(radar.code);
+        if (!radar.center_lat || !radar.center_long || !radar.img_radio) return;
+
+        const circle = L.circle(
+            [radar.center_lat, radar.center_long],
+            {
+                // Add 1% to the radius so the coverage circle aligns with the
+                // GeoTIFF tile edges, which include a small border of data
+                // beyond the nominal radar range (item 3).
+                radius:      radar.img_radio * 1000 * 1.01, // km → meters, +1%
+                fillColor:   '#000000',
+                fillOpacity: opacity,
+                stroke:      false,
+                interactive: false,
+                pane:        'coveragePane',
+            }
+        ).addTo(this.map);
+
+        this.coverageCircles[radar.code] = circle;
+    }
+
+    /**
+     * Fix 6: Remove the coverage circle for a radar.
+     * @param {string} radarCode
+     */
+    removeCoverageCircle(radarCode) {
+        const circle = this.coverageCircles[radarCode];
+        if (circle) {
+            if (this.map && this.map.hasLayer(circle)) {
+                this.map.removeLayer(circle);
+            }
+            delete this.coverageCircles[radarCode];
+        }
+    }
+
+    /**
+     * Fix 6: Remove all coverage circles.
+     */
+    clearCoverageCircles() {
+        Object.keys(this.coverageCircles).forEach(code => this.removeCoverageCircle(code));
+    }
+
+    /**
+     * Fix 6: Update fillOpacity on all existing coverage circles.
+     * Does NOT redraw — Leaflet supports live style updates via setStyle().
+     *
+     * @param {number} opacity - New fillOpacity value
+     */
+    updateCoverageOpacity(opacity) {
+        Object.values(this.coverageCircles).forEach(circle => {
+            circle.setStyle({ fillOpacity: opacity });
+        });
+    }
+
     /**
      * Get map instance
      */

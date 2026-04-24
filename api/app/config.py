@@ -28,6 +28,9 @@ class APISettings(BaseSettings):
     # Tile cache (optional, for future use)
     tile_cache_enabled: bool = Field(default=False, alias="TILE_CACHE_ENABLED")
     tile_cache_ttl: int = Field(default=300, alias="TILE_CACHE_TTL")
+
+    # Thread pool size for CPU-bound tile rendering (see tile_service.py)
+    tile_render_threads: int = Field(default=8, alias="TILE_RENDER_THREADS")
     
     class Config:
         env_file = ".env"
