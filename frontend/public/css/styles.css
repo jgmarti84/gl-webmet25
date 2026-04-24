@@ -470,6 +470,37 @@ body {
 }
 
 /* ============================================================
+   Fix 6: COVERAGE CONTROLS GROUP (inside settings panel)
+   ============================================================ */
+.coverage-controls {
+    border-top: 1px solid rgba(255,255,255,0.08);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    padding: 8px 0;
+    margin-bottom: 10px;
+}
+
+/* ============================================================
+   Fix 7: COG BROWSER CONTROL PANEL
+   Restores positioning lost during frontend restructuring.
+   ============================================================ */
+#control-panel {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 1050;
+    width: 280px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    background: rgba(26, 26, 46, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    padding: 12px;
+}
+
+/* ============================================================
    SETTINGS PANEL (floating, same base as .floating-panel)
    ============================================================ */
 .settings-row {
@@ -505,6 +536,71 @@ body {
     outline: none;
     border-color: #4fc3f7;
 }
+
+/* Settings section header: section title + small icon-only refresh button side by side */
+.settings-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: #aaa;
+}
+
+.settings-section-header span {
+    cursor: default;
+}
+
+/* Sub-row: number input + "min" label + Save button */
+.settings-row-sub {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    font-size: 12px;
+}
+
+.settings-row-sub input[type="number"] {
+    width: 52px;
+    padding: 4px 6px;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 4px;
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    font-size: 12px;
+}
+
+.settings-row-sub input[type="number"]:focus {
+    outline: none;
+    border-color: #4fc3f7;
+}
+
+.settings-unit {
+    font-size: 11px;
+    color: #888;
+    flex-shrink: 0;
+}
+
+/* Small icon-only refresh button used in settings section headers */
+.icon-refresh-btn {
+    width: 22px;
+    height: 22px;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 50%;
+    background: rgba(255,255,255,0.1);
+    color: #ccc;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+
+.icon-refresh-btn:hover { background: rgba(79,195,247,0.3); border-color: #4fc3f7; color: #fff; }
 
 .settings-info {
     font-size: 11px;
@@ -544,7 +640,33 @@ code {
 }
 
 /* ============================================================
-   STATUS NOTIFICATION  (floating, below icon bar)
+   Fix 3 (revised): MESSAGE AREA — last row inside #animation-controls.
+   Positioned inside the panel so it is never hidden behind other elements.
+   min-height reserves space so appearing/disappearing messages don't
+   cause the animation bar to shift in height while visible.
+   ============================================================ */
+
+#message-area {
+    min-height: 20px;
+    margin-top: 6px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    text-align: center;
+    /* Hidden by default — revealed by .visible class */
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    color: #888;
+    pointer-events: none;
+}
+
+#message-area.visible  { opacity: 1; }
+#message-area.loading  { color: #ffa726; background: rgba(255,167,38,0.08); border-radius: 4px; }
+#message-area.error    { color: #ef5350; background: rgba(244,67,54,0.12); border-radius: 4px; }
+#message-area.success  { color: #66bb6a; }
+
+/* ============================================================
+   STATUS NOTIFICATION (legacy element; now hidden)
    ============================================================ */
 .status-notification {
     position: absolute;
@@ -1018,21 +1140,74 @@ code {
 #btn-play-pause:active { transform: scale(0.95); }
 #btn-play-pause:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* Speed button */
-#btn-speed {
-    padding: 8px 14px;
-    border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 20px;
-    background: rgba(255,255,255,0.1);
-    color: #fff;
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.2s;
-    min-width: 48px;
+/* Speed slider (item 4: replaces discrete speed button) */
+.speed-control {
+    display: flex;
+    align-items: center;
+    gap: 5px;
 }
 
-#btn-speed:hover  { background: rgba(79,195,247,0.3); border-color: #4fc3f7; }
-#btn-speed:disabled { opacity: 0.5; cursor: not-allowed; }
+.speed-label {
+    font-size: 10px;
+    color: #aaa;
+    white-space: nowrap;
+}
+
+#speed-slider {
+    width: 72px;
+    height: 4px;
+    cursor: pointer;
+    accent-color: #4fc3f7;
+}
+
+#speed-value {
+    font-size: 11px;
+    color: #fff;
+    min-width: 32px;
+    text-align: left;
+    font-family: 'Courier New', monospace;
+}
+
+/* COG refresh now button (item 10) */
+#btn-cog-refresh-now {
+    width: 36px;
+    height: 36px;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 50%;
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#btn-cog-refresh-now:hover:not(:disabled) { background: rgba(79,195,247,0.3); border-color: #4fc3f7; }
+#btn-cog-refresh-now:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Live mode indicator (item 8) */
+.live-indicator {
+    font-size: 10px;
+    font-weight: bold;
+    font-family: 'Courier New', monospace;
+    padding: 2px 6px;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+
+.live-indicator.live-on {
+    color: #66bb6a;
+    background: rgba(102,187,106,0.15);
+    border: 1px solid rgba(102,187,106,0.3);
+}
+
+.live-indicator.live-off {
+    color: #888;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.1);
+}
 
 /* Frame counter */
 #frame-counter {
