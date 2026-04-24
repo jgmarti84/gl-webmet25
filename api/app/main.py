@@ -5,6 +5,8 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import logging
 import time
+import rasterio
+from rasterio.env import Env
 
 from .config import settings
 from .routers import radars_router, products_router, cogs_router, tiles_router, colormap_router
@@ -26,13 +28,33 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Radar Visualization API...")
     logger.info(f"Database: {settings.db_host}:{settings.db_port}/{settings.db_name}")
     logger.info(f"COG Base Path: {settings.cog_base_path}")
-    
-    yield
-    
-    # Shutdown
-    logger.info("Shutting down Radar Visualization API...")
-    _tile_render_executor.shutdown(wait=False)
-    logger.info("Tile render executor shut down.")
+
+    gdal_env = Env(
+        GDAL_CACHEMAX=settings.gdal_cachemax,
+        VSI_CACHE=settings.vsi_cache,
+        VSI_CACHE_SIZE=settings.vsi_cache_size,
+        GDAL_DISABLE_READDIR_ON_OPEN=settings.gdal_disable_readdir_on_open,
+        GDAL_HTTP_MERGE_CONSECUTIVE_RANGES="YES",
+        GDAL_TIFF_INTERNAL_MASK="YES",
+        GDAL_TIFF_OVR_BLOCKSIZE="256",
+    )
+    gdal_env.__enter__()
+    logger.info(
+        "GDAL environment configured:\n"
+        f"      GDAL_CACHEMAX={settings.gdal_cachemax}MB\n"
+        f"      VSI_CACHE={settings.vsi_cache}\n"
+        f"      VSI_CACHE_SIZE={settings.vsi_cache_size}\n"
+        f"      GDAL_DISABLE_READDIR_ON_OPEN={settings.gdal_disable_readdir_on_open}"
+    )
+
+    try:
+        yield
+    finally:
+        # Shutdown
+        logger.info("Shutting down Radar Visualization API...")
+        _tile_render_executor.shutdown(wait=False)
+        logger.info("Tile render executor shut down.")
+        gdal_env.__exit__(None, None, None)
 
 
 # Create FastAPI app

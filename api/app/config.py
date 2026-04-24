@@ -31,7 +31,13 @@ class APISettings(BaseSettings):
 
     # Thread pool size for CPU-bound tile rendering (see tile_service.py)
     tile_render_threads: int = Field(default=8, alias="TILE_RENDER_THREADS")
-    
+
+    # GDAL environment settings (applied at startup via rasterio.Env)
+    gdal_cachemax: int = Field(default=256, alias="GDAL_CACHEMAX")
+    vsi_cache: bool = Field(default=True, alias="VSI_CACHE")
+    vsi_cache_size: int = Field(default=5000000, alias="VSI_CACHE_SIZE")
+    gdal_disable_readdir_on_open: str = Field(default="EMPTY_DIR", alias="GDAL_DISABLE_READDIR_ON_OPEN")
+
     class Config:
         env_file = ".env"
         extra = "ignore"
