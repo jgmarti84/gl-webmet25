@@ -11,8 +11,8 @@ const ZINDEX_BASEMAP = 1;
 const ZINDEX_RADAR   = 2;
 
 // Frame pre-loading tuning
-const PRELOAD_BATCH_SIZE  = 5;   // frames to add to map per batch
-const PRELOAD_BATCH_DELAY = 100; // ms between batches
+const PRELOAD_BATCH_SIZE  = 20;  // was 5
+const PRELOAD_BATCH_DELAY = 50;  // was 100ms
 
 // Available basemap options
 const BASEMAPS = {
