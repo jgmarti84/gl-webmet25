@@ -32,6 +32,10 @@ class APISettings(BaseSettings):
     # Thread pool size for CPU-bound tile rendering (see tile_service.py)
     tile_render_threads: int = Field(default=8, alias="TILE_RENDER_THREADS")
 
+    # Per-thread rasterio DatasetReader LRU cache size (see tile_service.py)
+    # Total open file handles = TILE_RENDER_THREADS × DATASET_CACHE_SIZE_PER_THREAD
+    dataset_cache_size_per_thread: int = Field(default=32, alias="DATASET_CACHE_SIZE_PER_THREAD")
+
     # GDAL environment settings (applied at startup via rasterio.Env)
     gdal_cachemax: int = Field(default=256, alias="GDAL_CACHEMAX")
     vsi_cache: bool = Field(default=True, alias="VSI_CACHE")
