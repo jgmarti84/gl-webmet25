@@ -3,12 +3,14 @@
 Indexer management CLI.
 
 Usage:
-    python -m indexer.manage populate-cog-metadata     # Extract and update COG metadata
     python -m indexer.manage check                      # Check database connection
+    python -m indexer.manage populate-cog-metadata      # Extract and update COG metadata
+    python -m indexer.manage delete --help              # Delete products by radar/date
 """
 import argparse
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 
 logging.basicConfig(
@@ -128,15 +130,82 @@ def cmd_populate_cog_metadata(args):
         return 0 if failed_count == 0 else 1
 
 
+def cmd_delete(args):
+    """Delete COG products by date and optional radar/product filters.
+    
+    This command deletes all database records and files with:
+    - observation_time <= specified date
+    - radar_code in the specified list (or all radars if omitted)
+    - polarimetric_var matching the product (or all products if omitted)
+    """
+    from indexer.deleter import ProductDeleter
+    from indexer.config import settings
+    
+    # Validate and parse inputs
+    date_str = args.date
+    product_key = args.product
+    dry_run = args.dry_run
+    
+    # Parse radar codes from comma-separated list, or use None for all radars
+    radar_codes = None
+    if args.radars:
+        radar_codes = [code.strip().upper() for code in args.radars.split(',')]
+    
+    try:
+        # Parse and validate date
+        datetime.strptime(date_str, "%Y%m%d")
+    except ValueError:
+        logger.error(f"Invalid date format '{date_str}'. Use YYYYMMDD (e.g., 20260101).")
+        return 1
+    
+    try:
+        deleter = ProductDeleter(settings.watch_path)
+        deleted_cogs, deleted_files, errors = deleter.delete_products(
+            date_str=date_str,
+            radar_codes=radar_codes,
+            product_key=product_key,
+            dry_run=dry_run,
+        )
+        
+        if errors:
+            logger.warning(f"Deletion completed with {len(errors)} error(s):")
+            for error in errors:
+                logger.error(f"  - {error}")
+        
+        print("\n" + "=" * 60)
+        if dry_run:
+            print("DRY-RUN SUMMARY")
+        else:
+            print("DELETION SUMMARY")
+        print("=" * 60)
+        print(f"Date up to:    {date_str}")
+        print(f"Radars:        {', '.join(radar_codes) if radar_codes else 'ALL'}")
+        print(f"Product:       {product_key or 'ALL'}")
+        print(f"COG Records:   {deleted_cogs}")
+        print(f"Files Deleted: {deleted_files}")
+        print(f"Errors:        {len(errors)}")
+        print("=" * 60)
+        
+        return 0 if len(errors) == 0 else 1
+    
+    except Exception as e:
+        logger.error(f"Deletion failed: {e}")
+        return 1
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Indexer Management',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python -m indexer.manage check                    # Test database connection
-  python -m indexer.manage populate-cog-metadata    # Extract and update COG metadata
-  python -m indexer.manage populate-cog-metadata -p /custom/path  # Custom path
+  python -m indexer.manage check                                 # Test database connection
+  python -m indexer.manage populate-cog-metadata                 # Extract and update COG metadata
+  python -m indexer.manage populate-cog-metadata -p /path         # Custom path
+  python -m indexer.manage delete 20260101                        # Delete all COGs up to Jan 1, 2026
+  python -m indexer.manage delete 20260101 --radars RMA1,RMA2     # Delete specific radars only
+  python -m indexer.manage delete 20260101 --product DBZH         # Delete specific product only
+  python -m indexer.manage delete 20260101 --dry-run              # Preview deletion
         """
     )
     
@@ -154,6 +223,32 @@ Examples:
         help='Path to COG files (default: from settings.watch_path)'
     )
     populate_parser.set_defaults(func=cmd_populate_cog_metadata)
+    
+    # delete command
+    delete_parser = subparsers.add_parser(
+        'delete',
+        help='Delete COG products up to a specified date, with optional radar/product filters'
+    )
+    delete_parser.add_argument(
+        'date',
+        help='Date in YYYYMMDD format (e.g., 20260101). All COGs with observation_time <= this date will be deleted.'
+    )
+    delete_parser.add_argument(
+        '--radars',
+        default=None,
+        help='Comma-separated list of radar codes (e.g., RMA1,RMA2,RMA6). If omitted, all radars are included.'
+    )
+    delete_parser.add_argument(
+        '--product',
+        default=None,
+        help='Optional product key filter (e.g., DBZH). If omitted, all products are deleted.'
+    )
+    delete_parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Show what would be deleted without actually deleting'
+    )
+    delete_parser.set_defaults(func=cmd_delete)
     
     # Parse arguments
     args = parser.parse_args()
