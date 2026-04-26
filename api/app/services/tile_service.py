@@ -1,6 +1,7 @@
 # api/app/services/tile_service.py
 import hashlib
 import io
+import json
 import logging
 import threading
 import time
@@ -32,6 +33,9 @@ TILE_CACHE_MAX_SIZE: int = 2000
 # 4 decimal places (0.0001 precision) eliminates floating-point noise while still
 # distinguishing intentionally different range settings.
 CACHE_KEY_FLOAT_PRECISION: int = 4
+# Observation age threshold (seconds) below which a tile is considered "recent".
+# Recent tiles receive a shorter Redis TTL because they may be updated by the indexer.
+RECENT_TILE_THRESHOLD_SECONDS: int = 7200  # 2 hours
 
 # In-process tile cache — keyed by (file_path, z, x, y, cmap_name, cmap_vmin,
 # cmap_vmax, filter_vmin, filter_vmax).
@@ -194,8 +198,11 @@ def _redis_cache_key(cache_key: tuple) -> str:
 
     The tuple contains: (file_path, z, x, y, cmap_name,
     cmap_vmin, cmap_vmax, filter_vmin, filter_vmax)
+
+    JSON serialisation is used to avoid delimiter-collision issues
+    that can arise with flat string concatenation.
     """
-    raw = "|".join(str(v) for v in cache_key)
+    raw = json.dumps(list(cache_key), default=str, sort_keys=False)
     digest = hashlib.sha256(raw.encode()).hexdigest()
     return f"tile:{digest}"
 
@@ -215,7 +222,7 @@ def _get_tile_ttl(observation_time: Optional[datetime]) -> int:
         else observation_time
     )
     age = datetime.now(timezone.utc) - obs_utc
-    if age.total_seconds() < 7200:  # 2 hours
+    if age.total_seconds() < RECENT_TILE_THRESHOLD_SECONDS:
         return settings.redis_tile_ttl_recent_seconds
     return settings.redis_tile_ttl_seconds
 
@@ -761,3 +768,12 @@ def get_tile_service() -> TileService:
         _tile_service = TileService()
     return _tile_service
 
+
+def get_l1_cache_stats() -> Dict[str, int]:
+    """Return the current L1 in-memory tile cache occupancy.
+
+    Exposed as a public function so that routers can query L1 stats
+    without directly accessing the private ``_tile_cache`` variable.
+    """
+    with _tile_cache_lock:
+        return {"size": len(_tile_cache), "maxsize": TILE_CACHE_MAX_SIZE}

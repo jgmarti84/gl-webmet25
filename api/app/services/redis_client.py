@@ -38,7 +38,8 @@ def get_redis() -> redis.Redis | None:
                 decode_responses=False,  # tiles are raw bytes
             )
             _redis_client.ping()
-        except Exception:
+        except Exception as e:
+            logger.warning("Redis connection failed: %s", e)
             _redis_client = None
     return _redis_client
 
