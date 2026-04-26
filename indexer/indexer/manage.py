@@ -137,6 +137,8 @@ def cmd_delete(args):
     - observation_time <= specified date
     - radar_code in the specified list (or all radars if omitted)
     - polarimetric_var matching the product (or all products if omitted)
+    
+    The filesystem is scanned first to discover files; database is cleaned up afterward.
     """
     from indexer.deleter import ProductDeleter
     from indexer.config import settings
@@ -160,7 +162,7 @@ def cmd_delete(args):
     
     try:
         deleter = ProductDeleter(settings.watch_path)
-        deleted_cogs, deleted_files, errors = deleter.delete_products(
+        deleted_files, deleted_cogs, errors = deleter.delete_products(
             date_str=date_str,
             radar_codes=radar_codes,
             product_key=product_key,
@@ -181,8 +183,8 @@ def cmd_delete(args):
         print(f"Date up to:    {date_str}")
         print(f"Radars:        {', '.join(radar_codes) if radar_codes else 'ALL'}")
         print(f"Product:       {product_key or 'ALL'}")
-        print(f"COG Records:   {deleted_cogs}")
         print(f"Files Deleted: {deleted_files}")
+        print(f"COG Records:   {deleted_cogs}")
         print(f"Errors:        {len(errors)}")
         print("=" * 60)
         
