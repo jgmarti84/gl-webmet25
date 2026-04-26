@@ -1,5 +1,26 @@
 services:
   # ==========================================================================
+  # REDIS L2 TILE CACHE
+  # ==========================================================================
+  redis:
+    image: redis:7.2-alpine
+    container_name: radar_redis
+    command: >
+      redis-server
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+      --appendonly no
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ==========================================================================
   # DATABASE
   # ==========================================================================
   radar_db:
@@ -100,6 +121,8 @@ services:
         condition: service_healthy
       db-init:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5).read()"]
@@ -121,3 +144,6 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+
+volumes:
+  redis_data:

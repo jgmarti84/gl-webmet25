@@ -42,6 +42,17 @@ class APISettings(BaseSettings):
     vsi_cache_size: int = Field(default=5000000, alias="VSI_CACHE_SIZE")
     gdal_disable_readdir_on_open: str = Field(default="EMPTY_DIR", alias="GDAL_DISABLE_READDIR_ON_OPEN")
 
+    # Redis L2 tile cache
+    redis_host: str = Field(default="redis", alias="REDIS_HOST")
+    redis_port: int = Field(default=6379, alias="REDIS_PORT")
+    redis_db: int = Field(default=0, alias="REDIS_DB")
+    # TTL for tiles from past observations (immutable, 24 h)
+    redis_tile_ttl_seconds: int = Field(default=86400, alias="REDIS_TILE_TTL_SECONDS")
+    # TTL for tiles from recent observations (may change, 1 h)
+    redis_tile_ttl_recent_seconds: int = Field(default=3600, alias="REDIS_TILE_TTL_RECENT_SECONDS")
+    # Kill-switch: set REDIS_ENABLED=false to disable Redis without redeploying
+    redis_enabled: bool = Field(default=True, alias="REDIS_ENABLED")
+
     class Config:
         env_file = ".env"
         extra = "ignore"
