@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radar Visualization v2 - WebMet25</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Our CSS -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- v2 version indicator — fixed top-left, pointer-events:none so it never blocks map interaction -->
+    <div id="v2-indicator" style="
+      position: fixed;
+      top: 8px;
+      left: 8px;
+      background: #e74c3c;
+      color: white;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: bold;
+      z-index: 10000;
+      pointer-events: none;
+    ">v2-canvas</div>
+
+    <!-- Map Container -->
+    <div id="map"></div>
+
+    <!-- ===== ICON BAR (top-right) ===== -->
+    <!-- All module + action icons grouped in a vertical bar.
+         Positioned to the right of the map, above Leaflet's attribution. -->
+    <div id="icon-bar">
+        <!-- Module A – Radar Selection -->
+        <button id="btn-module-a" class="icon-btn" title="Radar Selection" aria-label="Radar Selection">
+            <span class="icon-glyph">📡</span>
+            <span class="icon-badge" id="badge-module-a">0</span>
+        </button>
+
+        <!-- Module B – Field/Product Selection -->
+        <button id="btn-module-b" class="icon-btn" title="Field Selection" aria-label="Field Selection">
+            <span class="icon-glyph">⊞</span>
+            <span class="icon-badge" id="badge-module-b">—</span>
+        </button>
+
+        <!-- Module C – Time Window -->
+        <button id="btn-module-c" class="icon-btn" title="Time Window" aria-label="Time Window">
+            <span class="icon-glyph">🕐</span>
+            <span class="icon-badge" id="badge-module-c">3h</span>
+        </button>
+
+        <!-- Camera – Map Snapshot -->
+        <button id="btn-snapshot" class="icon-btn" title="Take map snapshot" aria-label="Take map snapshot">
+            <span class="icon-glyph">📷</span>
+        </button>
+
+        <!-- Gear – Settings -->
+        <button id="btn-settings" class="icon-btn" title="Settings" aria-label="Open settings">
+            <span class="icon-glyph">⚙</span>
+        </button>
+    </div>
+
+    <!-- Snapshot error message (shown near icon bar) -->
+    <div id="snapshot-error" class="snapshot-error" style="display:none;"></div>
+
+    <!-- #status removed (Fix 3): status messages now appear in #message-area below animation controls -->
+
+    <!-- ===== MODULE A – Radar Selection ===== -->
+    <div id="panel-module-a" class="floating-panel" style="display:none;">
+        <div class="panel-header">
+            <span>📡 Radar Selection</span>
+            <button class="panel-close" data-close="panel-module-a" aria-label="Close panel">✕</button>
+        </div>
+        <div class="panel-body">
+            <!-- Active/Inactive toggle switch (Change 1) -->
+            <div class="control-group toggle-row">
+                <label class="toggle-switch-wrapper" for="toggle-show-inactive">
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="toggle-show-inactive">
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span class="toggle-label">Show inactive</span>
+                </label>
+            </div>
+            <!-- Select / clear actions -->
+            <div class="checkbox-actions">
+                <button id="btn-select-all-radars" class="small-btn">All</button>
+                <button id="btn-clear-all-radars" class="small-btn">None</button>
+            </div>
+            <!-- Radar checkbox list -->
+            <div id="radar-checkboxes" class="checkbox-container">
+                <div id="radar-list">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== MODULE B – Field/Product Selection ===== -->
+    <div id="panel-module-b" class="floating-panel" style="display:none;">
+        <div class="panel-header">
+            <span>⊞ Field Selection</span>
+            <button class="panel-close" data-close="panel-module-b" aria-label="Close panel">✕</button>
+        </div>
+        <div class="panel-body">
+            <!-- Field dropdown -->
+            <div class="control-group">
+                <label for="product-select">Field:</label>
+                <select id="product-select">
+                    <option value="">Select field...</option>
+                </select>
+            </div>
+            <!-- Filtered/Unfiltered toggle switch (Change 2)
+                 OFF = show unfiltered fields (no 'o' suffix, processed data)
+                 ON  = show filtered fields ('o' suffix, raw data) -->
+            <div class="control-group toggle-row">
+                <label class="toggle-switch-wrapper" for="toggle-show-filtered">
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="toggle-show-filtered">
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span class="toggle-label">Filtered</span>
+                </label>
+            </div>
+            <!-- Colormap Selection (hidden until product selected) -->
+            <div class="control-group" id="colormap-group" style="display:none;">
+                <label for="colormap-select">Colormap:</label>
+                <select id="colormap-select"></select>
+            </div>
+            <!-- Fix 2: Opacity slider -->
+            <div class="control-group" id="field-opacity-group" style="display:none;">
+                <label for="field-opacity-slider">Opacity:</label>
+                <div class="opacity-control">
+                    <input type="range" id="field-opacity-slider" min="0" max="1" step="0.05" value="0.7">
+                    <span id="field-opacity-value">70%</span>
+                </div>
+            </div>
+            <!-- Value Filter (vmin/vmax) -->
+            <div class="control-group" id="range-group" style="display:none;">
+                <label>Value Filter:</label>
+                <div class="range-control">
+                    <div class="range-row">
+                        <span class="range-label">Min</span>
+                        <input type="number" id="vmin-input" class="range-input" step="any">
+                    </div>
+                    <div class="range-row">
+                        <span class="range-label">Max</span>
+                        <input type="number" id="vmax-input" class="range-input" step="any">
+                    </div>
+                    <button id="btn-apply-range" class="small-btn apply-btn">Apply</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== MODULE C – Time Selection ===== -->
+    <div id="panel-module-c" class="floating-panel" style="display:none;">
+        <div class="panel-header">
+            <span>🕐 Time Window</span>
+            <button class="panel-close" data-close="panel-module-c" aria-label="Close panel">✕</button>
+        </div>
+        <div class="panel-body">
+            <!-- Predefined time window buttons (always one active) -->
+            <div class="time-window-buttons">
+                <button class="time-window-btn" data-hours="1.5">Last 1.5 hrs</button>
+                <button class="time-window-btn active" data-hours="3">Last 3 hrs</button>
+                <button class="time-window-btn" data-hours="4.5">Last 4.5 hrs</button>
+                <button class="time-window-btn" data-hours="6">Last 6 hrs</button>
+            </div>
+            <!-- Custom range reveal link -->
+            <div class="custom-range-toggle">
+                <button id="btn-custom-range" class="link-btn">Custom range…</button>
+            </div>
+            <!-- Custom datetime range (hidden by default, slides in) -->
+            <div id="timerange-container" class="timerange-container" style="display: none;">
+                <div class="timerange-inputs">
+                    <div class="input-group">
+                        <label for="start-date" class="input-label">From:</label>
+                        <input type="datetime-local" id="start-date" class="datetime-input">
+                    </div>
+                    <div class="input-group">
+                        <label for="end-date" class="input-label">To:</label>
+                        <input type="datetime-local" id="end-date" class="datetime-input">
+                    </div>
+                    <button id="btn-load-timerange" class="action-btn secondary" disabled>Load Range</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== SETTINGS PANEL ===== -->
+    <div id="settings-panel" class="floating-panel" style="display:none;">
+        <div class="panel-header">
+            <span>⚙ Settings</span>
+            <button class="panel-close" data-close="settings-panel" aria-label="Close settings">✕</button>
+        </div>
+        <div class="panel-body">
+            <!-- Basemap -->
+            <div class="control-group">
+                <label for="basemap-select">Basemap:</label>
+                <select id="basemap-select">
+                    <option value="dark">Dark</option>
+                    <option value="light">Light</option>
+                    <option value="osm">OpenStreetMap</option>
+                    <option value="satellite">Satellite</option>
+                    <option value="terrain">Terrain</option>
+                </select>
+            </div>
+            <!-- Fix 6: Coverage circles toggle + opacity, grouped below basemap -->
+            <div class="coverage-controls">
+                <div class="control-group toggle-row">
+                    <label class="toggle-switch-wrapper" for="toggle-coverage">
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="toggle-coverage">
+                            <span class="toggle-slider"></span>
+                        </span>
+                        <span class="toggle-label">Radar Coverage</span>
+                    </label>
+                </div>
+                <div class="control-group" id="coverage-opacity-group" style="display:none;">
+                    <label for="coverage-opacity-slider">Coverage opacity:</label>
+                    <div class="opacity-control">
+                        <input type="range" id="coverage-opacity-slider" min="0.01" max="0.5" step="0.01" value="0.1">
+                        <span id="coverage-opacity-value">10%</span>
+                    </div>
+                </div>
+            </div>
+            <!-- Radar status refresh -->
+            <div class="settings-section-header">
+                <span title="How often to re-check which radars are online. Only updates the status indicator; does not reload images.">Radar Status Check</span>
+                <button id="btn-radar-refresh-now" class="icon-refresh-btn" title="Re-check radar status now">↻</button>
+            </div>
+            <div class="settings-row-sub">
+                <input type="number" id="settings-refresh-interval" min="1" max="60" step="1" value="10">
+                <span class="settings-unit">min</span>
+                <button id="settings-refresh-save" class="small-btn">Save</button>
+            </div>
+            <!-- Live window update -->
+            <div class="settings-section-header">
+                <span title="How often to fetch new radar images when a time window (e.g. Last 3h) is active. Lower values mean more up-to-date data but more server load.">Live Window Update</span>
+                <button id="btn-settings-cog-refresh-now" class="icon-refresh-btn" title="Fetch latest COGs now">↻</button>
+            </div>
+            <div class="settings-row-sub">
+                <input type="number" id="settings-live-refresh-interval" min="1" max="30" step="1" value="5">
+                <span class="settings-unit">min</span>
+                <button id="settings-live-refresh-save" class="small-btn">Save</button>
+            </div>
+            <div class="settings-row settings-info">
+                <span>Radar activity threshold is set on the indexer via <code>RADAR_ACTIVE_THRESHOLD_HOURS</code>.</span>
+            </div>
+            <!-- Keyboard shortcuts -->
+            <div class="shortcuts-info">
+                <details>
+                    <summary>⌨️ Shortcuts</summary>
+                    <div class="shortcuts-list">
+                        <div><kbd>Space</kbd> Play/Pause</div>
+                        <div><kbd>←</kbd> <kbd>→</kbd> Navigate</div>
+                        <div><kbd>Home</kbd> Latest</div>
+                        <div><kbd>L</kbd> Load Latest</div>
+                        <div><kbd>S</kbd> Speed</div>
+                    </div>
+                </details>
+            </div>
+            <!-- COG Browser link: hidden by default; reveal with Ctrl+Shift+D -->
+            <a id="cog-browser-link" href="cog-browser.html" class="nav-link" style="display:none; margin-top:10px;">Go to COG Browser →</a>
+        </div>
+    </div>
+
+    <!-- ===== LEGEND (Bottom Left) ===== -->
+    <div id="legend-container"></div>
+    
+    <!-- ===== ANIMATION CONTROLS (Bottom Center) ===== -->
+    <div id="animation-controls">
+        <!-- Top row: time window label + live indicator + current frame time -->
+        <div class="animation-info-row">
+            <span id="time-window-label" class="time-window-label">—</span>
+            <span id="live-indicator" class="live-indicator live-off" title="Live mode status">○ Live</span>
+            <span id="time-display" class="frame-time-display">—</span>
+        </div>
+        <!-- Slider -->
+        <div class="animation-slider-container">
+            <input type="range" id="animation-slider" min="0" max="0" value="0" step="1">
+        </div>
+        <!-- Control buttons + nav + frame counter + speed slider -->
+        <div class="animation-buttons">
+            <button id="btn-prev" title="Previous frame" aria-label="Previous frame">◀</button>
+            <button id="btn-play-pause" title="Play" aria-label="Play/Pause">▶</button>
+            <button id="btn-next" title="Next frame" aria-label="Next frame">▶</button>
+            <button id="btn-latest" title="Go to latest frame" aria-label="Go to latest frame">▶▶</button>
+            <button id="btn-cog-refresh-now" title="Fetch latest COGs now" aria-label="Fetch latest COGs now" disabled>↻</button>
+            <div class="speed-control" title="Animation speed">
+                <span class="speed-label">Speed</span>
+                <input type="range" id="speed-slider" min="0.5" max="2" step="0.1" value="1">
+                <span id="speed-value">1.0x</span>
+            </div>
+            <span id="frame-counter">— / —</span>
+        </div>
+        <!-- Fix 3 (revised): status message area -->
+        <div id="message-area" class="message-area" role="status" aria-live="polite">
+            <span id="message-text"></span>
+        </div>
+    </div>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- v2 JS Modules -->
+    <script type="module" src="js/app-v2.js"></script>
+</body>
+</html>
