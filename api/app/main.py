@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import logging
+import os
 import time
 import rasterio
 from rasterio.env import Env
@@ -50,7 +51,8 @@ async def lifespan(app: FastAPI):
 
     # Eagerly establish Redis connection so the first tile request is fast
     redis_client = get_redis()
-    if redis_client is not None:
+    redis_ok = redis_client is not None
+    if redis_ok:
         logger.info(
             "Redis L2 tile cache connected at %s:%d",
             settings.redis_host,
@@ -58,6 +60,24 @@ async def lifespan(app: FastAPI):
         )
     else:
         logger.warning("Redis unavailable — falling back to L1 cache only")
+
+    try:
+        worker_count = int(os.environ.get("UVICORN_WORKERS", "1") or "1")
+    except ValueError:
+        worker_count = 1
+    if worker_count > 1 and not redis_ok:
+        logger.warning(
+            f"Running {worker_count} workers WITHOUT Redis. "
+            f"Each worker has an independent L1 cache — cache hit rates "
+            f"will be reduced. Start Redis to enable shared caching."
+        )
+
+    worker_id = os.getpid()
+    logger.info(
+        f"Worker PID={worker_id} started. "
+        f"Render threads={settings.tile_render_threads} "
+        f"Redis={'connected' if redis_ok else 'unavailable'}"
+    )
 
     try:
         yield
