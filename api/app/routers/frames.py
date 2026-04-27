@@ -412,6 +412,15 @@ async def get_frame_image(
                 cog.observation_time,
             ),
         )
+    except rasterio.errors.RasterioIOError as exc:
+        logger.warning(
+            "FRAME transient rasterio read error cog_id=%d file=%s: %s",
+            cog_id, cog.file_path, exc,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="COG file temporarily unreadable (may still be writing). Retry shortly.",
+        )
     except Exception as exc:
         logger.error(
             "FRAME unhandled render error cog_id=%d file=%s: %s",

@@ -584,7 +584,7 @@ const app = {
             });
         }
 
-        const applyColormapBtn = document.getElementById('apply-colormap-btn');
+        const applyColormapBtn = document.getElementById('btn-apply-range');
         if (applyColormapBtn) {
             applyColormapBtn.addEventListener('click', () => this.applyColormapChange());
         }
