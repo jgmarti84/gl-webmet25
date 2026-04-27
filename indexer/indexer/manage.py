@@ -147,6 +147,8 @@ def cmd_delete(args):
     date_str = args.date
     product_key = args.product
     dry_run = args.dry_run
+    remove_logs = args.remove_logs
+    quiet = args.quiet
     
     # Parse radar codes from comma-separated list, or use None for all radars
     radar_codes = None
@@ -161,12 +163,14 @@ def cmd_delete(args):
         return 1
     
     try:
-        deleter = ProductDeleter(settings.watch_path)
-        deleted_files, deleted_cogs, errors = deleter.delete_products(
+        deleter = ProductDeleter(settings.watch_path, settings.logs_path)
+        deleted_files, deleted_cogs, deleted_logs, errors = deleter.delete_products(
             date_str=date_str,
             radar_codes=radar_codes,
             product_key=product_key,
             dry_run=dry_run,
+            remove_logs=remove_logs,
+            quiet=quiet,
         )
         
         if errors:
@@ -185,6 +189,8 @@ def cmd_delete(args):
         print(f"Product:       {product_key or 'ALL'}")
         print(f"Files Deleted: {deleted_files}")
         print(f"COG Records:   {deleted_cogs}")
+        if remove_logs:
+            print(f"Log Files:     {deleted_logs}")
         print(f"Errors:        {len(errors)}")
         print("=" * 60)
         
@@ -208,6 +214,10 @@ Examples:
   python -m indexer.manage delete 20260101 --radars RMA1,RMA2     # Delete specific radars only
   python -m indexer.manage delete 20260101 --product DBZH         # Delete specific product only
   python -m indexer.manage delete 20260101 --dry-run              # Preview deletion
+  python -m indexer.manage delete 20260101 --remove-logs          # Also delete log files matching the date
+  python -m indexer.manage delete 20260101 --radars RMA1 --remove-logs # Delete COGs and logs from RMA1
+  python -m indexer.manage delete 20260101 --quiet                # Only show summary, not per-file output
+  python -m indexer.manage delete 20260101 --remove-logs --quiet  # Delete logs and COGs with minimal output
         """
     )
     
@@ -249,6 +259,16 @@ Examples:
         '--dry-run',
         action='store_true',
         help='Show what would be deleted without actually deleting'
+    )
+    delete_parser.add_argument(
+        '--remove-logs',
+        action='store_true',
+        help='Also delete matching log files (genpro25.log.YYYY-MM-DD) from the logs directory'
+    )
+    delete_parser.add_argument(
+        '--quiet',
+        action='store_true',
+        help='Suppress per-file logging. Only show the summary.'
     )
     delete_parser.set_defaults(func=cmd_delete)
     
