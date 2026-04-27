@@ -89,6 +89,7 @@ services:
       RADAR_CODES: "RMA1, RMA2, RMA16, RMA17, RMA6, RMA9, RMA10, RMA11, RMA12"   # Optional: limit to specific radars
     volumes:
       - ../product_output:/product_output
+      - ../logs:/logs
     depends_on:
       radar_db:
         condition: service_healthy

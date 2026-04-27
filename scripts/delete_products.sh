@@ -2,13 +2,14 @@
 #
 # scripts/delete_products.sh
 #
-# Delete COG products up to a specified date, with optional radar/product filters.
+# Delete COG products and optional log files up to a specified date.
 #
 # Usage:
 #   ./scripts/delete_products.sh 20260101
 #   ./scripts/delete_products.sh 20260101 --radars RMA1,RMA2
 #   ./scripts/delete_products.sh 20260101 --product DBZH
-#   ./scripts/delete_products.sh 20260101 --radars RMA1 --product DBZH --dry-run
+#   ./scripts/delete_products.sh 20260101 --remove-logs
+#   ./scripts/delete_products.sh 20260101 --radars RMA1 --product DBZH --remove-logs --dry-run
 #
 # This script:
 # 1. Takes a date (YYYYMMDD) as the cutoff for deletion
@@ -33,7 +34,7 @@ print_usage() {
     cat <<EOF
 Usage: $0 DATE [OPTIONS]
 
-Delete COG products from the webmet25 stack up to a specified date.
+Delete COG products and optional log files from the webmet25 stack up to a specified date.
 
 Positional arguments:
   DATE                     Date in YYYYMMDD format (e.g., 20260101).
@@ -44,6 +45,9 @@ Optional arguments:
                           If omitted, all radars are included.
   --product PRODUCT_KEY    Delete only this product (e.g., DBZH).
                           If omitted, all products are deleted.
+  --remove-logs            Also delete matching log files (genpro25.log.YYYY-MM-DD).
+                          Never deletes the current genpro25.log file.
+  --quiet                  Suppress per-file logging. Only show the deletion summary.
   --dry-run                Show what would be deleted without actually deleting.
 
 Examples:
@@ -58,6 +62,18 @@ Examples:
 
   # Combine filters: RMA1 + RMA2 + DBZH
   $0 20260101 --radars RMA1,RMA2 --product DBZH
+
+  # Also delete log files matching the date
+  $0 20260101 --remove-logs
+
+  # Delete COGs and logs from specific radars only
+  $0 20260101 --radars RMA1,RMA6 --remove-logs
+
+  # Suppress verbose output, only show summary
+  $0 20260101 --quiet
+
+  # Combine: delete logs and COGs with minimal output
+  $0 20260101 --remove-logs --quiet
 
   # Preview deletion without actually deleting
   $0 20260101 --dry-run
@@ -101,6 +117,14 @@ while [[ $# -gt 0 ]]; do
         --product)
             CMD="$CMD --product $2"
             shift 2
+            ;;
+        --remove-logs)
+            CMD="$CMD --remove-logs"
+            shift
+            ;;
+        --quiet)
+            CMD="$CMD --quiet"
+            shift
             ;;
         --dry-run)
             CMD="$CMD --dry-run"
