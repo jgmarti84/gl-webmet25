@@ -1,9 +1,13 @@
 # api/app/services/tile_service.py
+import hashlib
 import io
+import json
 import logging
 import threading
+import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Tuple, List
 
@@ -29,6 +33,9 @@ TILE_CACHE_MAX_SIZE: int = 2000
 # 4 decimal places (0.0001 precision) eliminates floating-point noise while still
 # distinguishing intentionally different range settings.
 CACHE_KEY_FLOAT_PRECISION: int = 4
+# Observation age threshold (seconds) below which a tile is considered "recent".
+# Recent tiles receive a shorter Redis TTL because they may be updated by the indexer.
+RECENT_TILE_THRESHOLD_SECONDS: int = 7200  # 2 hours
 
 # In-process tile cache — keyed by (file_path, z, x, y, cmap_name, cmap_vmin,
 # cmap_vmax, filter_vmin, filter_vmax).
@@ -180,6 +187,44 @@ def _tile_cache_key(
         round(filter_vmin, rnd) if filter_vmin is not None else None,
         round(filter_vmax, rnd) if filter_vmax is not None else None,
     )
+
+
+def _redis_cache_key(cache_key: tuple) -> str:
+    """
+    Converts the internal tuple cache key into a Redis string key.
+    Uses SHA256 to produce a fixed-length key regardless of the
+    number of parameters. Prefixed with 'tile:' for namespace
+    clarity and future key scanning.
+
+    The tuple contains: (file_path, z, x, y, cmap_name,
+    cmap_vmin, cmap_vmax, filter_vmin, filter_vmax)
+
+    JSON serialisation is used to avoid delimiter-collision issues
+    that can arise with flat string concatenation.
+    """
+    raw = json.dumps(list(cache_key), default=str, sort_keys=False)
+    digest = hashlib.sha256(raw.encode()).hexdigest()
+    return f"tile:{digest}"
+
+
+def _get_tile_ttl(observation_time: Optional[datetime]) -> int:
+    """
+    Returns Redis TTL in seconds based on observation age.
+    Recent COGs (within 2h) get a short TTL since they may
+    be re-indexed with updated data. Past COGs are immutable
+    and get a long TTL.
+    """
+    if observation_time is None:
+        return settings.redis_tile_ttl_recent_seconds
+    obs_utc = (
+        observation_time.replace(tzinfo=timezone.utc)
+        if observation_time.tzinfo is None
+        else observation_time
+    )
+    age = datetime.now(timezone.utc) - obs_utc
+    if age.total_seconds() < RECENT_TILE_THRESHOLD_SECONDS:
+        return settings.redis_tile_ttl_recent_seconds
+    return settings.redis_tile_ttl_seconds
 
 
 def detect_cog_type(file_path: str) -> str:
@@ -347,6 +392,7 @@ class TileService:
         filter_vmin: Optional[float] = None,
         filter_vmax: Optional[float] = None,
         cog_data_type: Optional[str] = None,
+        observation_time: Optional[datetime] = None,
     ) -> Optional[bytes]:
         """
         Generate a PNG tile from a COG file.
@@ -369,17 +415,18 @@ class TileService:
             disables that side of the filter (no filtering on that side).
 
         Args:
-            file_path:     Relative path to COG file
-            z, x, y:       Tile coordinates
-            colormap:      Integer-keyed colormap dict for non-raw_float tiles
-            resampling:    Resampling method
-            cmap_name:     Matplotlib/custom colormap name (raw_float only)
-            cmap_vmin:     Colormap range minimum — product default value
-            cmap_vmax:     Colormap range maximum — product default value
-            filter_vmin:   Optional data-filter lower bound (transparent if data < this)
-            filter_vmax:   Optional data-filter upper bound (transparent if data > this)
-            cog_data_type: Pre-determined COG type string (skips re-detection
-                           when already known from the database record)
+            file_path:        Relative path to COG file
+            z, x, y:          Tile coordinates
+            colormap:         Integer-keyed colormap dict for non-raw_float tiles
+            resampling:       Resampling method
+            cmap_name:        Matplotlib/custom colormap name (raw_float only)
+            cmap_vmin:        Colormap range minimum — product default value
+            cmap_vmax:        Colormap range maximum — product default value
+            filter_vmin:      Optional data-filter lower bound (transparent if data < this)
+            filter_vmax:      Optional data-filter upper bound (transparent if data > this)
+            cog_data_type:    Pre-determined COG type string (skips re-detection
+                              when already known from the database record)
+            observation_time: COG observation time, used for Redis TTL calculation
         Returns:
             PNG image bytes or transparent tile for out-of-bounds / errors
         """
@@ -403,12 +450,34 @@ class TileService:
             effective_cmap_vmin, effective_cmap_vmax,
             filter_vmin, filter_vmax,
         )
+
+        # --- L1 cache check ---
         with _tile_cache_lock:
             cached = _tile_cache.get(cache_key)
         if cached is not None:
-            logger.debug(f"Tile cache hit: {file_path} {z}/{x}/{y}")
+            logger.debug("TILE L1 HIT key=%s", cache_key)
             return cached
 
+        # --- L2 cache check (Redis) ---
+        from .redis_client import get_redis
+        r = get_redis()
+        redis_key = _redis_cache_key(cache_key)
+        if r is not None:
+            try:
+                cached_l2 = r.get(redis_key)
+            except Exception as e:
+                logger.warning("Redis get failed: %s", e)
+                cached_l2 = None
+            if cached_l2 is not None:
+                # Populate L1 from L2
+                with _tile_cache_lock:
+                    _tile_cache[cache_key] = cached_l2
+                logger.debug("TILE L2 HIT key=%s size=%dB", redis_key, len(cached_l2))
+                return cached_l2
+            logger.debug("TILE L2 MISS key=%s", redis_key)
+
+        # --- Render ---
+        t0 = time.monotonic()
         result = self._render_tile(
             full_path,
             file_path,
@@ -424,12 +493,29 @@ class TileService:
             filter_vmax,
             cog_data_type,
         )
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
 
         # Cache every successful result, including transparent tiles.
         # Do not cache None (file not found) so re-indexed files are picked up.
         if result is not None:
             with _tile_cache_lock:
                 _tile_cache[cache_key] = result
+
+            if r is not None:
+                ttl = _get_tile_ttl(observation_time)
+                try:
+                    r.setex(redis_key, ttl, result)
+                except Exception as e:
+                    logger.warning("Redis set failed: %s", e)
+                logger.info(
+                    "TILE RENDER + CACHE cog=%s z=%d x=%d y=%d elapsed=%dms l2_ttl=%ds",
+                    file_path, z, x, y, elapsed_ms, ttl,
+                )
+            else:
+                logger.info(
+                    "TILE RENDER + CACHE cog=%s z=%d x=%d y=%d elapsed=%dms l2_ttl=N/A",
+                    file_path, z, x, y, elapsed_ms,
+                )
 
         return result
 
@@ -682,3 +768,12 @@ def get_tile_service() -> TileService:
         _tile_service = TileService()
     return _tile_service
 
+
+def get_l1_cache_stats() -> Dict[str, int]:
+    """Return the current L1 in-memory tile cache occupancy.
+
+    Exposed as a public function so that routers can query L1 stats
+    without directly accessing the private ``_tile_cache`` variable.
+    """
+    with _tile_cache_lock:
+        return {"size": len(_tile_cache), "maxsize": TILE_CACHE_MAX_SIZE}

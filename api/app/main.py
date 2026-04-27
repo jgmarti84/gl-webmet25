@@ -12,6 +12,7 @@ from .config import settings
 from .routers import radars_router, products_router, cogs_router, tiles_router, colormap_router
 from .schemas import HealthResponse
 from .services.tile_service import _tile_render_executor
+from .services.redis_client import get_redis, close_redis
 
 # Setup logging
 logging.basicConfig(
@@ -47,11 +48,24 @@ async def lifespan(app: FastAPI):
         f"      GDAL_DISABLE_READDIR_ON_OPEN={settings.gdal_disable_readdir_on_open}"
     )
 
+    # Eagerly establish Redis connection so the first tile request is fast
+    redis_client = get_redis()
+    if redis_client is not None:
+        logger.info(
+            "Redis L2 tile cache connected at %s:%d",
+            settings.redis_host,
+            settings.redis_port,
+        )
+    else:
+        logger.warning("Redis unavailable — falling back to L1 cache only")
+
     try:
         yield
     finally:
         # Shutdown
         logger.info("Shutting down Radar Visualization API...")
+        close_redis()
+        logger.info("Redis connection closed.")
         _tile_render_executor.shutdown(wait=False)
         logger.info("Tile render executor shut down.")
         # Note: per-thread rasterio DatasetReader caches (threading.local) cannot
