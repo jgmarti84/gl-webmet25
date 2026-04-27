@@ -4,6 +4,7 @@ from .products import router as products_router
 from .cogs import router as cogs_router
 from .tiles import router as tiles_router
 from .colormap import router as colormap_router
+from .frames import router as frames_router
 
 __all__ = [
     'radars_router',
@@ -11,4 +12,5 @@ __all__ = [
     'cogs_router',
     'tiles_router',
     'colormap_router',
+    'frames_router',
 ]

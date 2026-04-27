@@ -17,6 +17,13 @@ from ..services.tile_service import read_cog_metadata, get_l1_cache_stats
 from ..services.redis_client import get_redis
 from ..utils.colormaps import colormap_for_field, colormap_options_for_field
 
+# Imported lazily to avoid a circular import at module load time.
+# frames.py imports from this module, so we defer the import to the
+# cache/stats handler rather than the module level.
+def _get_frame_l1_cache_stats():
+    from .frames import get_frame_l1_cache_stats
+    return get_frame_l1_cache_stats()
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tiles", tags=["Tiles"])
@@ -468,10 +475,13 @@ async def get_cache_stats():
                 logger.warning("Redis dbsize failed: %s", e)
 
     l1_stats = get_l1_cache_stats()
+    frame_l1_stats = _get_frame_l1_cache_stats()
     return {
         "l1_size": l1_stats["size"],
         "l1_maxsize": l1_stats["maxsize"],
         "l1_hit_rate": "N/A - not tracked",
+        "frame_l1_size": frame_l1_stats["size"],
+        "frame_l1_maxsize": frame_l1_stats["maxsize"],
         "redis_connected": redis_connected,
         "redis_used_memory_human": redis_used_memory_human,
         "redis_keyspace": {"tile_keys": tile_keys},

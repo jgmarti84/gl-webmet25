@@ -1,0 +1,21 @@
+# docker-compose.v2.yml
+# Extend the main stack with the v2 frontend on port 8090.
+# Usage:
+#   docker compose -f docker-compose.yml -f webmet25-v2/docker-compose.v2.yml up -d
+#
+# v2 is a parallel frontend for testing the Canvas-based animation
+# architecture. v1 (port 80) continues to run untouched.
+# Both v1 and v2 share the same API, database, and Redis cache.
+# Port 8090 bypasses Caddy auth — for development/testing only.
+
+services:
+  frontend-v2:
+    build:
+      context: .
+      dockerfile: webmet25-v2/frontend/Dockerfile
+    container_name: radar_frontend_v2
+    ports:
+      - "8090:8090"
+    depends_on:
+      - api
+    restart: unless-stopped
