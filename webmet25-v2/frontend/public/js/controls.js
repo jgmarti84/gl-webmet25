@@ -1,0 +1,460 @@
+/**
+ * Controls Module - Handles UI control interactions
+ */
+
+// Fix 3: message queue constants
+const MSG_AUTO_CLEAR_MS  = 8000; // non-error messages auto-clear after 8 s
+const MSG_MIN_DISPLAY_MS = 2000; // minimum time each message stays visible
+
+export class UIControls {
+    constructor() {
+        this.handlers = {};
+
+        // Fix 3: queue-based status message system
+        this._msgQueue  = [];      // pending messages
+        this._msgTimer  = null;    // setInterval for advancing the queue
+        this._clearTimer = null;   // setTimeout for auto-clearing the current message
+        this._msgShownAt = 0;      // timestamp when the current message was shown
+    }
+
+    // -------------------------------------------------------------------------
+    // Fix 3: Status message system
+    // Messages are shown in a dedicated fixed-height area below the animation
+    // controls at the bottom centre of the page.  Each message stays visible for
+    // at least MSG_MIN_DISPLAY_MS so rapid successive messages do not flash.
+    // Non-error messages are auto-cleared after MSG_AUTO_CLEAR_MS.
+    // Error messages persist until replaced.
+    // -------------------------------------------------------------------------
+
+    /**
+     * Queue a status message.
+     *
+     * @param {string} message - Text to display
+     * @param {string} type    - '' | 'loading' | 'error' | 'success'
+     */
+    setStatus(message, type = '') {
+        this._msgQueue.push({ message, type });
+        this._drainQueue();
+    }
+
+    /** Advance the message queue if possible. */
+    _drainQueue() {
+        if (this._msgQueue.length === 0) return;
+
+        const now = Date.now();
+        const elapsed = now - this._msgShownAt;
+
+        if (this._msgShownAt > 0 && elapsed < MSG_MIN_DISPLAY_MS) {
+            // Current message hasn't been visible long enough — schedule a retry
+            if (!this._msgTimer) {
+                this._msgTimer = setTimeout(() => {
+                    this._msgTimer = null;
+                    this._drainQueue();
+                }, MSG_MIN_DISPLAY_MS - elapsed);
+            }
+            return;
+        }
+
+        // Show the next message
+        const { message, type } = this._msgQueue.shift();
+        this._showMessage(message, type);
+    }
+
+    /** Render a message into the #message-area element. */
+    _showMessage(message, type) {
+        if (this._clearTimer) {
+            clearTimeout(this._clearTimer);
+            this._clearTimer = null;
+        }
+
+        const area = document.getElementById('message-area');
+        const text = document.getElementById('message-text');
+        if (!area || !text) return;
+
+        text.textContent = message;
+        // Remove old type classes and apply new one
+        area.className = 'message-area';
+        if (type) area.classList.add(type);
+        area.classList.add('visible');
+
+        this._msgShownAt = Date.now();
+
+        // Auto-clear non-error messages after MSG_AUTO_CLEAR_MS
+        if (type !== 'error') {
+            this._clearTimer = setTimeout(() => {
+                this._clearTimer = null;
+                // If there's another queued message show it; otherwise fade out
+                if (this._msgQueue.length > 0) {
+                    this._drainQueue();
+                } else {
+                    area.classList.remove('visible');
+                    this._msgShownAt = 0;
+                }
+            }, MSG_AUTO_CLEAR_MS);
+        }
+    }
+    
+    /**
+     * Update time display
+     */
+    setTimeDisplay(dateString) {
+        const display = document.getElementById('time-display');
+        if (!display) return;
+        
+        if (!dateString) {
+            display.textContent = '--:--';
+            return;
+        }
+        
+        const date = new Date(dateString);
+        display.textContent = date.toLocaleString('es-AR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: 'America/Argentina/Buenos_Aires',
+        });
+    }
+    
+    /**
+     * Populate a select dropdown with optional filtering
+     */
+    populateSelect(selectId, items, valueKey, labelKey, placeholder = 'Select...') {
+        const select = document.getElementById(selectId);
+        if (!select) return;
+        
+        select.innerHTML = `<option value="">${placeholder}</option>`;
+        
+        items.forEach(item => {
+            const option = document.createElement('option');
+            option.value = item[valueKey];
+            option.textContent = item[labelKey];
+            select.appendChild(option);
+        });
+    }
+    
+    /**
+     * Populate product select with filtered/unfiltered products
+     */
+    populateProductSelect(allProducts, showUnfiltered = false) {
+        const select = document.getElementById('product-select');
+        if (!select) return;
+        
+        // Filter products based on whether they end with 'o' (unfiltered) or not (filtered)
+        // Check for uppercase letter followed by lowercase 'o' at the end (e.g., RHOHVo, COLMAXo)
+        const filteredProducts = allProducts.filter(product => {
+            const productKey = product.product_key;
+            const isUnfiltered = /o$/.test(productKey); // product_key ends with 'o' = raw/unfiltered data
+            return showUnfiltered ? isUnfiltered : !isUnfiltered;
+        });
+        
+        // Populate the select
+        this.populateSelect('product-select', filteredProducts, 'product_key', 'product_title', 'Select product...');
+    }
+    
+    /**
+     * Change 2: Sync the "Filtered" toggle checkbox to application state.
+     * Replaces the old button-based updateFilterButton().
+     *
+     * @param {boolean} showFiltered - true = show 'o'-suffix (raw) products
+     */
+    updateFilterToggle(showFiltered) {
+        const toggle = document.getElementById('toggle-show-filtered');
+        if (toggle) toggle.checked = showFiltered;
+    }
+
+    /**
+     * @deprecated Use updateFilterToggle() instead.
+     * Kept as a no-op alias to avoid runtime errors from any missed call sites.
+     */
+    updateFilterButton() {}
+
+    /**
+     * Update Module A and Module B icon-bar badges.
+     *
+     * @param {number} selectedRadarCount - How many radars are currently checked
+     * @param {string|null} selectedProduct - Currently selected product_key (or null)
+     */
+    updateModuleBadges(selectedRadarCount, selectedProduct) {
+        const badgeA = document.getElementById('badge-module-a');
+        if (badgeA) badgeA.textContent = String(selectedRadarCount || 0);
+
+        const badgeB = document.getElementById('badge-module-b');
+        if (badgeB) badgeB.textContent = selectedProduct || '—';
+    }
+    
+    /**
+     * Enable/disable navigation buttons
+     */
+    enableNavButtons(enabled) {
+        const buttons = ['btn-prev', 'btn-next', 'btn-latest'];
+        buttons.forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) btn.disabled = !enabled;
+        });
+    }
+    
+    /**
+     * Enable/disable animation controls
+     */
+    enableAnimationControls(enabled) {
+        const controls = ['btn-play-pause', 'speed-slider', 'animation-slider'];
+        controls.forEach(id => {
+            const element = document.getElementById(id);
+            if (element) element.disabled = !enabled;
+        });
+    }
+    
+    /**
+     * Update play/pause button
+     */
+    updatePlayButton(isPlaying) {
+        const btn = document.getElementById('btn-play-pause');
+        if (!btn) return;
+        
+        if (isPlaying) {
+            btn.innerHTML = '⏸';
+            btn.title = 'Pause';
+        } else {
+            btn.innerHTML = '▶';
+            btn.title = 'Play';
+        }
+    }
+    
+    /**
+     * Update speed button
+     */
+    updateSpeedButton(speed) {
+        const btn = document.getElementById('btn-speed');
+        if (!btn) return;
+        
+        btn.textContent = `${speed}x`;
+        btn.title = `Speed: ${speed}x`;
+    }
+    
+    /**
+     * Update animation slider
+     */
+    updateAnimationSlider(currentIndex, totalFrames) {
+        const slider = document.getElementById('animation-slider');
+        if (!slider) return;
+        
+        slider.max = totalFrames - 1;
+        slider.value = currentIndex;
+    }
+    
+    /**
+     * Update frame counter
+     */
+    updateFrameCounter(currentIndex, totalFrames) {
+        const counter = document.getElementById('frame-counter');
+        if (!counter) return;
+        
+        counter.textContent = `${currentIndex + 1} / ${totalFrames}`;
+    }
+    
+    /**
+     * Update opacity display
+     */
+    updateOpacityDisplay(opacity) {
+        const display = document.getElementById('opacity-value');
+        if (!display) return;
+        
+        display.textContent = `${Math.round(opacity * 100)}%`;
+    }
+    
+    /**
+     * Populate radar checkboxes
+     * @param {Array} radars - Array of radar objects (must include is_active field)
+     * @param {boolean} showInactive - If true, inactive radars are visible but dimmed
+     */
+    populateRadarCheckboxes(radars, showInactive = false) {
+        const container = document.getElementById('radar-list');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        
+        radars.forEach(radar => {
+            const item = document.createElement('div');
+            item.className = 'radar-checkbox-item';
+            if (!radar.is_active) {
+                item.classList.add('radar-inactive');
+            }
+            
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = `radar-${radar.code}`;
+            checkbox.value = radar.code;
+            checkbox.className = 'radar-checkbox';
+            
+            const dot = document.createElement('span');
+            dot.className = `radar-status-dot ${radar.is_active ? 'radar-status-active' : 'radar-status-inactive'}`;
+            dot.title = radar.is_active ? 'Active' : 'Inactive';
+            
+            const label = document.createElement('label');
+            label.htmlFor = `radar-${radar.code}`;
+            label.textContent = radar.title;
+            
+            item.appendChild(checkbox);
+            item.appendChild(dot);
+            item.appendChild(label);
+            container.appendChild(item);
+        });
+    }
+    
+    /**
+     * Get selected radar codes
+     */
+    getSelectedRadars() {
+        const checkboxes = document.querySelectorAll('.radar-checkbox:checked');
+        return Array.from(checkboxes).map(cb => cb.value);
+    }
+    
+    /**
+     * Select all radars
+     */
+    selectAllRadars() {
+        const checkboxes = document.querySelectorAll('.radar-checkbox');
+        checkboxes.forEach(cb => cb.checked = true);
+    }
+    
+    /**
+     * Clear all radar selections
+     */
+    clearAllRadars() {
+        const checkboxes = document.querySelectorAll('.radar-checkbox');
+        checkboxes.forEach(cb => cb.checked = false);
+    }
+    
+    /**
+     * Enable/disable load latest button
+     */
+    enableLoadLatestButton(enabled) {
+        const btn = document.getElementById('btn-load-latest');
+        if (btn) btn.disabled = !enabled;
+    }
+    
+    /**
+     * Enable/disable load time range button
+     */
+    enableLoadTimeRangeButton(enabled) {
+        const btn = document.getElementById('btn-load-timerange');
+        if (btn) btn.disabled = !enabled;
+    }
+    
+    /**
+     * Set time range input values
+     */
+    setTimeRangeValues(startDate, endDate) {
+        const startInput = document.getElementById('start-date');
+        const endInput = document.getElementById('end-date');
+        
+        if (startInput && startDate) {
+            startInput.value = this.formatDateTimeLocal(startDate);
+        }
+        
+        if (endInput && endDate) {
+            endInput.value = this.formatDateTimeLocal(endDate);
+        }
+    }
+    
+    /**
+     * Get time range input values as Date objects
+     */
+    getTimeRangeValues() {
+        const startInput = document.getElementById('start-date');
+        const endInput = document.getElementById('end-date');
+        
+        const startValue = startInput ? startInput.value : null;
+        const endValue = endInput ? endInput.value : null;
+        
+        return {
+            start: startValue ? new Date(startValue) : null,
+            end: endValue ? new Date(endValue) : null,
+        };
+    }
+    
+    /**
+     * Format Date object for datetime-local input
+     */
+    formatDateTimeLocal(date) {
+        if (!date) return '';
+        
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+    
+    /**
+     * Show a semi-transparent loading overlay on top of the map.
+     * The overlay is created dynamically on first call and reused thereafter.
+     * @param {string} message - Text shown inside the overlay
+     */
+    showMapOverlay(message = 'Loading\u2026') {
+        let overlay = document.getElementById('map-loading-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'map-loading-overlay';
+            overlay.style.cssText = [
+                'position:absolute',
+                'top:0',
+                'left:0',
+                'width:100%',
+                'height:100%',
+                'background:rgba(0,0,0,0.45)',
+                'display:flex',
+                'align-items:center',
+                'justify-content:center',
+                'z-index:1000',
+                'color:#fff',
+                'font-size:1.1rem',
+                'font-weight:600',
+                'pointer-events:none',
+                'border-radius:inherit',
+            ].join(';');
+            const mapEl = document.getElementById('map');
+            if (mapEl) {
+                if (window.getComputedStyle(mapEl).position === 'static') {
+                    mapEl.style.position = 'relative';
+                }
+                mapEl.appendChild(overlay);
+            }
+        }
+        overlay.textContent = message;
+        overlay.style.display = 'flex';
+    }
+
+    /**
+     * Update the text of a visible map overlay without showing/hiding it.
+     * @param {string} message - New text to display
+     */
+    updateMapOverlay(message) {
+        const overlay = document.getElementById('map-loading-overlay');
+        if (overlay && overlay.style.display !== 'none') {
+            overlay.textContent = message;
+        }
+    }
+
+    /**
+     * Hide the map loading overlay.
+     */
+    hideMapOverlay() {
+        const overlay = document.getElementById('map-loading-overlay');
+        if (overlay) {
+            overlay.style.display = 'none';
+        }
+    }
+
+    /**
+     * Get selected value from dropdown
+     */
+    getSelectedValue(selectId) {
+        const select = document.getElementById(selectId);
+        return select ? select.value : null;
+    }
+}
