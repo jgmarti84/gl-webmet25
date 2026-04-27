@@ -103,6 +103,17 @@ services:
     build:
       context: .
       dockerfile: api/Dockerfile
+    # Override CMD from Dockerfile to enable multi-worker mode without rebuilding.
+    # UVICORN_WORKERS defaults to 4 if not set in the environment.
+    # Set UVICORN_WORKERS=1 in .env to revert to a single worker for debugging.
+    # Requires Redis to be running for a shared L2 tile cache across workers.
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --workers ${UVICORN_WORKERS:-4}
+      --loop uvloop
+      --http httptools
     container_name: radar_api
     environment:
       DB_HOST: radar_db

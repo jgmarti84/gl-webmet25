@@ -42,6 +42,10 @@ class APISettings(BaseSettings):
     vsi_cache_size: int = Field(default=5000000, alias="VSI_CACHE_SIZE")
     gdal_disable_readdir_on_open: str = Field(default="EMPTY_DIR", alias="GDAL_DISABLE_READDIR_ON_OPEN")
 
+    # UVICORN_WORKERS is read by docker-compose.yml, not here.
+    # Set in .env or docker-compose environment section.
+    # Default: 4. Formula: CPU_CORES // 2 (e.g. 4 on an 8-core server) for tile servers.
+
     # Redis L2 tile cache
     redis_host: str = Field(default="redis", alias="REDIS_HOST")
     redis_port: int = Field(default=6379, alias="REDIS_PORT")
