@@ -17,6 +17,7 @@ class IndexerSettings(BaseSettings):
     
     # Indexer specific
     watch_path: str = Field(default="/product_output", alias="WATCH_PATH")
+    logs_path: str = Field(default="/logs", alias="LOGS_PATH")
     scan_interval_seconds: int = Field(default=30, alias="SCAN_INTERVAL")
     file_pattern: str = Field(default="*.tif", alias="FILE_PATTERN")
     
