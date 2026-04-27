@@ -2,9 +2,7 @@
  * API Module - Handles all backend communication
  */
 
-const API_BASE = window.location.hostname === 'localhost' 
-    ? 'http://localhost:8000/api/v1'
-    : '/api/v1';
+const API_BASE = '/api/v1';
 
 export const api = {
     /**

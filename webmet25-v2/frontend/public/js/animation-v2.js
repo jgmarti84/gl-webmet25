@@ -13,7 +13,7 @@
  * - initControls() wires DOM elements and replaces app.js's inline listeners.
  */
 
-const BASE_FRAME_INTERVAL_MS = 100; // interval at 1× speed (ms per frame)
+// Frame interval is calculated dynamically: 1000ms / speedMultiplier (matches v1)
 
 export class AnimationController {
     /**
@@ -35,8 +35,14 @@ export class AnimationController {
         // Callback invoked after each frame advance so app-v2.js can update UI
         this._onFrameChange   = null;    // (frameIndex, frameObj) => void
 
-        // Bound DOM elements — populated by initControls()
-        this._ui = null;
+        // DOM elements — populated by initControls()
+        this._ui          = null;
+        this._playPauseBtn = null;
+        this._slider      = null;
+        this._speedSlider = null;
+        this._speedValue  = null;
+        this._frameCounter = null;
+        this._timeDisplay  = null;
     }
 
     // =========================================================================
@@ -47,7 +53,7 @@ export class AnimationController {
     get currentFrame() { return this._currentFrame; }
 
     get _frameIntervalMs() {
-        return Math.round(BASE_FRAME_INTERVAL_MS / this._speedMultiplier);
+        return Math.round(1000 / this._speedMultiplier);
     }
 
     // =========================================================================
@@ -55,38 +61,48 @@ export class AnimationController {
     // =========================================================================
 
     /**
-     * Wire animation-related DOM controls.
+     * Wire animation-related DOM controls via document.getElementById.
+     * The UIControls object does not expose these as properties, so we
+     * look them up directly from the DOM.
      *
-     * @param {Object} ui — same ui object built by app-v2.js containing the
-     *   play/pause button, prev/next/latest buttons, frame slider, speed selector.
+     * @param {Object} ui — UIControls instance (kept for API compatibility)
      */
     initControls(ui) {
         this._ui = ui;
 
-        if (ui.playPauseBtn) {
-            ui.playPauseBtn.addEventListener('click', () => this.toggle());
-        }
-        if (ui.prevFrameBtn) {
-            ui.prevFrameBtn.addEventListener('click', () => this.previous());
-        }
-        if (ui.nextFrameBtn) {
-            ui.nextFrameBtn.addEventListener('click', () => this.next());
-        }
-        if (ui.latestFrameBtn) {
-            ui.latestFrameBtn.addEventListener('click', () => this.goToLatest());
-        }
+        this._playPauseBtn  = document.getElementById('btn-play-pause');
+        const prevBtn        = document.getElementById('btn-prev');
+        const nextBtn        = document.getElementById('btn-next');
+        const latestBtn      = document.getElementById('btn-latest');
+        this._slider         = document.getElementById('animation-slider');
+        this._speedSlider    = document.getElementById('speed-slider');
+        this._speedValue     = document.getElementById('speed-value');
+        this._frameCounter   = document.getElementById('frame-counter');
+        this._timeDisplay    = document.getElementById('time-display');
 
-        if (ui.frameSlider) {
-            ui.frameSlider.addEventListener('input', e => {
+        if (this._playPauseBtn) {
+            this._playPauseBtn.addEventListener('click', () => this.toggle());
+        }
+        if (prevBtn)   prevBtn.addEventListener('click',   () => this.previous());
+        if (nextBtn)   nextBtn.addEventListener('click',   () => this.next());
+        if (latestBtn) latestBtn.addEventListener('click', () => this.goToLatest());
+
+        if (this._slider) {
+            this._slider.addEventListener('input', e => {
                 const idx = parseInt(e.target.value, 10);
                 if (!isNaN(idx)) this.goToFrame(idx);
             });
         }
 
-        if (ui.speedSelect) {
-            ui.speedSelect.addEventListener('change', e => {
-                const v = parseFloat(e.target.value);
-                if (!isNaN(v)) this.setSpeed(v);
+        if (this._speedSlider) {
+            this._speedSlider.addEventListener('input', e => {
+                const multiplier = parseFloat(e.target.value);
+                if (!isNaN(multiplier)) {
+                    this.setSpeed(multiplier);
+                    if (this._speedValue) {
+                        this._speedValue.textContent = `${multiplier.toFixed(1)}x`;
+                    }
+                }
             });
         }
     }
@@ -127,6 +143,9 @@ export class AnimationController {
         const clamped = Math.max(0, Math.min(index, this._frames.length - 1));
         this._currentFrame = clamped;
         this._showCurrentFrame();
+        this._updateSlider();
+        this._updateFrameCounter();
+        this._updateTimeDisplay();
     }
 
     next() {
@@ -135,6 +154,9 @@ export class AnimationController {
             ? this._currentFrame + 1
             : 0;
         this._showCurrentFrame();
+        this._updateSlider();
+        this._updateFrameCounter();
+        this._updateTimeDisplay();
     }
 
     previous() {
@@ -143,12 +165,18 @@ export class AnimationController {
             ? this._currentFrame - 1
             : this._frames.length - 1;
         this._showCurrentFrame();
+        this._updateSlider();
+        this._updateFrameCounter();
+        this._updateTimeDisplay();
     }
 
     goToLatest() {
         if (this._frames.length === 0) return;
         this._currentFrame = this._frames.length - 1;
         this._showCurrentFrame();
+        this._updateSlider();
+        this._updateFrameCounter();
+        this._updateTimeDisplay();
     }
 
     // =========================================================================
@@ -187,6 +215,11 @@ export class AnimationController {
         if (frames.length > 0) {
             this._showCurrentFrame();
         }
+
+        // Update slider range and counters for the new frame list
+        this._updateSlider();
+        this._updateFrameCounter();
+        this._updateTimeDisplay();
 
         // Re-start if was playing but loop died (e.g. frames had been empty)
         if (wasPlaying && !this._playing) {
@@ -248,6 +281,9 @@ export class AnimationController {
             ? this._currentFrame + 1
             : 0;
         this._showCurrentFrame();
+        this._updateSlider();
+        this._updateFrameCounter();
+        this._updateTimeDisplay();
     }
 
     _showCurrentFrame() {
@@ -263,8 +299,36 @@ export class AnimationController {
     }
 
     _updatePlayPauseButton() {
-        if (!this._ui || !this._ui.playPauseBtn) return;
-        this._ui.playPauseBtn.textContent = this._playing ? 'Pause' : 'Play';
-        this._ui.playPauseBtn.classList.toggle('playing', this._playing);
+        if (!this._playPauseBtn) return;
+        this._playPauseBtn.innerHTML = this._playing ? '&#9646;&#9646;' : '&#9654;';
+        this._playPauseBtn.classList.toggle('playing', this._playing);
+    }
+
+    _updateSlider() {
+        if (!this._slider) return;
+        this._slider.max   = Math.max(0, this._frames.length - 1);
+        this._slider.value = this._currentFrame;
+    }
+
+    _updateFrameCounter() {
+        if (!this._frameCounter) return;
+        if (this._frames.length === 0) {
+            this._frameCounter.textContent = '0 / 0';
+        } else {
+            this._frameCounter.textContent = `${this._currentFrame + 1} / ${this._frames.length}`;
+        }
+    }
+
+    _updateTimeDisplay() {
+        if (!this._timeDisplay) return;
+        const frame = this._frames[this._currentFrame];
+        if (!frame) return;
+        const ts = frame.timestamp || frame.observation_time;
+        if (!ts) return;
+        const d = new Date(ts);
+        const pad = n => String(n).padStart(2, '0');
+        this._timeDisplay.textContent =
+            `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ` +
+            `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
     }
 }

@@ -627,18 +627,8 @@ const app = {
             });
         }
 
-        // Speed slider (v2: AnimationController reads this; we update state too)
-        const speedSlider = document.getElementById('speed-slider');
-        const speedValue  = document.getElementById('speed-value');
-        if (speedSlider) {
-            speedSlider.addEventListener('input', (e) => {
-                const s = parseFloat(e.target.value);
-                if (!isNaN(s)) {
-                    state.animator.setSpeed(s);
-                    if (speedValue) speedValue.textContent = `${s.toFixed(1)}x`;
-                }
-            });
-        }
+        // Speed slider is wired by AnimationController.initControls() — do not
+        // duplicate it here, or two listeners would fire on every input event.
 
         // Snapshot keyboard shortcut
         document.addEventListener('keydown', (e) => {
@@ -1480,20 +1470,36 @@ const app = {
     // Panel helpers
     // =========================================================================
 
+    _panelButtonMap: {
+        'panel-module-a': 'btn-module-a',
+        'panel-module-b': 'btn-module-b',
+        'panel-module-c': 'btn-module-c',
+        'settings-panel': 'btn-settings',
+    },
+
     togglePanel(panelId) {
-        const panel = document.getElementById(panelId);
-        if (!panel) return;
-        const isOpen = panel.classList.contains('open');
-        // Close all other panels
-        document.querySelectorAll('.floating-panel, .settings-panel').forEach(p => {
-            p.classList.remove('open');
+        const ALL_PANELS = ['panel-module-a', 'panel-module-b', 'panel-module-c', 'settings-panel'];
+        ALL_PANELS.forEach(id => {
+            const panel = document.getElementById(id);
+            const btnId = this._panelButtonMap[id];
+            const btn   = btnId ? document.getElementById(btnId) : null;
+            if (id === panelId) {
+                const isOpen = panel && panel.style.display !== 'none';
+                if (panel) panel.style.display = isOpen ? 'none' : 'block';
+                if (btn)   btn.classList.toggle('is-active', !isOpen);
+            } else {
+                if (panel) panel.style.display = 'none';
+                if (btn)   btn.classList.remove('is-active');
+            }
         });
-        if (!isOpen) panel.classList.add('open');
     },
 
     closePanel(panelId) {
         const panel = document.getElementById(panelId);
-        if (panel) panel.classList.remove('open');
+        if (panel) panel.style.display = 'none';
+        const btnId = this._panelButtonMap[panelId];
+        const btn   = btnId ? document.getElementById(btnId) : null;
+        if (btn) btn.classList.remove('is-active');
     },
 
     // =========================================================================
