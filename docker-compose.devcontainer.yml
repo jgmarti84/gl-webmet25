@@ -13,6 +13,19 @@ services:
   frontend:
     command: ["tail", "-f", "/dev/null"]
 
+  frontend-v2:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        FE_VERSION: v2
+    container_name: radar_frontend_v2
+    ports:
+      - "8090:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+    
   # ==========================================================================
   # TEST DATABASE (devcontainer only, never used in production)
   # ==========================================================================

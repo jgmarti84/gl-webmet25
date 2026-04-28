@@ -9,11 +9,11 @@
  * - Improved UI/UX matching webmet.ohmc.ar
  */
 
-import { api } from './api.js';
+import { api } from '../shared/api.js';
 import { MapManager } from './map.js';
 import { AnimationController } from './animation.js';
-import { UIControls } from './controls.js';
-import { LegendRenderer } from './legend.js';
+import { UIControls } from '../shared/controls.js';
+import { LegendRenderer } from '../shared/legend.js';
 
 // =============================================================================
 // CONSTANTS
