@@ -150,6 +150,8 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        FE_VERSION: ${FE_VERSION:-v1}
     container_name: radar_frontend
     ports:
       - "80:80"

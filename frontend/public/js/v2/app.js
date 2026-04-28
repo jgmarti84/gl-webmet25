@@ -21,11 +21,11 @@
  *   controls via initControls().
  */
 
-import { api } from './api.js';
-import { MapManager } from './map-v2.js';
-import { AnimationController } from './animation-v2.js';
-import { UIControls } from './controls.js';
-import { LegendRenderer } from './legend.js';
+import { api } from '../shared/api.js';
+import { MapManager } from './map.js';
+import { AnimationController } from './animation.js';
+import { UIControls } from '../shared/controls.js';
+import { LegendRenderer } from '../shared/legend.js';
 
 // =============================================================================
 // CONSTANTS (identical to app.js)
