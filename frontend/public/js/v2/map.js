@@ -254,6 +254,22 @@ export class MapManager {
             zIndex:      200,
         });
         overlay.addTo(this._map);
+
+        // Apply crisp nearest-neighbor rendering so discrete measurement
+        // cells render as sharp pixel squares rather than a blurred gradient.
+        const el = overlay.getElement();
+        if (el) {
+            el.classList.add('radar-image-overlay');
+        }
+
+        // TODO Phase: zoom-adaptive rendering
+        // When implemented, pass ?zoom=N to the /frames/ endpoint so the backend
+        // selects the appropriate COG overview level (native ~473x473 at zoom 9+,
+        // overview 2x at zoom 8, 4x at zoom 7, etc.).
+        // Cache key for frames will need to include zoom tier (e.g. frame:{id}:{tier}:{params}).
+        // On map 'zoomend', if zoom crosses a tier boundary, invalidate preloaded
+        // object URLs and trigger a re-fetch cycle while holding last frame (LOCF).
+
         this._overlays.set(key, overlay);
     }
 

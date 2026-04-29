@@ -91,7 +91,7 @@ ROOT_RADAR_PRODUCTS_PATH/
 
 | Field | Value | Purpose |
 |---|---|---|
-| **CRS** | EPSG:4326 | Geographic coordinate system (WGS84 lat/lon) |
+| **CRS** | EPSG:3857 (Web Mercator / Pseudo-Mercator) | Coordinate system of the GeoTIFF raster. Note: the frames endpoint converts to WGS84 for X-Bbox-* response headers (which Leaflet requires) — no rendering code is affected. |
 | **radarlib_cmap** | Colormap name string | Name of matplotlib colormap used (e.g., `"grc_th"`) |
 | **vmin** | Float | Minimum data value for color scaling |
 | **vmax** | Float | Maximum data value for color scaling |
