@@ -49,8 +49,8 @@ const DEFAULT_TIME_WINDOW_HOURS = 3;
 // Fix 2: default per-field opacity
 const DEFAULT_FIELD_OPACITY = 0.7;
 
-// Fix 6: coverage circle defaults (item 2: default 10%)
-const DEFAULT_COVERAGE_OPACITY = 0.1;
+// Fix 6: coverage default opacity
+const DEFAULT_COVERAGE_OPACITY = 0.4;
 
 // =============================================================================
 // APPLICATION STATE
@@ -103,7 +103,6 @@ const state = {
     radarStatusRefreshInterval: null, // setInterval handle for periodic radar-list refresh
 
     // Fix 6: coverage circles
-    coverageVisible: false,
     coverageOpacity: DEFAULT_COVERAGE_OPACITY,
 };
 
@@ -177,8 +176,6 @@ const SETTINGS_KEY_REFRESH_INTERVAL = 'webmet25_radar_refresh_interval_min';
 // Fix 1: Separate key for live COG refresh interval (in ms) to avoid confusion with
 // the radar STATUS refresh interval above.  Default is DEFAULT_LIVE_REFRESH_INTERVAL_MS.
 const SETTINGS_KEY_LIVE_REFRESH_INTERVAL = 'webmet25_live_refresh_interval_ms';
-// Fix 6: Coverage circle localStorage keys
-const SETTINGS_KEY_COVERAGE_VISIBLE = 'webmet25_coverage_visible';
 const SETTINGS_KEY_COVERAGE_OPACITY = 'webmet25_coverage_opacity';
 
 // Legacy key – kept for one-time migration only
@@ -308,14 +305,6 @@ const app = {
         // Restore persisted settings
         state.showInactiveRadars = getSettingShowInactive();
         state.showUnfilteredProducts = getSettingShowFiltered();
-        // Fix 6: restore coverage settings before map init so circles can be drawn
-        const storedCoverageVisible = localStorage.getItem(SETTINGS_KEY_COVERAGE_VISIBLE);
-        state.coverageVisible = storedCoverageVisible === 'true';
-        const storedCoverageOpacity = localStorage.getItem(SETTINGS_KEY_COVERAGE_OPACITY);
-        state.coverageOpacity = storedCoverageOpacity !== null
-            ? parseFloat(storedCoverageOpacity)
-            : DEFAULT_COVERAGE_OPACITY;
-        
         try {
             // Wait for Leaflet to be loaded
             await this.waitForLeaflet();
@@ -456,23 +445,13 @@ const app = {
                 ? String(parseInt(stored, 10) / 60000)
                 : String(DEFAULT_LIVE_REFRESH_INTERVAL_MS / 60000);
         }
-        // Fix 6: Coverage toggle and opacity
-        const coverageToggle = document.getElementById('toggle-coverage');
-        if (coverageToggle) {
-            const visible = localStorage.getItem(SETTINGS_KEY_COVERAGE_VISIBLE) === 'true';
-            coverageToggle.checked = visible;
-            state.coverageVisible = visible;
-            const opacityGroup = document.getElementById('coverage-opacity-group');
-            if (opacityGroup) opacityGroup.style.display = visible ? 'block' : 'none';
-        }
-        const coverageOpacitySlider = document.getElementById('coverage-opacity-slider');
-        if (coverageOpacitySlider) {
-            const stored = localStorage.getItem(SETTINGS_KEY_COVERAGE_OPACITY);
-            const opacity = stored !== null ? parseFloat(stored) : DEFAULT_COVERAGE_OPACITY;
-            coverageOpacitySlider.value = opacity;
-            state.coverageOpacity = opacity;
-            const display = document.getElementById('coverage-opacity-value');
-            if (display) display.textContent = `${Math.round(opacity * 100)}%`;
+        // Sync coverage opacity slider with stored value
+        const coverageOpacitySliderInit = document.getElementById('coverage-opacity');
+        if (coverageOpacitySliderInit) {
+            const storedOpacity = parseFloat(
+                localStorage.getItem('webmet25_coverage_opacity')
+            ) || 0.4;
+            coverageOpacitySliderInit.value = storedOpacity;
         }
         // Fix 4: Initialise speed slider display
         const speedSlider = document.getElementById('speed-slider');
@@ -672,36 +651,32 @@ const app = {
             });
         }
 
-        // Fix 6: Coverage circles toggle
-        const coverageToggle = document.getElementById('toggle-coverage');
-        if (coverageToggle) {
-            coverageToggle.addEventListener('change', (e) => {
-                state.coverageVisible = e.target.checked;
-                localStorage.setItem(SETTINGS_KEY_COVERAGE_VISIBLE, String(state.coverageVisible));
-                const opacityGroup = document.getElementById('coverage-opacity-group');
-                if (opacityGroup) opacityGroup.style.display = state.coverageVisible ? 'block' : 'none';
-                if (state.coverageVisible) {
-                    // Draw circles for all currently selected radars
-                    state.selectedRadars.forEach(code => {
-                        const radar = state.radars.find(r => r.code === code);
-                        if (radar) state.mapManager.addCoverageCircle(radar, state.coverageOpacity);
-                    });
-                } else {
-                    state.mapManager.clearCoverageCircles();
-                }
+        // Coverage mode toggle — UI only, no functional behavior yet.
+        const COVERAGE_MODES = [
+            { id: 'cd',  label: 'C+D' },
+            { id: 'vig', label: 'VIG' },
+        ];
+        let _coverageModeIndex = 0;
+        const coverageToggleBtn = document.getElementById('coverage-toggle');
+        if (coverageToggleBtn) {
+            coverageToggleBtn.textContent = COVERAGE_MODES[_coverageModeIndex].label;
+            coverageToggleBtn.addEventListener('click', () => {
+                _coverageModeIndex = (_coverageModeIndex + 1) % COVERAGE_MODES.length;
+                coverageToggleBtn.textContent = COVERAGE_MODES[_coverageModeIndex].label;
             });
         }
 
-        // Fix 6: Coverage opacity slider
-        const coverageOpacitySlider = document.getElementById('coverage-opacity-slider');
+        // Coverage opacity slider
+        const coverageOpacitySlider = document.getElementById('coverage-opacity');
         if (coverageOpacitySlider) {
+            const storedOpacity = parseFloat(
+                localStorage.getItem('webmet25_coverage_opacity')
+            ) || 0.4;
+            coverageOpacitySlider.value = storedOpacity;
             coverageOpacitySlider.addEventListener('input', (e) => {
-                const opacity = parseFloat(e.target.value);
-                state.coverageOpacity = opacity;
-                localStorage.setItem(SETTINGS_KEY_COVERAGE_OPACITY, String(opacity));
-                const display = document.getElementById('coverage-opacity-value');
-                if (display) display.textContent = `${Math.round(opacity * 100)}%`;
-                state.mapManager.updateCoverageOpacity(opacity);
+                const val = parseFloat(e.target.value);
+                localStorage.setItem('webmet25_coverage_opacity', JSON.stringify(val));
+                state.mapManager.setCoverageOpacity(val);
             });
         }
 
@@ -1166,25 +1141,17 @@ const app = {
             }
         }
 
-        // Item 7: Draw coverage circles (SVG) if coverage is visible.
-        // Leaflet renders L.circle as SVG paths inside the custom pane div.
-        // We use getPane() — the authoritative Leaflet API — rather than a CSS
-        // class selector, which depends on Leaflet's internal naming convention
-        // (e.g. 'coveragePane' → 'leaflet-coverage-pane') and can silently fail.
-        if (state.coverageVisible) {
-            const leafletMap = state.mapManager.getMap();
-            const coveragePane = leafletMap ? leafletMap.getPane('coveragePane') : null;
-            const svgEls = coveragePane ? Array.from(coveragePane.querySelectorAll('svg')) : [];
-            for (const svg of svgEls) {
-                try {
-                    const svgRect = svg.getBoundingClientRect();
-                    const svgX = Math.round(svgRect.left - rect.left);
-                    const svgY = Math.round(svgRect.top - rect.top);
-                    const svgW = Math.round(svgRect.width);
-                    const svgH = Math.round(svgRect.height);
-                    if (svgW === 0 || svgH === 0) continue;
-                    // Clone so we can safely set xmlns without mutating the live DOM
-                    const svgClone = svg.cloneNode(true);
+        // Draw coverage mask SVG (always active — sits directly on the map container).
+        const coverageSvg = state.mapManager._coverageSvgEl;
+        if (coverageSvg) {
+            try {
+                const svgRect = coverageSvg.getBoundingClientRect();
+                const svgX = Math.round(svgRect.left - rect.left);
+                const svgY = Math.round(svgRect.top - rect.top);
+                const svgW = Math.round(svgRect.width);
+                const svgH = Math.round(svgRect.height);
+                if (svgW > 0 && svgH > 0) {
+                    const svgClone = coverageSvg.cloneNode(true);
                     svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
                     const serializer = new XMLSerializer();
                     const svgStr = serializer.serializeToString(svgClone);
@@ -1197,15 +1164,13 @@ const app = {
                             URL.revokeObjectURL(url);
                             res();
                         };
-                        // SVG draw failures are non-fatal: silently resolve so the rest
-                        // of the snapshot (tiles, other SVGs) can still be saved.
                         svgImg.onerror = () => { URL.revokeObjectURL(url); res(); };
                         svgImg.src = url;
                     });
                     drawnCount++;
-                } catch (e) {
-                    console.debug('Snapshot: failed to draw coverage SVG', e.message);
                 }
+            } catch (e) {
+                console.debug('Snapshot: failed to draw coverage mask SVG', e.message);
             }
         }
 
@@ -1278,16 +1243,18 @@ const app = {
         // Also update time range button state
         this.onTimeRangeChange();
 
-        // Fix 6: update coverage circles incrementally
-        if (state.coverageVisible) {
-            const added   = state.selectedRadars.filter(r => !prevRadars.includes(r));
-            const removed = prevRadars.filter(r => !state.selectedRadars.includes(r));
-            removed.forEach(code => state.mapManager.removeCoverageCircle(code));
-            added.forEach(code => {
-                const radar = state.radars.find(r => r.code === code);
-                if (radar) state.mapManager.addCoverageCircle(radar, state.coverageOpacity);
-            });
-        }
+        // Update coverage mask — always active, no visibility guard
+        const added   = state.selectedRadars.filter(r => !prevRadars.includes(r));
+        const removed = prevRadars.filter(r => !state.selectedRadars.includes(r));
+        removed.forEach(code => state.mapManager.removeRadarCoverage(code));
+        added.forEach(code => {
+            const radar = state.radars.find(r => r.code === code);
+            if (radar && radar.center_lat && radar.center_long && radar.img_radio) {
+                state.mapManager.addRadarCoverage(
+                    code, radar.center_lat, radar.center_long, radar.img_radio * 1000
+                );
+            }
+        });
 
         // When a time-range animation is already running, apply changes incrementally
         // so existing tile cache is preserved and playback is not interrupted.

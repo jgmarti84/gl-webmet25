@@ -1406,3 +1406,27 @@ code {
     image-rendering: crisp-edges;  /* Firefox < 93 fallback */
     image-rendering: pixelated;    /* Chrome, Edge, Safari, Firefox 93+ */
 }
+
+/* Coverage mode toggle button */
+.coverage-mode-btn {
+    padding: 4px 12px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #333;
+    color: #eee;
+    min-width: 48px;
+}
+
+.coverage-mode-btn:hover {
+    background: #444;
+}
+
+/* Coverage mode legend — small label below the mode toggle button */
+.coverage-mode-legend {
+    font-size: 0.7rem;
+    color: #888;
+    margin-top: 4px;
+    line-height: 1.3;
+}

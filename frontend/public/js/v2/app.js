@@ -41,7 +41,7 @@ const GEOLOCATION_AUTO_LOAD_HOURS = 3;
 const GEOLOCATION_AUTO_PRODUCT = 'DBZHo';
 const DEFAULT_TIME_WINDOW_HOURS = 3;
 const DEFAULT_FIELD_OPACITY = 0.7;
-const DEFAULT_COVERAGE_OPACITY = 0.1;
+const DEFAULT_COVERAGE_OPACITY = 0.4;
 
 // =============================================================================
 // APPLICATION STATE
@@ -69,8 +69,6 @@ const state = {
     liveHours: null,
     liveRefreshInterval: null,
     radarStatusRefreshInterval: null,
-    coverageVisible: false,
-    coverageOpacity: DEFAULT_COVERAGE_OPACITY,
 };
 
 // =============================================================================
@@ -218,13 +216,6 @@ const app = {
         state.showInactiveRadars    = getSettingShowInactive();
         state.showUnfilteredProducts = getSettingShowFiltered();
 
-        const storedCoverageVisible = localStorage.getItem(SETTINGS_KEY_COVERAGE_VISIBLE);
-        state.coverageVisible = storedCoverageVisible === 'true';
-        const storedCoverageOpacity = localStorage.getItem(SETTINGS_KEY_COVERAGE_OPACITY);
-        state.coverageOpacity = storedCoverageOpacity !== null
-            ? parseFloat(storedCoverageOpacity)
-            : DEFAULT_COVERAGE_OPACITY;
-
         try {
             await this.waitForLeaflet();
 
@@ -323,22 +314,13 @@ const app = {
                 ? String(parseInt(stored, 10) / 60000)
                 : String(DEFAULT_LIVE_REFRESH_INTERVAL_MS / 60000);
         }
-        const coverageToggle = document.getElementById('toggle-coverage');
-        if (coverageToggle) {
-            const visible = localStorage.getItem(SETTINGS_KEY_COVERAGE_VISIBLE) === 'true';
-            coverageToggle.checked = visible;
-            state.coverageVisible = visible;
-            const opacityGroup = document.getElementById('coverage-opacity-group');
-            if (opacityGroup) opacityGroup.style.display = visible ? 'block' : 'none';
-        }
-        const coverageOpacitySlider = document.getElementById('coverage-opacity-slider');
-        if (coverageOpacitySlider) {
-            const stored = localStorage.getItem(SETTINGS_KEY_COVERAGE_OPACITY);
-            const opacity = stored !== null ? parseFloat(stored) : DEFAULT_COVERAGE_OPACITY;
-            coverageOpacitySlider.value = opacity;
-            state.coverageOpacity = opacity;
-            const display = document.getElementById('coverage-opacity-value');
-            if (display) display.textContent = `${Math.round(opacity * 100)}%`;
+        // Sync coverage opacity slider with stored value
+        const coverageOpacitySliderInit = document.getElementById('coverage-opacity');
+        if (coverageOpacitySliderInit) {
+            const storedOpacity = parseFloat(
+                localStorage.getItem('webmet25_coverage_opacity')
+            ) || 0.4;
+            coverageOpacitySliderInit.value = storedOpacity;
         }
         const speedSlider = document.getElementById('speed-slider');
         const speedValue  = document.getElementById('speed-value');
@@ -386,7 +368,7 @@ const app = {
                 const cb = document.getElementById(`radar-${r.code}`);
                 if (cb) cb.checked = true;
             });
-            this.onRadarSelectionChange();
+            this.onRadarCheckboxChange();
 
             const preferredProducts = [GEOLOCATION_AUTO_PRODUCT, 'DBZH'];
             let selectedProduct = null;
@@ -481,33 +463,33 @@ const app = {
             });
         }
 
-        const coverageToggle = document.getElementById('toggle-coverage');
-        if (coverageToggle) {
-            coverageToggle.addEventListener('change', (e) => {
-                state.coverageVisible = e.target.checked;
-                localStorage.setItem(SETTINGS_KEY_COVERAGE_VISIBLE, String(state.coverageVisible));
-                const opacityGroup = document.getElementById('coverage-opacity-group');
-                if (opacityGroup) opacityGroup.style.display = state.coverageVisible ? 'block' : 'none';
-                if (state.coverageVisible) {
-                    state.selectedRadars.forEach(code => {
-                        const radar = state.radars.find(r => r.code === code);
-                        if (radar) state.mapManager.addCoverageCircle(radar, state.coverageOpacity);
-                    });
-                } else {
-                    state.mapManager.clearCoverageCircles();
-                }
+        // Coverage mode toggle — UI only, no functional behavior yet.
+        // Cycles between C+D (Conventional+Doppler) and VIG (Vigilant) modes.
+        const COVERAGE_MODES = [
+            { id: 'cd',  label: 'C+D' },
+            { id: 'vig', label: 'VIG' },
+        ];
+        let _coverageModeIndex = 0;
+
+        const coverageToggleBtn = document.getElementById('coverage-toggle');
+        if (coverageToggleBtn) {
+            coverageToggleBtn.textContent = COVERAGE_MODES[_coverageModeIndex].label;
+            coverageToggleBtn.addEventListener('click', () => {
+                _coverageModeIndex = (_coverageModeIndex + 1) % COVERAGE_MODES.length;
+                coverageToggleBtn.textContent = COVERAGE_MODES[_coverageModeIndex].label;
             });
         }
 
-        const coverageOpacitySlider = document.getElementById('coverage-opacity-slider');
+        const coverageOpacitySlider = document.getElementById('coverage-opacity');
         if (coverageOpacitySlider) {
+            const storedOpacity = parseFloat(
+                localStorage.getItem('webmet25_coverage_opacity')
+            ) || 0.4;
+            coverageOpacitySlider.value = storedOpacity;
             coverageOpacitySlider.addEventListener('input', (e) => {
-                const opacity = parseFloat(e.target.value);
-                state.coverageOpacity = opacity;
-                localStorage.setItem(SETTINGS_KEY_COVERAGE_OPACITY, String(opacity));
-                state.mapManager.updateCoverageOpacity(opacity);
-                const display = document.getElementById('coverage-opacity-value');
-                if (display) display.textContent = `${Math.round(opacity * 100)}%`;
+                const val = parseFloat(e.target.value);
+                localStorage.setItem('webmet25_coverage_opacity', JSON.stringify(val));
+                state.mapManager.setCoverageOpacity(val);
             });
         }
 
@@ -658,14 +640,16 @@ const app = {
 
         state.selectedRadars = newSelection;
 
-        // Update coverage circles
-        if (state.coverageVisible) {
-            added.forEach(code => {
-                const radar = state.radars.find(r => r.code === code);
-                if (radar) state.mapManager.addCoverageCircle(radar, state.coverageOpacity);
-            });
-            removed.forEach(code => state.mapManager.removeCoverageCircle(code));
-        }
+        // Update coverage mask — always active, no visibility guard
+        added.forEach(code => {
+            const radar = state.radars.find(r => r.code === code);
+            if (radar && radar.center_lat && radar.center_long && radar.img_radio) {
+                state.mapManager.addRadarCoverage(
+                    code, radar.center_lat, radar.center_long, radar.img_radio * 1000
+                );
+            }
+        });
+        removed.forEach(code => state.mapManager.removeRadarCoverage(code));
 
         // Incremental add/remove while animation is running
         if (state.animationMode === 'timerange') {

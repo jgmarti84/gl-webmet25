@@ -106,8 +106,14 @@ export class MapManager {
         // app-v2.js checks this before attempting incremental updates.
         this._loadInProgress = false;
 
-        // Radar coverage circles (L.circle), keyed by radar code.
-        this._coverageCircles = {};
+        // Coverage mask state — SVG element appended directly to the map
+        // container (outside Leaflet panes) to avoid pane CSS transforms.
+        this._coverageSvgEl = null;
+        this._coverageOpacity = parseFloat(
+            localStorage.getItem('webmet25_coverage_opacity')
+        ) || 0.4;
+        // Map of radarCode → { lat, lng, radius_m }
+        this._activeRadarCoverages = new Map();
     }
 
     // =========================================================================
@@ -121,10 +127,21 @@ export class MapManager {
     init() {
         this._map = L.map(this._mapElementId).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
 
-        // Create coverage pane below tile pane but above the basemap.
-        // Same z-index design as v1 map.js.
-        this._map.createPane('coveragePane');
-        this._map.getPane('coveragePane').style.zIndex = 350;
+        // Radar coverage mask pane — kept for z-index ordering, the SVG
+        // is NOT placed inside this pane (panes are transformed by Leaflet
+        // during pan/zoom which would misalign the circles). The SVG is
+        // appended directly to the map container instead.
+        this._map.createPane('coverageMaskPane');
+        this._map.getPane('coverageMaskPane').style.zIndex = 300;
+        this._map.getPane('coverageMaskPane').style.pointerEvents = 'none';
+
+        this._initCoverageMask();
+
+        // Redraw on every pan and zoom event (not just *end) so circles
+        // track the viewport smoothly during drags and pinch-zoom.
+        this._map.on('move zoom moveend zoomend resize', () => {
+            this._updateCoverageMask();
+        });
 
         this.setBasemap(this._currentBasemap);
         return this._map;
@@ -660,54 +677,179 @@ export class MapManager {
     }
 
     // =========================================================================
-    // Coverage circle helpers — identical to v1
+    // Coverage mask helpers
     // =========================================================================
 
-    addCoverageCircle(radar, opacity = 0.1) {
-        if (!radar || !radar.code) return;
-        this.removeCoverageCircle(radar.code);
-        if (!radar.center_lat || !radar.center_long || !radar.img_radio) return;
+    /**
+     * Create the full-map SVG overlay mask once, at map init.
+     * The mask starts with no cutout circles; call addRadarCoverage() to add them.
+     */
+    _initCoverageMask() {
+        const svgNS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(svgNS, 'svg');
+        svg.setAttribute('xmlns', svgNS);
+        // Cover the entire map container. Positioned outside all Leaflet panes
+        // so pan/zoom CSS transforms on panes do NOT shift this element.
+        // Width/height attributes must be set (not just CSS) so the SVG has
+        // an intrinsic viewport for resolving percentage/coordinate values.
+        // We keep them in sync with the container in _updateCoverageMask().
+        const mapSize = this._map.getSize();
+        svg.setAttribute('width', String(mapSize.x));
+        svg.setAttribute('height', String(mapSize.y));
+        svg.style.cssText = [
+            'position:absolute',
+            'top:0',
+            'left:0',
+            'pointer-events:none',
+            // Above overlayPane (400) and markerPane (600) so the mask always
+            // sits on top of all map content.
+            'z-index:650',
+        ].join(';');
 
-        const circle = L.circle(
-            [radar.center_lat, radar.center_long],
-            {
-                radius:      radar.img_radio * 1000 * 1.01,
-                fillColor:   '#000000',
-                fillOpacity: opacity,
-                stroke:      false,
-                interactive: false,
-                pane:        'coveragePane',
-            }
-        ).addTo(this._map);
+        // <defs> with mask
+        const defs = document.createElementNS(svgNS, 'defs');
+        const mask = document.createElementNS(svgNS, 'mask');
+        mask.setAttribute('id', 'radar-coverage-mask');
+        // Use userSpaceOnUse so all coordinates are in plain SVG pixels —
+        // no ambiguity from objectBoundingBox percentage resolution.
+        mask.setAttribute('maskUnits', 'userSpaceOnUse');
+        mask.setAttribute('maskContentUnits', 'userSpaceOnUse');
+        // Cover entire SVG with huge rect — updated each frame via viewBox
+        // so there is no chance of a gap if the map is larger than expected.
+        mask.setAttribute('x', '-9999');
+        mask.setAttribute('y', '-9999');
+        mask.setAttribute('width', '99999');
+        mask.setAttribute('height', '99999');
 
-        this._coverageCircles[radar.code] = circle;
+        // White base rect = show everything by default.
+        // Use large absolute values — safe regardless of zoom/pan.
+        const maskBase = document.createElementNS(svgNS, 'rect');
+        maskBase.setAttribute('x', '-9999');
+        maskBase.setAttribute('y', '-9999');
+        maskBase.setAttribute('width', '99999');
+        maskBase.setAttribute('height', '99999');
+        maskBase.setAttribute('fill', 'white');
+        mask.appendChild(maskBase);
+
+        defs.appendChild(mask);
+        svg.appendChild(defs);
+
+        // Dark overlay rect — covers the entire SVG canvas.
+        // Black circles punched into the mask make coverage areas transparent.
+        const overlay = document.createElementNS(svgNS, 'rect');
+        overlay.setAttribute('id', 'radar-coverage-overlay-rect');
+        overlay.setAttribute('x', '-9999');
+        overlay.setAttribute('y', '-9999');
+        overlay.setAttribute('width', '99999');
+        overlay.setAttribute('height', '99999');
+        overlay.setAttribute('fill', '#000000');
+        overlay.setAttribute('opacity', String(this._coverageOpacity));
+        overlay.setAttribute('mask', 'url(#radar-coverage-mask)');
+        svg.appendChild(overlay);
+
+        this._coverageSvgEl = svg;
+
+        // Append directly to the map container (not a pane) so the SVG
+        // is never subject to Leaflet's pane CSS transforms.
+        const mapContainer = this._map.getContainer();
+        if (getComputedStyle(mapContainer).position === 'static') {
+            mapContainer.style.position = 'relative';
+        }
+        mapContainer.appendChild(svg);
     }
 
-    removeCoverageCircle(radarCode) {
-        const circle = this._coverageCircles[radarCode];
-        if (circle) {
-            if (this._map && this._map.hasLayer(circle)) {
-                this._map.removeLayer(circle);
-            }
-            delete this._coverageCircles[radarCode];
+    /**
+     * Redraw the SVG mask circles to match the current map viewport.
+     * Must be called after every pan/zoom and after coverage set changes.
+     */
+    _updateCoverageMask() {
+        if (!this._coverageSvgEl) return;
+
+        // Keep SVG dimensions matching the map container so latLngToContainerPoint
+        // coordinates fall within the SVG's rendered area after resize.
+        const mapSize = this._map.getSize();
+        this._coverageSvgEl.setAttribute('width', String(mapSize.x));
+        this._coverageSvgEl.setAttribute('height', String(mapSize.y));
+
+        const svgNS = 'http://www.w3.org/2000/svg';
+        const mask = this._coverageSvgEl.querySelector('#radar-coverage-mask');
+        if (!mask) return;
+
+        // Remove all existing cutout circles (keep the white base rect)
+        mask.querySelectorAll('circle').forEach(c => c.remove());
+
+        // Add one black circle per active radar coverage area.
+        // Black in SVG mask = fully transparent in the masked element.
+        // Overlapping black circles merge automatically (union).
+        for (const [, coverage] of this._activeRadarCoverages) {
+            const point = this._map.latLngToContainerPoint(
+                L.latLng(coverage.lat, coverage.lng)
+            );
+            const radiusPx = this._metersToPixels(coverage.lat, coverage.radius_m);
+
+            const circle = document.createElementNS(svgNS, 'circle');
+            circle.setAttribute('cx', String(point.x));
+            circle.setAttribute('cy', String(point.y));
+            circle.setAttribute('r', String(radiusPx));
+            circle.setAttribute('fill', 'black');
+            mask.appendChild(circle);
+        }
+
+        // Sync opacity on the overlay rect
+        const overlayRect = this._coverageSvgEl.querySelector(
+            '#radar-coverage-overlay-rect'
+        );
+        if (overlayRect) {
+            overlayRect.setAttribute('opacity', String(this._coverageOpacity));
         }
     }
 
-    clearCoverageCircles() {
-        Object.keys(this._coverageCircles).forEach(code => this.removeCoverageCircle(code));
+    /**
+     * Convert a ground radius in meters to SVG layer pixels
+     * at the given latitude and the current map zoom.
+     * @param {number} lat
+     * @param {number} radiusMeters
+     * @returns {number}
+     */
+    _metersToPixels(lat, radiusMeters) {
+        // Compute pixel radius using the same container-point projection
+        // used in _updateCoverageMask so units are consistent with the viewBox.
+        const metersPerDegLng = 111320 * Math.cos(lat * Math.PI / 180);
+        const offsetLng = radiusMeters / metersPerDegLng;
+        const centerPx = this._map.latLngToContainerPoint(L.latLng(lat, 0));
+        const edgePx   = this._map.latLngToContainerPoint(L.latLng(lat, offsetLng));
+        return Math.abs(edgePx.x - centerPx.x);
     }
 
-    updateCoverageOpacity(opacity) {
-        Object.values(this._coverageCircles).forEach(circle => {
-            circle.setStyle({ fillOpacity: opacity });
-        });
+    /**
+     * Register a radar's coverage area in the mask.
+     * @param {string} radarCode
+     * @param {number} lat     Center latitude (WGS84)
+     * @param {number} lng     Center longitude (WGS84)
+     * @param {number} radius_m Coverage radius in meters
+     */
+    addRadarCoverage(radarCode, lat, lng, radius_m) {
+        this._activeRadarCoverages.set(radarCode, { lat, lng, radius_m });
+        this._updateCoverageMask();
     }
 
-    setCoverageVisible(visible, opacity) {
-        if (!visible) {
-            this.clearCoverageCircles();
-        }
-        // Circles are re-added by app-v2.js when visible=true
+    /**
+     * Remove a radar's coverage area from the mask.
+     * @param {string} radarCode
+     */
+    removeRadarCoverage(radarCode) {
+        this._activeRadarCoverages.delete(radarCode);
+        this._updateCoverageMask();
+    }
+
+    /**
+     * Update the opacity of the shaded region outside coverage areas.
+     * Coverage circles themselves remain fully transparent.
+     * @param {number} opacity  0.0 – 1.0
+     */
+    setCoverageOpacity(opacity) {
+        this._coverageOpacity = opacity;
+        this._updateCoverageMask();
     }
 
     // =========================================================================
