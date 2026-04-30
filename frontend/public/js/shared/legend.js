@@ -46,10 +46,10 @@ export class LegendRenderer {
             return;
         }
         
-        // Create legend title
+        // Create legend title — prefer human-readable product_title, fall back to product_key
         const title = document.createElement('div');
         title.className = 'legend-title';
-        title.textContent = colormapData.product_key || colormapData.colormap || 'Legend';
+        title.textContent = colormapData.product_title || colormapData.product_key || colormapData.colormap || 'Legend';
         this.container.appendChild(title);
         
         // Create scale container
@@ -147,14 +147,12 @@ export class LegendRenderer {
         
         this.container.appendChild(scale);
         
-        // Add unit if available
-        const unit = colormapData.unit || '';
-        if (unit) {
-            const unitEl = document.createElement('div');
-            unitEl.className = 'legend-unit';
-            unitEl.textContent = unit;
-            this.container.appendChild(unitEl);
-        }
+        // Always show unit; use '?' when unknown
+        const unitText = (colormapData.unit && colormapData.unit.trim()) ? colormapData.unit.trim() : '?';
+        const unitEl = document.createElement('div');
+        unitEl.className = 'legend-unit';
+        unitEl.textContent = unitText;
+        this.container.appendChild(unitEl);
     }
     
     /**

@@ -235,6 +235,8 @@ const app = {
             await this.loadInitialData();
             this.setupEventListeners();
             this.initSettingsPanel();
+            this._updateRadarBadge();
+            this._updateFieldBadge();
 
             // v2: wire animation DOM controls now that ui and animator exist
             state.animator.initControls(state.ui);
@@ -391,6 +393,7 @@ const app = {
             const productSelect = document.getElementById('product-select');
             if (productSelect) productSelect.value = selectedProduct;
             state.selectedProduct = selectedProduct;
+            this._updateFieldBadge();
             await this.loadColormapOptions();
 
             await this.loadLastNHours(GEOLOCATION_AUTO_LOAD_HOURS);
@@ -525,6 +528,7 @@ const app = {
                 state.selectedColormap = null;
                 state.currentVmin = null;
                 state.currentVmax = null;
+                this._updateFieldBadge();
                 await this.loadColormapOptions();
                 if (state.animationMode === 'timerange') {
                     // Load new field frames in background — animation continues
@@ -655,11 +659,26 @@ const app = {
             }
         });
 
-        // Live refresh manual trigger
+        // Live refresh manual trigger (main toolbar button)
         const cogRefreshNowBtn = document.getElementById('btn-cog-refresh-now');
         if (cogRefreshNowBtn) {
             cogRefreshNowBtn.addEventListener('click', () => {
                 if (state.liveHours !== null) this.refreshLiveWindow();
+            });
+        }
+
+        // Radar status refresh — settings panel "Refresh Now" button
+        const radarRefreshNowBtn = document.getElementById('btn-radar-refresh-now');
+        if (radarRefreshNowBtn) {
+            radarRefreshNowBtn.addEventListener('click', () => this.refreshRadarList());
+        }
+
+        // Live window manual refresh — settings panel "Refresh Now" button
+        const settingsCogRefreshBtn = document.getElementById('btn-settings-cog-refresh-now');
+        if (settingsCogRefreshBtn) {
+            settingsCogRefreshBtn.addEventListener('click', () => {
+                if (state.liveHours !== null) this.refreshLiveWindow();
+                else state.ui.setStatus('Live mode is not active', 'error');
             });
         }
     },
@@ -691,6 +710,7 @@ const app = {
             added.forEach(code => this.addRadarIncremental(code));
             removed.forEach(code => this.removeRadarIncremental(code));
         }
+        this._updateRadarBadge();
     },
 
     onRadarSelectionChange() {
@@ -911,6 +931,7 @@ const app = {
             if (firstCog) state.ui.setTimeDisplay(firstCog.observation_time);
 
             if (colormap) {
+                this._enrichColormapWithProduct(colormap);
                 state.legend.render(colormap, {
                     filterVmin: state.currentVmin,
                     filterVmax: state.currentVmax,
@@ -1019,6 +1040,7 @@ const app = {
             state.animator.goToFrame(0);
 
             if (colormap) {
+                this._enrichColormapWithProduct(colormap);
                 state.legend.render(colormap, {
                     filterVmin: state.currentVmin,
                     filterVmax: state.currentVmax,
@@ -1422,6 +1444,7 @@ const app = {
         try {
             const colormap = await api.getColormapInfo(state.selectedProduct, state.selectedColormap);
             if (colormap) {
+                this._enrichColormapWithProduct(colormap);
                 state.legend.render(colormap, {
                     filterVmin: state.currentVmin,
                     filterVmax: state.currentVmax,
@@ -1431,6 +1454,24 @@ const app = {
         } catch (e) {
             console.warn('applyColormapChange: failed to update legend:', e);
         }
+    },
+
+    /**
+     * Enrich a colormap object with product_title and unit from state.products.
+     * Called just before legend.render() so the legend shows a human-readable
+     * field name and the correct unit.  Mutates and returns the same object.
+     *
+     * @param {object} colormap - Colormap object returned by api.getColormapInfo()
+     * @returns {object} The same colormap object, enriched in-place.
+     */
+    _enrichColormapWithProduct(colormap) {
+        if (!colormap || !state.products) return colormap;
+        const product = state.products.find(p => p.product_key === state.selectedProduct);
+        if (product) {
+            colormap.product_title = product.product_title || null;
+            colormap.unit = product.unit !== undefined ? product.unit : null;
+        }
+        return colormap;
     },
 
     /**
@@ -1579,6 +1620,7 @@ const app = {
             try {
                 const colormap = await api.getColormapInfo(state.selectedProduct, state.selectedColormap);
                 if (colormap) {
+                    this._enrichColormapWithProduct(colormap);
                     state.legend.render(colormap, {
                         filterVmin: state.currentVmin,
                         filterVmax: state.currentVmax,
@@ -1608,6 +1650,24 @@ const app = {
         }
         const cogRefreshBtn = document.getElementById('btn-cog-refresh-now');
         if (cogRefreshBtn) cogRefreshBtn.disabled = state.liveHours === null;
+    },
+
+    /** Update badge-module-a with the number of selected radars. */
+    _updateRadarBadge() {
+        const badge = document.getElementById('badge-module-a');
+        if (!badge) return;
+        const count = (state.selectedRadars || []).length;
+        badge.textContent = count > 0 ? String(count) : '';
+        badge.style.display = count > 0 ? 'inline-flex' : 'none';
+    },
+
+    /** Update badge-module-b with the currently selected product key. */
+    _updateFieldBadge() {
+        const badge = document.getElementById('badge-module-b');
+        if (!badge) return;
+        const key = state.selectedProduct || '';
+        badge.textContent = key ? key.toUpperCase() : '';
+        badge.style.display = key ? 'inline-flex' : 'none';
     },
 
     // =========================================================================
@@ -1694,6 +1754,27 @@ const app = {
                     rect.width, rect.height);
             }
             ctx.globalAlpha = 1;
+
+            // Draw the coverage SVG mask layer (appended directly to the map
+            // container, outside Leaflet panes, so not captured by the img loop above).
+            const coverageSvg = state.mapManager && state.mapManager._coverageSvgEl;
+            if (coverageSvg) {
+                try {
+                    const svgData = new XMLSerializer().serializeToString(coverageSvg);
+                    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+                    const svgUrl  = URL.createObjectURL(svgBlob);
+                    await new Promise((resolve, reject) => {
+                        const svgImg = new Image();
+                        svgImg.onload = () => {
+                            ctx.drawImage(svgImg, 0, 0, canvas.width, canvas.height);
+                            URL.revokeObjectURL(svgUrl);
+                            resolve();
+                        };
+                        svgImg.onerror = () => { URL.revokeObjectURL(svgUrl); resolve(); };
+                        svgImg.src = svgUrl;
+                    });
+                } catch (_) { /* coverage overlay is best-effort */ }
+            }
 
             const link = document.createElement('a');
             link.download = `radar-snapshot-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;

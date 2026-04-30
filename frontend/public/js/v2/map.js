@@ -143,7 +143,7 @@ export class MapManager {
             this._updateCoverageMask();
         });
 
-        this.setBasemap(this._currentBasemap);
+        this.setBasemap(localStorage.getItem('webmet25_selected_basemap') || this._currentBasemap);
         return this._map;
     }
 
@@ -169,6 +169,9 @@ export class MapManager {
             crossOrigin: 'anonymous',
         }).addTo(this._map);
         this._currentBasemap = basemapKey;
+        localStorage.setItem('webmet25_selected_basemap', basemapKey);
+        const basemapSelect = document.getElementById('basemap-select');
+        if (basemapSelect && basemapSelect.value !== basemapKey) basemapSelect.value = basemapKey;
     }
 
     // =========================================================================
