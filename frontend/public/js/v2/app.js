@@ -525,7 +525,9 @@ const app = {
                 state.currentVmin = null;
                 state.currentVmax = null;
                 await this.loadColormapOptions();
-                this.onTimeRangeChange();
+                // Route through onSelectionChange so time-range animation
+                // seamlessly reloads with the new field without stopping.
+                await this.onSelectionChange();
             });
         }
 
@@ -858,15 +860,14 @@ const app = {
             state.ui.setStatus('Loading frame image…', 'loading');
             await state.mapManager.loadFrames(cogsByFrame, state.selectedProduct, params, null);
 
-            // Zoom to first radar bounds
-            if (firstCog && !state.hasZoomedToBounds) {
-                const radar = state.radars.find(r => r.code === firstCog.radar_code);
-                if (radar?.extent) {
-                    const ext = radar.extent;
-                    state.mapManager.getMap().fitBounds([
-                        [ext.lat_min, ext.lon_min],
-                        [ext.lat_max, ext.lon_max],
-                    ]);
+            // Zoom to all selected radar bounds
+            if (!state.hasZoomedToBounds) {
+                const allBounds = this._getAllRadarsBounds();
+                if (allBounds) {
+                    state.mapManager.getMap().fitBounds(allBounds, {
+                        padding: [32, 32],
+                        maxZoom: 8,
+                    });
                 }
                 state.hasZoomedToBounds = true;
             }
@@ -877,9 +878,10 @@ const app = {
             if (firstCog) state.ui.setTimeDisplay(firstCog.observation_time);
 
             if (colormap) {
-                if (state.currentVmin !== null) colormap.vmin = state.currentVmin;
-                if (state.currentVmax !== null) colormap.vmax = state.currentVmax;
-                state.legend.render(colormap);
+                state.legend.render(colormap, {
+                    filterVmin: state.currentVmin,
+                    filterVmax: state.currentVmax,
+                });
                 state.legend.show();
             }
 
@@ -902,6 +904,8 @@ const app = {
     // =========================================================================
 
     async loadTimeRangeCogs() {
+        this._showFieldLoadingBadge();
+        try {
         if (state.selectedRadars.length === 0 || !state.selectedProduct) {
             state.ui.setStatus('Select radar(s) and product', 'error');
             return;
@@ -963,16 +967,14 @@ const app = {
                 }
             );
 
-            // Zoom to first frame's first radar bounds
-            const anyRadarCode = Object.keys(groupedFrames[0].cogsByRadar)[0];
-            if (anyRadarCode && !state.hasZoomedToBounds) {
-                const radar = state.radars.find(r => r.code === anyRadarCode);
-                if (radar?.extent) {
-                    const ext = radar.extent;
-                    state.mapManager.getMap().fitBounds([
-                        [ext.lat_min, ext.lon_min],
-                        [ext.lat_max, ext.lon_max],
-                    ]);
+            // Zoom to all selected radar bounds
+            if (!state.hasZoomedToBounds) {
+                const allBounds = this._getAllRadarsBounds();
+                if (allBounds) {
+                    state.mapManager.getMap().fitBounds(allBounds, {
+                        padding: [32, 32],
+                        maxZoom: 8,
+                    });
                 }
                 state.hasZoomedToBounds = true;
             }
@@ -984,9 +986,10 @@ const app = {
             state.animator.goToFrame(0);
 
             if (colormap) {
-                if (state.currentVmin !== null) colormap.vmin = state.currentVmin;
-                if (state.currentVmax !== null) colormap.vmax = state.currentVmax;
-                state.legend.render(colormap);
+                state.legend.render(colormap, {
+                    filterVmin: state.currentVmin,
+                    filterVmax: state.currentVmax,
+                });
                 state.legend.show();
             }
 
@@ -1023,6 +1026,9 @@ const app = {
         } catch (error) {
             console.error('Load time range error:', error);
             state.ui.setStatus(`Error: ${error.message}`, 'error');
+        }
+        } finally {
+            this._hideFieldLoadingBadge();
         }
     },
 
@@ -1382,14 +1388,13 @@ const app = {
         const cogsByFrame = buildCogsByFrameMap(state.cogs);
         const params      = this.getTileParams();
 
-        state.ui.showMapOverlay('Applying colormap\u2026');
-
         try {
             const colormap = await api.getColormapInfo(state.selectedProduct, state.selectedColormap);
             if (colormap) {
-                if (state.currentVmin !== null) colormap.vmin = state.currentVmin;
-                if (state.currentVmax !== null) colormap.vmax = state.currentVmax;
-                state.legend.render(colormap);
+                state.legend.render(colormap, {
+                    filterVmin: state.currentVmin,
+                    filterVmax: state.currentVmax,
+                });
             }
         } catch (e) {
             console.warn('Failed to update legend during colormap change:', e);
@@ -1403,13 +1408,12 @@ const app = {
         await state.mapManager.updateParams(
             cogsByFrame, state.selectedProduct, params,
             (loaded, total) => {
-                state.ui.updateMapOverlay(`Applying colormap\u2026 ${loaded}\u00a0/\u00a0${total}`);
+                state.ui.setStatus(`Applying colormap\u2026 ${loaded}\u00a0/\u00a0${total}`, 'loading');
             }
         );
 
         state.animator.updateFrames(state.cogs, state.selectedProduct, prevIndex);
         state.animator.goToFrame(prevIndex);
-        state.ui.hideMapOverlay();
         state.ui.setStatus('Colormap updated \u2713', 'success');
         if (wasPlaying) state.animator.play();
     },
@@ -1434,6 +1438,57 @@ const app = {
         slider.value = opacity;
         if (display) display.textContent = `${Math.round(opacity * 100)}%`;
         if (state.mapManager) state.mapManager.setOpacity(opacity);
+    },
+
+    _showFieldLoadingBadge() {
+        const badge = document.getElementById('field-loading-badge');
+        if (badge) badge.classList.add('visible');
+    },
+
+    _hideFieldLoadingBadge() {
+        const badge = document.getElementById('field-loading-badge');
+        if (badge) badge.classList.remove('visible');
+    },
+
+    /**
+     * Compute the union LatLngBounds for all currently selected
+     * and active radars, using center + img_radio radius.
+     * Returns a Leaflet LatLngBounds or null if no radars found.
+     */
+    _getAllRadarsBounds() {
+        if (!state.selectedRadars || state.selectedRadars.length === 0) {
+            return null;
+        }
+        let bounds = null;
+        for (const radarCode of state.selectedRadars) {
+            const radar = state.radars.find(r => r.code === radarCode);
+            if (!radar) continue;
+
+            // Prefer explicit bounding box if available
+            let radarBounds;
+            if (radar.extent) {
+                radarBounds = L.latLngBounds(
+                    [radar.extent.lat_min, radar.extent.lon_min],
+                    [radar.extent.lat_max, radar.extent.lon_max]
+                );
+            } else if (radar.center_lat && radar.center_long && radar.img_radio) {
+                // Approximate from center + radius (img_radio is in km)
+                const radiusDeg = radar.img_radio / 111.0;
+                radarBounds = L.latLngBounds(
+                    [radar.center_lat - radiusDeg, radar.center_long - radiusDeg],
+                    [radar.center_lat + radiusDeg, radar.center_long + radiusDeg]
+                );
+            } else {
+                continue;
+            }
+
+            if (!bounds) {
+                bounds = radarBounds;
+            } else {
+                bounds.extend(radarBounds);
+            }
+        }
+        return bounds;
     },
 
     updateLiveIndicator() {
@@ -1493,6 +1548,20 @@ const app = {
     onTimeRangeChange() {
         // Deactivate live preset buttons if the user manually changed the range.
         // (kept for UI consistency; actual live state is tracked via state.liveHours)
+    },
+
+    /**
+     * Route field/product changes to the appropriate load function based on
+     * the current animation mode. Does NOT stop the animation before loading
+     * so that existing frames continue to play while new data is fetched.
+     */
+    async onSelectionChange() {
+        if (state.animationMode === 'timerange') {
+            await this.loadTimeRangeCogs();
+        } else if (state.animationMode === 'latest') {
+            await this.loadLatestCogs();
+        }
+        // If no animation mode is active yet, nothing to reload.
     },
 
     // =========================================================================

@@ -75,7 +75,7 @@ export class MapManager {
         this._mapElementId  = mapElementId;
         this._map           = null;
         this._baseLayer     = null;
-        this._currentBasemap = 'dark';
+        this._currentBasemap = 'osm';
         this._currentOpacity = DEFAULT_OPACITY;
 
         // -----------------------------------------------------------------------
