@@ -24,7 +24,7 @@
 
 import { api } from '../shared/api.js';
 import { MapManager } from './map.js';
-import { AnimationController } from './animation.js';
+import { AnimationController, formatTimestamp } from './animation.js';
 import { UIControls } from '../shared/controls.js';
 import { LegendRenderer } from '../shared/legend.js';
 
@@ -856,7 +856,8 @@ const app = {
 
         state.ui.updateFrameCounter(newCurrentIndex, newFrames.length);
         state.ui.updateAnimationSlider(newCurrentIndex, newFrames.length);
-        state.ui.setTimeDisplay(newFrames[newCurrentIndex].timestamp);
+        const _td1 = document.getElementById('time-display');
+        if (_td1) _td1.textContent = formatTimestamp(newFrames[newCurrentIndex].timestamp);
         state.ui.setStatus(`✓ Removed ${radarCode.toUpperCase()} from animation`, 'success');
     },
 
@@ -928,7 +929,10 @@ const app = {
             // Show single frame
             state.mapManager.showFrame(0, Array.from(singleFrameRadarMap.keys()), state.selectedProduct);
 
-            if (firstCog) state.ui.setTimeDisplay(firstCog.observation_time);
+            if (firstCog) {
+                const _td2 = document.getElementById('time-display');
+                if (_td2) _td2.textContent = formatTimestamp(firstCog.observation_time);
+            }
 
             if (colormap) {
                 this._enrichColormapWithProduct(colormap);
@@ -1333,10 +1337,12 @@ const app = {
         if (!frame) return;
         this.updateTimeWindowLabel();
 
+        const timeDisplay = document.getElementById('time-display');
+
         if (frame.cogsByRadar) {
             // v2: showFrame is called by AnimationController._showCurrentFrame()
             // so we only need to update the UI here
-            state.ui.setTimeDisplay(frame.timestamp);
+            if (timeDisplay) timeDisplay.textContent = formatTimestamp(frame.timestamp);
             state.ui.updateFrameCounter(index, state.animator.getFrameCount());
             state.ui.updateAnimationSlider(index, state.animator.getFrameCount());
             return;
@@ -1344,7 +1350,7 @@ const app = {
 
         // Legacy single-COG fallback
         if (frame.observation_time) {
-            state.ui.setTimeDisplay(frame.observation_time);
+            if (timeDisplay) timeDisplay.textContent = formatTimestamp(frame.observation_time);
             state.ui.updateFrameCounter(index, state.animator.getFrameCount());
             state.ui.updateAnimationSlider(index, state.animator.getFrameCount());
         }
