@@ -28,8 +28,13 @@ export class LegendRenderer {
     /**
      * Render legend from new colormap data format
      * Supports both old format (entries array) and new format (colors array with vmin/vmax)
+     *
+     * @param {object} colormapData  - Colormap info from API (vmin/vmax are the FULL product range)
+     * @param {object} [filterOptions] - Optional filter range for display
+     * @param {number|null} [filterOptions.filterVmin] - Filter min (data filter only, not colormap mutation)
+     * @param {number|null} [filterOptions.filterVmax] - Filter max (data filter only, not colormap mutation)
      */
-    render(colormapData) {
+    render(colormapData, filterOptions = {}) {
         if (!this.container) return;
         
         this.currentColormap = colormapData;
@@ -41,10 +46,10 @@ export class LegendRenderer {
             return;
         }
         
-        // Create legend title
+        // Create legend title — prefer human-readable product_title, fall back to product_key
         const title = document.createElement('div');
         title.className = 'legend-title';
-        title.textContent = colormapData.product_key || colormapData.colormap || 'Legend';
+        title.textContent = colormapData.product_title || colormapData.product_key || colormapData.colormap || 'Legend';
         this.container.appendChild(title);
         
         // Create scale container
@@ -54,15 +59,30 @@ export class LegendRenderer {
         // Handle new format (colors array with vmin/vmax)
         if (colormapData.colors && Array.isArray(colormapData.colors)) {
             const colors = colormapData.colors;
-            const vmin = colormapData.vmin ?? 0;
-            const vmax = colormapData.vmax ?? 100;
+            // Full product range — never mutated by filters.
+            const fullVmin = colormapData.vmin ?? 0;
+            const fullVmax = colormapData.vmax ?? 100;
             // Fallback values (0 / 100) are generic defaults used only when
             // the API response is missing vmin/vmax — this should not happen in
             // normal operation since the API always returns these values.  If
             // they are missing, the legend will still render but colour-to-value
             // mapping will be approximate until real data is loaded.
-            const range = vmax - vmin;
-            const decimals = legendDecimalPlaces(range);
+            const fullRange = fullVmax - fullVmin;
+
+            // The display range: if a filter is active, show only the filtered
+            // portion in the legend axis labels. Colors are anchored to the
+            // full colormap so values have the same color whether filtered or not.
+            const { filterVmin = null, filterVmax = null } = filterOptions;
+            const displayVmin = filterVmin !== null ? filterVmin : fullVmin;
+            const displayVmax = filterVmax !== null ? filterVmax : fullVmax;
+            const displayRange = displayVmax - displayVmin;
+
+            // Fractions within the full colormap [0..1] that correspond to
+            // the start and end of the displayed range.
+            const startFraction = fullRange > 0 ? (displayVmin - fullVmin) / fullRange : 0;
+            const endFraction   = fullRange > 0 ? (displayVmax - fullVmin) / fullRange : 1;
+
+            const decimals = legendDecimalPlaces(Math.abs(displayRange));
             
             // Fix 4: Use at most MAX_LEGEND_STOPS evenly-spaced stops.
             // High values appear at the top; low values at the bottom.
@@ -70,10 +90,12 @@ export class LegendRenderer {
             
             // Iterate from high (top) to low (bottom): i goes numStops-1 → 0
             for (let i = numStops - 1; i >= 0; i--) {
-                // fraction goes 1 → 0 as i goes numStops-1 → 0
-                const fraction = (numStops === 1) ? 1 : i / (numStops - 1);
-                const colorIndex = Math.round(fraction * (colors.length - 1));
-                const value = vmin + fraction * range;
+                // displayFraction: position within displayVmin..displayVmax (1→0 top→bottom)
+                const displayFraction = (numStops === 1) ? 1 : i / (numStops - 1);
+                // fullFraction: position on the full colormap gradient
+                const fullFraction = startFraction + displayFraction * (endFraction - startFraction);
+                const colorIndex = Math.round(fullFraction * (colors.length - 1));
+                const value = displayVmin + displayFraction * displayRange;
                 
                 const item = document.createElement('div');
                 item.className = 'legend-item';
@@ -125,14 +147,12 @@ export class LegendRenderer {
         
         this.container.appendChild(scale);
         
-        // Add unit if available
-        const unit = colormapData.unit || '';
-        if (unit) {
-            const unitEl = document.createElement('div');
-            unitEl.className = 'legend-unit';
-            unitEl.textContent = unit;
-            this.container.appendChild(unitEl);
-        }
+        // Always show unit; use '?' when unknown
+        const unitText = (colormapData.unit && colormapData.unit.trim()) ? colormapData.unit.trim() : '?';
+        const unitEl = document.createElement('div');
+        unitEl.className = 'legend-unit';
+        unitEl.textContent = unitText;
+        this.container.appendChild(unitEl);
     }
     
     /**

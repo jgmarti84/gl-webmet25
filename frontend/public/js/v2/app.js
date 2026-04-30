@@ -14,8 +14,9 @@
  * - addRadarIncremental() calls mapManager.addRadarToFrame() / addFrame().
  * - removeRadarIncremental() calls mapManager.removeFrame() / removeFrameSlot().
  * - refreshLiveWindow() uses the same MapManager v2 API for incremental diffs.
- * - applyColormapChange() uses mapManager.updateParams() instead of
- *   preloadFramesBackground / commitPendingFrames.
+ * - applyColormapChange() updates the legend only; image reload for all
+ *   changes (field, colormap, range filter) goes through _loadFramesWithContinuity()
+ *   which uses updateParams() for an atomic background swap without stopping animation.
  * - loadLatestCogs() builds a single-frame cogsByFrame and calls loadFrames().
  * - AnimationController v2 takes mapManager in the constructor and wires
  *   controls via initControls().
@@ -23,7 +24,7 @@
 
 import { api } from '../shared/api.js';
 import { MapManager } from './map.js';
-import { AnimationController } from './animation.js';
+import { AnimationController, formatTimestamp } from './animation.js';
 import { UIControls } from '../shared/controls.js';
 import { LegendRenderer } from '../shared/legend.js';
 
@@ -37,9 +38,9 @@ const DEFAULT_LIVE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 const LIVE_REFRESH_MAX_COGS = 200;
 const GEOLOCATION_AUTO_SELECT_COUNT = 3;
-const GEOLOCATION_AUTO_LOAD_HOURS = 3;
+const GEOLOCATION_AUTO_LOAD_HOURS = 1.5;
 const GEOLOCATION_AUTO_PRODUCT = 'DBZHo';
-const DEFAULT_TIME_WINDOW_HOURS = 3;
+const DEFAULT_TIME_WINDOW_HOURS = 1.5;
 const DEFAULT_FIELD_OPACITY = 0.7;
 const DEFAULT_COVERAGE_OPACITY = 0.4;
 
@@ -234,6 +235,8 @@ const app = {
             await this.loadInitialData();
             this.setupEventListeners();
             this.initSettingsPanel();
+            this._updateRadarBadge();
+            this._updateFieldBadge();
 
             // v2: wire animation DOM controls now that ui and animator exist
             state.animator.initControls(state.ui);
@@ -390,6 +393,7 @@ const app = {
             const productSelect = document.getElementById('product-select');
             if (productSelect) productSelect.value = selectedProduct;
             state.selectedProduct = selectedProduct;
+            this._updateFieldBadge();
             await this.loadColormapOptions();
 
             await this.loadLastNHours(GEOLOCATION_AUTO_LOAD_HOURS);
@@ -524,8 +528,18 @@ const app = {
                 state.selectedColormap = null;
                 state.currentVmin = null;
                 state.currentVmax = null;
+                this._updateFieldBadge();
                 await this.loadColormapOptions();
-                this.onTimeRangeChange();
+                if (state.animationMode === 'timerange') {
+                    // Load new field frames in background — animation continues
+                    // with old field until new frames are ready.
+                    await this._loadFramesWithContinuity(
+                        () => this._fetchTimeRangeFrames(),
+                        { showBadge: true, badgeText: 'Loading field…' }
+                    );
+                } else {
+                    await this.loadLatestCogs();
+                }
             });
         }
 
@@ -561,14 +575,39 @@ const app = {
         // Colormap
         const colormapSelect = document.getElementById('colormap-select');
         if (colormapSelect) {
-            colormapSelect.addEventListener('change', (e) => {
+            colormapSelect.addEventListener('change', async (e) => {
                 state.selectedColormap = e.target.value || null;
+                // Update legend immediately with new colormap.
+                await this.applyColormapChange();
+                // Re-fetch frames in background with new colormap applied.
+                // No badge — colormap re-fetch is fast (typically Redis-cached).
+                if (state.animationMode === 'timerange') {
+                    await this._loadFramesWithContinuity(
+                        () => this._fetchTimeRangeFrames(),
+                        { showBadge: false }
+                    );
+                } else if (state.animationMode === 'latest') {
+                    await this.loadLatestCogs();
+                }
             });
         }
 
         const applyColormapBtn = document.getElementById('btn-apply-range');
         if (applyColormapBtn) {
-            applyColormapBtn.addEventListener('click', () => this.applyColormapChange());
+            applyColormapBtn.addEventListener('click', async () => {
+                // Apply button handles range filter (vmin/vmax) only.
+                // Re-fetch frames in background — animation keeps playing.
+                if (state.animationMode === 'timerange') {
+                    await this._loadFramesWithContinuity(
+                        () => this._fetchTimeRangeFrames(),
+                        { showBadge: true, badgeText: 'Applying…' }
+                    );
+                } else if (state.animationMode === 'latest') {
+                    await this.loadLatestCogs();
+                } else {
+                    await this.applyColormapChange();
+                }
+            });
         }
 
         const vminInput = document.getElementById('vmin-input');
@@ -620,11 +659,26 @@ const app = {
             }
         });
 
-        // Live refresh manual trigger
+        // Live refresh manual trigger (main toolbar button)
         const cogRefreshNowBtn = document.getElementById('btn-cog-refresh-now');
         if (cogRefreshNowBtn) {
             cogRefreshNowBtn.addEventListener('click', () => {
                 if (state.liveHours !== null) this.refreshLiveWindow();
+            });
+        }
+
+        // Radar status refresh — settings panel "Refresh Now" button
+        const radarRefreshNowBtn = document.getElementById('btn-radar-refresh-now');
+        if (radarRefreshNowBtn) {
+            radarRefreshNowBtn.addEventListener('click', () => this.refreshRadarList());
+        }
+
+        // Live window manual refresh — settings panel "Refresh Now" button
+        const settingsCogRefreshBtn = document.getElementById('btn-settings-cog-refresh-now');
+        if (settingsCogRefreshBtn) {
+            settingsCogRefreshBtn.addEventListener('click', () => {
+                if (state.liveHours !== null) this.refreshLiveWindow();
+                else state.ui.setStatus('Live mode is not active', 'error');
             });
         }
     },
@@ -656,6 +710,7 @@ const app = {
             added.forEach(code => this.addRadarIncremental(code));
             removed.forEach(code => this.removeRadarIncremental(code));
         }
+        this._updateRadarBadge();
     },
 
     onRadarSelectionChange() {
@@ -801,7 +856,8 @@ const app = {
 
         state.ui.updateFrameCounter(newCurrentIndex, newFrames.length);
         state.ui.updateAnimationSlider(newCurrentIndex, newFrames.length);
-        state.ui.setTimeDisplay(newFrames[newCurrentIndex].timestamp);
+        const _td1 = document.getElementById('time-display');
+        if (_td1) _td1.textContent = formatTimestamp(newFrames[newCurrentIndex].timestamp);
         state.ui.setStatus(`✓ Removed ${radarCode.toUpperCase()} from animation`, 'success');
     },
 
@@ -858,15 +914,14 @@ const app = {
             state.ui.setStatus('Loading frame image…', 'loading');
             await state.mapManager.loadFrames(cogsByFrame, state.selectedProduct, params, null);
 
-            // Zoom to first radar bounds
-            if (firstCog && !state.hasZoomedToBounds) {
-                const radar = state.radars.find(r => r.code === firstCog.radar_code);
-                if (radar?.extent) {
-                    const ext = radar.extent;
-                    state.mapManager.getMap().fitBounds([
-                        [ext.lat_min, ext.lon_min],
-                        [ext.lat_max, ext.lon_max],
-                    ]);
+            // Zoom to all selected radar bounds
+            if (!state.hasZoomedToBounds) {
+                const allBounds = this._getAllRadarsBounds();
+                if (allBounds) {
+                    state.mapManager.getMap().fitBounds(allBounds, {
+                        padding: [32, 32],
+                        maxZoom: 8,
+                    });
                 }
                 state.hasZoomedToBounds = true;
             }
@@ -874,12 +929,17 @@ const app = {
             // Show single frame
             state.mapManager.showFrame(0, Array.from(singleFrameRadarMap.keys()), state.selectedProduct);
 
-            if (firstCog) state.ui.setTimeDisplay(firstCog.observation_time);
+            if (firstCog) {
+                const _td2 = document.getElementById('time-display');
+                if (_td2) _td2.textContent = formatTimestamp(firstCog.observation_time);
+            }
 
             if (colormap) {
-                if (state.currentVmin !== null) colormap.vmin = state.currentVmin;
-                if (state.currentVmax !== null) colormap.vmax = state.currentVmax;
-                state.legend.render(colormap);
+                this._enrichColormapWithProduct(colormap);
+                state.legend.render(colormap, {
+                    filterVmin: state.currentVmin,
+                    filterVmax: state.currentVmax,
+                });
                 state.legend.show();
             }
 
@@ -902,6 +962,8 @@ const app = {
     // =========================================================================
 
     async loadTimeRangeCogs() {
+        this._showFieldLoadingBadge();
+        try {
         if (state.selectedRadars.length === 0 || !state.selectedProduct) {
             state.ui.setStatus('Select radar(s) and product', 'error');
             return;
@@ -963,16 +1025,14 @@ const app = {
                 }
             );
 
-            // Zoom to first frame's first radar bounds
-            const anyRadarCode = Object.keys(groupedFrames[0].cogsByRadar)[0];
-            if (anyRadarCode && !state.hasZoomedToBounds) {
-                const radar = state.radars.find(r => r.code === anyRadarCode);
-                if (radar?.extent) {
-                    const ext = radar.extent;
-                    state.mapManager.getMap().fitBounds([
-                        [ext.lat_min, ext.lon_min],
-                        [ext.lat_max, ext.lon_max],
-                    ]);
+            // Zoom to all selected radar bounds
+            if (!state.hasZoomedToBounds) {
+                const allBounds = this._getAllRadarsBounds();
+                if (allBounds) {
+                    state.mapManager.getMap().fitBounds(allBounds, {
+                        padding: [32, 32],
+                        maxZoom: 8,
+                    });
                 }
                 state.hasZoomedToBounds = true;
             }
@@ -984,9 +1044,11 @@ const app = {
             state.animator.goToFrame(0);
 
             if (colormap) {
-                if (state.currentVmin !== null) colormap.vmin = state.currentVmin;
-                if (state.currentVmax !== null) colormap.vmax = state.currentVmax;
-                state.legend.render(colormap);
+                this._enrichColormapWithProduct(colormap);
+                state.legend.render(colormap, {
+                    filterVmin: state.currentVmin,
+                    filterVmax: state.currentVmax,
+                });
                 state.legend.show();
             }
 
@@ -1023,6 +1085,9 @@ const app = {
         } catch (error) {
             console.error('Load time range error:', error);
             state.ui.setStatus(`Error: ${error.message}`, 'error');
+        }
+        } finally {
+            this._hideFieldLoadingBadge();
         }
     },
 
@@ -1063,7 +1128,17 @@ const app = {
             this.onTimeRangeChange();
             state.liveHours = hours;
 
-            await this.loadTimeRangeCogs();
+            // If an animation is already running, reload the new window in the
+            // background so playback is not interrupted. Otherwise do a full load
+            // which also handles initial setup (zoom, enable controls, etc.).
+            if (state.animationMode === 'timerange' && state.animator.getIsPlaying()) {
+                await this._loadFramesWithContinuity(
+                    () => this._fetchTimeRangeFrames(),
+                    { showBadge: true, badgeText: 'Loading…' }
+                );
+            } else {
+                await this.loadTimeRangeCogs();
+            }
 
             if (state.liveHours !== null) {
                 this.startLiveRefresh(hours);
@@ -1262,10 +1337,12 @@ const app = {
         if (!frame) return;
         this.updateTimeWindowLabel();
 
+        const timeDisplay = document.getElementById('time-display');
+
         if (frame.cogsByRadar) {
             // v2: showFrame is called by AnimationController._showCurrentFrame()
             // so we only need to update the UI here
-            state.ui.setTimeDisplay(frame.timestamp);
+            if (timeDisplay) timeDisplay.textContent = formatTimestamp(frame.timestamp);
             state.ui.updateFrameCounter(index, state.animator.getFrameCount());
             state.ui.updateAnimationSlider(index, state.animator.getFrameCount());
             return;
@@ -1273,7 +1350,7 @@ const app = {
 
         // Legacy single-COG fallback
         if (frame.observation_time) {
-            state.ui.setTimeDisplay(frame.observation_time);
+            if (timeDisplay) timeDisplay.textContent = formatTimestamp(frame.observation_time);
             state.ui.updateFrameCounter(index, state.animator.getFrameCount());
             state.ui.updateAnimationSlider(index, state.animator.getFrameCount());
         }
@@ -1368,50 +1445,39 @@ const app = {
 
     async applyColormapChange() {
         if (!state.animationMode) return;
-
-        if (state.animationMode === 'latest') {
-            await this.loadLatestCogs();
-            return;
-        }
-
-        if (!state.cogs || !state.cogs.length) {
-            await this.loadTimeRangeCogs();
-            return;
-        }
-
-        const cogsByFrame = buildCogsByFrameMap(state.cogs);
-        const params      = this.getTileParams();
-
-        state.ui.showMapOverlay('Applying colormap\u2026');
-
+        // Update legend only — image reload is now handled by the
+        // apply-button and colormap-dropdown handlers via _loadFramesWithContinuity.
         try {
             const colormap = await api.getColormapInfo(state.selectedProduct, state.selectedColormap);
             if (colormap) {
-                if (state.currentVmin !== null) colormap.vmin = state.currentVmin;
-                if (state.currentVmax !== null) colormap.vmax = state.currentVmax;
-                state.legend.render(colormap);
+                this._enrichColormapWithProduct(colormap);
+                state.legend.render(colormap, {
+                    filterVmin: state.currentVmin,
+                    filterVmax: state.currentVmax,
+                });
+                state.legend.show();
             }
         } catch (e) {
-            console.warn('Failed to update legend during colormap change:', e);
+            console.warn('applyColormapChange: failed to update legend:', e);
         }
+    },
 
-        const prevIndex   = state.animator.getCurrentIndex();
-        const wasPlaying  = state.animator.getIsPlaying();
-        state.animator.stop();
-
-        // v2: updateParams reloads all images with new params, swaps atomically
-        await state.mapManager.updateParams(
-            cogsByFrame, state.selectedProduct, params,
-            (loaded, total) => {
-                state.ui.updateMapOverlay(`Applying colormap\u2026 ${loaded}\u00a0/\u00a0${total}`);
-            }
-        );
-
-        state.animator.updateFrames(state.cogs, state.selectedProduct, prevIndex);
-        state.animator.goToFrame(prevIndex);
-        state.ui.hideMapOverlay();
-        state.ui.setStatus('Colormap updated \u2713', 'success');
-        if (wasPlaying) state.animator.play();
+    /**
+     * Enrich a colormap object with product_title and unit from state.products.
+     * Called just before legend.render() so the legend shows a human-readable
+     * field name and the correct unit.  Mutates and returns the same object.
+     *
+     * @param {object} colormap - Colormap object returned by api.getColormapInfo()
+     * @returns {object} The same colormap object, enriched in-place.
+     */
+    _enrichColormapWithProduct(colormap) {
+        if (!colormap || !state.products) return colormap;
+        const product = state.products.find(p => p.product_key === state.selectedProduct);
+        if (product) {
+            colormap.product_title = product.product_title || null;
+            colormap.unit = product.unit !== undefined ? product.unit : null;
+        }
+        return colormap;
     },
 
     /**
@@ -1436,6 +1502,148 @@ const app = {
         if (state.mapManager) state.mapManager.setOpacity(opacity);
     },
 
+    _showFieldLoadingBadge(message = 'Loading field…') {
+        const badge = document.getElementById('field-loading-badge');
+        if (badge) {
+            badge.textContent = message;
+            badge.classList.add('visible');
+        }
+    },
+
+    _hideFieldLoadingBadge() {
+        const badge = document.getElementById('field-loading-badge');
+        if (badge) badge.classList.remove('visible');
+    },
+
+    /**
+     * Compute the union LatLngBounds for all currently selected
+     * and active radars, using center + img_radio radius.
+     * Returns a Leaflet LatLngBounds or null if no radars found.
+     */
+    _getAllRadarsBounds() {
+        if (!state.selectedRadars || state.selectedRadars.length === 0) {
+            return null;
+        }
+        let bounds = null;
+        for (const radarCode of state.selectedRadars) {
+            const radar = state.radars.find(r => r.code === radarCode);
+            if (!radar) continue;
+
+            // Prefer explicit bounding box if available
+            let radarBounds;
+            if (radar.extent) {
+                radarBounds = L.latLngBounds(
+                    [radar.extent.lat_min, radar.extent.lon_min],
+                    [radar.extent.lat_max, radar.extent.lon_max]
+                );
+            } else if (radar.center_lat && radar.center_long && radar.img_radio) {
+                // Approximate from center + radius (img_radio is in km)
+                const radiusDeg = radar.img_radio / 111.0;
+                radarBounds = L.latLngBounds(
+                    [radar.center_lat - radiusDeg, radar.center_long - radiusDeg],
+                    [radar.center_lat + radiusDeg, radar.center_long + radiusDeg]
+                );
+            } else {
+                continue;
+            }
+
+            if (!bounds) {
+                bounds = radarBounds;
+            } else {
+                bounds.extend(radarBounds);
+            }
+        }
+        return bounds;
+    },
+
+    /**
+     * Fetch COGs for the current time-range selection and group them into frames.
+     * Pure data function — no animation state mutation, no map layer teardown,
+     * no animator.stop() calls.
+     * Returns { groupedFrames, cogsByFrame } or null if no data available.
+     */
+    async _fetchTimeRangeFrames() {
+        if (state.selectedRadars.length === 0 || !state.selectedProduct) return null;
+        const timeRange = state.ui.getTimeRangeValues();
+        if (!timeRange.start || !timeRange.end || timeRange.start >= timeRange.end) return null;
+
+        const cogs = await api.getCogsForTimeRange(
+            state.selectedRadars, state.selectedProduct,
+            timeRange.start, timeRange.end, 100
+        );
+        if (!cogs || cogs.length === 0) return null;
+
+        const groupedFrames = groupCogsByTimestamp(cogs);
+        const cogsByFrame   = buildCogsByFrameMap(groupedFrames);
+        return { groupedFrames, cogsByFrame };
+    },
+
+    /**
+     * Load new frames in the background without interrupting the current
+     * animation. When loading completes, atomically swap the frame buffer:
+     *   1. mapManager.updateParams() preloads images into a new buffer and
+     *      swaps _frameImages — the RAF loop keeps reading old images throughout.
+     *   2. animator.updateFrames() replaces the frames array — the RAF loop
+     *      picks up new frames on the very next tick.
+     *
+     * If loadFn throws, the current animation continues unchanged.
+     *
+     * @param {Function} loadFn  - async () => { groupedFrames, cogsByFrame } | null
+     * @param {object}   opts
+     * @param {boolean}  opts.showBadge  - show loading badge during preload
+     * @param {string}   opts.badgeText  - initial badge label
+     */
+    async _loadFramesWithContinuity(loadFn, { showBadge = true, badgeText = 'Loading\u2026' } = {}) {
+        if (showBadge) this._showFieldLoadingBadge(badgeText);
+        try {
+            const result = await loadFn();
+            if (!result || !result.groupedFrames || result.groupedFrames.length === 0) {
+                console.warn('[continuity] No frames returned \u2014 keeping current animation');
+                return;
+            }
+
+            const { groupedFrames, cogsByFrame } = result;
+            const params    = this.getTileParams();
+            const prevIndex = state.animator.getCurrentIndex();
+
+            // Stage 1: preload all frame images into a new buffer.
+            // The animator keeps displaying old frames until the swap.
+            await state.mapManager.updateParams(
+                cogsByFrame, state.selectedProduct, params,
+                (loaded, total) => {
+                    if (showBadge) this._showFieldLoadingBadge(`${badgeText} ${loaded}\u00a0/\u00a0${total}`);
+                }
+            );
+
+            // Stage 2: atomic frame-list swap \u2014 RAF picks up new frames next tick.
+            state.cogs = groupedFrames;
+            state.animator.updateFrames(
+                groupedFrames, state.selectedProduct,
+                Math.min(prevIndex, groupedFrames.length - 1)
+            );
+
+            // Best-effort legend refresh after swap.
+            try {
+                const colormap = await api.getColormapInfo(state.selectedProduct, state.selectedColormap);
+                if (colormap) {
+                    this._enrichColormapWithProduct(colormap);
+                    state.legend.render(colormap, {
+                        filterVmin: state.currentVmin,
+                        filterVmax: state.currentVmax,
+                    });
+                    state.legend.show();
+                }
+            } catch (_) { /* legend update is best-effort */ }
+
+            state.ui.setStatus('Updated \u2713', 'success');
+        } catch (err) {
+            console.error('[continuity] Background load failed:', err);
+            // Animation continues unchanged \u2014 no error propagated to animator.
+        } finally {
+            if (showBadge) this._hideFieldLoadingBadge();
+        }
+    },
+
     updateLiveIndicator() {
         const el = document.getElementById('live-indicator');
         if (!el) return;
@@ -1448,6 +1656,24 @@ const app = {
         }
         const cogRefreshBtn = document.getElementById('btn-cog-refresh-now');
         if (cogRefreshBtn) cogRefreshBtn.disabled = state.liveHours === null;
+    },
+
+    /** Update badge-module-a with the number of selected radars. */
+    _updateRadarBadge() {
+        const badge = document.getElementById('badge-module-a');
+        if (!badge) return;
+        const count = (state.selectedRadars || []).length;
+        badge.textContent = count > 0 ? String(count) : '';
+        badge.style.display = count > 0 ? 'inline-flex' : 'none';
+    },
+
+    /** Update badge-module-b with the currently selected product key. */
+    _updateFieldBadge() {
+        const badge = document.getElementById('badge-module-b');
+        if (!badge) return;
+        const key = state.selectedProduct || '';
+        badge.textContent = key ? key.toUpperCase() : '';
+        badge.style.display = key ? 'inline-flex' : 'none';
     },
 
     // =========================================================================
@@ -1495,6 +1721,20 @@ const app = {
         // (kept for UI consistency; actual live state is tracked via state.liveHours)
     },
 
+    /**
+     * Route field/product changes to the appropriate load function based on
+     * the current animation mode. Does NOT stop the animation before loading
+     * so that existing frames continue to play while new data is fetched.
+     */
+    async onSelectionChange() {
+        if (state.animationMode === 'timerange') {
+            await this.loadTimeRangeCogs();
+        } else if (state.animationMode === 'latest') {
+            await this.loadLatestCogs();
+        }
+        // If no animation mode is active yet, nothing to reload.
+    },
+
     // =========================================================================
     // Snapshot
     // =========================================================================
@@ -1520,6 +1760,27 @@ const app = {
                     rect.width, rect.height);
             }
             ctx.globalAlpha = 1;
+
+            // Draw the coverage SVG mask layer (appended directly to the map
+            // container, outside Leaflet panes, so not captured by the img loop above).
+            const coverageSvg = state.mapManager && state.mapManager._coverageSvgEl;
+            if (coverageSvg) {
+                try {
+                    const svgData = new XMLSerializer().serializeToString(coverageSvg);
+                    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+                    const svgUrl  = URL.createObjectURL(svgBlob);
+                    await new Promise((resolve, reject) => {
+                        const svgImg = new Image();
+                        svgImg.onload = () => {
+                            ctx.drawImage(svgImg, 0, 0, canvas.width, canvas.height);
+                            URL.revokeObjectURL(svgUrl);
+                            resolve();
+                        };
+                        svgImg.onerror = () => { URL.revokeObjectURL(svgUrl); resolve(); };
+                        svgImg.src = svgUrl;
+                    });
+                } catch (_) { /* coverage overlay is best-effort */ }
+            }
 
             const link = document.createElement('a');
             link.download = `radar-snapshot-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;

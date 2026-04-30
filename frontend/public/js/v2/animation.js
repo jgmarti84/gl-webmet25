@@ -15,6 +15,82 @@
 
 // Frame interval is calculated dynamically: 1000ms / speedMultiplier (matches v1)
 
+/**
+ * Format a UTC ISO timestamp for display in the animation
+ * control panel.
+ *
+ * Strategy:
+ * 1. Try to display in the user's local timezone using the
+ *    browser's Intl API (most accurate — uses OS timezone)
+ * 2. Fall back to UTC display if Intl is unavailable or
+ *    throws (e.g. very old browsers)
+ *
+ * No geolocation or external API calls are made.
+ * The browser's own timezone (from OS settings) is used.
+ */
+export function formatTimestamp(isoString) {
+    if (!isoString) return '--:--';
+
+    try {
+        const date = new Date(isoString);
+        if (isNaN(date.getTime())) return '--:--';
+
+        // Get the browser's local timezone from the OS
+        const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+        // Format in local time with explicit timezone
+        const formatted = new Intl.DateTimeFormat(undefined, {
+            timeZone:  localTz,
+            year:      'numeric',
+            month:     '2-digit',
+            day:       '2-digit',
+            hour:      '2-digit',
+            minute:    '2-digit',
+            second:    '2-digit',
+            hour12:    false,
+        }).format(date);
+
+        // Append short timezone name so user knows it's local
+        const tzShort = new Intl.DateTimeFormat(undefined, {
+            timeZone:     localTz,
+            timeZoneName: 'short',
+        }).formatToParts(date)
+            .find(p => p.type === 'timeZoneName')?.value || '';
+
+        return tzShort ? `${formatted} ${tzShort}` : formatted;
+
+    } catch (err) {
+        // Fallback — format as UTC explicitly
+        console.warn('[timestamp] Local timezone failed,',
+            'falling back to UTC:', err);
+        return _formatUtcFallback(isoString);
+    }
+}
+
+/**
+ * UTC fallback formatter.
+ * Used when Intl timezone resolution fails.
+ * Appends "UTC" suffix so user knows it is not local time.
+ */
+function _formatUtcFallback(isoString) {
+    try {
+        const date = new Date(isoString);
+        if (isNaN(date.getTime())) return '--:--';
+        const pad = n => String(n).padStart(2, '0');
+        return [
+            date.getUTCFullYear(),
+            pad(date.getUTCMonth() + 1),
+            pad(date.getUTCDate()),
+        ].join('-') + ' ' + [
+            pad(date.getUTCHours()),
+            pad(date.getUTCMinutes()),
+            pad(date.getUTCSeconds()),
+        ].join(':') + ' UTC';
+    } catch {
+        return '--:--';
+    }
+}
+
 export class AnimationController {
     /**
      * @param {import('./map-v2.js').MapManager} mapManager
@@ -325,10 +401,6 @@ export class AnimationController {
         if (!frame) return;
         const ts = frame.timestamp || frame.observation_time;
         if (!ts) return;
-        const d = new Date(ts);
-        const pad = n => String(n).padStart(2, '0');
-        this._timeDisplay.textContent =
-            `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ` +
-            `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+        this._timeDisplay.textContent = formatTimestamp(ts);
     }
 }

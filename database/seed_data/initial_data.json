@@ -359,7 +359,8 @@
         "product_title": "COLMAX(Z)",
         "product_description": "Este es un producto colmax tipo DBZH",
         "enabled": true,
-        "see_in_open": true
+        "see_in_open": true,
+        "unit": "dBZ"
     }
 },
 {
@@ -370,7 +371,8 @@
         "product_title": "RHOHV",
         "product_description": "Coeficiente de correlacion co-polar.",
         "enabled": true,
-        "see_in_open": false
+        "see_in_open": false,
+        "unit": "-"
     }
 },
 {
@@ -381,7 +383,8 @@
         "product_title": "Z@0.5",
         "product_description": "Factor de Reflectividad Equivalente",
         "enabled": true,
-        "see_in_open": false
+        "see_in_open": false,
+        "unit": "dBZ"
     }
 },
 {
@@ -392,7 +395,8 @@
         "product_title": "PHIDP",
         "product_description": "Diferencia de Propagaci\u00f3n de Fase",
         "enabled": false,
-        "see_in_open": false
+        "see_in_open": false,
+        "unit": "\u00b0 (degrees)"
     }
 },
 {
@@ -403,7 +407,8 @@
         "product_title": "DBZV",
         "product_description": "Factor de Reflectividad Vertical",
         "enabled": false,
-        "see_in_open": false
+        "see_in_open": false,
+        "unit": "dBZ"
     }
 },
 {
@@ -414,7 +419,8 @@
         "product_title": "VRAD",
         "product_description": "Velocidad Doppler",
         "enabled": true,
-        "see_in_open": false
+        "see_in_open": false,
+        "unit": "m/s"
     }
 },
 {
@@ -425,7 +431,8 @@
         "product_title": "WRAD",
         "product_description": "Ancho Espectral",
         "enabled": true,
-        "see_in_open": false
+        "see_in_open": false,
+        "unit": "m"
     }
 },
 {
@@ -436,7 +443,8 @@
         "product_title": "DBZH sf",
         "product_description": "DBZH sin filtrar",
         "enabled": true,
-        "see_in_open": false
+        "see_in_open": false,
+        "unit": "dBZ"
     }
 },
 {
@@ -447,7 +455,8 @@
         "product_title": "PHIDP sf",
         "product_description": "PHIDP sin filtrar",
         "enabled": false,
-        "see_in_open": false
+        "see_in_open": false,
+        "unit": "\u00b0 (degrees)"
     }
 },
 {
@@ -458,7 +467,8 @@
         "product_title": "DBZV sf",
         "product_description": "DBZV sin filtrar",
         "enabled": false,
-        "see_in_open": false
+        "see_in_open": false,
+        "unit": "dBZ"
     }
 },
 {
@@ -469,7 +479,8 @@
         "product_title": "COLMAX sf",
         "product_description": "COLMAX sin filtrar",
         "enabled": true,
-        "see_in_open": false
+        "see_in_open": false,
+        "unit": "dBZ"
     }
 },
 {
@@ -480,7 +491,8 @@
         "product_title": "RHOHV@0.5",
         "product_description": "RHOHV sin filtrar",
         "enabled": true,
-        "see_in_open": false
+        "see_in_open": false,
+        "unit": "-"
     }
 },
 {
@@ -491,7 +503,8 @@
         "product_title": "ZDR sf",
         "product_description": "ZDR sin filtrar",
         "enabled": true,
-        "see_in_open": false
+        "see_in_open": false,
+        "unit": "dB"
     }
 },
 {
@@ -502,7 +515,8 @@
         "product_title": "VRADo sf",
         "product_description": "VRAD sin filtrar",
         "enabled": true,
-        "see_in_open": false
+        "see_in_open": false,
+        "unit": "m/s"
     }
 },
 {
@@ -513,7 +527,8 @@
         "product_title": "WRAD sf",
         "product_description": "WRAD sin filtrar",
         "enabled": true,
-        "see_in_open": false
+        "see_in_open": false,
+        "unit": "m"
     }
 },
 {
@@ -546,7 +561,8 @@
         "product_title": "KDP@0.5",
         "product_description": "Diferencial de fase espec\u00edfico",
         "enabled": true,
-        "see_in_open": false
+        "see_in_open": false,
+        "unit": "\u00b0/km (degrees/km)"
     }
 },
 {
@@ -557,7 +573,8 @@
         "product_title": "ZDR@0.5",
         "product_description": "Reflectividad diferencial",
         "enabled": true,
-        "see_in_open": false
+        "see_in_open": false,
+        "unit": "dB"
     }
 },
 {

@@ -1218,18 +1218,25 @@ code {
     text-align: center;
 }
 
-/* Map overlay (used during colormap/filter apply) */
-#map-overlay {
+/* Field loading indicator — appears in top-right of map during
+   field switch preload. Non-intrusive, does not block the map. */
+#field-loading-badge {
+    display: none;
     position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    z-index: 900;
-    background: rgba(26,26,46,0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-    color: #4fc3f7;
+    top: 12px;
+    right: 12px;
+    z-index: 1100;
+    background: rgba(30, 30, 60, 0.85);
+    color: #a0c4ff;
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(160, 196, 255, 0.3);
     pointer-events: none;
+    letter-spacing: 0.03em;
+}
+#field-loading-badge.visible {
+    display: block;
 }
 
 /* ============================================================
