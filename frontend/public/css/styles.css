@@ -1398,3 +1398,11 @@ code {
 
     #btn-speed { padding: 6px 10px; font-size: 11px; }
 }
+
+/* Radar image overlays — nearest-neighbor scaling preserves discrete
+   measurement cells. Applied to L.imageOverlay elements in v2.
+   Bilinear (browser default) produces misleading blur at high zoom. */
+.radar-image-overlay {
+    image-rendering: crisp-edges;  /* Firefox < 93 fallback */
+    image-rendering: pixelated;    /* Chrome, Edge, Safari, Firefox 93+ */
+}
