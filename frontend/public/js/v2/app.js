@@ -14,8 +14,9 @@
  * - addRadarIncremental() calls mapManager.addRadarToFrame() / addFrame().
  * - removeRadarIncremental() calls mapManager.removeFrame() / removeFrameSlot().
  * - refreshLiveWindow() uses the same MapManager v2 API for incremental diffs.
- * - applyColormapChange() uses mapManager.updateParams() instead of
- *   preloadFramesBackground / commitPendingFrames.
+ * - applyColormapChange() updates the legend only; image reload for all
+ *   changes (field, colormap, range filter) goes through _loadFramesWithContinuity()
+ *   which uses updateParams() for an atomic background swap without stopping animation.
  * - loadLatestCogs() builds a single-frame cogsByFrame and calls loadFrames().
  * - AnimationController v2 takes mapManager in the constructor and wires
  *   controls via initControls().
@@ -525,9 +526,16 @@ const app = {
                 state.currentVmin = null;
                 state.currentVmax = null;
                 await this.loadColormapOptions();
-                // Route through onSelectionChange so time-range animation
-                // seamlessly reloads with the new field without stopping.
-                await this.onSelectionChange();
+                if (state.animationMode === 'timerange') {
+                    // Load new field frames in background — animation continues
+                    // with old field until new frames are ready.
+                    await this._loadFramesWithContinuity(
+                        () => this._fetchTimeRangeFrames(),
+                        { showBadge: true, badgeText: 'Loading field…' }
+                    );
+                } else {
+                    await this.loadLatestCogs();
+                }
             });
         }
 
@@ -563,14 +571,39 @@ const app = {
         // Colormap
         const colormapSelect = document.getElementById('colormap-select');
         if (colormapSelect) {
-            colormapSelect.addEventListener('change', (e) => {
+            colormapSelect.addEventListener('change', async (e) => {
                 state.selectedColormap = e.target.value || null;
+                // Update legend immediately with new colormap.
+                await this.applyColormapChange();
+                // Re-fetch frames in background with new colormap applied.
+                // No badge — colormap re-fetch is fast (typically Redis-cached).
+                if (state.animationMode === 'timerange') {
+                    await this._loadFramesWithContinuity(
+                        () => this._fetchTimeRangeFrames(),
+                        { showBadge: false }
+                    );
+                } else if (state.animationMode === 'latest') {
+                    await this.loadLatestCogs();
+                }
             });
         }
 
         const applyColormapBtn = document.getElementById('btn-apply-range');
         if (applyColormapBtn) {
-            applyColormapBtn.addEventListener('click', () => this.applyColormapChange());
+            applyColormapBtn.addEventListener('click', async () => {
+                // Apply button handles range filter (vmin/vmax) only.
+                // Re-fetch frames in background — animation keeps playing.
+                if (state.animationMode === 'timerange') {
+                    await this._loadFramesWithContinuity(
+                        () => this._fetchTimeRangeFrames(),
+                        { showBadge: true, badgeText: 'Applying…' }
+                    );
+                } else if (state.animationMode === 'latest') {
+                    await this.loadLatestCogs();
+                } else {
+                    await this.applyColormapChange();
+                }
+            });
         }
 
         const vminInput = document.getElementById('vmin-input');
@@ -1069,7 +1102,17 @@ const app = {
             this.onTimeRangeChange();
             state.liveHours = hours;
 
-            await this.loadTimeRangeCogs();
+            // If an animation is already running, reload the new window in the
+            // background so playback is not interrupted. Otherwise do a full load
+            // which also handles initial setup (zoom, enable controls, etc.).
+            if (state.animationMode === 'timerange' && state.animator.getIsPlaying()) {
+                await this._loadFramesWithContinuity(
+                    () => this._fetchTimeRangeFrames(),
+                    { showBadge: true, badgeText: 'Loading…' }
+                );
+            } else {
+                await this.loadTimeRangeCogs();
+            }
 
             if (state.liveHours !== null) {
                 this.startLiveRefresh(hours);
@@ -1374,20 +1417,8 @@ const app = {
 
     async applyColormapChange() {
         if (!state.animationMode) return;
-
-        if (state.animationMode === 'latest') {
-            await this.loadLatestCogs();
-            return;
-        }
-
-        if (!state.cogs || !state.cogs.length) {
-            await this.loadTimeRangeCogs();
-            return;
-        }
-
-        const cogsByFrame = buildCogsByFrameMap(state.cogs);
-        const params      = this.getTileParams();
-
+        // Update legend only — image reload is now handled by the
+        // apply-button and colormap-dropdown handlers via _loadFramesWithContinuity.
         try {
             const colormap = await api.getColormapInfo(state.selectedProduct, state.selectedColormap);
             if (colormap) {
@@ -1395,27 +1426,11 @@ const app = {
                     filterVmin: state.currentVmin,
                     filterVmax: state.currentVmax,
                 });
+                state.legend.show();
             }
         } catch (e) {
-            console.warn('Failed to update legend during colormap change:', e);
+            console.warn('applyColormapChange: failed to update legend:', e);
         }
-
-        const prevIndex   = state.animator.getCurrentIndex();
-        const wasPlaying  = state.animator.getIsPlaying();
-        state.animator.stop();
-
-        // v2: updateParams reloads all images with new params, swaps atomically
-        await state.mapManager.updateParams(
-            cogsByFrame, state.selectedProduct, params,
-            (loaded, total) => {
-                state.ui.setStatus(`Applying colormap\u2026 ${loaded}\u00a0/\u00a0${total}`, 'loading');
-            }
-        );
-
-        state.animator.updateFrames(state.cogs, state.selectedProduct, prevIndex);
-        state.animator.goToFrame(prevIndex);
-        state.ui.setStatus('Colormap updated \u2713', 'success');
-        if (wasPlaying) state.animator.play();
     },
 
     /**
@@ -1440,9 +1455,12 @@ const app = {
         if (state.mapManager) state.mapManager.setOpacity(opacity);
     },
 
-    _showFieldLoadingBadge() {
+    _showFieldLoadingBadge(message = 'Loading field…') {
         const badge = document.getElementById('field-loading-badge');
-        if (badge) badge.classList.add('visible');
+        if (badge) {
+            badge.textContent = message;
+            badge.classList.add('visible');
+        }
     },
 
     _hideFieldLoadingBadge() {
@@ -1489,6 +1507,93 @@ const app = {
             }
         }
         return bounds;
+    },
+
+    /**
+     * Fetch COGs for the current time-range selection and group them into frames.
+     * Pure data function — no animation state mutation, no map layer teardown,
+     * no animator.stop() calls.
+     * Returns { groupedFrames, cogsByFrame } or null if no data available.
+     */
+    async _fetchTimeRangeFrames() {
+        if (state.selectedRadars.length === 0 || !state.selectedProduct) return null;
+        const timeRange = state.ui.getTimeRangeValues();
+        if (!timeRange.start || !timeRange.end || timeRange.start >= timeRange.end) return null;
+
+        const cogs = await api.getCogsForTimeRange(
+            state.selectedRadars, state.selectedProduct,
+            timeRange.start, timeRange.end, 100
+        );
+        if (!cogs || cogs.length === 0) return null;
+
+        const groupedFrames = groupCogsByTimestamp(cogs);
+        const cogsByFrame   = buildCogsByFrameMap(groupedFrames);
+        return { groupedFrames, cogsByFrame };
+    },
+
+    /**
+     * Load new frames in the background without interrupting the current
+     * animation. When loading completes, atomically swap the frame buffer:
+     *   1. mapManager.updateParams() preloads images into a new buffer and
+     *      swaps _frameImages — the RAF loop keeps reading old images throughout.
+     *   2. animator.updateFrames() replaces the frames array — the RAF loop
+     *      picks up new frames on the very next tick.
+     *
+     * If loadFn throws, the current animation continues unchanged.
+     *
+     * @param {Function} loadFn  - async () => { groupedFrames, cogsByFrame } | null
+     * @param {object}   opts
+     * @param {boolean}  opts.showBadge  - show loading badge during preload
+     * @param {string}   opts.badgeText  - initial badge label
+     */
+    async _loadFramesWithContinuity(loadFn, { showBadge = true, badgeText = 'Loading\u2026' } = {}) {
+        if (showBadge) this._showFieldLoadingBadge(badgeText);
+        try {
+            const result = await loadFn();
+            if (!result || !result.groupedFrames || result.groupedFrames.length === 0) {
+                console.warn('[continuity] No frames returned \u2014 keeping current animation');
+                return;
+            }
+
+            const { groupedFrames, cogsByFrame } = result;
+            const params    = this.getTileParams();
+            const prevIndex = state.animator.getCurrentIndex();
+
+            // Stage 1: preload all frame images into a new buffer.
+            // The animator keeps displaying old frames until the swap.
+            await state.mapManager.updateParams(
+                cogsByFrame, state.selectedProduct, params,
+                (loaded, total) => {
+                    if (showBadge) this._showFieldLoadingBadge(`${badgeText} ${loaded}\u00a0/\u00a0${total}`);
+                }
+            );
+
+            // Stage 2: atomic frame-list swap \u2014 RAF picks up new frames next tick.
+            state.cogs = groupedFrames;
+            state.animator.updateFrames(
+                groupedFrames, state.selectedProduct,
+                Math.min(prevIndex, groupedFrames.length - 1)
+            );
+
+            // Best-effort legend refresh after swap.
+            try {
+                const colormap = await api.getColormapInfo(state.selectedProduct, state.selectedColormap);
+                if (colormap) {
+                    state.legend.render(colormap, {
+                        filterVmin: state.currentVmin,
+                        filterVmax: state.currentVmax,
+                    });
+                    state.legend.show();
+                }
+            } catch (_) { /* legend update is best-effort */ }
+
+            state.ui.setStatus('Updated \u2713', 'success');
+        } catch (err) {
+            console.error('[continuity] Background load failed:', err);
+            // Animation continues unchanged \u2014 no error propagated to animator.
+        } finally {
+            if (showBadge) this._hideFieldLoadingBadge();
+        }
     },
 
     updateLiveIndicator() {
