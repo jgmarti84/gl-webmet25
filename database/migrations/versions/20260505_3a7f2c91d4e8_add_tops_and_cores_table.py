@@ -7,6 +7,7 @@ Create Date: 2026-05-05
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import ENUM as PgEnum
 
 # revision identifiers, used by Alembic.
 revision = '3a7f2c91d4e8'
@@ -28,13 +29,13 @@ def upgrade() -> None:
         sa.Column('top_count', sa.Integer(), nullable=False, server_default='0'),
         sa.Column(
             'status',
-            sa.Enum(
-                'pending', 'available', 'processing', 'error', 'archived', 'missing',
+            PgEnum(
+                'PENDING', 'AVAILABLE', 'PROCESSING', 'ERROR', 'ARCHIVED', 'MISSING', 
                 name='cogstatus',
                 create_type=False,
             ),
             nullable=False,
-            server_default='available',
+            server_default='AVAILABLE',
         ),
         sa.Column('strategy', sa.String(length=32), nullable=True),
         sa.Column('vol_nr', sa.String(length=16), nullable=True),

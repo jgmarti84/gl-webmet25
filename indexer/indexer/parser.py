@@ -226,7 +226,7 @@ def _parse_compact_datetime_utc(dt_str: str) -> datetime:
     Raises:
         ValueError: If ``dt_str`` does not consist of exactly 14 digits.
     """
-    m = re.fullmatch(r"(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})", dt_str)
+    m = re.fullmatch(r"(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z", dt_str)
     if not m:
         raise ValueError(
             f"Cannot parse compact datetime '{dt_str}': expected 14 digits (YYYYMMDDHHMMSS)"
@@ -260,11 +260,11 @@ class TopsAndCoresFilenameParser:
 
         RMA6_A_00_20260505163854_TOPS_CORES.geojson
     """
-
-    _PATTERN = re.compile(
-        r"^(?P<radar>[A-Z0-9]+)_(?P<strategy>[^_]+)_(?P<vol_nr>[^_]+)"
-        r"_(?P<datetime>\d{14})_TOPS_CORES\.geojson$"
-    )
+    # _PATTERN = re.compile(
+    #     r"^(?P<radar>[A-Z0-9]+)_(?P<strategy>[^_]+)_(?P<vol_nr>[^_]+)"
+    #     r"_(?P<datetime>\d{14})_TOPS_CORES\.geojson$"
+    # )
+    _PATTERN = re.compile(r"^(?P<radar>[A-Z0-9]+)_(?P<strategy>\d{4})_(?P<vol_nr>\d{2})_(?P<datetime>\d{8}T\d{6}Z)_TOPS_CORES\.geojson$")
 
     def parse(self, file_path: str) -> ParsedTopsAndCoresInfo:
         """
