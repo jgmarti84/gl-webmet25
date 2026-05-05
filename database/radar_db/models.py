@@ -54,6 +54,7 @@ class Radar(Base):
     
     # Relationships
     cog_files = relationship("RadarCOG", back_populates="radar", cascade="all, delete-orphan")
+    tops_and_cores = relationship("TopsAndCores", back_populates="radar", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Radar(code='{self.code}', title='{self.title}')>"
@@ -217,3 +218,47 @@ class RadarCOG(Base):
     
     def __repr__(self):
         return f"<RadarCOG(id={self.id}, radar='{self.radar_code}', file='{self.file_name}')>"
+
+
+class TopsAndCores(Base):
+    """
+    Tops and Cores GeoJSON file reference.
+
+    Indexed by the watcher from *_TOPS_CORES.geojson files produced by radarlib.
+    """
+    __tablename__ = 'tops_and_cores'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Foreign key
+    radar_code = Column(String(16), ForeignKey('radars.code', ondelete='CASCADE'),
+                        nullable=False, index=True)
+
+    # Temporal information
+    observation_time = Column(DateTime(timezone=True), nullable=False, index=True)
+
+    # File information
+    file_path = Column(String(512), nullable=False, unique=True)
+    file_name = Column(String(256), nullable=False)
+
+    # Feature counts
+    feature_count = Column(Integer, nullable=False, default=0)
+    core_count = Column(Integer, nullable=False, default=0)
+    top_count = Column(Integer, nullable=False, default=0)
+
+    # Status
+    status = Column(SQLEnum(COGStatus), nullable=False, default=COGStatus.AVAILABLE, index=True)
+
+    # Filename components
+    strategy = Column(String(32), nullable=True)
+    vol_nr = Column(String(16), nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    radar = relationship("Radar", back_populates="tops_and_cores")
+
+    def __repr__(self):
+        return f"<TopsAndCores(id={self.id}, radar='{self.radar_code}', file='{self.file_name}')>"

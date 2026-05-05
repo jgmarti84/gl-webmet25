@@ -187,3 +187,120 @@ class COGWatcher:
                 logger.error(f"Session error: {e}")
             
             time.sleep(self.scan_interval)
+
+
+class TopsAndCoresWatcher:
+    """
+    Watches for new TopsAndCores GeoJSON files and registers them.
+
+    Files must match the pattern ``*_TOPS_CORES.geojson`` and live under
+    ``tops_and_cores_dir`` (recursively).
+
+    Uses the same polling approach and scan interval as :class:`COGWatcher`.
+    """
+
+    _FILE_PATTERN = "*_TOPS_CORES.geojson"
+
+    def __init__(self, tops_and_cores_dir: str):
+        self.tops_and_cores_dir = Path(tops_and_cores_dir)
+        self.scan_interval = settings.scan_interval_seconds
+        self._warned_missing_dir: bool = False
+
+    def discover_files(self) -> list:
+        """
+        Recursively discover all ``*_TOPS_CORES.geojson`` files.
+
+        Returns:
+            List of :class:`~pathlib.Path` objects.
+        """
+        return list(self.tops_and_cores_dir.rglob(self._FILE_PATTERN))
+
+    def run_scan(self, session) -> int:
+        """
+        Run a single scan cycle.
+
+        Args:
+            session: SQLAlchemy session (managed by the caller).
+
+        Returns:
+            Number of newly registered files.
+        """
+        from indexer.parser import TopsAndCoresFilenameParser
+        from indexer.registrar import TopsAndCoresRegistrar
+        from radar_db.models import TopsAndCores, COGStatus
+
+        if not self.tops_and_cores_dir.exists():
+            if not self._warned_missing_dir:
+                logger.warning(
+                    f"TOPS_AND_CORES_DIR does not exist: {self.tops_and_cores_dir}. "
+                    f"Skipping scan. This warning will not repeat."
+                )
+                self._warned_missing_dir = True
+            return 0
+
+        # Reset warning if the directory reappears
+        self._warned_missing_dir = False
+
+        files = self.discover_files()
+        logger.debug(f"TOPS_CORES scan: found {len(files)} candidate file(s)")
+
+        filename_parser = TopsAndCoresFilenameParser()
+        registrar = TopsAndCoresRegistrar(session)
+
+        registered_count = 0
+
+        for file_path in files:
+            str_path = str(file_path)
+            try:
+                parsed = filename_parser.parse(str_path)
+            except ValueError as exc:
+                logger.warning(f"TOPS_CORES skipping unrecognised file: {file_path} — {exc}")
+                continue
+
+            registrar.register(str_path, parsed)
+            registered_count += 1
+
+        # Mark files no longer on disk as MISSING
+        available_records = session.query(TopsAndCores).filter(
+            TopsAndCores.status == COGStatus.AVAILABLE
+        ).all()
+
+        for record in available_records:
+            if not Path(record.file_path).exists():
+                registrar.mark_missing(record.file_path)
+
+        return registered_count
+
+    def run_forever(self, get_session_func) -> None:
+        """
+        Run the watcher continuously using the same loop pattern as
+        :class:`COGWatcher`.
+
+        Args:
+            get_session_func: Callable that returns a new SQLAlchemy session.
+        """
+        logger.info(
+            f"Starting TopsAndCores watcher on {self.tops_and_cores_dir}"
+        )
+        logger.info(f"Scan interval: {self.scan_interval} seconds")
+
+        while True:
+            try:
+                session = get_session_func()
+                try:
+                    count = self.run_scan(session)
+                    if count > 0:
+                        logger.info(
+                            f"TopsAndCores scan complete: processed {count} file(s)"
+                        )
+                    session.commit()
+                except Exception as e:
+                    logger.error(f"TopsAndCores scan error: {e}")
+                    session.rollback()
+                finally:
+                    session.close()
+
+            except Exception as e:
+                logger.error(f"TopsAndCores session error: {e}")
+
+            time.sleep(self.scan_interval)
