@@ -46,6 +46,14 @@ export class TopsCoresLayer {
         this._map = map;
         this._visible = false;
         this._radius = DEFAULT_RADIUS;
+        this._pane = 'topsCoresPane';
+
+        // Dedicated pane above overlayPane (200) so markers always sit on top
+        // of L.imageOverlay radar images regardless of DOM insertion order.
+        if (!map.getPane(this._pane)) {
+            map.createPane(this._pane);
+            map.getPane(this._pane).style.zIndex = 450;
+        }
 
         // L.LayerGroup that holds all CircleMarkers for the current frame
         this._layerGroup = L.layerGroup().addTo(map);
@@ -226,6 +234,7 @@ export class TopsCoresLayer {
             const marker = L.circleMarker([coords[1], coords[0]], {
                 ...CORE_STYLE,
                 radius: this._radius,
+                pane: this._pane,
             });
             const dbz = props.intensity_dbz != null ? `${props.intensity_dbz} dBZ` : '—';
             marker.bindTooltip(`Core — ${dbz}`, { sticky: true });
@@ -235,6 +244,7 @@ export class TopsCoresLayer {
             const marker = L.circleMarker([coords[1], coords[0]], {
                 ...TOP_STYLE,
                 radius: this._radius,
+                pane: this._pane,
             });
             const alt = props.altitude_m != null ? `${props.altitude_m} m` : '—';
             marker.bindTooltip(`Top — ${alt}`, { sticky: true });

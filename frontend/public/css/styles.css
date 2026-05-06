@@ -1130,21 +1130,21 @@ code {
     width: 48px;
     height: 48px;
     border: none;
-    border-radius: 50%;
-    background: #4fc3f7;
+    border-radius: 4px;
+    background: transparent;
+    box-shadow: none;
     color: #fff;
-    font-size: 20px;
+    font-size: 24px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: opacity 0.2s, color 0.2s;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 2px 8px rgba(79,195,247,0.4);
 }
 
-#btn-play-pause:hover  { background: #42a5f5; transform: scale(1.05); }
-#btn-play-pause:active { transform: scale(0.95); }
-#btn-play-pause:disabled { opacity: 0.5; cursor: not-allowed; }
+#btn-play-pause:hover  { opacity: 0.75; color: #4fc3f7; background: transparent; }
+#btn-play-pause:active { opacity: 0.6; }
+#btn-play-pause:disabled { opacity: 0.35; cursor: not-allowed; }
 
 /* Speed slider (item 4: replaces discrete speed button) */
 .speed-control {
@@ -1395,7 +1395,7 @@ code {
         padding: 8px 12px;
     }
 
-    #btn-play-pause { width: 40px; height: 40px; font-size: 16px; }
+    #btn-play-pause { width: 40px; height: 40px; font-size: 20px; }
 
     #legend-container {
         bottom: 80px;
