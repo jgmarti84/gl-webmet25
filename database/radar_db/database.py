@@ -5,6 +5,8 @@ from sqlalchemy.pool import QueuePool
 from contextlib import contextmanager
 from typing import Generator
 import logging
+from alembic.config import Config
+from alembic import command
 
 from radar_db.config import settings
 from radar_db.models import Base
@@ -60,7 +62,12 @@ class DatabaseManager:
             conn.commit()
         Base.metadata.create_all(bind=self._engine)
         logger.info("All database tables created")
-    
+        
+        # Stamp Alembic to head so future migrations run correctly
+        alembic_cfg = Config("alembic.ini")  # ← adjust path if needed
+        command.stamp(alembic_cfg, "head")
+        logger.info("Alembic stamped to head")
+
     def drop_all_tables(self):
         Base.metadata.drop_all(bind=self._engine)
         logger.warning("All database tables dropped")

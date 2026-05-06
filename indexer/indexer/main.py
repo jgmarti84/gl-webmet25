@@ -4,7 +4,9 @@
 Main entry point for the COG indexer service.
 """
 import logging
+import os
 import sys
+import threading
 import time
 import argparse
 
@@ -37,13 +39,32 @@ def wait_for_database(max_retries: int = 30, delay: int = 2) -> bool:
 def run_indexer():
     """Run the indexer service."""
     from radar_db import db_manager
-    from indexer.watcher import COGWatcher
-    
+    from indexer.watcher import COGWatcher, TopsAndCoresWatcher
+
     # Wait for database
     if not wait_for_database():
         sys.exit(1)
-    
-    # Create and run watcher
+
+    # Resolve the TopsAndCores directory from environment
+    tops_and_cores_dir = os.getenv("TOPS_AND_CORES_DIR", "/tops_and_cores")
+    if not os.getenv("TOPS_AND_CORES_DIR"):
+        logger.warning(
+            "TOPS_AND_CORES_DIR environment variable is not set. "
+            f"Using default: {tops_and_cores_dir}"
+        )
+
+    # Start TopsAndCoresWatcher in a background thread
+    tc_watcher = TopsAndCoresWatcher(tops_and_cores_dir)
+    tc_thread = threading.Thread(
+        target=tc_watcher.run_forever,
+        args=(db_manager.get_session_direct,),
+        name="tops-and-cores-watcher",
+        daemon=True,
+    )
+    tc_thread.start()
+    logger.info(f"TopsAndCores watcher started (dir={tops_and_cores_dir})")
+
+    # Run COGWatcher on the main thread (blocks forever)
     watcher = COGWatcher()
     watcher.run_forever(db_manager.get_session_direct)
 

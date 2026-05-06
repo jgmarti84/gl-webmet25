@@ -256,3 +256,141 @@ class COGRegistrar:
             logger.info(f"Marked {count} files as missing")
         
         return count
+
+
+class TopsAndCoresRegistrar:
+    """Handles registration of TopsAndCores GeoJSON files in the database."""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def register(self, file_path: str, parsed) -> None:
+        """
+        Register a single TopsAndCores GeoJSON file in the database.
+
+        Args:
+            file_path: Absolute path to the GeoJSON file on disk.
+            parsed:    :class:`~indexer.parser.ParsedTopsAndCoresInfo` returned
+                       by :class:`~indexer.parser.TopsAndCoresFilenameParser`.
+        """
+        from radar_db.models import TopsAndCores, COGStatus
+
+        # Check if already indexed and AVAILABLE → nothing to do
+        existing = self.session.query(TopsAndCores).filter_by(
+            file_path=file_path
+        ).first()
+
+        if existing is not None:
+            if existing.status == COGStatus.AVAILABLE:
+                logger.debug(
+                    f"TOPS_CORES already indexed (AVAILABLE): {file_path}"
+                )
+                return
+            # Fall through to update records that are in a non-AVAILABLE state
+
+        # Parse GeoJSON to obtain feature counts and observation_time
+        feature_count = 0
+        core_count = 0
+        top_count = 0
+        observation_time = parsed.observation_time
+        status = COGStatus.AVAILABLE
+
+        try:
+            import json
+
+            with open(file_path, "r", encoding="utf-8") as fh:
+                geojson = json.load(fh)
+
+            features = geojson.get("features", [])
+            feature_count = len(features)
+
+            for feat in features:
+                props = feat.get("properties") or {}
+                feat_type = props.get("type", "")
+                if feat_type == "core":
+                    core_count += 1
+                elif feat_type == "top":
+                    top_count += 1
+
+            # Prefer observation_time from the first feature's properties
+            if features:
+                raw_time = (features[0].get("properties") or {}).get(
+                    "observation_time"
+                )
+                if raw_time:
+                    from datetime import timezone as _tz
+
+                    parsed_obs = datetime.fromisoformat(raw_time)
+                    if parsed_obs.tzinfo is None:
+                        parsed_obs = parsed_obs.replace(tzinfo=_tz.utc)
+                    observation_time = parsed_obs
+
+        except Exception:
+            logger.error(
+                f"Failed to parse GeoJSON for TOPS_CORES file: {file_path}",
+                exc_info=True,
+            )
+            status = COGStatus.ERROR
+
+        if existing is not None:
+            # Update existing record
+            existing.observation_time = observation_time
+            existing.feature_count = feature_count
+            existing.core_count = core_count
+            existing.top_count = top_count
+            existing.status = status
+        else:
+            record = TopsAndCores(
+                radar_code=parsed.radar_code,
+                observation_time=observation_time,
+                file_path=file_path,
+                file_name=str(file_path).split("/")[-1],
+                feature_count=feature_count,
+                core_count=core_count,
+                top_count=top_count,
+                status=status,
+                strategy=parsed.strategy,
+                vol_nr=parsed.vol_nr,
+            )
+            self.session.add(record)
+
+        try:
+            self.session.flush()
+        except Exception as e:
+            logger.error(f"Failed to flush TopsAndCores record for {file_path}: {e}")
+            self.session.rollback()
+            return
+
+        if status == COGStatus.AVAILABLE:
+            logger.info(
+                f"TOPS_CORES indexed radar={parsed.radar_code} "
+                f"time={observation_time} "
+                f"cores={core_count} tops={top_count}"
+            )
+
+    def mark_missing(self, file_path: str) -> None:
+        """
+        Mark a registered TopsAndCores file as MISSING.
+
+        Args:
+            file_path: Absolute path previously stored in ``file_path`` column.
+        """
+        from radar_db.models import TopsAndCores, COGStatus
+
+        record = self.session.query(TopsAndCores).filter_by(
+            file_path=file_path
+        ).first()
+
+        if record is None:
+            logger.debug(f"TOPS_CORES mark_missing: record not found for {file_path}")
+            return
+
+        record.status = COGStatus.MISSING
+        try:
+            self.session.flush()
+            logger.warning(f"TOPS_CORES marked as missing: {file_path}")
+        except Exception as e:
+            logger.error(
+                f"Failed to mark TopsAndCores as missing for {file_path}: {e}"
+            )
+            self.session.rollback()

@@ -91,7 +91,8 @@ ROOT_RADAR_PRODUCTS_PATH/
 
 | Field | Value | Purpose |
 |---|---|---|
-| **CRS** | EPSG:3857 (Web Mercator / Pseudo-Mercator) | Coordinate system of the GeoTIFF raster. Note: the frames endpoint converts to WGS84 for X-Bbox-* response headers (which Leaflet requires) — no rendering code is affected. |
+| **CRS** | EPSG:3857 | Web Mercator (Pseudo-Mercator). Frames endpoint
+|         |           | converts to WGS84 for X-Bbox-* headers. |
 | **radarlib_cmap** | Colormap name string | Name of matplotlib colormap used (e.g., `"grc_th"`) |
 | **vmin** | Float | Minimum data value for color scaling |
 | **vmax** | Float | Maximum data value for color scaling |
@@ -161,6 +162,13 @@ tests/ # Automated tests
 | GET | `/tiles/{cog_id}/{z}/{x}/{y}.png` | Render tile image |
 | GET | `/tiles/{cog_id}/metadata` | Get tile metadata |
 | GET | `/products/{product_key}/colormap` | Get product colormap |
+| GET | `/frames/{cog_id}/image.png` | Full COG as single PNG (v2) |
+
+### frames endpoint response headers
+- X-Bbox-West/South/East/North — WGS84 bounding box
+- X-Width, X-Height — image dimensions in pixels
+- X-Overview-Factor — overview level used (always 1 currently)
+- Cache-Control, ETag — same strategy as tile endpoint
 
 ---
 
@@ -178,6 +186,70 @@ tests/ # Automated tests
 - Frame animation with speed control (0.5x–2x)
 - Periodic polling for new COGs (5 minute interval)
 - **Modules:** `app.js`, `api.js`, `map.js`, `animation.js`
+
+## v2 Frontend Architecture (current production standard)
+### Key differences from v1
+| Aspect | v1 | v2 |
+|---|---|---|
+| Radar layer | L.tileLayer | L.imageOverlay |
+| Endpoint | /tiles/{id}/{z}/{x}/{y}.png | /frames/{id}/image.png |
+| Animation | setTimeout opacity toggle | requestAnimationFrame |
+| DOM objects | ~180 TileLayers per session | 1 overlay per radar |
+| HTTP requests | ~1800 per session | ~180 per session |
+
+### Animation continuity pattern
+Field changes, time-window changes, colormap changes, and range
+filter applies NEVER stop the animation. All use staged background
+loading via `_loadFramesWithContinuity(loadFn, opts)`:
+1. `_fetchTimeRangeFrames()` fetches new frames (pure, no side effects)
+2. Animation keeps running from current buffer
+3. `animator.setFrames(stagingFrames)` atomically swaps on completion
+4. RAF loop picks up new frames on next tick
+
+> ⚠️ Never call `animator.stop()`, `animator.reset()`, or
+> `clearRadarLayer()` before new frames are ready. This breaks
+> animation continuity. All data loading must go through
+> `_loadFramesWithContinuity`.
+
+### Coverage mask (v2 only)
+SVG mask inside Leaflet `coverageMaskPane` (zIndex 300).
+- Sits above basemap (200) and below radar overlays (400)
+- Full-map dark rect with transparent circle cutouts per radar
+- `addRadarCoverage(code, lat, lng, radius_m)` — call on radar add
+- `removeRadarCoverage(code)` — call on radar remove
+- `setCoverageOpacity(opacity)` — called by opacity slider
+- Redraws on `viewreset` + `moveend` only (not every frame)
+- Zero zoom lag: SVG is child of Leaflet pane transform group
+
+### Basemap
+Default: OSM (`'osm'` key). Persisted to localStorage
+(`selectedBasemap`). Always call `setBasemap(key)` to change —
+never manipulate `_baseLayer` directly.
+
+### Frame image rendering
+`image-rendering: pixelated` applied to all radar overlays via
+`.radar-image-overlay` CSS class. Applied once after `addTo(map)`.
+Class persists across `setUrl()` calls — no need to re-apply.
+
+### Legend
+Renders: field name (top) → colormap bar → units (bottom).
+Unit shows `?` when null. Never mutate `colormap.vmin`/`colormap.vmax`
+before calling `legend.render()`. Pass filter range separately:
+`legend.render(colormap, { filterVmin, filterVmax })`.
+
+### Timestamps
+Frame timestamps displayed in browser OS timezone via
+`Intl.DateTimeFormat().resolvedOptions().timeZone`.
+UTC with "UTC" suffix is fallback only. No geolocation needed.
+
+### Default values (v2)
+| Setting | Default | localStorage key |
+|---|---|---|
+| Time window | 1.5h (90 min) | timeWindowHours |
+| Basemap | OSM | selectedBasemap |
+| Coverage opacity | 0.4 | webmet25_coverage_opacity |
+| Radar status interval | 300s | radarStatusInterval |
+| Live window interval | 60min | liveWindowMinutes |
 
 ---
 
@@ -212,13 +284,14 @@ tests/ # Automated tests
 - ❌ Missing files cause 500 errors. Must be handled gracefully.
 
 ### High Priority
-- ❌ No tile caching. Every tile is recomputed on each request.
+- ✅ RESOLVED: L1 LRU + L2 Redis tile cache implemented.
+   Frame cache also implemented (key prefix: frame:).
 - ❌ Incomplete error handling in tile rendering and indexer.
 - ❌ No rate limiting. API is vulnerable to DOS attacks.
 - ❌ Database credentials in plaintext in `docker-compose.yml`.
 
 ### Medium Priority
-- ❌ Hardcoded API base URL in frontend.
+- ✅ RESOLVED: api.js uses relative /api/v1 path unconditionally.
 - ❌ No pagination on products and references endpoints.
 - ❌ No automated tests.
 - ❌ No monitoring or log aggregation.
