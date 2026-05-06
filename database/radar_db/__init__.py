@@ -1,6 +1,6 @@
 # database/radar_db/__init__.py
 from .database import db_manager, get_db, init_db, check_db_connection
-from .models import Base, Radar, RadarProduct, Reference, RadarCOG, COGStatus
+from .models import Base, Radar, RadarProduct, Reference, RadarCOG, COGStatus, TopsAndCores
 
 __all__ = [
     'db_manager',
@@ -13,4 +13,5 @@ __all__ = [
     'Reference',
     'RadarCOG',
     'COGStatus',
+    'TopsAndCores',
 ]

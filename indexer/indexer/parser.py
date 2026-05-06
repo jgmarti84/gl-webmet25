@@ -1,10 +1,10 @@
 # indexer/indexer/parser.py
 """
-Filename parser for COG files.
+Filename parser for COG files and TopsAndCores GeoJSON files.
 CUSTOMIZE THIS MODULE to match your genpro25 output naming convention!
 """
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 import re
@@ -207,3 +207,92 @@ class COGFilenameParser:
 
 # Default parser instance
 parser = COGFilenameParser()
+
+
+def _parse_compact_datetime_utc(dt_str: str) -> datetime:
+    """
+    Parse a 14-digit compact datetime string (YYYYMMDDHHMMSS) into a
+    timezone-aware UTC datetime.
+
+    Uses the same overflow-tolerant approach as COGFilenameParser so that
+    seconds/minutes beyond the normal range are handled via timedelta addition.
+
+    Args:
+        dt_str: String of exactly 14 digits, e.g. ``"20260505163854"``.
+
+    Returns:
+        Timezone-aware UTC :class:`datetime`.
+
+    Raises:
+        ValueError: If ``dt_str`` does not consist of exactly 14 digits.
+    """
+    m = re.fullmatch(r"(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z", dt_str)
+    if not m:
+        raise ValueError(
+            f"Cannot parse compact datetime '{dt_str}': expected 14 digits (YYYYMMDDHHMMSS)"
+        )
+    year, month, day, hour, minute, second = (int(g) for g in m.groups())
+    base = datetime(year, month, day, tzinfo=timezone.utc)
+    return base + timedelta(hours=hour, minutes=minute, seconds=second)
+
+
+@dataclass
+class ParsedTopsAndCoresInfo:
+    """Parsed information from a TopsAndCores GeoJSON filename."""
+
+    radar_code: str
+    strategy: str
+    vol_nr: str
+    observation_time: datetime  # Always timezone-aware UTC
+
+
+class TopsAndCoresFilenameParser:
+    """
+    Parser for TopsAndCores GeoJSON filenames.
+
+    Expected format::
+
+        {radar_code}_{strategy}_{vol_nr}_{timestamp}_TOPS_CORES.geojson
+
+    Where ``{timestamp}`` is ``YYYYMMDDHHMMSS`` (14 digits, no separators).
+
+    Example::
+
+        RMA6_A_00_20260505163854_TOPS_CORES.geojson
+    """
+    # _PATTERN = re.compile(
+    #     r"^(?P<radar>[A-Z0-9]+)_(?P<strategy>[^_]+)_(?P<vol_nr>[^_]+)"
+    #     r"_(?P<datetime>\d{14})_TOPS_CORES\.geojson$"
+    # )
+    _PATTERN = re.compile(r"^(?P<radar>[A-Z0-9]+)_(?P<strategy>\d{4})_(?P<vol_nr>\d{2})_(?P<datetime>\d{8}T\d{6}Z)_TOPS_CORES\.geojson$")
+
+    def parse(self, file_path: str) -> ParsedTopsAndCoresInfo:
+        """
+        Parse a TopsAndCores GeoJSON filename.
+
+        Args:
+            file_path: Full path or filename of the GeoJSON file.
+
+        Returns:
+            :class:`ParsedTopsAndCoresInfo` with extracted metadata.
+
+        Raises:
+            ValueError: If the filename does not match the expected pattern.
+        """
+        filename = Path(file_path).name
+        match = self._PATTERN.match(filename)
+        if not match:
+            raise ValueError(
+                f"Filename '{filename}' does not match the TopsAndCores pattern "
+                f"'<RADAR>_<strategy>_<vol_nr>_<YYYYMMDDHHMMSS>_TOPS_CORES.geojson'"
+            )
+
+        groups = match.groupdict()
+        observation_time = _parse_compact_datetime_utc(groups["datetime"])
+
+        return ParsedTopsAndCoresInfo(
+            radar_code=groups["radar"],
+            strategy=groups["strategy"],
+            vol_nr=groups["vol_nr"],
+            observation_time=observation_time,
+        )
