@@ -223,6 +223,22 @@ FE_V2_BADGE
                     </div>
                 </div>
             </div>
+            <!-- Tops & Cores layer controls -->
+            <div class="control-group toggle-row">
+                <label class="toggle-switch-wrapper" for="toggle-tops-cores">
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="toggle-tops-cores">
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span class="toggle-label">Tops &amp; Cores</span>
+                </label>
+            </div>
+            <div id="tops-cores-size-row" class="control-group" style="display:none;">
+                <label for="tops-cores-size">Point size:</label>
+                <div class="opacity-control">
+                    <input type="range" id="tops-cores-size" min="4" max="20" step="1" value="8">
+                </div>
+            </div>
             <!-- Radar status refresh — 2-row layout to avoid horizontal overflow -->
             <div class="settings-section-header">
                 <span title="How often to re-check which radars are online. Only updates the status indicator; does not reload images.">Radar Status Check</span>

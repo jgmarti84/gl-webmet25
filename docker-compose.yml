@@ -125,9 +125,11 @@ services:
       DB_USER: radar
       DB_PASSWORD: radarpass
       COG_BASE_PATH: /product_output
+      TOPS_AND_CORES_DIR: /tops_and_cores
       CORS_ORIGINS: "*"
     volumes:
       - ../product_output:/product_output:ro
+      - ../tops_and_cores:/tops_and_cores:ro
     ports:
       - "8000:8000"
     depends_on:
@@ -153,7 +155,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        FE_VERSION: ${FE_VERSION:-v1}
+        FE_VERSION: ${FE_VERSION:-v2}
     container_name: radar_frontend
     ports:
       - "80:80"

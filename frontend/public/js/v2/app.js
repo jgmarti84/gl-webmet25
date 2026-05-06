@@ -27,6 +27,7 @@ import { MapManager } from './map.js';
 import { AnimationController, formatTimestamp } from './animation.js';
 import { UIControls } from '../shared/controls.js';
 import { LegendRenderer } from '../shared/legend.js';
+import { TopsCoresLayer } from '../shared/tops-cores.js';
 
 // =============================================================================
 // CONSTANTS (identical to app.js)
@@ -70,6 +71,9 @@ const state = {
     liveHours: null,
     liveRefreshInterval: null,
     radarStatusRefreshInterval: null,
+    topsCoresLayer: null,
+    topsCoresVisible: false,
+    topsCoresPointSize: 8,
 };
 
 // =============================================================================
@@ -128,6 +132,8 @@ const SETTINGS_KEY_REFRESH_INTERVAL   = 'webmet25_radar_refresh_interval_min';
 const SETTINGS_KEY_LIVE_REFRESH_INTERVAL = 'webmet25_live_refresh_interval_ms';
 const SETTINGS_KEY_COVERAGE_VISIBLE   = 'webmet25_coverage_visible';
 const SETTINGS_KEY_COVERAGE_OPACITY   = 'webmet25_coverage_opacity';
+const SETTINGS_KEY_TOPS_CORES_VISIBLE = 'webmet25_tops_cores_visible';
+const SETTINGS_KEY_TOPS_CORES_SIZE    = 'webmet25_tops_cores_size';
 const SETTINGS_KEY_ACTIVE_ONLY_LEGACY = 'webmet25_active_only';
 
 function getSettingShowInactive() {
@@ -241,8 +247,24 @@ const app = {
             // v2: wire animation DOM controls now that ui and animator exist
             state.animator.initControls(state.ui);
 
+            // Initialize TopsCoresLayer (but don't show it yet)
+            state.topsCoresLayer = new TopsCoresLayer(state.mapManager._map);
+            state.topsCoresLayer.setPointSize(state.topsCoresPointSize);
+            if (state.topsCoresVisible) {
+                state.topsCoresLayer.setVisible(true);
+            } else {
+                state.topsCoresLayer.setVisible(false);
+            }
+
             state.ui.enableAnimationControls(false);
             state.ui.enableNavButtons(false);
+
+            // Restore tops & cores visibility and size from localStorage
+            const storedVisible = localStorage.getItem(SETTINGS_KEY_TOPS_CORES_VISIBLE);
+            if (storedVisible === 'true') {
+                state.topsCoresVisible = true;
+                state.topsCoresLayer.setVisible(true);
+            }
 
             state.ui.setStatus('Ready', 'success');
             this.startRadarStatusRefresh();
@@ -324,6 +346,19 @@ const app = {
                 localStorage.getItem('webmet25_coverage_opacity')
             ) || 0.4;
             coverageOpacitySliderInit.value = storedOpacity;
+        }
+        // Sync tops & cores toggle and size slider with stored values
+        const topsCoresToggle = document.getElementById('toggle-tops-cores');
+        if (topsCoresToggle) {
+            const stored = localStorage.getItem(SETTINGS_KEY_TOPS_CORES_VISIBLE);
+            state.topsCoresVisible = stored === 'true';
+            topsCoresToggle.checked = state.topsCoresVisible;
+        }
+        const topsCoresSizeSlider = document.getElementById('tops-cores-size');
+        if (topsCoresSizeSlider) {
+            const stored = localStorage.getItem(SETTINGS_KEY_TOPS_CORES_SIZE);
+            state.topsCoresPointSize = stored ? parseInt(stored, 10) : 8;
+            topsCoresSizeSlider.value = state.topsCoresPointSize;
         }
         const speedSlider = document.getElementById('speed-slider');
         const speedValue  = document.getElementById('speed-value');
@@ -513,6 +548,39 @@ const app = {
                 localStorage.setItem(SETTINGS_KEY_SHOW_FILTERED, String(state.showUnfilteredProducts));
                 state.ui.populateProductSelect(state.products, state.showUnfilteredProducts);
                 state.ui.updateFilterToggle(state.showUnfilteredProducts);
+            });
+        }
+
+        // Tops & Cores toggle
+        const topsCoresToggle = document.getElementById('toggle-tops-cores');
+        const topsCoresSizeRow = document.getElementById('tops-cores-size-row');
+        if (topsCoresToggle) {
+            topsCoresToggle.addEventListener('change', (e) => {
+                state.topsCoresVisible = e.target.checked;
+                localStorage.setItem(SETTINGS_KEY_TOPS_CORES_VISIBLE, String(state.topsCoresVisible));
+                if (topsCoresSizeRow) {
+                    topsCoresSizeRow.style.display = e.target.checked ? 'block' : 'none';
+                }
+                this._updateTopsCoresLayer();
+            });
+            // Initialize size row visibility
+            if (topsCoresSizeRow) {
+                topsCoresSizeRow.style.display = state.topsCoresVisible ? 'block' : 'none';
+            }
+        }
+
+        // Tops & Cores point size slider
+        const topsCoresSizeSlider = document.getElementById('tops-cores-size');
+        if (topsCoresSizeSlider) {
+            topsCoresSizeSlider.addEventListener('input', (e) => {
+                const size = parseInt(e.target.value, 10);
+                if (!isNaN(size)) {
+                    state.topsCoresPointSize = size;
+                    localStorage.setItem(SETTINGS_KEY_TOPS_CORES_SIZE, String(size));
+                    if (state.topsCoresLayer) {
+                        state.topsCoresLayer.setPointSize(size);
+                    }
+                }
             });
         }
 
@@ -1345,6 +1413,11 @@ const app = {
             if (timeDisplay) timeDisplay.textContent = formatTimestamp(frame.timestamp);
             state.ui.updateFrameCounter(index, state.animator.getFrameCount());
             state.ui.updateAnimationSlider(index, state.animator.getFrameCount());
+
+            // Fire-and-forget tops & cores update
+            if (state.topsCoresLayer && state.topsCoresVisible) {
+                state.topsCoresLayer.updateFrame(frame);
+            }
             return;
         }
 
@@ -1674,6 +1747,26 @@ const app = {
         const key = state.selectedProduct || '';
         badge.textContent = key ? key.toUpperCase() : '';
         badge.style.display = key ? 'inline-flex' : 'none';
+    },
+
+    _updateTopsCoresLayer() {
+        if (state.topsCoresVisible) {
+            if (!state.topsCoresLayer) {
+                state.topsCoresLayer = new TopsCoresLayer(state.mapManager._map);
+                state.topsCoresLayer.setPointSize(state.topsCoresPointSize);
+            }
+            state.topsCoresLayer.setVisible(true);
+            // Immediately update with current frame if available
+            const currentFrame = state.animator ? state.animator.getCurrentFrameObj() : null;
+            if (currentFrame) {
+                state.topsCoresLayer.updateFrame(currentFrame);
+            }
+        } else {
+            if (state.topsCoresLayer) {
+                state.topsCoresLayer.setVisible(false);
+                state.topsCoresLayer.clear();
+            }
+        }
     },
 
     // =========================================================================
