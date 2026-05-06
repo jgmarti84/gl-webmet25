@@ -25,11 +25,13 @@ frontend.
 radarlib (producer)
     │
     ├── outputs GeoTIFF COGs to ROOT_RADAR_PRODUCTS_PATH
+    ├── outputs GeoJSON tops & cores to TOPS_AND_CORES_DIR
     │
     ▼
 webmet25 (consumer)
     │
     ├── Indexer watches ROOT_RADAR_PRODUCTS_PATH
+    ├── TopsAndCoresWatcher watches TOPS_AND_CORES_DIR
     │   ├── parses filenames
     │   ├── extracts metadata
     │   └── stores in PostgreSQL/PostGIS
@@ -146,6 +148,7 @@ tests/ # Automated tests
 | `Radar` | `code` | `title`, `center_lat`, `center_long`, `is_active` |
 | `RadarProduct` | `id` | `product_key` (UNIQUE), `product_title`, `min_value`, `max_value` |
 | `RadarCOG` | `id` | `radar_code` (FK), `product_id` (FK), `file_path` (UNIQUE), `observation_time`, `status` |
+| `TopsAndCores` | `id` | `radar_code` (FK), `observation_time` (indexed), `file_path` (UNIQUE), `core_count`, `top_count`, `feature_count`, `status` (COGStatus), `strategy`, `vol_nr` |
 | `Reference` | `id` | `product_id` (FK), `value`, `color` |
 | `Estrategia` | `code` | `description` |
 
@@ -163,6 +166,8 @@ tests/ # Automated tests
 | GET | `/tiles/{cog_id}/metadata` | Get tile metadata |
 | GET | `/products/{product_key}/colormap` | Get product colormap |
 | GET | `/frames/{cog_id}/image.png` | Full COG as single PNG (v2) |
+| GET | `/tops-cores` | Query TopsAndCores records by radar codes + time range |
+| GET | `/tops-cores/{id}/features` | Fetch GeoJSON FeatureCollection from disk by record ID |
 
 ### frames endpoint response headers
 - X-Bbox-West/South/East/North — WGS84 bounding box
@@ -177,6 +182,11 @@ tests/ # Automated tests
 - **COGFilenameParser:** Parses filenames using radarlib naming convention
 - **COGRegistrar:** Extracts metadata, inserts/updates `RadarCOG` records
 - Marks missing files as `MISSING` status in database
+- **TopsAndCoresWatcher:** Scans `TOPS_AND_CORES_DIR` recursively for `*_TOPS_CORES.geojson` files
+- **TopsAndCoresFilenameParser:** Parses `{radar_code}_{strategy}_{vol_nr}_{timestamp}_TOPS_CORES.geojson`
+- **TopsAndCoresRegistrar:** Opens GeoJSON, counts features, inserts/updates `TopsAndCores` records
+- `TOPS_AND_CORES_DIR` env var controls the watch root (default `/tops_and_cores`)
+- New classes are additions alongside existing classes — never modify COG* classes when working on tops & cores
 
 ---
 
@@ -186,6 +196,15 @@ tests/ # Automated tests
 - Frame animation with speed control (0.5x–2x)
 - Periodic polling for new COGs (5 minute interval)
 - **Modules:** `app.js`, `api.js`, `map.js`, `animation.js`
+
+**Tops & Cores Layer (v2 only):**
+- **Module:** `frontend/public/js/shared/tops-cores.js`
+- **Class:** `TopsCoresLayer` — manages `L.layerGroup()` of `L.circleMarker` instances
+- Cores: `fillColor: '#3b82f6'` (blue). Tops: `fillColor: '#ef4444'` (red). Both: black border, `weight: 1`
+- `updateFrame(frame)` fetches `/tops-cores` for ±2.5 min window, then fetches GeoJSON per record via `Promise.all`
+- Fire-and-forget from animation loop — never blocks frame advance
+- Toggled via settings panel checkbox; point size controlled via 4–20px slider
+- State persisted in `localStorage`: `webmet25_tops_cores_visible`, `webmet25_tops_cores_size`
 
 ## v2 Frontend Architecture (current production standard)
 ### Key differences from v1
@@ -253,6 +272,85 @@ UTC with "UTC" suffix is fallback only. No geolocation needed.
 
 ---
 
+## Tops & Cores Data Pipeline
+
+### Data Flow
+radarlib (genpro25-rma*)
+→ /tops_and_cores/{radar_code}/YYYY/MM/DD/{radar_code}{strategy}{vol_nr}_{timestamp}_TOPS_CORES.geojson
+→ TopsAndCoresWatcher (indexer) scans and registers to DB
+→ GET /api/v1/tops-cores — metadata query
+→ GET /api/v1/tops-cores/{id}/features — GeoJSON served from disk
+→ TopsCoresLayer (v2 frontend) renders L.circleMarker per feature
+
+
+### GeoJSON Schema (produced by radarlib, consumed by webmet25)
+```json
+{
+  "type": "FeatureCollection",
+  "features": [{
+    "type": "Feature",
+    "geometry": { "type": "Point", "coordinates": [lon, lat] },
+    "properties": {
+      "type": "core",
+      "intensity_dbz": 52,
+      "radar_code": "RMA6",
+      "observation_time": "2026-05-05T16:38:54Z"
+    }
+  }]
+}
+```
+
+- type is "core" or "top"
+- Cores carry intensity_dbz (int); tops carry altitude_m (int)
+- Coordinates: [lon, lat] — GeoJSON standard order
+
+### Filename Pattern
+{radar_code}_{strategy}_{vol_nr}_{timestamp}_TOPS_CORES.geojson
+Timestamp format: YYYYMMDDHHMMSS — parsed by TopsAndCoresFilenameParser.
+This pattern is the contract between radarlib and webmet25 — never change it
+without updating both TopsAndCoresFilenameParser and radarlib's cores_and_tops.py.
+
+### Docker Volumes
+Both radar_api and radar_indexer services mount:
+```yaml
+volumes:
+  - ./tops_and_cores:/tops_and_cores:ro
+environment:
+  TOPS_AND_CORES_DIR: /tops_and_cores
+```
+The tops_and_cores/ host directory is written by genpro25-rma* containers.
+webmet25 services are read-only consumers.
+
+### Migration Notes
+- TopsAndCores model uses the existing COGStatus enum — do NOT define a new one
+- When writing Alembic migrations that reference cogstatus, use
+sqlalchemy.dialects.postgresql.ENUM with create_type=False instead of sa.Enum
+(sa.Enum with create_type=False does not reliably suppress creation inside op.create_table)
+- manage.py init stamps Alembic head after create_all() — fresh installs
+and migration-based upgrades are always in sync
+
+### API Behavior
+- GET /tops-cores returns metadata only (not file contents). Cache-Control: no-cache.
+- GET /tops-cores/{id}/features reads file from disk. Cache-Control: immutable 86400s.
+Updates record status to MISSING in DB if file not found at serve time.
+- Empty result from /tops-cores → return [], not 404.
+
+---
+
+## localStorage Keys Reference (v2 Frontend)
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `webmet25_show_inactive_radars` | boolean | false | Show inactive radars toggle |
+| `webmet25_show_filtered_fields` | boolean | false | Show filtered fields toggle |
+| `webmet25_live_refresh_interval_ms` | number | 300000 | Live refresh interval (ms) |
+| `webmet25_coverage_visible` | boolean | false | Coverage circles toggle |
+| `webmet25_coverage_opacity` | number | 0.4 | Coverage circles opacity |
+| `webmet25_tops_cores_visible` | boolean | false | Tops & Cores layer toggle |
+| `webmet25_tops_cores_size` | number | 8 | Circle marker radius in px |
+
+---
+
 ## Coding Conventions & Rules
 > Always follow these when generating code.
 
@@ -292,6 +390,8 @@ UTC with "UTC" suffix is fallback only. No geolocation needed.
 
 ### Medium Priority
 - ✅ RESOLVED: api.js uses relative /api/v1 path unconditionally.
+- ✅ Convective Cores & Storm Tops: IMPLEMENTED — radarlib generates GeoJSON,
+indexer registers, API serves, v2 frontend displays as CircleMarker layer.
 - ❌ No pagination on products and references endpoints.
 - ❌ No automated tests.
 - ❌ No monitoring or log aggregation.
