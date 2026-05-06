@@ -188,7 +188,7 @@ export class UIControls {
      * Enable/disable navigation buttons
      */
     enableNavButtons(enabled) {
-        const buttons = ['btn-prev', 'btn-next', 'btn-latest'];
+        const buttons = ['btn-first', 'btn-prev', 'btn-next', 'btn-latest'];
         buttons.forEach(id => {
             const btn = document.getElementById(id);
             if (btn) btn.disabled = !enabled;

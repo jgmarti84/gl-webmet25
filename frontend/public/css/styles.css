@@ -1012,10 +1012,9 @@ code {
    ANIMATION CONTROLS  (Bottom Center)
    ============================================================ */
 #animation-controls {
-    position: absolute;
-    bottom: 10px;
-    left: 50%;
-    transform: translateX(-50%);
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
     z-index: 1000;
     background: rgba(26,26,46,0.95);
     padding: 10px 16px;
@@ -1033,6 +1032,11 @@ code {
     align-items: center;
     margin-bottom: 6px;
     gap: 8px;
+    cursor: grab;
+    user-select: none;
+}
+.animation-info-row.dragging {
+    cursor: grabbing;
 }
 
 .time-window-label {
@@ -1093,29 +1097,31 @@ code {
     gap: 8px;
 }
 
-/* Navigation buttons (prev/next/latest) in animation bar */
-#btn-prev, #btn-next, #btn-latest {
+/* Navigation buttons (prev/next/latest/first/refresh) in animation bar */
+#btn-first, #btn-prev, #btn-next, #btn-latest {
     width: 36px;
     height: 36px;
-    border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 50%;
-    background: rgba(255,255,255,0.1);
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    box-shadow: none;
     color: #fff;
     font-size: 14px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: opacity 0.2s, color 0.2s;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-#btn-prev:hover, #btn-next:hover, #btn-latest:hover {
-    background: rgba(79,195,247,0.3);
-    border-color: #4fc3f7;
+#btn-first:hover, #btn-prev:hover, #btn-next:hover, #btn-latest:hover {
+    opacity: 0.75;
+    color: #4fc3f7;
+    background: transparent;
 }
 
-#btn-prev:disabled, #btn-next:disabled, #btn-latest:disabled {
-    opacity: 0.5;
+#btn-first:disabled, #btn-prev:disabled, #btn-next:disabled, #btn-latest:disabled {
+    opacity: 0.35;
     cursor: not-allowed;
 }
 
@@ -1172,19 +1178,20 @@ code {
 #btn-cog-refresh-now {
     width: 36px;
     height: 36px;
-    border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 50%;
-    background: rgba(255,255,255,0.1);
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    box-shadow: none;
     color: #fff;
     font-size: 16px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: opacity 0.2s, color 0.2s;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-#btn-cog-refresh-now:hover:not(:disabled) { background: rgba(79,195,247,0.3); border-color: #4fc3f7; }
+#btn-cog-refresh-now:hover:not(:disabled) { opacity: 0.75; color: #4fc3f7; background: transparent; }
 #btn-cog-refresh-now:disabled { opacity: 0.35; cursor: not-allowed; }
 
 /* Live mode indicator (item 8) */
