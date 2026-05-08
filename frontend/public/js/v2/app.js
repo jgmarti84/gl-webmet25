@@ -247,6 +247,8 @@ const app = {
             // v2: wire animation DOM controls now that ui and animator exist
             state.animator.initControls(state.ui);
 
+            // Make animation panel draggable via its info-row header
+            this._initDraggablePanel();
             // Initialize TopsCoresLayer (but don't show it yet)
             state.topsCoresLayer = new TopsCoresLayer(state.mapManager._map);
             state.topsCoresLayer.setPointSize(state.topsCoresPointSize);
@@ -587,6 +589,24 @@ const app = {
         const radarCheckboxes = document.getElementById('radar-checkboxes');
         if (radarCheckboxes) {
             radarCheckboxes.addEventListener('change', () => this.onRadarCheckboxChange());
+        }
+
+        // All / None radar selection buttons
+        const selectAllBtn = document.getElementById('btn-select-all-radars');
+        if (selectAllBtn) {
+            selectAllBtn.addEventListener('click', () => {
+                const checkboxes = document.querySelectorAll('#radar-checkboxes input[type="checkbox"]');
+                checkboxes.forEach(cb => { cb.checked = true; });
+                this.onRadarCheckboxChange();
+            });
+        }
+        const selectNoneBtn = document.getElementById('btn-clear-all-radars');
+        if (selectNoneBtn) {
+            selectNoneBtn.addEventListener('click', () => {
+                const checkboxes = document.querySelectorAll('#radar-checkboxes input[type="checkbox"]');
+                checkboxes.forEach(cb => { cb.checked = false; });
+                this.onRadarCheckboxChange();
+            });
         }
 
         const productSelect = document.getElementById('product-select');
@@ -1004,10 +1024,7 @@ const app = {
 
             if (colormap) {
                 this._enrichColormapWithProduct(colormap);
-                state.legend.render(colormap, {
-                    filterVmin: state.currentVmin,
-                    filterVmax: state.currentVmax,
-                });
+                state.legend.render(colormap);
                 state.legend.show();
             }
 
@@ -1113,10 +1130,7 @@ const app = {
 
             if (colormap) {
                 this._enrichColormapWithProduct(colormap);
-                state.legend.render(colormap, {
-                    filterVmin: state.currentVmin,
-                    filterVmax: state.currentVmax,
-                });
+                state.legend.render(colormap);
                 state.legend.show();
             }
 
@@ -1524,10 +1538,7 @@ const app = {
             const colormap = await api.getColormapInfo(state.selectedProduct, state.selectedColormap);
             if (colormap) {
                 this._enrichColormapWithProduct(colormap);
-                state.legend.render(colormap, {
-                    filterVmin: state.currentVmin,
-                    filterVmax: state.currentVmax,
-                });
+                state.legend.render(colormap);
                 state.legend.show();
             }
         } catch (e) {
@@ -1700,10 +1711,7 @@ const app = {
                 const colormap = await api.getColormapInfo(state.selectedProduct, state.selectedColormap);
                 if (colormap) {
                     this._enrichColormapWithProduct(colormap);
-                    state.legend.render(colormap, {
-                        filterVmin: state.currentVmin,
-                        filterVmax: state.currentVmax,
-                    });
+                    state.legend.render(colormap);
                     state.legend.show();
                 }
             } catch (_) { /* legend update is best-effort */ }
@@ -1883,6 +1891,60 @@ const app = {
             console.warn('Snapshot failed:', err);
             state.ui.setStatus('Snapshot failed: ' + err.message, 'error');
         }
+    },
+
+    /**
+     * Make the animation panel draggable by its top info row (the drag handle).
+     * Only mouse events are used — no HTML5 Drag API (which conflicts with Leaflet).
+     * Position is NOT persisted to localStorage; page reload always resets to bottom-right.
+     */
+    _initDraggablePanel() {
+        const panel  = document.getElementById('animation-controls');
+        const handle = panel ? panel.querySelector('.animation-info-row') : null;
+        if (!panel || !handle) return;
+
+        let dragging = false;
+        let offsetX  = 0;
+        let offsetY  = 0;
+
+        handle.addEventListener('mousedown', (e) => {
+            // Only trigger on the handle itself or its direct label children,
+            // not on interactive inputs inside the row.
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+
+            // Convert current CSS bottom/right to explicit left/top
+            const rect = panel.getBoundingClientRect();
+            panel.style.right  = 'auto';
+            panel.style.bottom = 'auto';
+            panel.style.left   = `${rect.left}px`;
+            panel.style.top    = `${rect.top}px`;
+
+            dragging = true;
+            offsetX  = e.clientX - rect.left;
+            offsetY  = e.clientY - rect.top;
+
+            handle.classList.add('dragging');
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!dragging) return;
+            const maxX = window.innerWidth  - panel.offsetWidth;
+            const maxY = window.innerHeight - panel.offsetHeight;
+            const x = Math.max(0, Math.min(e.clientX - offsetX, maxX));
+            const y = Math.max(0, Math.min(e.clientY - offsetY, maxY));
+            panel.style.left = `${x}px`;
+            panel.style.top  = `${y}px`;
+        });
+
+        const endDrag = () => {
+            if (!dragging) return;
+            dragging = false;
+            handle.classList.remove('dragging');
+        };
+
+        document.addEventListener('mouseup',    endDrag);
+        document.addEventListener('mouseleave', endDrag);
     },
 };
 

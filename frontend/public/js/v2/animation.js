@@ -114,6 +114,7 @@ export class AnimationController {
         // DOM elements — populated by initControls()
         this._ui          = null;
         this._playPauseBtn = null;
+        this._firstFrameBtn = null;
         this._slider      = null;
         this._speedSlider = null;
         this._speedValue  = null;
@@ -147,9 +148,11 @@ export class AnimationController {
         this._ui = ui;
 
         this._playPauseBtn  = document.getElementById('btn-play-pause');
+        const firstBtn       = document.getElementById('btn-first');
         const prevBtn        = document.getElementById('btn-prev');
         const nextBtn        = document.getElementById('btn-next');
         const latestBtn      = document.getElementById('btn-latest');
+        this._firstFrameBtn  = firstBtn;
         this._slider         = document.getElementById('animation-slider');
         this._speedSlider    = document.getElementById('speed-slider');
         this._speedValue     = document.getElementById('speed-value');
@@ -159,6 +162,7 @@ export class AnimationController {
         if (this._playPauseBtn) {
             this._playPauseBtn.addEventListener('click', () => this.toggle());
         }
+        if (firstBtn)  firstBtn.addEventListener('click',  () => this.goToFirst());
         if (prevBtn)   prevBtn.addEventListener('click',   () => this.previous());
         if (nextBtn)   nextBtn.addEventListener('click',   () => this.next());
         if (latestBtn) latestBtn.addEventListener('click', () => this.goToLatest());
@@ -249,6 +253,15 @@ export class AnimationController {
     goToLatest() {
         if (this._frames.length === 0) return;
         this._currentFrame = this._frames.length - 1;
+        this._showCurrentFrame();
+        this._updateSlider();
+        this._updateFrameCounter();
+        this._updateTimeDisplay();
+    }
+
+    goToFirst() {
+        if (this._frames.length === 0) return;
+        this._currentFrame = 0;
         this._showCurrentFrame();
         this._updateSlider();
         this._updateFrameCounter();
@@ -384,6 +397,10 @@ export class AnimationController {
         if (!this._slider) return;
         this._slider.max   = Math.max(0, this._frames.length - 1);
         this._slider.value = this._currentFrame;
+        // Keep btn-first disabled when already at the first frame
+        if (this._firstFrameBtn) {
+            this._firstFrameBtn.disabled = (this._frames.length === 0 || this._currentFrame === 0);
+        }
     }
 
     _updateFrameCounter() {
