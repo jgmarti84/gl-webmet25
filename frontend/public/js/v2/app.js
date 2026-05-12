@@ -370,6 +370,7 @@ const app = {
             speedValue.textContent = `${s.toFixed(1)}x`;
         }
         this._syncFieldOpacitySlider();
+        this._updateTopsCoresUIVisibility();
     },
 
     async tryGeolocationAutoInit() {
@@ -432,6 +433,7 @@ const app = {
             state.selectedProduct = selectedProduct;
             this._updateFieldBadge();
             await this.loadColormapOptions();
+            this._updateTopsCoresUIVisibility();
 
             await this.loadLastNHours(GEOLOCATION_AUTO_LOAD_HOURS);
             if (state.animator.getFrameCount() > 1) {
@@ -565,10 +567,6 @@ const app = {
                 }
                 this._updateTopsCoresLayer();
             });
-            // Initialize size row visibility
-            if (topsCoresSizeRow) {
-                topsCoresSizeRow.style.display = state.topsCoresVisible ? 'block' : 'none';
-            }
         }
 
         // Tops & Cores point size slider
@@ -618,6 +616,7 @@ const app = {
                 state.currentVmax = null;
                 this._updateFieldBadge();
                 await this.loadColormapOptions();
+                this._updateTopsCoresUIVisibility();
                 if (state.animationMode === 'timerange') {
                     // Load new field frames in background — animation continues
                     // with old field until new frames are ready.
@@ -1757,7 +1756,39 @@ const app = {
         badge.style.display = key ? 'inline-flex' : 'none';
     },
 
+    isTopsCoresAvailableForField() {
+        return state.selectedProduct === 'COLMAX';
+    },
+
+    _updateTopsCoresUIVisibility() {
+        const topsCoresToggleRow = document.getElementById('tops-cores-toggle-row');
+        const topsCoresToggle = document.getElementById('toggle-tops-cores');
+        const topsCoresSizeRow = document.getElementById('tops-cores-size-row');
+        if (!topsCoresToggle) return;
+
+        const isAvailable = this.isTopsCoresAvailableForField();
+        if (topsCoresToggleRow) {
+            topsCoresToggleRow.style.display = isAvailable ? 'block' : 'none';
+        }
+        topsCoresToggle.disabled = !isAvailable;
+        topsCoresToggle.checked = state.topsCoresVisible;
+
+        if (topsCoresSizeRow) {
+            topsCoresSizeRow.style.display = (isAvailable && state.topsCoresVisible) ? 'block' : 'none';
+        }
+
+        this._updateTopsCoresLayer();
+    },
+
     _updateTopsCoresLayer() {
+        if (!this.isTopsCoresAvailableForField()) {
+            if (state.topsCoresLayer) {
+                state.topsCoresLayer.setVisible(false);
+                state.topsCoresLayer.clear();
+            }
+            return;
+        }
+
         if (state.topsCoresVisible) {
             if (!state.topsCoresLayer) {
                 state.topsCoresLayer = new TopsCoresLayer(state.mapManager._map);
