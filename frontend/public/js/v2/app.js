@@ -1757,7 +1757,8 @@ const app = {
     },
 
     isTopsCoresAvailableForField() {
-        return state.selectedProduct === 'COLMAX';
+        const baseProductKey = (state.selectedProduct || '').replace(/o$/, '');
+        return baseProductKey === 'COLMAX';
     },
 
     _updateTopsCoresUIVisibility() {
