@@ -114,6 +114,22 @@ FE_V2_BADGE
                     <span class="toggle-label">Filtered</span>
                 </label>
             </div>
+            <!-- Tops & Cores layer controls -->
+            <div id="tops-cores-toggle-row" class="control-group toggle-row">
+                <label class="toggle-switch-wrapper" for="toggle-tops-cores">
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="toggle-tops-cores">
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span class="toggle-label">Tops &amp; Cores</span>
+                </label>
+            </div>
+            <div id="tops-cores-size-row" class="control-group" style="display:none;">
+                <label for="tops-cores-size">Point size:</label>
+                <div class="opacity-control">
+                    <input type="range" id="tops-cores-size" min="4" max="20" step="1" value="8">
+                </div>
+            </div>
             <!-- Colormap Selection (hidden until product selected) -->
             <div class="control-group" id="colormap-group" style="display:none;">
                 <label for="colormap-select">Colormap:</label>
@@ -221,22 +237,6 @@ FE_V2_BADGE
                     <div class="opacity-control">
                         <input type="range" id="coverage-opacity" min="0" max="1" step="0.01" value="0.4">
                     </div>
-                </div>
-            </div>
-            <!-- Tops & Cores layer controls -->
-            <div class="control-group toggle-row">
-                <label class="toggle-switch-wrapper" for="toggle-tops-cores">
-                    <span class="toggle-switch">
-                        <input type="checkbox" id="toggle-tops-cores">
-                        <span class="toggle-slider"></span>
-                    </span>
-                    <span class="toggle-label">Tops &amp; Cores</span>
-                </label>
-            </div>
-            <div id="tops-cores-size-row" class="control-group" style="display:none;">
-                <label for="tops-cores-size">Point size:</label>
-                <div class="opacity-control">
-                    <input type="range" id="tops-cores-size" min="4" max="20" step="1" value="8">
                 </div>
             </div>
             <!-- Radar status refresh — 2-row layout to avoid horizontal overflow -->
