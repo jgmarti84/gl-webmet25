@@ -114,6 +114,13 @@ function getAvailableProductKeys(products, showUnfilteredProducts) {
         });
 }
 
+function selectDefaultProduct(availableProductKeys) {
+    const preferredKeys = ['COLMAX', 'DBZH', 'DBZHo'];
+    return preferredKeys.find(key => availableProductKeys.includes(key))
+        || availableProductKeys[0]
+        || null;
+}
+
 /**
  * Convert a groupedFrames array (app.js state.cogs format) to the
  * Map<frameIndex, Map<radarCode, cogObject>> format expected by MapManager.loadFrames().
@@ -270,13 +277,6 @@ const app = {
             state.ui.enableAnimationControls(false);
             state.ui.enableNavButtons(false);
 
-            // Restore tops & cores visibility and size from localStorage
-            const storedVisible = localStorage.getItem(SETTINGS_KEY_TOPS_CORES_VISIBLE);
-            state.topsCoresVisible = storedVisible === null
-                ? this.isTopsCoresAvailableForField(state.selectedProduct)
-                : storedVisible === 'true';
-            state.topsCoresLayer.setVisible(state.topsCoresVisible);
-
             state.ui.setStatus('Ready', 'success');
             this.startRadarStatusRefresh();
             this.tryGeolocationAutoInit();
@@ -307,10 +307,7 @@ const app = {
 
         const productSelect = document.getElementById('product-select');
         const availableKeys = getAvailableProductKeys(state.products, state.showUnfilteredProducts);
-        const preferredKeys = ['COLMAX', 'DBZH', 'DBZHo'];
-        const defaultProduct = preferredKeys.find(key => availableKeys.includes(key))
-            || availableKeys[0]
-            || null;
+        const defaultProduct = selectDefaultProduct(availableKeys);
 
         state.selectedProduct = defaultProduct;
         if (productSelect) productSelect.value = defaultProduct || '';
