@@ -24,15 +24,6 @@ RUN sed -i \
     "s|FE_ENTRY_POINT|js/${FE_VERSION}/app.js|g" \
     /usr/share/nginx/html/index.html
 
-# Inject v2 badge or remove placeholder
-RUN if [ "$FE_VERSION" = "v2" ]; then \
-        sed -i 's|FE_V2_BADGE|<div id="v2-indicator" style="position:fixed;top:8px;left:8px;background:#e74c3c;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold;z-index:10000;pointer-events:none;">v2-canvas</div>|g' \
-            /usr/share/nginx/html/index.html; \
-    else \
-        sed -i 's|FE_V2_BADGE||g' \
-            /usr/share/nginx/html/index.html; \
-    fi
-
 # Copy unified nginx config
 COPY frontend/nginx.conf /etc/nginx/nginx.conf
 

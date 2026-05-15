@@ -40,7 +40,7 @@ const DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 const LIVE_REFRESH_MAX_COGS = 200;
 const GEOLOCATION_AUTO_SELECT_COUNT = 3;
 const GEOLOCATION_AUTO_LOAD_HOURS = 1.5;
-const GEOLOCATION_AUTO_PRODUCT = 'DBZHo';
+const GEOLOCATION_AUTO_PRODUCT = 'COLMAX';
 const DEFAULT_TIME_WINDOW_HOURS = 1.5;
 const DEFAULT_FIELD_OPACITY = 0.7;
 const DEFAULT_COVERAGE_OPACITY = 0.4;
@@ -263,10 +263,10 @@ const app = {
 
             // Restore tops & cores visibility and size from localStorage
             const storedVisible = localStorage.getItem(SETTINGS_KEY_TOPS_CORES_VISIBLE);
-            if (storedVisible === 'true') {
-                state.topsCoresVisible = true;
-                state.topsCoresLayer.setVisible(true);
-            }
+            state.topsCoresVisible = storedVisible === null
+                ? this.isTopsCoresAvailableForField()
+                : storedVisible === 'true';
+            state.topsCoresLayer.setVisible(state.topsCoresVisible);
 
             state.ui.setStatus('Ready', 'success');
             this.startRadarStatusRefresh();
@@ -295,6 +295,18 @@ const app = {
         state.products = await api.getProducts();
         state.ui.populateProductSelect(state.products, state.showUnfilteredProducts);
         state.ui.updateFilterToggle(state.showUnfilteredProducts);
+
+        const productSelect = document.getElementById('product-select');
+        const availableKeys = productSelect
+            ? Array.from(productSelect.options).map(option => option.value).filter(Boolean)
+            : [];
+        const preferredKeys = ['COLMAX', 'DBZH', 'DBZHo'];
+        const defaultProduct = preferredKeys.find(key => availableKeys.includes(key))
+            || availableKeys[0]
+            || null;
+
+        state.selectedProduct = defaultProduct;
+        if (productSelect) productSelect.value = defaultProduct || '';
     },
 
     updateActiveOnlyToggle() {
@@ -353,7 +365,9 @@ const app = {
         const topsCoresToggle = document.getElementById('toggle-tops-cores');
         if (topsCoresToggle) {
             const stored = localStorage.getItem(SETTINGS_KEY_TOPS_CORES_VISIBLE);
-            state.topsCoresVisible = stored === 'true';
+            state.topsCoresVisible = stored === null
+                ? this.isTopsCoresAvailableForField()
+                : stored === 'true';
             topsCoresToggle.checked = state.topsCoresVisible;
         }
         const topsCoresSizeSlider = document.getElementById('tops-cores-size');

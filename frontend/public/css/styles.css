@@ -640,23 +640,23 @@ code {
 }
 
 /* ============================================================
-   Fix 3 (revised): MESSAGE AREA — last row inside #animation-controls.
-   Positioned inside the panel so it is never hidden behind other elements.
-   min-height reserves space so appearing/disappearing messages don't
-   cause the animation bar to shift in height while visible.
+   MESSAGE AREA — bottom-left overlay.
    ============================================================ */
 
 #message-area {
-    min-height: 20px;
-    margin-top: 6px;
-    padding: 3px 8px;
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    z-index: 1050;
+    max-width: 300px;
+    padding: 10px 15px;
     border-radius: 4px;
-    font-size: 11px;
-    text-align: center;
-    /* Hidden by default — revealed by .visible class */
+    font-size: 14px;
+    text-align: left;
+    background: rgba(0, 0, 0, 0.8);
+    color: #ffffff;
     opacity: 0;
     transition: opacity 0.3s ease;
-    color: #888;
     pointer-events: none;
 }
 
