@@ -30,6 +30,19 @@ body {
     z-index: 1;
 }
 
+#logo-container {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 1100;
+}
+
+#logo-container img {
+    height: 50px;
+    width: auto;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
 /* ============================================================
    ICON BAR  (top-right)
    z-index > Leaflet controls (Leaflet uses up to ~1000)
