@@ -653,21 +653,22 @@ code {
 }
 
 /* ============================================================
-   MESSAGE AREA — bottom-left overlay.
+   MESSAGE AREA — below animation controls.
    ============================================================ */
 
 #message-area {
-    position: absolute;
-    bottom: 20px;
-    left: 20px;
-    z-index: 1050;
-    max-width: 300px;
-    padding: 10px 15px;
+    position: fixed;
+    bottom: 8px;
+    right: 20px;
+    z-index: 1001;
+    width: 420px;
+    max-width: min(640px, calc(100vw - 40px));
+    padding: 6px 10px;
     border-radius: 4px;
-    font-size: 14px;
-    text-align: left;
-    background: rgba(0, 0, 0, 0.8);
-    color: #ffffff;
+    font-size: 12px;
+    text-align: center;
+    background: rgba(26,26,46,0.92);
+    color: #cfd8dc;
     opacity: 0;
     transition: opacity 0.3s ease;
     pointer-events: none;
@@ -1238,13 +1239,13 @@ code {
     text-align: center;
 }
 
-/* Field loading indicator — appears in top-right of map during
-   field switch preload. Non-intrusive, does not block the map. */
+/* Field loading indicator — appears in bottom-left during
+   field switch preload so it does not hide behind open panels. */
 #field-loading-badge {
     display: none;
-    position: absolute;
-    top: 12px;
-    right: 12px;
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
     z-index: 1100;
     background: rgba(30, 30, 60, 0.85);
     color: #a0c4ff;
