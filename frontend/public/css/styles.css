@@ -653,16 +653,13 @@ code {
 }
 
 /* ============================================================
-   MESSAGE AREA — below animation controls.
+   MESSAGE AREA — inside animation controls, centered at bottom.
    ============================================================ */
 
 #message-area {
-    position: fixed;
-    bottom: 8px;
-    right: 20px;
-    z-index: 1001;
-    width: 420px;
-    max-width: min(640px, calc(100vw - 40px));
+    position: relative;
+    margin-top: 8px;
+    width: 100%;
     padding: 6px 10px;
     border-radius: 4px;
     font-size: 12px;
