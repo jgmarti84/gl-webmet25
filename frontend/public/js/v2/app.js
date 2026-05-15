@@ -105,6 +105,15 @@ function groupCogsByTimestamp(cogs, toleranceMinutes = BUCKET_TOLERANCE_MINUTES)
         .map(([, frame]) => frame);
 }
 
+function getAvailableProductKeys(products, showUnfilteredProducts) {
+    return products
+        .map(product => product.product_key)
+        .filter(productKey => {
+            const isUnfiltered = /o$/.test(productKey);
+            return showUnfilteredProducts ? isUnfiltered : !isUnfiltered;
+        });
+}
+
 /**
  * Convert a groupedFrames array (app.js state.cogs format) to the
  * Map<frameIndex, Map<radarCode, cogObject>> format expected by MapManager.loadFrames().
@@ -264,7 +273,7 @@ const app = {
             // Restore tops & cores visibility and size from localStorage
             const storedVisible = localStorage.getItem(SETTINGS_KEY_TOPS_CORES_VISIBLE);
             state.topsCoresVisible = storedVisible === null
-                ? this.isTopsCoresAvailableForField()
+                ? this.isTopsCoresAvailableForField(state.selectedProduct)
                 : storedVisible === 'true';
             state.topsCoresLayer.setVisible(state.topsCoresVisible);
 
@@ -297,9 +306,7 @@ const app = {
         state.ui.updateFilterToggle(state.showUnfilteredProducts);
 
         const productSelect = document.getElementById('product-select');
-        const availableKeys = productSelect
-            ? Array.from(productSelect.options).map(option => option.value).filter(Boolean)
-            : [];
+        const availableKeys = getAvailableProductKeys(state.products, state.showUnfilteredProducts);
         const preferredKeys = ['COLMAX', 'DBZH', 'DBZHo'];
         const defaultProduct = preferredKeys.find(key => availableKeys.includes(key))
             || availableKeys[0]
@@ -366,7 +373,7 @@ const app = {
         if (topsCoresToggle) {
             const stored = localStorage.getItem(SETTINGS_KEY_TOPS_CORES_VISIBLE);
             state.topsCoresVisible = stored === null
-                ? this.isTopsCoresAvailableForField()
+                ? this.isTopsCoresAvailableForField(state.selectedProduct)
                 : stored === 'true';
             topsCoresToggle.checked = state.topsCoresVisible;
         }
@@ -1770,8 +1777,8 @@ const app = {
         badge.style.display = key ? 'inline-flex' : 'none';
     },
 
-    isTopsCoresAvailableForField() {
-        const baseProductKey = (state.selectedProduct || '').replace(/o$/, '');
+    isTopsCoresAvailableForField(productKey = state.selectedProduct) {
+        const baseProductKey = (productKey || '').replace(/o$/, '');
         return baseProductKey === 'COLMAX';
     },
 
