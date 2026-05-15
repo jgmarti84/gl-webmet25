@@ -632,6 +632,7 @@ const app = {
                 state.selectedColormap = null;
                 state.currentVmin = null;
                 state.currentVmax = null;
+                this.onTimeRangeChange();
                 this._updateFieldBadge();
                 await this.loadColormapOptions();
                 this._updateTopsCoresUIVisibility();
@@ -648,9 +649,12 @@ const app = {
             });
         }
 
-        const loadBtn = document.getElementById('load-time-range-btn');
+        const loadBtn = document.getElementById('btn-load-timerange');
         if (loadBtn) {
-            loadBtn.addEventListener('click', () => this.loadTimeRangeCogs());
+            loadBtn.addEventListener('click', () => {
+                this.stopLiveRefresh();
+                this.loadTimeRangeCogs();
+            });
         }
 
         const loadLatestBtn = document.getElementById('load-latest-btn');
@@ -667,13 +671,29 @@ const app = {
                     document.querySelectorAll('[data-hours]').forEach(b =>
                         b.classList.toggle('active', b === e.currentTarget)
                     );
+                    const timerangeContainer = document.getElementById('timerange-container');
+                    if (timerangeContainer) timerangeContainer.style.display = 'none';
                     this.loadLastNHours(hours);
                 }
             });
         });
 
-        const startInput = document.getElementById('start-time');
-        const endInput   = document.getElementById('end-time');
+        const customRangeBtn = document.getElementById('btn-custom-range');
+        if (customRangeBtn) {
+            customRangeBtn.addEventListener('click', () => {
+                const timerangeContainer = document.getElementById('timerange-container');
+                if (!timerangeContainer) return;
+                const isHidden = timerangeContainer.style.display === 'none' || !timerangeContainer.style.display;
+                timerangeContainer.style.display = isHidden ? 'block' : 'none';
+                if (isHidden) {
+                    document.querySelectorAll('[data-hours]').forEach(b => b.classList.remove('active'));
+                    state.activeTimeWindowHours = null;
+                }
+            });
+        }
+
+        const startInput = document.getElementById('start-date');
+        const endInput   = document.getElementById('end-date');
         if (startInput) startInput.addEventListener('change', () => this.onTimeRangeChange());
         if (endInput)   endInput.addEventListener('change',   () => this.onTimeRangeChange());
 
@@ -1868,8 +1888,10 @@ const app = {
     // =========================================================================
 
     onTimeRangeChange() {
-        // Deactivate live preset buttons if the user manually changed the range.
-        // (kept for UI consistency; actual live state is tracked via state.liveHours)
+        const timeRange = state.ui.getTimeRangeValues();
+        const hasValidRange = timeRange.start && timeRange.end && timeRange.start < timeRange.end;
+        const canLoad = state.selectedRadars.length > 0 && state.selectedProduct && hasValidRange;
+        state.ui.enableLoadTimeRangeButton(canLoad);
     },
 
     /**
