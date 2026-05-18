@@ -3,7 +3,7 @@
  */
 
 // Fix 3: message queue constants
-const MSG_AUTO_CLEAR_MS  = 8000; // non-error messages auto-clear after 8 s
+const MSG_AUTO_CLEAR_MS  = 4000; // non-error messages auto-clear after 4 s
 const MSG_MIN_DISPLAY_MS = 2000; // minimum time each message stays visible
 
 export class UIControls {
@@ -294,7 +294,7 @@ export class UIControls {
             
             const label = document.createElement('label');
             label.htmlFor = `radar-${radar.code}`;
-            label.textContent = radar.title;
+            label.textContent = `${radar.title} - ${radar.code}`;
             
             item.appendChild(checkbox);
             item.appendChild(dot);

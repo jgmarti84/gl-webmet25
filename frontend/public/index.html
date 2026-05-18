@@ -12,7 +12,9 @@
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-FE_V2_BADGE
+    <div id="logo-container">
+        <img src="/assets/images/logos/OHMC@3x.png" alt="OHMC Radar Meteorology System">
+    </div>
     <!-- Map Container -->
     <div id="map">
         <div id="field-loading-badge">Loading field…</div>
@@ -314,8 +316,6 @@ FE_V2_BADGE
             </div>
             <span id="frame-counter">— / —</span>
         </div>
-        <!-- Fix 3 (revised): status message area inside the animation panel,
-             always visible, never hidden behind. Uses min-height to prevent layout shifts. -->
         <div id="message-area" class="message-area" role="status" aria-live="polite">
             <span id="message-text"></span>
         </div>

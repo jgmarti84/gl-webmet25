@@ -40,7 +40,7 @@ const DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 const LIVE_REFRESH_MAX_COGS = 200;
 const GEOLOCATION_AUTO_SELECT_COUNT = 3;
 const GEOLOCATION_AUTO_LOAD_HOURS = 1.5;
-const GEOLOCATION_AUTO_PRODUCT = 'DBZHo';
+const GEOLOCATION_AUTO_PRODUCT = 'COLMAX';
 const DEFAULT_TIME_WINDOW_HOURS = 1.5;
 const DEFAULT_FIELD_OPACITY = 0.7;
 const DEFAULT_COVERAGE_OPACITY = 0.4;
@@ -103,6 +103,22 @@ function groupCogsByTimestamp(cogs, toleranceMinutes = BUCKET_TOLERANCE_MINUTES)
     return Array.from(buckets.entries())
         .sort((a, b) => a[0] - b[0])
         .map(([, frame]) => frame);
+}
+
+function getAvailableProductKeys(products, showUnfilteredProducts) {
+    return products
+        .map(product => product.product_key)
+        .filter(productKey => {
+            const isUnfiltered = /o$/.test(productKey);
+            return showUnfilteredProducts ? isUnfiltered : !isUnfiltered;
+        });
+}
+
+function selectDefaultProduct(availableProductKeys) {
+    const preferredKeys = ['COLMAX', 'DBZH', 'DBZHo'];
+    return preferredKeys.find(key => availableProductKeys.includes(key))
+        || availableProductKeys[0]
+        || null;
 }
 
 /**
@@ -261,13 +277,6 @@ const app = {
             state.ui.enableAnimationControls(false);
             state.ui.enableNavButtons(false);
 
-            // Restore tops & cores visibility and size from localStorage
-            const storedVisible = localStorage.getItem(SETTINGS_KEY_TOPS_CORES_VISIBLE);
-            if (storedVisible === 'true') {
-                state.topsCoresVisible = true;
-                state.topsCoresLayer.setVisible(true);
-            }
-
             state.ui.setStatus('Ready', 'success');
             this.startRadarStatusRefresh();
             this.tryGeolocationAutoInit();
@@ -295,6 +304,13 @@ const app = {
         state.products = await api.getProducts();
         state.ui.populateProductSelect(state.products, state.showUnfilteredProducts);
         state.ui.updateFilterToggle(state.showUnfilteredProducts);
+
+        const productSelect = document.getElementById('product-select');
+        const availableKeys = getAvailableProductKeys(state.products, state.showUnfilteredProducts);
+        const defaultProduct = selectDefaultProduct(availableKeys);
+
+        state.selectedProduct = defaultProduct;
+        if (productSelect) productSelect.value = defaultProduct || '';
     },
 
     updateActiveOnlyToggle() {
@@ -353,7 +369,9 @@ const app = {
         const topsCoresToggle = document.getElementById('toggle-tops-cores');
         if (topsCoresToggle) {
             const stored = localStorage.getItem(SETTINGS_KEY_TOPS_CORES_VISIBLE);
-            state.topsCoresVisible = stored === 'true';
+            state.topsCoresVisible = stored === null
+                ? this.isTopsCoresAvailableForField(state.selectedProduct)
+                : stored === 'true';
             topsCoresToggle.checked = state.topsCoresVisible;
         }
         const topsCoresSizeSlider = document.getElementById('tops-cores-size');
@@ -614,6 +632,7 @@ const app = {
                 state.selectedColormap = null;
                 state.currentVmin = null;
                 state.currentVmax = null;
+                this.onTimeRangeChange();
                 this._updateFieldBadge();
                 await this.loadColormapOptions();
                 this._updateTopsCoresUIVisibility();
@@ -630,9 +649,12 @@ const app = {
             });
         }
 
-        const loadBtn = document.getElementById('load-time-range-btn');
+        const loadBtn = document.getElementById('btn-load-timerange');
         if (loadBtn) {
-            loadBtn.addEventListener('click', () => this.loadTimeRangeCogs());
+            loadBtn.addEventListener('click', () => {
+                this.stopLiveRefresh();
+                this.loadTimeRangeCogs();
+            });
         }
 
         const loadLatestBtn = document.getElementById('load-latest-btn');
@@ -649,13 +671,29 @@ const app = {
                     document.querySelectorAll('[data-hours]').forEach(b =>
                         b.classList.toggle('active', b === e.currentTarget)
                     );
+                    const timerangeContainer = document.getElementById('timerange-container');
+                    if (timerangeContainer) timerangeContainer.style.display = 'none';
                     this.loadLastNHours(hours);
                 }
             });
         });
 
-        const startInput = document.getElementById('start-time');
-        const endInput   = document.getElementById('end-time');
+        const customRangeBtn = document.getElementById('btn-custom-range');
+        if (customRangeBtn) {
+            customRangeBtn.addEventListener('click', () => {
+                const timerangeContainer = document.getElementById('timerange-container');
+                if (!timerangeContainer) return;
+                const isHidden = timerangeContainer.style.display === 'none' || !timerangeContainer.style.display;
+                timerangeContainer.style.display = isHidden ? 'block' : 'none';
+                if (isHidden) {
+                    document.querySelectorAll('[data-hours]').forEach(b => b.classList.remove('active'));
+                    state.activeTimeWindowHours = null;
+                }
+            });
+        }
+
+        const startInput = document.getElementById('start-date');
+        const endInput   = document.getElementById('end-date');
         if (startInput) startInput.addEventListener('change', () => this.onTimeRangeChange());
         if (endInput)   endInput.addEventListener('change',   () => this.onTimeRangeChange());
 
@@ -1756,8 +1794,8 @@ const app = {
         badge.style.display = key ? 'inline-flex' : 'none';
     },
 
-    isTopsCoresAvailableForField() {
-        const baseProductKey = (state.selectedProduct || '').replace(/o$/, '');
+    isTopsCoresAvailableForField(productKey = state.selectedProduct) {
+        const baseProductKey = (productKey || '').replace(/o$/, '');
         return baseProductKey === 'COLMAX';
     },
 
@@ -1850,8 +1888,10 @@ const app = {
     // =========================================================================
 
     onTimeRangeChange() {
-        // Deactivate live preset buttons if the user manually changed the range.
-        // (kept for UI consistency; actual live state is tracked via state.liveHours)
+        const timeRange = state.ui.getTimeRangeValues();
+        const hasValidRange = timeRange.start && timeRange.end && timeRange.start < timeRange.end;
+        const canLoad = state.selectedRadars.length > 0 && state.selectedProduct && hasValidRange;
+        state.ui.enableLoadTimeRangeButton(canLoad);
     },
 
     /**

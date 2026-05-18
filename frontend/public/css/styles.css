@@ -30,6 +30,19 @@ body {
     z-index: 1;
 }
 
+#logo-container {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 1100;
+}
+
+#logo-container img {
+    height: 50px;
+    width: auto;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
 /* ============================================================
    ICON BAR  (top-right)
    z-index > Leaflet controls (Leaflet uses up to ~1000)
@@ -640,23 +653,21 @@ code {
 }
 
 /* ============================================================
-   Fix 3 (revised): MESSAGE AREA — last row inside #animation-controls.
-   Positioned inside the panel so it is never hidden behind other elements.
-   min-height reserves space so appearing/disappearing messages don't
-   cause the animation bar to shift in height while visible.
+   MESSAGE AREA — inside animation controls, centered at bottom.
    ============================================================ */
 
 #message-area {
-    min-height: 20px;
-    margin-top: 6px;
-    padding: 3px 8px;
+    position: relative;
+    margin-top: 8px;
+    width: 100%;
+    padding: 6px 10px;
     border-radius: 4px;
-    font-size: 11px;
+    font-size: 12px;
     text-align: center;
-    /* Hidden by default — revealed by .visible class */
+    background: rgba(26,26,46,0.92);
+    color: #cfd8dc;
     opacity: 0;
     transition: opacity 0.3s ease;
-    color: #888;
     pointer-events: none;
 }
 
@@ -1225,13 +1236,13 @@ code {
     text-align: center;
 }
 
-/* Field loading indicator — appears in top-right of map during
-   field switch preload. Non-intrusive, does not block the map. */
+/* Field loading indicator — appears in bottom-left during
+   field switch preload so it does not hide behind open panels. */
 #field-loading-badge {
     display: none;
-    position: absolute;
-    top: 12px;
-    right: 12px;
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
     z-index: 1100;
     background: rgba(30, 30, 60, 0.85);
     color: #a0c4ff;

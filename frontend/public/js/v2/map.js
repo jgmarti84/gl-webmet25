@@ -125,7 +125,7 @@ export class MapManager {
      * @returns {L.Map}
      */
     init() {
-        this._map = L.map(this._mapElementId).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+        this._map = L.map(this._mapElementId, { zoomControl: false }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
 
         // Radar coverage mask pane — kept for z-index ordering, the SVG
         // is NOT placed inside this pane (panes are transformed by Leaflet
