@@ -1778,5 +1778,17 @@
             4
         ]
     }
+},
+{
+    "model": "radar_api.estrategia",
+    "pk": "0315",
+    "fields": {
+        "description": "Sin descripcion",
+        "volumenes": [
+            1,
+            2,
+            4
+        ]
+    }
 }
 ]

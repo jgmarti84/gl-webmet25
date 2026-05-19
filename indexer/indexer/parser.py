@@ -22,34 +22,60 @@ class ParsedCOGInfo:
     elevation_angle: float = 0.0
     is_valid: bool = True
     error: Optional[str] = None
+    strategy: Optional[str] = None   # e.g. "0315" — present in new filename format
+    vol_nr: Optional[str] = None     # e.g. "01"   — present in new filename format
 
 
 class COGFilenameParser:
     """
-    Parser for COG filenames.
-    
-    IMPORTANT: Customize the parse() method to match your naming convention!
-    
-    Common patterns supported:
-    1. {radar}_{product}_{YYYYMMDD}_{HHMMSS}.tif
-    2. {radar}_{product}_{YYYYMMDD}_{HHMMSS}_{elevation}.tif
-    3. Path-based: /product_output/{radar}/{product}/{YYYY}/{MM}/{DD}/file.tif
+    Parser for COG filenames produced by radarlib's ProductGenerationDaemon.
+
+    Two patterns are supported (tried in order):
+
+    **Pattern 0 — current production format:**
+    ``{RADAR}_{strategy}_{vol_nr}_{YYYYMMDDTHHMMSSZ}_{FIELD}[o].tif``
+
+    Examples::
+
+        RMA1_0315_01_20260401T205000Z_DBZH.tif
+        RMA1_0315_01_20260401T205000Z_DBZHo.tif   # unfiltered
+        RMA1_0302_02_20260401T205000Z_COLMAX.tif
+
+    **Pattern 1 — legacy format (backward compatibility only):**
+    ``{RADAR}_{YYYYMMDDTHHMMSSZ}_{FIELD}[o]_{elev}.tif``
+
+    Example::
+
+        RMA1_20260401T205000Z_DBZHo_00.tif
+
+    Legacy files are indexed with ``strategy=None`` and ``vol_nr=None``.
+    A WARNING is logged for each legacy file to encourage migration.
     """
     
-    # Example patterns - adjust to your needs!
-    FILENAME_PATTERNS = [
-        # Pattern 0: RMA3_20260127T230000Z_DBZHo_00.tif
-        re.compile(r'^(?P<radar>[A-Z0-9]+)_(?P<datetime>\d{8}T\d{6}Z)_(?P<product>[A-Za-z0-9]+)_(?P<elev>[\d.]+)\.tif$'),
-        
-        # Pattern 1: RMA3_DBZH_20240115_143022.tif
-        re.compile(r'^(?P<radar>[A-Z0-9]+)_(?P<product>[A-Za-z0-9]+)_(?P<date>\d{8})_(?P<time>\d{6})\.tif$'),
-        
-        # Pattern 2: RMA3_DBZH_20240115_143022_0.5.tif (with elevation)
-        re.compile(r'^(?P<radar>[A-Z0-9]+)_(?P<product>[A-Za-z0-9]+)_(?P<date>\d{8})_(?P<time>\d{6})_(?P<elev>[\d.]+)\.tif$'),
-        
-        # Pattern 3: RMA3_DBZH_2024-01-15T14:30:22.tif (ISO-ish format)
-        re.compile(r'^(?P<radar>[A-Z0-9]+)_(?P<product>[A-Za-z0-9]+)_(?P<datetime>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\.tif$'),
-    ]
+    # Pattern 0 (current production format):
+    #   RMA1_0315_01_20260401T205000Z_DBZH.tif
+    #   RMA1_0315_01_20260401T205000Z_DBZHo.tif   (unfiltered, 'o' suffix)
+    #   RMA1_0302_02_20260401T205000Z_COLMAX.tif
+    _PATTERN_NEW = re.compile(
+        r'^(?P<radar>[A-Z0-9]+)'
+        r'_(?P<strategy>\d{4})'
+        r'_(?P<vol_nr>\d{2})'
+        r'_(?P<datetime>\d{8}T\d{6}Z)'
+        r'_(?P<product>[A-Za-z0-9]+)'
+        r'\.tif$'
+    )
+
+    # Pattern 1 (legacy format — backward compatibility only):
+    #   RMA1_20260401T205000Z_DBZHo_00.tif
+    _PATTERN_LEGACY = re.compile(
+        r'^(?P<radar>[A-Z0-9]+)'
+        r'_(?P<datetime>\d{8}T\d{6}Z)'
+        r'_(?P<product>[A-Za-z0-9]+)'
+        r'_(?P<elev>[\d.]+)'
+        r'\.tif$'
+    )
+
+    FILENAME_PATTERNS = [_PATTERN_NEW, _PATTERN_LEGACY]
     
     def __init__(self, base_path: str = "/product_output"):
         self.base_path = Path(base_path)
@@ -77,62 +103,68 @@ class COGFilenameParser:
         return self._parse_from_path(path)
     
     def _parse_from_match(self, match: re.Match, path: Path) -> ParsedCOGInfo:
-        """Parse from regex match."""
-        groups = match.groupdict()
-        
-        try:
-            radar_code = groups['radar']
-            product_key = groups['product']
+        """Parse from regex match.
 
-            # if "DBZH" in product_key:
-            #     product_key = product_key.replace("DBZH", "TH")
-            # if "ZDR" in product_key:
-            #     product_key = product_key.replace("ZDR", "TDR")
-            # if "DBZV" in product_key:
-            #     product_key = product_key.replace("DBZV", "TV")
-                
-            # Parse datetime (robust to minute/second overflow)
-            if 'datetime' in groups:
-                # Expect formats like YYYYMMDDTHHMMSSZ or ISO-like strings
-                dt_str = groups['datetime']
-                # Try to extract numeric parts: YYYYMMDDTHHMMSS
-                m = re.match(r"(?P<Y>\d{4})(?P<m>\d{2})(?P<d>\d{2})T(?P<H>\d{2})(?P<M>\d{2})(?P<S>\d{2})Z?", dt_str)
-                if m:
-                    parts = m.groupdict()
-                    year = int(parts['Y']); month = int(parts['m']); day = int(parts['d'])
-                    hour = int(parts['H']); minute = int(parts['M']); second = int(parts['S'])
-                    base = datetime(year, month, day)
-                    obs_time = base + timedelta(hours=hour, minutes=minute, seconds=second)
-                else:
-                    # Fallback to fromisoformat for other ISO-like strings
-                    obs_time = datetime.fromisoformat(dt_str)
+        Handles both the current production pattern (with strategy/vol_nr) and
+        the legacy pattern (with elevation angle suffix). Logs a warning for
+        legacy-format files to encourage migration.
+        """
+        groups = match.groupdict()
+
+        try:
+            radar_code = groups["radar"]
+            product_key = groups["product"]
+
+            # --- Datetime (always present; format: YYYYMMDDTHHMMSSZ) ---
+            dt_str = groups["datetime"]
+            m = re.match(
+                r"(?P<Y>\d{4})(?P<mo>\d{2})(?P<d>\d{2})T(?P<H>\d{2})(?P<M>\d{2})(?P<S>\d{2})Z?",
+                dt_str,
+            )
+            if m:
+                p = m.groupdict()
+                base = datetime(int(p["Y"]), int(p["mo"]), int(p["d"]), tzinfo=timezone.utc)
+                obs_time = base + timedelta(
+                    hours=int(p["H"]), minutes=int(p["M"]), seconds=int(p["S"])
+                )
             else:
-                date_str = groups['date']
-                time_str = groups['time']
-                # time_str expected as HHMMSS - parse components and normalize
-                h = int(time_str[0:2]); m = int(time_str[2:4]); s = int(time_str[4:6])
-                base = datetime(int(date_str[0:4]), int(date_str[4:6]), int(date_str[6:8]))
-                obs_time = base + timedelta(hours=h, minutes=m, seconds=s)
-            
-            # Parse elevation if present
-            elevation = float(groups.get('elev', 0.0))
-            
+                obs_time = datetime.fromisoformat(dt_str).replace(tzinfo=timezone.utc)
+
+            # --- New format: strategy + vol_nr, no elevation in filename ---
+            if "strategy" in groups and groups["strategy"] is not None:
+                strategy = groups["strategy"]   # 4-digit string, e.g. "0315"
+                vol_nr = groups["vol_nr"]        # 2-digit string, e.g. "01"
+                elevation = 0.0
+            else:
+                # --- Legacy format: elevation in filename, no strategy/vol_nr ---
+                strategy = None
+                vol_nr = None
+                elevation = float(groups.get("elev") or 0.0)
+                logger.warning(
+                    f"Legacy COG filename detected: '{path.name}'. "
+                    f"strategy and vol_nr will be NULL. "
+                    f"Please migrate to the new naming format: "
+                    f"<RADAR>_<strategy>_<vol_nr>_<TIMESTAMP>_<FIELD>.tif"
+                )
+
             return ParsedCOGInfo(
                 radar_code=radar_code,
                 product_key=product_key,
                 observation_time=obs_time,
                 elevation_angle=elevation,
-                is_valid=True
+                is_valid=True,
+                strategy=strategy,
+                vol_nr=vol_nr,
             )
-            
+
         except Exception as e:
             logger.warning(f"Failed to parse filename {path.name}: {e}")
             return ParsedCOGInfo(
                 radar_code="",
                 product_key="",
-                observation_time=datetime.now(),
+                observation_time=datetime.now(tz=timezone.utc),
                 is_valid=False,
-                error=str(e)
+                error=str(e),
             )
     
     def _parse_from_path(self, path: Path) -> ParsedCOGInfo:

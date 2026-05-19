@@ -108,6 +108,11 @@ class COGResponse(BaseModel):
     cog_cmap: Optional[str] = None
     cog_vmin: Optional[float] = None
     cog_vmax: Optional[float] = None
+
+    # radarlib production metadata (new-format COGs only; None for legacy)
+    strategy: Optional[str] = None           # e.g. "0315"
+    vol_nr: Optional[str] = None             # e.g. "01"
+    radar_coverage_m: Optional[float] = None  # radar coverage radius in metres
     
     class Config:
         from_attributes = True

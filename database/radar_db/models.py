@@ -195,6 +195,10 @@ class RadarCOG(Base):
     cog_vmin = Column(Float, nullable=True, comment="Default vmin stored in COG metadata")
     cog_vmax = Column(Float, nullable=True, comment="Default vmax stored in COG metadata")
 
+    # radarlib production metadata (present in new-format COGs, NULL for legacy)
+    vol_nr = Column(String(16), nullable=True, index=True, comment="Volume number, e.g. '01'")
+    radar_coverage_m = Column(Float, nullable=True, comment="Radar coverage radius in metres from radarlib tag")
+
     # Status
     status = Column(SQLEnum(COGStatus), default=COGStatus.AVAILABLE, index=True)
     error_message = Column(Text)
