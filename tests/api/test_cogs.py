@@ -220,3 +220,62 @@ def test_cog_404_response_has_detail_field():
         response = client.get(f"{PREFIX}/999999999")
     data = response.json()
     assert "detail" in data
+
+
+# ---------------------------------------------------------------------------
+# Filtered ↔ Unfiltered isolation
+# Selecting a filtered field (e.g. 'DBZH') must NEVER return the unfiltered
+# counterpart ('DBZHo'), and vice-versa.
+# ---------------------------------------------------------------------------
+
+def test_cogs_filtered_product_key_excludes_unfiltered_cogs():
+    """
+    GET /cogs?product_key=DBZH must not return COGs whose product_key ends in 'o'.
+    Selecting a filtered field must never silently return unfiltered COGs.
+    """
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.get(PREFIX, params={"product_key": "DBZH", "page_size": 200})
+    assert response.status_code == 200
+    cogs = response.json()["cogs"]
+    # Every returned COG must be for the exact requested key — never 'DBZHo'
+    for cog in cogs:
+        pk = cog.get("product_key") or ""
+        assert not pk.endswith("o"), (
+            f"Filtered query for 'DBZH' returned unfiltered COG with product_key='{pk}'"
+        )
+
+
+def test_cogs_unfiltered_product_key_excludes_filtered_cogs():
+    """
+    GET /cogs?product_key=DBZHo must not return COGs without the 'o' suffix.
+    Selecting an unfiltered field must never silently return filtered COGs.
+    """
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.get(PREFIX, params={"product_key": "DBZHo", "page_size": 200})
+    assert response.status_code == 200
+    cogs = response.json()["cogs"]
+    for cog in cogs:
+        pk = cog.get("product_key") or ""
+        # Accept 'DBZHo' or legacy product_key=None (legacy product-linked COGs)
+        if pk:
+            assert pk.endswith("o"), (
+                f"Unfiltered query for 'DBZHo' returned filtered COG with product_key='{pk}'"
+            )
+
+
+def test_cogs_filtered_and_unfiltered_results_are_disjoint():
+    """
+    COGs returned for 'DBZH' and COGs returned for 'DBZHo' must be completely
+    disjoint — no COG id should appear in both result sets.
+    """
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        filtered = set(
+            c["id"] for c in client.get(PREFIX, params={"product_key": "DBZH", "page_size": 200}).json()["cogs"]
+        )
+        unfiltered = set(
+            c["id"] for c in client.get(PREFIX, params={"product_key": "DBZHo", "page_size": 200}).json()["cogs"]
+        )
+    overlap = filtered & unfiltered
+    assert overlap == set(), (
+        f"COG ids appear in both filtered and unfiltered result sets: {overlap}"
+    )

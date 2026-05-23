@@ -63,6 +63,35 @@ def cmd_seed(args):
     return 0
 
 
+def cmd_sync(args):
+    """Sync the database with the current state of the seed JSON file (full upsert)."""
+    from radar_db.seeds import sync_seeds
+    from radar_db.database import check_db_connection
+
+    if not check_db_connection():
+        logger.error("Cannot connect to database. Please check your settings.")
+        return 1
+
+    seed_file = args.file if args.file != 'default' else None
+    logger.info(f"Syncing seed data from: {seed_file or 'default location'}")
+    if args.deactivate_missing:
+        logger.warning("--deactivate-missing is set: radars absent from the JSON will be marked inactive.")
+
+    results = sync_seeds(
+        data_file=seed_file,
+        deactivate_missing_radars=args.deactivate_missing,
+    )
+
+    if 'error' in results:
+        logger.error(f"Sync failed: {results['error']}")
+        return 1
+
+    logger.info("Sync complete!")
+    for key, count in sorted(results.items()):
+        logger.info(f"  {key}: {count}")
+    return 0
+
+
 def cmd_check(args):
     """Check database connection."""
     from radar_db.database import check_db_connection
@@ -288,8 +317,11 @@ def main():
         epilog="""
 Examples:
   python -m radar_db.manage init                    # Create tables
-  python -m radar_db.manage seed                    # Load seed data
+  python -m radar_db.manage seed                    # Load seed data (insert-only)
   python -m radar_db.manage seed -f custom.json     # Load custom seed file
+  python -m radar_db.manage sync                    # Upsert all seed data (apply JSON changes)
+  python -m radar_db.manage sync -f custom.json     # Upsert from custom file
+  python -m radar_db.manage sync --deactivate-missing  # Also deactivate radars not in JSON
   python -m radar_db.manage check                   # Test connection
   python -m radar_db.manage info                    # Show database stats
   python -m radar_db.manage reset --seed            # Reset and reseed
@@ -305,13 +337,31 @@ Examples:
     init_parser.set_defaults(func=cmd_init)
     
     # seed command
-    seed_parser = subparsers.add_parser('seed', help='Load seed data')
+    seed_parser = subparsers.add_parser('seed', help='Load seed data (insert-only, skips existing records)')
     seed_parser.add_argument(
         '-f', '--file', 
         default='default',
         help='Path to seed data JSON file (default: auto-detect)'
     )
     seed_parser.set_defaults(func=cmd_seed)
+
+    # sync command
+    sync_parser = subparsers.add_parser(
+        'sync',
+        help='Sync database with seed JSON (full upsert: update existing + insert new)'
+    )
+    sync_parser.add_argument(
+        '-f', '--file',
+        default='default',
+        help='Path to seed data JSON file (default: auto-detect)'
+    )
+    sync_parser.add_argument(
+        '--deactivate-missing',
+        action='store_true',
+        default=False,
+        help='Mark Radar rows absent from the JSON as is_active=False'
+    )
+    sync_parser.set_defaults(func=cmd_sync)
     
     # check command
     check_parser = subparsers.add_parser('check', help='Check database connection')

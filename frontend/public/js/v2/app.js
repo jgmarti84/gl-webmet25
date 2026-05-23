@@ -566,7 +566,9 @@ const app = {
         const showFilteredToggle = document.getElementById('toggle-show-filtered');
         if (showFilteredToggle) {
             showFilteredToggle.addEventListener('change', (e) => {
-                state.showUnfilteredProducts = e.target.checked;
+                // Toggle ON  → filtered/processed fields (no 'o' suffix) → showUnfilteredProducts = false
+                // Toggle OFF → raw/unfiltered fields ('o' suffix)         → showUnfilteredProducts = true
+                state.showUnfilteredProducts = !e.target.checked;
                 localStorage.setItem(SETTINGS_KEY_SHOW_FILTERED, String(state.showUnfilteredProducts));
                 state.ui.populateProductSelect(state.products, state.showUnfilteredProducts);
                 state.ui.updateFilterToggle(state.showUnfilteredProducts);
