@@ -929,6 +929,9 @@ const app = {
             // Show the new current frame immediately
             state.animator.goToFrame(newCurrentIndex);
 
+            // Update coverage mask: use COG-based radius for the newly added radar
+            this._updateCoverageFromCogs(newCogs);
+
             state.ui.updateFrameCounter(newCurrentIndex, state.cogs.length);
             state.ui.updateAnimationSlider(newCurrentIndex, state.cogs.length);
             state.ui.setStatus(`✓ Added ${radarCode.toUpperCase()} — ${state.cogs.length} frames`, 'success');
@@ -1056,6 +1059,9 @@ const app = {
             // Show single frame
             state.mapManager.showFrame(0, Array.from(singleFrameRadarMap.keys()), state.selectedProduct);
 
+            // Update coverage mask with actual COG coverage radius
+            this._updateCoverageFromCogs(Array.from(singleFrameRadarMap.values()));
+
             if (firstCog) {
                 const _td2 = document.getElementById('time-display');
                 if (_td2) _td2.textContent = formatTimestamp(firstCog.observation_time);
@@ -1162,6 +1168,10 @@ const app = {
             }
 
             state.cogs = groupedFrames;
+
+            // Update coverage mask with actual per-product coverage radius from COGs
+            const _allCogsTimeRange = groupedFrames.flatMap(f => Object.values(f.cogsByRadar));
+            this._updateCoverageFromCogs(_allCogsTimeRange);
 
             // v2: updateFrames takes (frames, productKey, currentIndex)
             state.animator.updateFrames(groupedFrames, state.selectedProduct, 0);
@@ -1639,6 +1649,54 @@ const app = {
     },
 
     /**
+     * Update the SVG coverage mask for each active radar using the actual
+     * coverage radius stored in the COG metadata (radar_coverage_m).
+     *
+     * Accepts a flat array of COG objects (each with .radar_code and
+     * .radar_coverage_m).  For each active radar the median coverage radius
+     * across all provided COGs is used — this means that for products like
+     * VRAD/WRAD (shorter range) the circle will automatically shrink.
+     * Falls back to radar.img_radio (km → m) when no COG coverage is available.
+     *
+     * @param {Array} cogs  Flat array of COG response objects.
+     */
+    _updateCoverageFromCogs(cogs) {
+        if (!cogs || cogs.length === 0) return;
+
+        // Collect per-radar coverage samples from COG metadata
+        const samplesByRadar = new Map();
+        for (const cog of cogs) {
+            if (cog.radar_coverage_m != null) {
+                const code = cog.radar_code;
+                if (!samplesByRadar.has(code)) samplesByRadar.set(code, []);
+                samplesByRadar.get(code).push(cog.radar_coverage_m);
+            }
+        }
+
+        for (const radarCode of state.selectedRadars) {
+            const radar = state.radars.find(r => r.code === radarCode);
+            if (!radar || !radar.center_lat || !radar.center_long) continue;
+
+            const samples = samplesByRadar.get(radarCode);
+            let radius_m;
+            if (samples && samples.length > 0) {
+                // Use median to be robust against outliers
+                const sorted = samples.slice().sort((a, b) => a - b);
+                radius_m = sorted[Math.floor(sorted.length / 2)];
+            } else {
+                // Fallback: img_radio is stored in km
+                radius_m = radar.img_radio ? radar.img_radio * 1000 : null;
+            }
+
+            if (radius_m != null) {
+                state.mapManager.addRadarCoverage(
+                    radarCode, radar.center_lat, radar.center_long, radius_m
+                );
+            }
+        }
+    },
+
+    /**
      * Compute the union LatLngBounds for all currently selected
      * and active radars, using center + img_radio radius.
      * Returns a Leaflet LatLngBounds or null if no radars found.
@@ -1744,6 +1802,10 @@ const app = {
                 groupedFrames, state.selectedProduct,
                 Math.min(prevIndex, groupedFrames.length - 1)
             );
+
+            // Update coverage mask to reflect potential coverage change (e.g. field switch)
+            const _allCogsContinuity = groupedFrames.flatMap(f => Object.values(f.cogsByRadar));
+            this._updateCoverageFromCogs(_allCogsContinuity);
 
             // Best-effort legend refresh after swap.
             try {
