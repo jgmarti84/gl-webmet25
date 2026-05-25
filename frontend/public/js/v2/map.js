@@ -791,23 +791,65 @@ export class MapManager {
         // first order.  _metersToPixels computes that pixel radius by measuring
         // the E-W Mercator pixel distance for R metres, which is correct.
         //
-        // However the circle CENTRE must be the Mercator visual centre of the
-        // COG image overlay — not the raw WGS84 DB coordinate.  Leaflet places
-        // imageOverlay by stretching the image between the projected SW and NE
-        // corners, so the screen-pixel centre = Mercator midpoint of N and S.
-        // _visualCenterForRadar() computes this from the recorded bbox.
+        // However the circle CENTRE must match where the data disc actually
+        // renders on screen.  Leaflet places imageOverlay by computing screen
+        // pixels for the SW and NE bbox corners and stretching the image element
+        // between them.  The visual centre of that image element in screen-pixel
+        // space is therefore the arithmetic mean of the SW and NE container
+        // points — NOT latLngToContainerPoint(radar_lat, radar_lng) — because
+        // the Mercator Y function is non-linear and its midpoint does not map
+        // back to the WGS84 radar latitude.
+        //
+        // We compute cx, cy directly in pixel space from the bbox.
+        // When no bbox is available yet (before frames load) we fall back to the
+        // DB radar lat/lng.
         for (const [radarCode, coverage] of this._activeRadarCoverages) {
-            const { lat: centerLat, lng: centerLng } =
-                this._visualCenterForRadar(radarCode, coverage);
+            let cx, cy;
 
-            const point = this._map.latLngToContainerPoint(
-                L.latLng(centerLat, centerLng)
-            );
-            const radiusPx = this._metersToPixels(centerLat, coverage.radius_m);
+            // Search case-insensitively so 'RMA9__DBZH' matches radarCode 'RMA9'
+            let bbox = null;
+            const prefix = radarCode.toUpperCase() + '__';
+            for (const [key, b] of this._bboxes) {
+                if (key.toUpperCase().startsWith(prefix)) {
+                    bbox = b;
+                    break;
+                }
+            }
+
+            if (bbox) {
+                // Pixel-space midpoint — identical to where Leaflet centres
+                // the stretched image element, no trigonometry needed.
+                const swPx = this._map.latLngToContainerPoint(
+                    L.latLng(bbox.south, bbox.west)
+                );
+                const nePx = this._map.latLngToContainerPoint(
+                    L.latLng(bbox.north, bbox.east)
+                );
+                cx = (swPx.x + nePx.x) / 2;
+                cy = (swPx.y + nePx.y) / 2;
+                console.debug(
+                    `[coverage] ${radarCode} centre from bbox:`,
+                    `bbox N=${bbox.north.toFixed(4)} S=${bbox.south.toFixed(4)}`,
+                    `→ cx=${cx.toFixed(1)} cy=${cy.toFixed(1)}`
+                );
+            } else {
+                // Fallback: no frames loaded yet, use DB radar position
+                const pt = this._map.latLngToContainerPoint(
+                    L.latLng(coverage.lat, coverage.lng)
+                );
+                cx = pt.x;
+                cy = pt.y;
+                console.debug(
+                    `[coverage] ${radarCode} centre from DB lat/lng (no bbox yet):`,
+                    `lat=${coverage.lat} lng=${coverage.lng}`
+                );
+            }
+
+            const radiusPx = this._metersToPixels(coverage.lat, coverage.radius_m);
 
             const circle = document.createElementNS(svgNS, 'circle');
-            circle.setAttribute('cx', String(point.x));
-            circle.setAttribute('cy', String(point.y));
+            circle.setAttribute('cx', String(cx));
+            circle.setAttribute('cy', String(cy));
             circle.setAttribute('r', String(radiusPx));
             circle.setAttribute('fill', 'black');
             mask.appendChild(circle);
@@ -820,67 +862,6 @@ export class MapManager {
         if (overlayRect) {
             overlayRect.setAttribute('opacity', String(this._coverageOpacity));
         }
-    }
-
-    /**
-     * Return the visual centre (lat, lng) for a radar's coverage disc.
-     *
-     * The COG image is placed by Leaflet using the WGS84 bbox from the
-     * X-Bbox-* response headers.  Leaflet projects the SW and NE corners
-     * through Web Mercator and stretches the image between those screen
-     * points.  The visual (screen-pixel) centre of the image is therefore
-     * the *Mercator midpoint* of the N/S latitudes — NOT the arithmetic
-     * midpoint of the bbox latitudes and NOT necessarily the WGS84
-     * radar position stored in the database.
-     *
-     * This method looks up the first bbox recorded for the given radarCode
-     * and computes that corrected centre.  If no bbox has been loaded yet it
-     * falls back to the DB coordinates held in `coverage`.
-     *
-     * @param {string} radarCode
-     * @param {{lat:number, lng:number, radius_m:number}} coverage
-     * @returns {{lat:number, lng:number}}
-     */
-    _visualCenterForRadar(radarCode, coverage) {
-        // Find the first bbox that belongs to this radar
-        // (keys are `${radarCode}__${productKey}`).
-        let bbox = null;
-        for (const [key, b] of this._bboxes) {
-            if (key.startsWith(radarCode + '__')) {
-                bbox = b;
-                break;
-            }
-        }
-
-        if (!bbox) {
-            // No frame loaded yet — use DB coords as-is.
-            return { lat: coverage.lat, lng: coverage.lng };
-        }
-
-        // Mercator-midpoint latitude: invert the average of the two Mercator Y
-        // values so the coverage circle is centred at the same screen position
-        // as the middle of the stretched image overlay.
-        const lat = this._mercatorMidLat(bbox.south, bbox.north);
-        const lng = (bbox.west + bbox.east) / 2;
-        return { lat, lng };
-    }
-
-    /**
-     * Return the latitude whose Mercator Y value is the arithmetic mean of
-     * the Mercator Y values at `south` and `north`.
-     *
-     * Mercator Y(φ) = ln( tan(π/4 + φ/2) )   (in radians)
-     * Inverse:  φ   = 2·atan( exp(Y) ) − π/2
-     *
-     * @param {number} south  Southern latitude in WGS84 degrees
-     * @param {number} north  Northern latitude in WGS84 degrees
-     * @returns {number} Latitude in WGS84 degrees
-     */
-    _mercatorMidLat(south, north) {
-        const toRad   = d => d * Math.PI / 180;
-        const mercY   = lat => Math.log(Math.tan(Math.PI / 4 + toRad(lat) / 2));
-        const invMerc = y  => (2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180 / Math.PI;
-        return invMerc((mercY(south) + mercY(north)) / 2);
     }
 
     /**
