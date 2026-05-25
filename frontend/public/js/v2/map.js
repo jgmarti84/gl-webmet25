@@ -772,27 +772,30 @@ export class MapManager {
         const mask = this._coverageSvgEl.querySelector('#radar-coverage-mask');
         if (!mask) return;
 
-        // Remove all existing cutout polygons (keep the white base rect)
-        mask.querySelectorAll('polygon').forEach(c => c.remove());
+        // Remove all existing cutout circles (keep the white base rect)
+        mask.querySelectorAll('circle').forEach(c => c.remove());
 
-        // Add one black geodetic polygon per active radar coverage area.
+        // Add one black circle per active radar coverage area.
         // Black in SVG mask = fully transparent in the masked element.
-        // A true geodetic circle in AEQD warped to Mercator is NOT a perfect
-        // pixel-space circle — it is slightly taller N-S than E-W, and this
-        // distortion grows with latitude.  Drawing a pixel-space SVG <circle>
-        // would underestimate the N-S extent, leaving COG data visible outside
-        // the mask at the top and bottom of the coverage disc.
-        // Instead we sample N_COVERAGE_PTS vertices evenly around the geodetic
-        // boundary and draw them as a <polygon>, which matches the COG edge.
+        // Overlapping black circles merge automatically (union).
+        //
+        // The Mercator projection is conformal: at any single point, the N-S
+        // and E-W scales are both sec(lat), so a geodetic circle of radius R
+        // centred at the radar projects to a circle in Mercator pixel-space to
+        // first order.  _metersToPixels computes that pixel radius by measuring
+        // the E-W Mercator pixel distance for R metres, which is correct.
         for (const [, coverage] of this._activeRadarCoverages) {
-            const points = this._geodeticCirclePoints(
-                coverage.lat, coverage.lng, coverage.radius_m
+            const point = this._map.latLngToContainerPoint(
+                L.latLng(coverage.lat, coverage.lng)
             );
+            const radiusPx = this._metersToPixels(coverage.lat, coverage.radius_m);
 
-            const polygon = document.createElementNS(svgNS, 'polygon');
-            polygon.setAttribute('points', points);
-            polygon.setAttribute('fill', 'black');
-            mask.appendChild(polygon);
+            const circle = document.createElementNS(svgNS, 'circle');
+            circle.setAttribute('cx', String(point.x));
+            circle.setAttribute('cy', String(point.y));
+            circle.setAttribute('r', String(radiusPx));
+            circle.setAttribute('fill', 'black');
+            mask.appendChild(circle);
         }
 
         // Sync opacity on the overlay rect
@@ -805,36 +808,20 @@ export class MapManager {
     }
 
     /**
-     * Sample N_PTS evenly-spaced vertices along the geodetic coverage boundary
-     * and return them as an SVG points string ("x1,y1 x2,y2 ...").
-     *
-     * Each vertex is computed from the center (lat, lng) by a flat-earth
-     * per-vertex offset: the segment length (radius_m / N_PTS of the
-     * circumference) is short enough that the spherical error is negligible
-     * (~0.01 % for R = 300 km).  The result matches the AEQD→Mercator
-     * reprojection performed by radarlib, which also uses flat-earth offsets
-     * via pyproj AEQD.
-     *
-     * @param {number} lat       Radar center latitude  (WGS84 degrees)
-     * @param {number} lng       Radar center longitude (WGS84 degrees)
-     * @param {number} radiusMeters  Coverage radius in metres
-     * @param {number} [nPts=64] Number of polygon vertices
-     * @returns {string} SVG points attribute value
+     * Convert a ground radius in meters to SVG layer pixels
+     * at the given latitude and the current map zoom.
+     * @param {number} lat
+     * @param {number} radiusMeters
+     * @returns {number}
      */
-    _geodeticCirclePoints(lat, lng, radiusMeters, nPts = 64) {
-        const DEG_PER_METER_LAT = 1 / 111320;
-        const DEG_PER_METER_LNG = 1 / (111320 * Math.cos(lat * Math.PI / 180));
-        const pts = [];
-        for (let i = 0; i < nPts; i++) {
-            const angle = (2 * Math.PI * i) / nPts;
-            const dLat = radiusMeters * Math.cos(angle) * DEG_PER_METER_LAT;
-            const dLng = radiusMeters * Math.sin(angle) * DEG_PER_METER_LNG;
-            const px = this._map.latLngToContainerPoint(
-                L.latLng(lat + dLat, lng + dLng)
-            );
-            pts.push(`${px.x},${px.y}`);
-        }
-        return pts.join(' ');
+    _metersToPixels(lat, radiusMeters) {
+        // Compute pixel radius using the same container-point projection
+        // used in _updateCoverageMask so units are consistent with the viewBox.
+        const metersPerDegLng = 111320 * Math.cos(lat * Math.PI / 180);
+        const offsetLng = radiusMeters / metersPerDegLng;
+        const centerPx = this._map.latLngToContainerPoint(L.latLng(lat, 0));
+        const edgePx   = this._map.latLngToContainerPoint(L.latLng(lat, offsetLng));
+        return Math.abs(edgePx.x - centerPx.x);
     }
 
     /**
