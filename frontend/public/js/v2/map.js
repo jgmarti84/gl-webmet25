@@ -778,8 +778,8 @@ export class MapManager {
         const mask = this._coverageSvgEl.querySelector('#radar-coverage-mask');
         if (!mask) return;
 
-        // Remove all existing cutout circles (keep the white base rect)
-        mask.querySelectorAll('circle').forEach(c => c.remove());
+        // Remove all existing cutout ellipses/circles (keep the white base rect)
+        mask.querySelectorAll('ellipse,circle').forEach(c => c.remove());
 
         // Add one black circle per active radar coverage area.
         // Black in SVG mask = fully transparent in the masked element.
@@ -817,8 +817,14 @@ export class MapManager {
             }
 
             if (bbox) {
-                // Pixel-space midpoint — identical to where Leaflet centres
-                // the stretched image element, no trigonometry needed.
+                // The COG is a square pixel array (e.g. 473×473) stretched by
+                // Leaflet over the Mercator bbox screen rectangle.  At southern
+                // latitudes the Mercator bbox is TALLER in screen pixels than it
+                // is wide (sec(lat) scale factor), so the square image is
+                // stretched non-uniformly.  A circular data boundary in the
+                // image therefore appears as an ELLIPSE on screen.
+                // Derive rx (E-W) and ry (N-S) separately from the bbox so the
+                // mask matches the actual rendered data edge exactly.
                 const swPx = this._map.latLngToContainerPoint(
                     L.latLng(bbox.south, bbox.west)
                 );
@@ -827,22 +833,24 @@ export class MapManager {
                 );
                 cx = (swPx.x + nePx.x) / 2;
                 cy = (swPx.y + nePx.y) / 2;
-                // Derive radius directly from the bbox pixel half-width.
-                // The AEQD→Mercator warp maps the east edge of the grid
-                // (x=+R, y=0 in AEQD) to bbox.east, so the pixel half-width
-                // equals the actual radar measurement range in screen pixels.
-                // This is more accurate than converting img_radio (DB value)
-                // through _metersToPixels, which may differ from the real
-                // BUFR range used by the radarlib safeguard mask.
-                radiusPx = (nePx.x - swPx.x) / 2;
+                const rx = (nePx.x - swPx.x) / 2;   // E-W half-width in px
+                const ry = (swPx.y - nePx.y) / 2;   // N-S half-height in px
                 console.log(
-                    `[coverage] ${radarCode} bbox:`,
+                    `[coverage] ${radarCode} ellipse:`,
                     `N=${bbox.north.toFixed(4)} S=${bbox.south.toFixed(4)}`,
                     `W=${bbox.west.toFixed(4)} E=${bbox.east.toFixed(4)}`,
-                    `→ cx=${cx.toFixed(1)} cy=${cy.toFixed(1)} r=${radiusPx.toFixed(1)}px`
+                    `→ cx=${cx.toFixed(1)} cy=${cy.toFixed(1)} rx=${rx.toFixed(1)} ry=${ry.toFixed(1)}`
                 );
+                const ellipse = document.createElementNS(svgNS, 'ellipse');
+                ellipse.setAttribute('cx', String(cx));
+                ellipse.setAttribute('cy', String(cy));
+                ellipse.setAttribute('rx', String(rx));
+                ellipse.setAttribute('ry', String(ry));
+                ellipse.setAttribute('fill', 'black');
+                mask.appendChild(ellipse);
             } else {
-                // Fallback: no frames loaded yet, use DB radar position
+                // Fallback: no frames loaded yet, use DB radar position with
+                // a symmetric circle derived from img_radio.
                 const pt = this._map.latLngToContainerPoint(
                     L.latLng(coverage.lat, coverage.lng)
                 );
@@ -850,17 +858,16 @@ export class MapManager {
                 cy = pt.y;
                 radiusPx = this._metersToPixels(coverage.lat, coverage.radius_m);
                 console.log(
-                    `[coverage] ${radarCode} centre from DB lat/lng (no bbox yet):`,
+                    `[coverage] ${radarCode} circle fallback (no bbox yet):`,
                     `lat=${coverage.lat} lng=${coverage.lng}`
                 );
+                const circle = document.createElementNS(svgNS, 'circle');
+                circle.setAttribute('cx', String(cx));
+                circle.setAttribute('cy', String(cy));
+                circle.setAttribute('r', String(radiusPx));
+                circle.setAttribute('fill', 'black');
+                mask.appendChild(circle);
             }
-
-            const circle = document.createElementNS(svgNS, 'circle');
-            circle.setAttribute('cx', String(cx));
-            circle.setAttribute('cy', String(cy));
-            circle.setAttribute('r', String(radiusPx));
-            circle.setAttribute('fill', 'black');
-            mask.appendChild(circle);
         }
 
         // Sync opacity on the overlay rect
