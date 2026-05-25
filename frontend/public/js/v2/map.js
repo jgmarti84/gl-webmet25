@@ -33,18 +33,24 @@ const BLANK_PNG =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAA' +
     'DUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
-// Available basemap options — identical to v1
+// Available basemap options
 const BASEMAPS = {
-    'dark': {
-        name:        'Dark',
-        url:         'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-        attribution: '© OpenStreetMap contributors, © CARTO',
+    'argenmap': {
+        name:        'IGN Argenmap',
+        url:         'https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+        attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
         maxZoom:     18,
     },
-    'light': {
-        name:        'Light',
-        url:         'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-        attribution: '© OpenStreetMap contributors, © CARTO',
+    'argenmap_gris': {
+        name:        'IGN Argenmap Gris',
+        url:         'https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/mapabase_gris@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+        attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
+        maxZoom:     18,
+    },
+    'argenmap_topo': {
+        name:        'IGN Argenmap Topo',
+        url:         'https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/mapabase_topo@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+        attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
         maxZoom:     18,
     },
     'osm': {
@@ -52,18 +58,6 @@ const BASEMAPS = {
         url:         '/osm-tiles/{z}/{x}/{y}.png',
         attribution: '© OpenStreetMap contributors',
         maxZoom:     19,
-    },
-    'satellite': {
-        name:        'Satellite',
-        url:         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        attribution: 'Tiles © Esri',
-        maxZoom:     18,
-    },
-    'terrain': {
-        name:        'Terrain',
-        url:         'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-        attribution: 'Map data: © OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap',
-        maxZoom:     17,
     },
 };
 
@@ -75,7 +69,7 @@ export class MapManager {
         this._mapElementId  = mapElementId;
         this._map           = null;
         this._baseLayer     = null;
-        this._currentBasemap = 'osm';
+        this._currentBasemap = 'argenmap';
         this._currentOpacity = DEFAULT_OPACITY;
 
         // -----------------------------------------------------------------------
