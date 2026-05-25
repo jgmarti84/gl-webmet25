@@ -827,7 +827,7 @@ export class MapManager {
                 );
                 cx = (swPx.x + nePx.x) / 2;
                 cy = (swPx.y + nePx.y) / 2;
-                console.debug(
+                console.log(
                     `[coverage] ${radarCode} centre from bbox:`,
                     `bbox N=${bbox.north.toFixed(4)} S=${bbox.south.toFixed(4)}`,
                     `→ cx=${cx.toFixed(1)} cy=${cy.toFixed(1)}`
@@ -839,7 +839,7 @@ export class MapManager {
                 );
                 cx = pt.x;
                 cy = pt.y;
-                console.debug(
+                console.log(
                     `[coverage] ${radarCode} centre from DB lat/lng (no bbox yet):`,
                     `lat=${coverage.lat} lng=${coverage.lng}`
                 );
