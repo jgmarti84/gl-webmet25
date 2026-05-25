@@ -804,7 +804,7 @@ export class MapManager {
         // When no bbox is available yet (before frames load) we fall back to the
         // DB radar lat/lng.
         for (const [radarCode, coverage] of this._activeRadarCoverages) {
-            let cx, cy;
+            let cx, cy, radiusPx;
 
             // Search case-insensitively so 'RMA9__DBZH' matches radarCode 'RMA9'
             let bbox = null;
@@ -827,10 +827,19 @@ export class MapManager {
                 );
                 cx = (swPx.x + nePx.x) / 2;
                 cy = (swPx.y + nePx.y) / 2;
+                // Derive radius directly from the bbox pixel half-width.
+                // The AEQD→Mercator warp maps the east edge of the grid
+                // (x=+R, y=0 in AEQD) to bbox.east, so the pixel half-width
+                // equals the actual radar measurement range in screen pixels.
+                // This is more accurate than converting img_radio (DB value)
+                // through _metersToPixels, which may differ from the real
+                // BUFR range used by the radarlib safeguard mask.
+                radiusPx = (nePx.x - swPx.x) / 2;
                 console.log(
-                    `[coverage] ${radarCode} centre from bbox:`,
-                    `bbox N=${bbox.north.toFixed(4)} S=${bbox.south.toFixed(4)}`,
-                    `→ cx=${cx.toFixed(1)} cy=${cy.toFixed(1)}`
+                    `[coverage] ${radarCode} bbox:`,
+                    `N=${bbox.north.toFixed(4)} S=${bbox.south.toFixed(4)}`,
+                    `W=${bbox.west.toFixed(4)} E=${bbox.east.toFixed(4)}`,
+                    `→ cx=${cx.toFixed(1)} cy=${cy.toFixed(1)} r=${radiusPx.toFixed(1)}px`
                 );
             } else {
                 // Fallback: no frames loaded yet, use DB radar position
@@ -839,13 +848,12 @@ export class MapManager {
                 );
                 cx = pt.x;
                 cy = pt.y;
+                radiusPx = this._metersToPixels(coverage.lat, coverage.radius_m);
                 console.log(
                     `[coverage] ${radarCode} centre from DB lat/lng (no bbox yet):`,
                     `lat=${coverage.lat} lng=${coverage.lng}`
                 );
             }
-
-            const radiusPx = this._metersToPixels(coverage.lat, coverage.radius_m);
 
             const circle = document.createElementNS(svgNS, 'circle');
             circle.setAttribute('cx', String(cx));
