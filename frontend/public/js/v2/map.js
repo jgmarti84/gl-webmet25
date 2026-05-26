@@ -211,6 +211,8 @@ export class MapManager {
         if (params.colormap)                            qs.set('colormap', params.colormap);
         if (params.vmin !== undefined && params.vmin !== null) qs.set('vmin', params.vmin);
         if (params.vmax !== undefined && params.vmax !== null) qs.set('vmax', params.vmax);
+        if (params.smooth)                              qs.set('smooth', 'true');
+        if (params.smooth && params.smoothSigma != null) qs.set('smooth_sigma', params.smoothSigma);
         const str = qs.toString();
         return str ? `${base}?${str}` : base;
     }
