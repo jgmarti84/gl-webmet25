@@ -74,6 +74,8 @@ const state = {
     topsCoresLayer: null,
     topsCoresVisible: false,
     topsCoresPointSize: 8,
+    smoothingEnabled: false,
+    smoothingSigma: 0.8,
 };
 
 // =============================================================================
@@ -151,6 +153,8 @@ const SETTINGS_KEY_COVERAGE_OPACITY   = 'webmet25_coverage_opacity';
 const SETTINGS_KEY_TOPS_CORES_VISIBLE = 'webmet25_tops_cores_visible';
 const SETTINGS_KEY_TOPS_CORES_SIZE    = 'webmet25_tops_cores_size';
 const SETTINGS_KEY_ACTIVE_ONLY_LEGACY = 'webmet25_active_only';
+const SETTINGS_KEY_SMOOTH_ENABLED     = 'webmet25_smooth_enabled';
+const SETTINGS_KEY_SMOOTH_SIGMA       = 'webmet25_smooth_sigma';
 
 function getSettingShowInactive() {
     const stored = localStorage.getItem(SETTINGS_KEY_SHOW_INACTIVE);
@@ -196,6 +200,22 @@ function setLiveRefreshIntervalMs(ms) {
 // =============================================================================
 // GEOLOCATION HELPERS (identical to app.js)
 // =============================================================================
+
+/**
+ * Returns a debounced version of *fn* that only fires after *ms* milliseconds
+ * of inactivity. Useful for sliders whose `input` events fire at high frequency.
+ *
+ * @param {Function} fn
+ * @param {number}   ms
+ * @returns {Function}
+ */
+function debounce(fn, ms) {
+    let timer = null;
+    return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), ms);
+    };
+}
 
 function haversineKm(lat1, lon1, lat2, lon2) {
     const R = 6371;
@@ -379,6 +399,22 @@ const app = {
             const stored = localStorage.getItem(SETTINGS_KEY_TOPS_CORES_SIZE);
             state.topsCoresPointSize = stored ? parseInt(stored, 10) : 8;
             topsCoresSizeSlider.value = state.topsCoresPointSize;
+        }
+        // Smooth: restore from localStorage
+        const smoothToggle = document.getElementById('toggle-smoothing');
+        if (smoothToggle) {
+            const stored = localStorage.getItem(SETTINGS_KEY_SMOOTH_ENABLED);
+            state.smoothingEnabled = stored === 'true';
+            smoothToggle.checked = state.smoothingEnabled;
+        }
+        const smoothSigmaSlider = document.getElementById('smoothing-sigma');
+        const smoothSigmaValue  = document.getElementById('smoothing-sigma-value');
+        if (smoothSigmaSlider) {
+            const stored = localStorage.getItem(SETTINGS_KEY_SMOOTH_SIGMA);
+            const sigma  = stored !== null ? parseFloat(stored) : 0.8;
+            state.smoothingSigma = isNaN(sigma) ? 0.8 : Math.min(Math.max(sigma, 0.3), 3.0);
+            smoothSigmaSlider.value = state.smoothingSigma;
+            if (smoothSigmaValue) smoothSigmaValue.textContent = state.smoothingSigma.toFixed(1);
         }
         const speedSlider = document.getElementById('speed-slider');
         const speedValue  = document.getElementById('speed-value');
@@ -600,6 +636,53 @@ const app = {
                     if (state.topsCoresLayer) {
                         state.topsCoresLayer.setPointSize(size);
                     }
+                }
+            });
+        }
+
+        // Gaussian smoothing toggle
+        const smoothToggle = document.getElementById('toggle-smoothing');
+        const smoothSigmaRow = document.getElementById('smoothing-sigma-row');
+        if (smoothToggle) {
+            smoothToggle.addEventListener('change', async (e) => {
+                state.smoothingEnabled = e.target.checked;
+                localStorage.setItem(SETTINGS_KEY_SMOOTH_ENABLED, String(state.smoothingEnabled));
+                if (smoothSigmaRow) {
+                    smoothSigmaRow.style.display = state.smoothingEnabled ? 'block' : 'none';
+                }
+                if (state.animationMode === 'timerange') {
+                    await this._loadFramesWithContinuity(
+                        () => this._fetchTimeRangeFrames(),
+                        { showBadge: true, badgeText: 'Applying…' }
+                    );
+                } else if (state.animationMode === 'latest') {
+                    await this.loadLatestCogs();
+                }
+            });
+        }
+
+        // Gaussian smoothing sigma slider (debounced 400 ms)
+        const smoothSigmaSlider = document.getElementById('smoothing-sigma');
+        const smoothSigmaValue  = document.getElementById('smoothing-sigma-value');
+        if (smoothSigmaSlider) {
+            const debouncedSigmaReload = debounce(async () => {
+                if (state.animationMode === 'timerange') {
+                    await this._loadFramesWithContinuity(
+                        () => this._fetchTimeRangeFrames(),
+                        { showBadge: false }
+                    );
+                } else if (state.animationMode === 'latest') {
+                    await this.loadLatestCogs();
+                }
+            }, 400);
+
+            smoothSigmaSlider.addEventListener('input', (e) => {
+                const sigma = parseFloat(e.target.value);
+                if (!isNaN(sigma)) {
+                    state.smoothingSigma = sigma;
+                    if (smoothSigmaValue) smoothSigmaValue.textContent = sigma.toFixed(1);
+                    localStorage.setItem(SETTINGS_KEY_SMOOTH_SIGMA, String(sigma));
+                    if (state.smoothingEnabled) debouncedSigmaReload();
                 }
             });
         }
@@ -1527,6 +1610,10 @@ const app = {
             document.getElementById('colormap-group').style.display = 'none';
             document.getElementById('range-group').style.display = 'none';
             document.getElementById('field-opacity-group').style.display = 'none';
+            const smoothToggleRowHide = document.getElementById('smoothing-toggle-row');
+            const smoothSigmaRowHide  = document.getElementById('smoothing-sigma-row');
+            if (smoothToggleRowHide) smoothToggleRowHide.style.display = 'none';
+            if (smoothSigmaRowHide)  smoothSigmaRowHide.style.display  = 'none';
             return;
         }
         try {
@@ -1573,6 +1660,13 @@ const app = {
             document.getElementById('colormap-group').style.display = 'block';
             document.getElementById('range-group').style.display = 'block';
             document.getElementById('field-opacity-group').style.display = 'block';
+            // Reveal smoothing toggle; sigma slider follows current state
+            const smoothToggleRow = document.getElementById('smoothing-toggle-row');
+            const smoothSigmaRow  = document.getElementById('smoothing-sigma-row');
+            if (smoothToggleRow) smoothToggleRow.style.display = 'flex';
+            if (smoothSigmaRow) {
+                smoothSigmaRow.style.display = state.smoothingEnabled ? 'block' : 'none';
+            }
             this._syncFieldOpacitySlider();
         } catch (err) {
             console.warn('Failed to load colormap options:', err);
@@ -1619,9 +1713,11 @@ const app = {
      */
     getTileParams() {
         return {
-            colormap: state.selectedColormap || null,
-            vmin:     state.currentVmin,
-            vmax:     state.currentVmax,
+            colormap:    state.selectedColormap || null,
+            vmin:        state.currentVmin,
+            vmax:        state.currentVmax,
+            smooth:      state.smoothingEnabled,
+            smoothSigma: state.smoothingSigma,
         };
     },
 

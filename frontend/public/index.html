@@ -180,6 +180,33 @@
                     <button id="btn-apply-range" class="small-btn apply-btn">Apply</button>
                 </div>
             </div>
+            <!-- Gaussian Smoothing – hidden until product selected -->
+            <div class="control-group toggle-row" id="smoothing-toggle-row" style="display:none;">
+                <label class="toggle-switch-wrapper" for="toggle-smoothing">
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="toggle-smoothing">
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span class="toggle-label">Smooth
+                        <span class="filter-info-tip" aria-label="What does smoothing do?">
+                            ?
+                            <span class="filter-info-popup">
+                                <strong>Gaussian smoothing</strong><br>
+                                Reduces pixel noise on the rendered image.<br>
+                                <!-- &bull; Applied server-side on the raw reflectivity values<br>
+                                &bull; Higher sigma = more blur<br>
+                                &bull; Recommended: sigma 0.5&ndash;1.2<br> -->
+                            </span>
+                        </span>
+                    </span>
+                </label>
+            </div>
+            <div class="control-group" id="smoothing-sigma-row" style="display:none;">
+                <label for="smoothing-sigma">Sigma: <span id="smoothing-sigma-value">0.8</span> px</label>
+                <div class="opacity-control">
+                    <input type="range" id="smoothing-sigma" min="0.3" max="3.0" step="0.1" value="0.8">
+                </div>
+            </div>
         </div>
     </div>
 
