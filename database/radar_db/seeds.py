@@ -269,6 +269,176 @@ class DataSeeder:
         logger.info(f"Seeding complete: {results}")
         return results
 
+    # ------------------------------------------------------------------
+    # Sync (full upsert) — applies every field change from the JSON file
+    # ------------------------------------------------------------------
+
+    def _upsert_radar(self, session: Session, pk: str, fields: dict) -> str:
+        existing = session.query(Radar).filter_by(code=pk).first()
+        kwargs = dict(
+            title=fields.get('title', ''),
+            description=fields.get('description', ''),
+            center_lat=Decimal(str(fields.get('center_lat', 0))),
+            center_long=Decimal(str(fields.get('center_long', 0))),
+            img_radio=fields.get('img_radio', 240),
+            is_active=fields.get('is_active', True),
+            point1_lat=Decimal(str(fields.get('point1_lat', 0))),
+            point1_long=Decimal(str(fields.get('point1_long', 0))),
+            point2_lat=Decimal(str(fields.get('point2_lat', 0))),
+            point2_long=Decimal(str(fields.get('point2_long', 0))),
+        )
+        if existing:
+            for k, v in kwargs.items():
+                setattr(existing, k, v)
+            return 'updated'
+        session.add(Radar(code=pk, **kwargs))
+        return 'inserted'
+
+    def _upsert_product(self, session: Session, pk: int, fields: dict) -> str:
+        product_key = fields.get('product_key', '')
+        existing = session.query(RadarProduct).filter_by(product_key=product_key).first()
+        kwargs = dict(
+            product_title=fields.get('product_title', ''),
+            product_description=fields.get('product_description', ''),
+            enabled=fields.get('enabled', True),
+            see_in_open=fields.get('see_in_open', False),
+        )
+        if existing:
+            for k, v in kwargs.items():
+                setattr(existing, k, v)
+            return 'updated'
+        session.add(RadarProduct(id=pk, product_key=product_key, **kwargs))
+        return 'inserted'
+
+    def _upsert_reference(self, session: Session, pk: int, fields: dict) -> str:
+        product_id = fields.get('product')
+        product = session.query(RadarProduct).filter_by(id=product_id).first()
+        if not product:
+            logger.warning(f"Product {product_id} not found for reference {pk}, skipping")
+            return 'skipped'
+        existing = session.query(Reference).filter_by(id=pk).first()
+        kwargs = dict(
+            product_id=product_id,
+            title=fields.get('title', ''),
+            description=fields.get('description', ''),
+            unit=fields.get('unit', ''),
+            value=float(fields.get('value', 0)),
+            color=fields.get('color', '#000000'),
+            color_font=fields.get('color_font', '#FFFFFF'),
+        )
+        if existing:
+            for k, v in kwargs.items():
+                setattr(existing, k, v)
+            return 'updated'
+        session.add(Reference(id=pk, **kwargs))
+        return 'inserted'
+
+    def _upsert_volumen(self, session: Session, pk: int, fields: dict) -> str:
+        existing = session.query(Volumen).filter_by(id=pk).first()
+        if existing:
+            existing.value = fields.get('value', 0)
+            return 'updated'
+        session.add(Volumen(id=pk, value=fields.get('value', 0)))
+        return 'inserted'
+
+    def _upsert_estrategia(self, session: Session, pk: str, fields: dict) -> str:
+        existing = session.query(Estrategia).filter_by(code=pk).first()
+        if existing:
+            existing.description = fields.get('description', '')
+            action = 'updated'
+        else:
+            existing = Estrategia(code=pk, description=fields.get('description', ''))
+            session.add(existing)
+            action = 'inserted'
+        # Sync volumen relationships
+        volumen_ids = fields.get('volumenes', [])
+        new_volumenes = []
+        for vol_id in volumen_ids:
+            vol = session.query(Volumen).filter_by(id=vol_id).first()
+            if vol:
+                new_volumenes.append(vol)
+            else:
+                logger.warning(f"Volumen {vol_id} not found for estrategia {pk}")
+        existing.volumenes = new_volumenes
+        return action
+
+    def sync_all(self, deactivate_missing_radars: bool = False) -> Dict[str, int]:
+        """
+        Full upsert: apply every value in the JSON file to the database.
+        Existing rows are updated; missing rows are inserted.
+
+        Args:
+            deactivate_missing_radars: if True, Radar rows whose code is not
+                present in the JSON are marked is_active=False.
+        """
+        if not self.load_json():
+            return {"error": "Could not load seed data file"}
+
+        groups = self._group_by_model()
+        results: Dict[str, int] = {}
+
+        def _tally(results: dict, base: str, action: str) -> None:
+            key = f"{base}_{action}"
+            results[key] = results.get(key, 0) + 1
+
+        logger.info(f"Syncing model groups: {list(groups.keys())}")
+
+        with db_manager.get_session() as session:
+            # 1. Radars
+            if 'radar' in groups:
+                json_radar_pks = set()
+                for record in groups['radar']:
+                    pk = record['pk']
+                    json_radar_pks.add(pk)
+                    action = self._upsert_radar(session, pk, record.get('fields', {}))
+                    _tally(results, 'radars', action)
+                session.flush()
+
+                if deactivate_missing_radars:
+                    all_db_radars = session.query(Radar).all()
+                    for r in all_db_radars:
+                        if r.code not in json_radar_pks and r.is_active:
+                            r.is_active = False
+                            _tally(results, 'radars', 'deactivated')
+
+            # 2. Products
+            if 'radarproduct' in groups:
+                for record in groups['radarproduct']:
+                    action = self._upsert_product(
+                        session, record['pk'], record.get('fields', {})
+                    )
+                    _tally(results, 'products', action)
+                session.flush()
+
+            # 3. References
+            if 'reference' in groups:
+                for record in groups['reference']:
+                    action = self._upsert_reference(
+                        session, record['pk'], record.get('fields', {})
+                    )
+                    _tally(results, 'references', action)
+                session.flush()
+
+            # 4. Volumenes
+            if 'volumen' in groups:
+                for record in groups['volumen']:
+                    action = self._upsert_volumen(
+                        session, record['pk'], record.get('fields', {})
+                    )
+                    _tally(results, 'volumenes', action)
+                session.flush()
+
+            # 5. Estrategias
+            if 'estrategia' in groups:
+                for record in groups['estrategia']:
+                    action = self._upsert_estrategia(
+                        session, record['pk'], record.get('fields', {})
+                    )
+                    _tally(results, 'estrategias', action)
+
+        logger.info(f"Sync complete: {results}")
+        return results
+
 
 def run_seeds(data_file: Optional[str] = None) -> Dict[str, int]:
     """
@@ -282,6 +452,26 @@ def run_seeds(data_file: Optional[str] = None) -> Dict[str, int]:
     """
     seeder = DataSeeder(data_file)
     return seeder.seed_all()
+
+
+def sync_seeds(
+    data_file: Optional[str] = None,
+    deactivate_missing_radars: bool = False,
+) -> Dict[str, int]:
+    """
+    Sync the database with the current state of the seed JSON file.
+
+    Unlike run_seeds(), this performs a full upsert:
+      - Existing records are updated to match the JSON values.
+      - New records are inserted.
+      - Optionally, Radar rows whose PK is absent from the JSON are
+        marked is_active=False (safe default: opt-in via flag).
+
+    Returns:
+        Dict with keys like 'radars_updated', 'radars_inserted', etc.
+    """
+    seeder = DataSeeder(data_file)
+    return seeder.sync_all(deactivate_missing_radars=deactivate_missing_radars)
 
 
 if __name__ == "__main__":

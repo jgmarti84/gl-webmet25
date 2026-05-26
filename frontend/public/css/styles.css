@@ -308,6 +308,66 @@ body {
     white-space: nowrap;
 }
 
+/* ── Filter info tooltip (the "?" badge next to "Filtered" label) ── */
+.filter-info-tip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    margin-left: 5px;
+    border-radius: 50%;
+    background: #555;
+    color: #ddd;
+    font-size: 10px;
+    font-weight: bold;
+    cursor: default;
+    position: relative;
+    vertical-align: middle;
+    line-height: 1;
+    user-select: none;
+}
+
+.filter-info-tip:hover {
+    background: #888;
+}
+
+.filter-info-popup {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: 240px;
+    padding: 10px 12px;
+    background: #1e2a38;
+    color: #dce4ef;
+    font-size: 11px;
+    line-height: 1.55;
+    border: 1px solid #3a4f64;
+    border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+    pointer-events: none;
+    white-space: normal;
+    z-index: 1200;
+    font-weight: normal;
+}
+
+/* Arrow pointing down */
+.filter-info-popup::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: #3a4f64;
+}
+
+.filter-info-tip:hover .filter-info-popup {
+    display: block;
+}
+
 /* ============================================================
    MODULE A – RADAR CHECKBOXES
    ============================================================ */

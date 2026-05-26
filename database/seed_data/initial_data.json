@@ -357,9 +357,21 @@
     "fields": {
         "product_key": "COLMAX",
         "product_title": "COLMAX(Z)",
-        "product_description": "Este es un producto colmax tipo DBZH",
+        "product_description": "COLMAX tipo DBZH",
         "enabled": true,
         "see_in_open": true,
+        "unit": "dBZ"
+    }
+},
+{
+    "model": "radar_api.radarproduct",
+    "pk": 19,
+    "fields": {
+        "product_key": "COLMAXo",
+        "product_title": "COLMAX (Z)",
+        "product_description": "COLMAX sin filtrar",
+        "enabled": true,
+        "see_in_open": false,
         "unit": "dBZ"
     }
 },
@@ -368,8 +380,20 @@
     "pk": 2,
     "fields": {
         "product_key": "RHOHV",
-        "product_title": "RHOHV",
-        "product_description": "Coeficiente de correlacion co-polar.",
+        "product_title": "RHOHV@0.5",
+        "product_description": "Coeficiente de correlacion co-polar",
+        "enabled": false,
+        "see_in_open": false,
+        "unit": "-"
+    }
+},
+{
+    "model": "radar_api.radarproduct",
+    "pk": 20,
+    "fields": {
+        "product_key": "RHOHVo",
+        "product_title": "RHOHV@0.5",
+        "product_description": "Coeficiente de correlacion co-polar sin filtrar",
         "enabled": true,
         "see_in_open": false,
         "unit": "-"
@@ -389,11 +413,35 @@
 },
 {
     "model": "radar_api.radarproduct",
+    "pk": 16,
+    "fields": {
+        "product_key": "DBZHo",
+        "product_title": "Z@0.5",
+        "product_description": "Factor de Reflectividad Equivalente sin filtrar",
+        "enabled": true,
+        "see_in_open": false,
+        "unit": "dBZ"
+    }
+},
+{
+    "model": "radar_api.radarproduct",
     "pk": 4,
     "fields": {
         "product_key": "PHIDP",
         "product_title": "PHIDP",
         "product_description": "Diferencia de Propagaci\u00f3n de Fase",
+        "enabled": false,
+        "see_in_open": false,
+        "unit": "\u00b0 (degrees)"
+    }
+},
+{
+    "model": "radar_api.radarproduct",
+    "pk": 17,
+    "fields": {
+        "product_key": "PHIDPo",
+        "product_title": "PHIDP",
+        "product_description": "Diferencia de Propagaci\u00f3n de Fase sin filtrar",
         "enabled": false,
         "see_in_open": false,
         "unit": "\u00b0 (degrees)"
@@ -413,11 +461,35 @@
 },
 {
     "model": "radar_api.radarproduct",
+    "pk": 18,
+    "fields": {
+        "product_key": "DBZVo",
+        "product_title": "DBZV",
+        "product_description": "Factor de Reflectividad Vertical sin filtrar",
+        "enabled": false,
+        "see_in_open": false,
+        "unit": "dBZ"
+    }
+},
+{
+    "model": "radar_api.radarproduct",
     "pk": 7,
     "fields": {
         "product_key": "VRAD",
         "product_title": "VRAD",
         "product_description": "Velocidad Doppler",
+        "enabled": false,
+        "see_in_open": false,
+        "unit": "m/s"
+    }
+},
+{
+    "model": "radar_api.radarproduct",
+    "pk": 22,
+    "fields": {
+        "product_key": "VRADo",
+        "product_title": "VRAD",
+        "product_description": "Velocidad Doppler sin filtrar",
         "enabled": true,
         "see_in_open": false,
         "unit": "m/s"
@@ -430,93 +502,9 @@
         "product_key": "WRAD",
         "product_title": "WRAD",
         "product_description": "Ancho Espectral",
-        "enabled": true,
+        "enabled": false,
         "see_in_open": false,
         "unit": "m"
-    }
-},
-{
-    "model": "radar_api.radarproduct",
-    "pk": 16,
-    "fields": {
-        "product_key": "DBZHo",
-        "product_title": "DBZH sf",
-        "product_description": "DBZH sin filtrar",
-        "enabled": true,
-        "see_in_open": false,
-        "unit": "dBZ"
-    }
-},
-{
-    "model": "radar_api.radarproduct",
-    "pk": 17,
-    "fields": {
-        "product_key": "PHIDPo",
-        "product_title": "PHIDP sf",
-        "product_description": "PHIDP sin filtrar",
-        "enabled": false,
-        "see_in_open": false,
-        "unit": "\u00b0 (degrees)"
-    }
-},
-{
-    "model": "radar_api.radarproduct",
-    "pk": 18,
-    "fields": {
-        "product_key": "DBZVo",
-        "product_title": "DBZV sf",
-        "product_description": "DBZV sin filtrar",
-        "enabled": false,
-        "see_in_open": false,
-        "unit": "dBZ"
-    }
-},
-{
-    "model": "radar_api.radarproduct",
-    "pk": 19,
-    "fields": {
-        "product_key": "COLMAXo",
-        "product_title": "COLMAX sf",
-        "product_description": "COLMAX sin filtrar",
-        "enabled": true,
-        "see_in_open": false,
-        "unit": "dBZ"
-    }
-},
-{
-    "model": "radar_api.radarproduct",
-    "pk": 20,
-    "fields": {
-        "product_key": "RHOHVo",
-        "product_title": "RHOHV@0.5",
-        "product_description": "RHOHV sin filtrar",
-        "enabled": true,
-        "see_in_open": false,
-        "unit": "-"
-    }
-},
-{
-    "model": "radar_api.radarproduct",
-    "pk": 21,
-    "fields": {
-        "product_key": "ZDRo",
-        "product_title": "ZDR sf",
-        "product_description": "ZDR sin filtrar",
-        "enabled": true,
-        "see_in_open": false,
-        "unit": "dB"
-    }
-},
-{
-    "model": "radar_api.radarproduct",
-    "pk": 22,
-    "fields": {
-        "product_key": "VRADo",
-        "product_title": "VRADo sf",
-        "product_description": "VRAD sin filtrar",
-        "enabled": true,
-        "see_in_open": false,
-        "unit": "m/s"
     }
 },
 {
@@ -524,11 +512,59 @@
     "pk": 23,
     "fields": {
         "product_key": "WRADo",
-        "product_title": "WRAD sf",
-        "product_description": "WRAD sin filtrar",
+        "product_title": "WRAD",
+        "product_description": "Ancho Espectral sin filtrar",
         "enabled": true,
         "see_in_open": false,
         "unit": "m"
+    }
+},
+{
+    "model": "radar_api.radarproduct",
+    "pk": 27,
+    "fields": {
+        "product_key": "ZDR",
+        "product_title": "ZDR@0.5",
+        "product_description": "Reflectividad diferencial",
+        "enabled": true,
+        "see_in_open": false,
+        "unit": "dB"
+    }
+},
+{
+    "model": "radar_api.radarproduct",
+    "pk": 21,
+    "fields": {
+        "product_key": "ZDRo",
+        "product_title": "ZDR@0.5",
+        "product_description": "Reflectividad diferencial sin filtrar",
+        "enabled": true,
+        "see_in_open": false,
+        "unit": "dB"
+    }
+},
+{
+    "model": "radar_api.radarproduct",
+    "pk": 26,
+    "fields": {
+        "product_key": "KDP",
+        "product_title": "KDP@0.5",
+        "product_description": "Diferencial de fase espec\u00edfico",
+        "enabled": true,
+        "see_in_open": false,
+        "unit": "\u00b0/km (degrees/km)"
+    }
+},
+{
+    "model": "radar_api.radarproduct",
+    "pk": 28,
+    "fields": {
+        "product_key": "KDPo",
+        "product_title": "KDP@0.5",
+        "product_description": "Diferencial de fase espec\u00edfico sin filtrar",
+        "enabled": true,
+        "see_in_open": false,
+        "unit": "\u00b0/km (degrees/km)"
     }
 },
 {
@@ -551,30 +587,6 @@
         "product_description": "MOSAICO",
         "enabled": false,
         "see_in_open": false
-    }
-},
-{
-    "model": "radar_api.radarproduct",
-    "pk": 26,
-    "fields": {
-        "product_key": "KDP",
-        "product_title": "KDP@0.5",
-        "product_description": "Diferencial de fase espec\u00edfico",
-        "enabled": true,
-        "see_in_open": false,
-        "unit": "\u00b0/km (degrees/km)"
-    }
-},
-{
-    "model": "radar_api.radarproduct",
-    "pk": 27,
-    "fields": {
-        "product_key": "ZDR",
-        "product_title": "ZDR@0.5",
-        "product_description": "Reflectividad diferencial",
-        "enabled": true,
-        "see_in_open": false,
-        "unit": "dB"
     }
 },
 {
@@ -1775,6 +1787,18 @@
     "fields": {
         "description": "#Vol1 240km (TODAS) // Vol2 180km (TODAS)       // Vol3 480km (TH,TV,CM)    // Vol04 240km (TODAS) Error sweeps distinto rango.",
         "volumenes": [
+            4
+        ]
+    }
+},
+{
+    "model": "radar_api.estrategia",
+    "pk": "0315",
+    "fields": {
+        "description": "Sin descripcion",
+        "volumenes": [
+            1,
+            2,
             4
         ]
     }

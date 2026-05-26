@@ -55,6 +55,9 @@ def cog_to_response(cog: RadarCOG, base_url: str = "") -> COGResponse:
         cog_cmap=cog.cog_cmap,
         cog_vmin=cog.cog_vmin,
         cog_vmax=cog.cog_vmax,
+        strategy=cog.estrategia_code,
+        vol_nr=cog.vol_nr,
+        radar_coverage_m=cog.radar_coverage_m,
     )
 
 
@@ -64,40 +67,50 @@ def list_cogs(
     product_key: Optional[str] = None,
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
+    strategy: Optional[str] = Query(default=None, description="Filter by volume strategy, e.g. '0315'"),
+    vol_nr: Optional[str] = Query(default=None, description="Filter by volume number, e.g. '01'"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db)
 ):
     """
     List COG files with filtering.
-    
+
     - **radar_code**: Filter by radar code
     - **product_key**: Filter by product key
+    - **strategy**: Filter by volume strategy code (e.g. ``0315``)
+    - **vol_nr**: Filter by volume number (e.g. ``01``)
     - **start_time**: Filter by observation time >= start_time
     - **end_time**: Filter by observation time <= end_time
     - **page**: Page number (default: 1)
     - **page_size**: Items per page (default: 50, max: 200)
     """
     query = db.query(RadarCOG).filter(RadarCOG.status == COGStatus.AVAILABLE)
-    
+
     if radar_code:
         query = query.filter(RadarCOG.radar_code == radar_code)
-    
+
     if product_key:
-        # Match exact polarimetric_var, OR the same key with an 'o' suffix
-        # (e.g. 'VRAD' should also match COGs stored as 'VRADo'), OR via the
-        # product relationship for product-linked COGs.
+        # Exact match on polarimetric_var so that selecting a filtered field
+        # (e.g. 'DBZH') never returns the unfiltered counterpart ('DBZHo'),
+        # and vice-versa.  Legacy product-linked COGs (polarimetric_var=None)
+        # are matched via the product relationship.
         query = query.filter(
             (RadarCOG.polarimetric_var == product_key) |
-            (RadarCOG.polarimetric_var == product_key + 'o') |
             (RadarCOG.product.has(RadarProduct.product_key == product_key))
         )
-    
+
     if start_time:
         query = query.filter(RadarCOG.observation_time >= start_time)
-    
+
     if end_time:
         query = query.filter(RadarCOG.observation_time <= end_time)
+
+    if strategy:
+        query = query.filter(RadarCOG.estrategia_code == strategy)
+
+    if vol_nr:
+        query = query.filter(RadarCOG.vol_nr == vol_nr)
     
     # Get total count
     total = query.count()
@@ -131,7 +144,7 @@ def get_latest_cog(
         .filter(
             RadarCOG.radar_code == radar_code,
             (RadarCOG.polarimetric_var == product_key) |
-            (RadarCOG.polarimetric_var == product_key + 'o'),
+            (RadarCOG.product.has(RadarProduct.product_key == product_key)),
             RadarCOG.status == COGStatus.AVAILABLE
         )\
         .order_by(desc(RadarCOG.observation_time))\
@@ -166,7 +179,7 @@ def get_timeline(
         .filter(
             RadarCOG.radar_code == radar_code,
             (RadarCOG.polarimetric_var == product_key) |
-            (RadarCOG.polarimetric_var == product_key + 'o'),
+            (RadarCOG.product.has(RadarProduct.product_key == product_key)),
             RadarCOG.status == COGStatus.AVAILABLE,
             RadarCOG.observation_time >= cutoff_time
         )\

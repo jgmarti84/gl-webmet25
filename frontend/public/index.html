@@ -104,16 +104,27 @@
                     <option value="">Select field...</option>
                 </select>
             </div>
-            <!-- Filtered/Unfiltered toggle switch (Change 2)
-                 OFF = show unfiltered fields (no 'o' suffix, processed data)
-                 ON  = show filtered fields ('o' suffix, raw data) -->
+            <!-- Filtered/Unfiltered toggle switch
+                 ON  = show filtered fields (no 'o' suffix, quality-filtered/processed data)
+                 OFF = show unfiltered/raw fields ('o' suffix, no quality filter applied) -->
             <div class="control-group toggle-row">
                 <label class="toggle-switch-wrapper" for="toggle-show-filtered">
                     <span class="toggle-switch">
                         <input type="checkbox" id="toggle-show-filtered">
                         <span class="toggle-slider"></span>
                     </span>
-                    <span class="toggle-label">Filtered</span>
+                    <span class="toggle-label">Filtered
+                        <span class="filter-info-tip" aria-label="What does filtered mean?">
+                            ?
+                            <span class="filter-info-popup">
+                                <strong>Polarimetric filter (GRC)</strong><br>
+                                &bull; RHOHV > 0.87 <br>
+                                <!-- &bull; &#x03C1;<sub>HV</sub> > 0.87<br> -->
+                                <!-- &bull; High texture in differential phase (&Phi;<sub>DP</sub>)<br> -->
+                                &bull; DBZH > 30 dBZ <br>
+                            </span>
+                        </span>
+                    </span>
                 </label>
             </div>
             <!-- Tops & Cores layer controls -->
@@ -218,11 +229,10 @@
             <div class="control-group">
                 <label for="basemap-select">Basemap:</label>
                 <select id="basemap-select">
-                    <option value="dark">Dark</option>
-                    <option value="light">Light</option>
+                    <option value="argenmap" selected>IGN Argenmap</option>
+                    <option value="argenmap_gris">IGN Argenmap Gris</option>
+                    <option value="argenmap_topo">IGN Argenmap Topo</option>
                     <option value="osm">OpenStreetMap</option>
-                    <option value="satellite">Satellite</option>
-                    <option value="terrain">Terrain</option>
                 </select>
             </div>
             <!-- Coverage mask controls -->

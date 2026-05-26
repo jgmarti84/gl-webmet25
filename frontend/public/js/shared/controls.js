@@ -161,7 +161,9 @@ export class UIControls {
      */
     updateFilterToggle(showFiltered) {
         const toggle = document.getElementById('toggle-show-filtered');
-        if (toggle) toggle.checked = showFiltered;
+        // Invert: toggle ON means filtered shown (showUnfilteredProducts=false),
+        // so checked = !showUnfilteredProducts (i.e. !showFiltered)
+        if (toggle) toggle.checked = !showFiltered;
     }
 
     /**
@@ -294,7 +296,7 @@ export class UIControls {
             
             const label = document.createElement('label');
             label.htmlFor = `radar-${radar.code}`;
-            label.textContent = `${radar.title} - ${radar.code}`;
+            label.textContent = `${radar.code} - ${radar.title}`;
             
             item.appendChild(checkbox);
             item.appendChild(dot);

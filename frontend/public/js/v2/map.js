@@ -33,18 +33,24 @@ const BLANK_PNG =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAA' +
     'DUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
-// Available basemap options — identical to v1
+// Available basemap options
 const BASEMAPS = {
-    'dark': {
-        name:        'Dark',
-        url:         'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-        attribution: '© OpenStreetMap contributors, © CARTO',
+    'argenmap': {
+        name:        'IGN Argenmap',
+        url:         'https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+        attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
         maxZoom:     18,
     },
-    'light': {
-        name:        'Light',
-        url:         'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-        attribution: '© OpenStreetMap contributors, © CARTO',
+    'argenmap_gris': {
+        name:        'IGN Argenmap Gris',
+        url:         'https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/mapabase_gris@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+        attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
+        maxZoom:     18,
+    },
+    'argenmap_topo': {
+        name:        'IGN Argenmap Topo',
+        url:         'https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/mapabase_topo@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+        attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
         maxZoom:     18,
     },
     'osm': {
@@ -52,18 +58,6 @@ const BASEMAPS = {
         url:         '/osm-tiles/{z}/{x}/{y}.png',
         attribution: '© OpenStreetMap contributors',
         maxZoom:     19,
-    },
-    'satellite': {
-        name:        'Satellite',
-        url:         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        attribution: 'Tiles © Esri',
-        maxZoom:     18,
-    },
-    'terrain': {
-        name:        'Terrain',
-        url:         'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-        attribution: 'Map data: © OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap',
-        maxZoom:     17,
     },
 };
 
@@ -75,7 +69,7 @@ export class MapManager {
         this._mapElementId  = mapElementId;
         this._map           = null;
         this._baseLayer     = null;
-        this._currentBasemap = 'osm';
+        this._currentBasemap = 'argenmap';
         this._currentOpacity = DEFAULT_OPACITY;
 
         // -----------------------------------------------------------------------
@@ -291,6 +285,12 @@ export class MapManager {
         // object URLs and trigger a re-fetch cycle while holding last frame (LOCF).
 
         this._overlays.set(key, overlay);
+
+        // A new bbox is now available for this radar, so the coverage mask
+        // centre (derived from the Mercator midpoint of the bbox) may have
+        // changed.  Refresh immediately so the circle snaps to the correct
+        // screen position as soon as the first frame is received.
+        this._updateCoverageMask();
     }
 
     /**
@@ -778,24 +778,96 @@ export class MapManager {
         const mask = this._coverageSvgEl.querySelector('#radar-coverage-mask');
         if (!mask) return;
 
-        // Remove all existing cutout circles (keep the white base rect)
-        mask.querySelectorAll('circle').forEach(c => c.remove());
+        // Remove all existing cutout ellipses/circles (keep the white base rect)
+        mask.querySelectorAll('ellipse,circle').forEach(c => c.remove());
 
         // Add one black circle per active radar coverage area.
         // Black in SVG mask = fully transparent in the masked element.
         // Overlapping black circles merge automatically (union).
-        for (const [, coverage] of this._activeRadarCoverages) {
-            const point = this._map.latLngToContainerPoint(
-                L.latLng(coverage.lat, coverage.lng)
-            );
-            const radiusPx = this._metersToPixels(coverage.lat, coverage.radius_m);
+        //
+        // The Mercator projection is conformal: at any single point, the N-S
+        // and E-W scales are both sec(lat), so a geodetic circle of radius R
+        // centred at the radar projects to a circle in Mercator pixel-space to
+        // first order.  _metersToPixels computes that pixel radius by measuring
+        // the E-W Mercator pixel distance for R metres, which is correct.
+        //
+        // However the circle CENTRE must match where the data disc actually
+        // renders on screen.  Leaflet places imageOverlay by computing screen
+        // pixels for the SW and NE bbox corners and stretching the image element
+        // between them.  The visual centre of that image element in screen-pixel
+        // space is therefore the arithmetic mean of the SW and NE container
+        // points — NOT latLngToContainerPoint(radar_lat, radar_lng) — because
+        // the Mercator Y function is non-linear and its midpoint does not map
+        // back to the WGS84 radar latitude.
+        //
+        // We compute cx, cy directly in pixel space from the bbox.
+        // When no bbox is available yet (before frames load) we fall back to the
+        // DB radar lat/lng.
+        for (const [radarCode, coverage] of this._activeRadarCoverages) {
+            let cx, cy, radiusPx;
 
-            const circle = document.createElementNS(svgNS, 'circle');
-            circle.setAttribute('cx', String(point.x));
-            circle.setAttribute('cy', String(point.y));
-            circle.setAttribute('r', String(radiusPx));
-            circle.setAttribute('fill', 'black');
-            mask.appendChild(circle);
+            // Search case-insensitively so 'RMA9__DBZH' matches radarCode 'RMA9'
+            let bbox = null;
+            const prefix = radarCode.toUpperCase() + '__';
+            for (const [key, b] of this._bboxes) {
+                if (key.toUpperCase().startsWith(prefix)) {
+                    bbox = b;
+                    break;
+                }
+            }
+
+            if (bbox) {
+                // The COG is a square pixel array (e.g. 473×473) stretched by
+                // Leaflet over the Mercator bbox screen rectangle.  At southern
+                // latitudes the Mercator bbox is TALLER in screen pixels than it
+                // is wide (sec(lat) scale factor), so the square image is
+                // stretched non-uniformly.  A circular data boundary in the
+                // image therefore appears as an ELLIPSE on screen.
+                // Derive rx (E-W) and ry (N-S) separately from the bbox so the
+                // mask matches the actual rendered data edge exactly.
+                const swPx = this._map.latLngToContainerPoint(
+                    L.latLng(bbox.south, bbox.west)
+                );
+                const nePx = this._map.latLngToContainerPoint(
+                    L.latLng(bbox.north, bbox.east)
+                );
+                cx = (swPx.x + nePx.x) / 2;
+                cy = (swPx.y + nePx.y) / 2;
+                const rx = (nePx.x - swPx.x) / 2;   // E-W half-width in px
+                const ry = (swPx.y - nePx.y) / 2;   // N-S half-height in px
+                console.log(
+                    `[coverage] ${radarCode} ellipse:`,
+                    `N=${bbox.north.toFixed(4)} S=${bbox.south.toFixed(4)}`,
+                    `W=${bbox.west.toFixed(4)} E=${bbox.east.toFixed(4)}`,
+                    `→ cx=${cx.toFixed(1)} cy=${cy.toFixed(1)} rx=${rx.toFixed(1)} ry=${ry.toFixed(1)}`
+                );
+                const ellipse = document.createElementNS(svgNS, 'ellipse');
+                ellipse.setAttribute('cx', String(cx));
+                ellipse.setAttribute('cy', String(cy));
+                ellipse.setAttribute('rx', String(rx));
+                ellipse.setAttribute('ry', String(ry));
+                ellipse.setAttribute('fill', 'black');
+                mask.appendChild(ellipse);
+            } else {
+                // Fallback: no frames loaded yet, use DB radar position with
+                // a symmetric circle derived from img_radio.
+                const pt = this._map.latLngToContainerPoint(
+                    L.latLng(coverage.lat, coverage.lng)
+                );
+                cx = pt.x;
+                cy = pt.y;
+                radiusPx = this._metersToPixels(coverage.lat, coverage.radius_m);
+                console.log(
+                    `[coverage] ${radarCode} circle fallback (no bbox yet):`,
+                    `lat=${coverage.lat} lng=${coverage.lng}`
+                );
+                const circle = document.createElementNS(svgNS, 'circle');
+                circle.setAttribute('cx', String(cx));
+                circle.setAttribute('cy', String(cy));
+                circle.setAttribute('r', String(radiusPx));
+                circle.setAttribute('fill', 'black');
+                mask.appendChild(circle);
+            }
         }
 
         // Sync opacity on the overlay rect

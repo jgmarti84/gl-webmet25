@@ -98,7 +98,23 @@ class COGRegistrar:
                         metadata['cog_vmax'] = float(tags["radarlib_vmax"])
                     except (ValueError, TypeError):
                         pass
-                
+
+                # radarlib production metadata tags (present in new-format COGs)
+                if tags.get("radarlib_strategy"):
+                    metadata['strategy'] = tags["radarlib_strategy"]
+                if tags.get("radarlib_vol_nr"):
+                    metadata['vol_nr'] = tags["radarlib_vol_nr"]
+                if tags.get("radarlib_field_name"):
+                    metadata['field_name'] = tags["radarlib_field_name"]
+                if tags.get("radarlib_radar_coverage_m"):
+                    try:
+                        metadata['radar_coverage_m'] = float(tags["radarlib_radar_coverage_m"])
+                    except (ValueError, TypeError):
+                        logger.warning(
+                            f"Invalid radarlib_radar_coverage_m value in {file_path}: "
+                            f"'{tags['radarlib_radar_coverage_m']}' — skipping"
+                        )
+
                 # Bounding box in WGS84
                 if src.crs:
                     try:
@@ -150,7 +166,7 @@ class COGRegistrar:
         Returns:
             ID of the registered COG, or None if registration failed
         """
-        from radar_db.models import RadarCOG, COGStatus, Radar
+        from radar_db.models import Estrategia, RadarCOG, COGStatus, Radar
         
         # Get relative path for storage
         try:
@@ -173,7 +189,6 @@ class COGRegistrar:
         radar = self.session.query(Radar).filter_by(code=parsed.radar_code).first()
         if not radar:
             logger.warning(f"Unknown radar code: {parsed.radar_code} for file {file_path}")
-            # Optionally: create radar entry or skip
             return None
         
         # Get product ID
@@ -184,7 +199,6 @@ class COGRegistrar:
 
         # Check unique constraint (radar, product, time, elevation) to avoid duplicate inserts
         if product_id is not None:
-            from radar_db.models import RadarCOG
             existing = self.session.query(RadarCOG).filter_by(
                 radar_code=parsed.radar_code,
                 product_id=product_id,
@@ -192,12 +206,42 @@ class COGRegistrar:
                 elevation_angle=parsed.elevation_angle
             ).first()
             if existing:
-                logger.info(f"Skipping already-recorded observation for {parsed.radar_code} {parsed.product_key} at {parsed.observation_time}")
+                logger.info(
+                    f"Skipping already-recorded observation for {parsed.radar_code} "
+                    f"{parsed.product_key} at {parsed.observation_time}"
+                )
                 return None
         
-        # Extract COG metadata
+        # Extract COG metadata from GeoTIFF tags
         cog_metadata = self.extract_cog_metadata(file_path)
-        
+
+        # --- Resolve strategy -------------------------------------------------
+        # Prefer filename-parsed value; fall back to embedded GeoTIFF tag.
+        # Always pop from cog_metadata to prevent it leaking into **cog_metadata.
+        strategy_from_tag = cog_metadata.pop("strategy", None)
+        strategy_code = parsed.strategy or strategy_from_tag
+        estrategia_code = None
+        if strategy_code:
+            strategy_obj = self.session.query(Estrategia).filter_by(code=strategy_code).first()
+            if strategy_obj:
+                estrategia_code = strategy_obj.code
+            else:
+                logger.warning(
+                    f"Strategy '{strategy_code}' not found in database for {file_path}. "
+                    f"COG will be indexed without strategy link."
+                )
+
+        # --- Resolve vol_nr ---------------------------------------------------
+        vol_nr = parsed.vol_nr or cog_metadata.pop("vol_nr", None)
+        cog_metadata.pop("vol_nr", None)  # prevent duplicate kwarg via **cog_metadata
+
+        # --- Pull radar_coverage_m out of metadata dict -----------------------
+        # (must not be passed via **cog_metadata — handled explicitly below)
+        radar_coverage_m = cog_metadata.pop("radar_coverage_m", None)
+
+        # --- Drop tag-only keys that have no matching DB column ---------------
+        cog_metadata.pop("field_name", None)
+
         # Get file stats
         stat = file_path.stat()
         
@@ -213,7 +257,10 @@ class COGRegistrar:
             file_size_bytes=stat.st_size,
             file_mtime=datetime.fromtimestamp(stat.st_mtime),
             status=COGStatus.AVAILABLE,
-            **cog_metadata
+            estrategia_code=estrategia_code,
+            vol_nr=vol_nr,
+            radar_coverage_m=radar_coverage_m,
+            **cog_metadata,
         )
         
         # Optional checksum
@@ -223,7 +270,12 @@ class COGRegistrar:
         try:
             self.session.add(cog)
             self.session.flush()
-            logger.info(f"Indexed: {rel_path} (ID: {cog.id})")
+            logger.info(
+                f"Indexed: {rel_path} (ID: {cog.id}) "
+                f"[radar={parsed.radar_code}, field={parsed.product_key}, "
+                f"strategy={strategy_code}, vol_nr={vol_nr}, "
+                f"coverage={radar_coverage_m} m]"
+            )
             return cog.id
         except Exception as e:
             logger.error(f"Failed to index {rel_path}: {e}")
