@@ -2,11 +2,12 @@
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from radar_db import (
     COGStatus,
@@ -17,15 +18,21 @@ from radar_db import (
     TopsAndCores,
     get_db,
 )
-from radar_db.models import Estrategia, Volumen
+from radar_db.models import Estrategia, Volumen, ColormapStop, ProductColormapOption
 from ..schemas.admin import (
     AdminBulkDeleteResponse,
     AdminCOGListResponse,
     AdminCOGPatchStatus,
     AdminCOGResponse,
+    AdminColormapStopCreate,
+    AdminColormapStopResponse,
+    AdminColormapSummary,
+    AdminColormapCreateFromHex,
     AdminEstrategiaCreate,
     AdminEstrategiaResponse,
     AdminEstrategiaUpdate,
+    AdminProductColormapOptionCreate,
+    AdminProductColormapOptionResponse,
     AdminRadarCreate,
     AdminRadarPatch,
     AdminRadarProductCreate,
@@ -780,3 +787,205 @@ def admin_bulk_delete_tops_cores(
     deleted_count = query.delete(synchronize_session=False)
     db.commit()
     return AdminBulkDeleteResponse(deleted_count=deleted_count)
+
+
+# ── Colormap stops ────────────────────────────────────────────────────────────
+
+
+@router.get("/colormap-stops", response_model=List[AdminColormapSummary])
+def admin_list_colormap_summaries(db: Session = Depends(get_db)):
+    """List all colormaps with stop count and system flag."""
+    rows = (
+        db.query(
+            ColormapStop.cmap_name,
+            func.count(ColormapStop.id).label("stop_count"),
+            func.bool_and(ColormapStop.is_system).label("is_system"),
+        )
+        .group_by(ColormapStop.cmap_name)
+        .order_by(ColormapStop.cmap_name)
+        .all()
+    )
+    return [
+        AdminColormapSummary(cmap_name=r.cmap_name, stop_count=r.stop_count, is_system=r.is_system)
+        for r in rows
+    ]
+
+
+@router.get("/colormap-stops/{cmap_name}", response_model=List[AdminColormapStopResponse])
+def admin_get_colormap_stops(
+    cmap_name: str,
+    db: Session = Depends(get_db),
+):
+    """Get all stops for a specific colormap."""
+    stops = (
+        db.query(ColormapStop)
+        .filter(ColormapStop.cmap_name == cmap_name)
+        .order_by(ColormapStop.channel, ColormapStop.sort_order)
+        .all()
+    )
+    if not stops:
+        raise HTTPException(status_code=404, detail=f"Colormap '{cmap_name}' not found")
+    return stops
+
+
+@router.post("/colormap-stops", response_model=AdminColormapStopResponse, status_code=201)
+def admin_create_colormap_stop(
+    payload: AdminColormapStopCreate,
+    db: Session = Depends(get_db),
+):
+    """Append a single stop row to a colormap."""
+    stop = ColormapStop(**payload.model_dump())
+    db.add(stop)
+    _commit_or_conflict(db, "Failed to create colormap stop")
+    db.refresh(stop)
+    return stop
+
+
+@router.delete("/colormap-stops/{cmap_name}", response_model=AdminBulkDeleteResponse)
+def admin_delete_colormap(
+    cmap_name: str,
+    db: Session = Depends(get_db),
+):
+    """Delete all stops for a non-system colormap."""
+    system_row = (
+        db.query(ColormapStop)
+        .filter(ColormapStop.cmap_name == cmap_name, ColormapStop.is_system.is_(True))
+        .first()
+    )
+    if system_row:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Colormap '{cmap_name}' is a system colormap and cannot be deleted",
+        )
+    deleted = (
+        db.query(ColormapStop)
+        .filter(ColormapStop.cmap_name == cmap_name)
+        .delete(synchronize_session=False)
+    )
+    if deleted == 0:
+        raise HTTPException(status_code=404, detail=f"Colormap '{cmap_name}' not found")
+    db.commit()
+    return AdminBulkDeleteResponse(deleted_count=deleted)
+
+
+# ── Product colormap options ──────────────────────────────────────────────────
+
+
+@router.get("/colormap-options", response_model=List[AdminProductColormapOptionResponse])
+def admin_list_colormap_options(
+    product_key: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """List all product colormap options, optionally filtered by product_key."""
+    query = db.query(ProductColormapOption).order_by(
+        ProductColormapOption.product_key, ProductColormapOption.cmap_name
+    )
+    if product_key:
+        query = query.filter(ProductColormapOption.product_key == product_key.upper())
+    return query.all()
+
+
+@router.post("/colormap-options", response_model=AdminProductColormapOptionResponse, status_code=201)
+def admin_create_colormap_option(
+    payload: AdminProductColormapOptionCreate,
+    db: Session = Depends(get_db),
+):
+    """Add a colormap option to a product."""
+    option = ProductColormapOption(
+        product_key=payload.product_key.upper(),
+        cmap_name=payload.cmap_name,
+    )
+    db.add(option)
+    _commit_or_conflict(db, f"Option '{payload.cmap_name}' already exists for '{payload.product_key}'")
+    db.refresh(option)
+    return option
+
+
+@router.delete("/colormap-options/{option_id}", status_code=204)
+def admin_delete_colormap_option(
+    option_id: int,
+    db: Session = Depends(get_db),
+):
+    """Delete a product colormap option by ID."""
+    option = db.query(ProductColormapOption).get(option_id)
+    if option is None:
+        raise HTTPException(status_code=404, detail=f"Colormap option '{option_id}' not found")
+    db.delete(option)
+    db.commit()
+
+
+# ── Colormap creator (hex stops → channels) ──────────────────────────────────
+
+
+def _hex_to_rgb(hex_color: str):
+    """Convert #RRGGBB to (r_float, g_float, b_float) in [0, 1]."""
+    h = hex_color.lstrip('#')
+    if len(h) != 6:
+        raise ValueError(f"Invalid hex color: {hex_color!r}")
+    return tuple(int(h[i:i+2], 16) / 255.0 for i in (0, 2, 4))
+
+
+@router.post("/colormap-from-hex", response_model=AdminColormapSummary, status_code=201)
+def admin_create_colormap_from_hex(
+    payload: AdminColormapCreateFromHex,
+    db: Session = Depends(get_db),
+):
+    """
+    Create a new colormap from a list of (position, hex_color) stops.
+
+    Each hex stop is expanded into three ColormapStop rows (r, g, b).
+    Optionally add the new colormap as an option for the supplied product_keys.
+    """
+    # Reject if already exists.
+    existing = db.query(ColormapStop).filter(ColormapStop.cmap_name == payload.cmap_name).first()
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Colormap '{payload.cmap_name}' already exists. Delete it first to recreate.",
+        )
+
+    # Validate + convert hex stops.
+    try:
+        rgb_stops = [(s.position, _hex_to_rgb(s.color)) for s in payload.stops]
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    rgb_stops.sort(key=lambda x: x[0])
+
+    # Insert channel rows.
+    channel_names = ('r', 'g', 'b')
+    rows_to_add = []
+    for ch_idx, ch_name in enumerate(channel_names):
+        for sort_order, (position, rgb) in enumerate(rgb_stops):
+            rows_to_add.append(
+                ColormapStop(
+                    cmap_name=payload.cmap_name,
+                    channel=ch_name,
+                    position=position,
+                    val_left=rgb[ch_idx],
+                    val_right=rgb[ch_idx],
+                    sort_order=sort_order,
+                    is_system=False,
+                )
+            )
+    db.bulk_save_objects(rows_to_add)
+
+    # Link to products if requested.
+    for key in payload.product_keys:
+        norm_key = key.upper()
+        # Skip if already linked.
+        already = (
+            db.query(ProductColormapOption)
+            .filter(
+                ProductColormapOption.product_key == norm_key,
+                ProductColormapOption.cmap_name == payload.cmap_name,
+            )
+            .first()
+        )
+        if not already:
+            db.add(ProductColormapOption(product_key=norm_key, cmap_name=payload.cmap_name))
+
+    db.commit()
+
+    stop_count = len(rows_to_add)
+    return AdminColormapSummary(cmap_name=payload.cmap_name, stop_count=stop_count, is_system=False)

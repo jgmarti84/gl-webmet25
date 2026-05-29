@@ -112,6 +112,9 @@ class AdminRadarProductBase(BaseModel):
         default=None, description="Maximum product value"
     )
     unit: Optional[str] = Field(default=None, description="Product unit")
+    default_cmap: Optional[str] = Field(
+        default=None, description="Default colormap name for this product", max_length=64
+    )
 
 
 class AdminRadarProductCreate(AdminRadarProductBase):
@@ -147,6 +150,9 @@ class AdminRadarProductPatch(BaseModel):
         default=None, description="Maximum product value"
     )
     unit: Optional[str] = Field(default=None, description="Product unit")
+    default_cmap: Optional[str] = Field(
+        default=None, description="Default colormap name for this product", max_length=64
+    )
 
 
 class AdminRadarProductResponse(AdminRadarProductBase):
@@ -333,3 +339,81 @@ class AdminTopsAndCoresListResponse(AdminPaginatedResponse):
     """Paginated tops and cores list response."""
 
     items: List[AdminTopsAndCoresResponse] = Field(description="Current page records")
+
+
+# ── Colormap admin schemas ─────────────────────────────────────────────────
+
+
+class AdminColormapSummary(BaseModel):
+    """Summary of a single colormap (one row per distinct cmap_name)."""
+
+    cmap_name: str = Field(description="Colormap identifier")
+    stop_count: int = Field(description="Total stop rows across all channels")
+    is_system: bool = Field(description="System colormaps cannot be deleted")
+
+
+class AdminColormapStopResponse(BaseModel):
+    """Single colormap stop row."""
+
+    id: int
+    cmap_name: str
+    channel: str
+    position: float
+    val_left: float
+    val_right: float
+    sort_order: int
+    is_system: bool
+
+    class Config:
+        from_attributes = True
+
+
+class AdminColormapStopCreate(BaseModel):
+    """Create a single colormap stop."""
+
+    cmap_name: str = Field(description="Colormap identifier", max_length=64)
+    channel: str = Field(description="Colour channel: r, g or b", max_length=1)
+    position: float = Field(description="Normalised position in [0, 1]")
+    val_left: float = Field(description="Channel value approaching this position")
+    val_right: float = Field(description="Channel value leaving this position")
+    sort_order: int = Field(default=0, description="Stable ordering within (cmap_name, channel)")
+    is_system: bool = Field(default=False, description="Mark as system colormap")
+
+
+class AdminProductColormapOptionResponse(BaseModel):
+    """Product colormap option row."""
+
+    id: int
+    product_key: str
+    cmap_name: str
+
+    class Config:
+        from_attributes = True
+
+
+class AdminProductColormapOptionCreate(BaseModel):
+    """Create a product colormap option."""
+
+    product_key: str = Field(description="Product key", max_length=16)
+    cmap_name: str = Field(description="Colormap name", max_length=64)
+
+
+class AdminColormapHexStop(BaseModel):
+    """A single (position, hex_color) stop for colormap creation."""
+
+    position: float = Field(description="Normalised position in [0, 1]", ge=0.0, le=1.0)
+    color: str = Field(description="Hex color string, e.g. #FF0000", max_length=7)
+
+
+class AdminColormapCreateFromHex(BaseModel):
+    """Create a new colormap from a list of hex color stops."""
+
+    cmap_name: str = Field(description="New colormap name (must be unique)", max_length=64)
+    stops: List[AdminColormapHexStop] = Field(
+        description="List of (position, hex_color) stops. Minimum 2.",
+        min_length=2,
+    )
+    product_keys: List[str] = Field(
+        default_factory=list,
+        description="Product keys to add this colormap as an option for",
+    )

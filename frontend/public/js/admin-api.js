@@ -124,6 +124,23 @@ export const adminApi = {
     patchTopsCoresStatus(id, status) { return request(`/tops-cores/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }); },
     deleteTopsCores(id) { return request(`/tops-cores/${id}`, { method: 'DELETE' }); },
 
+    // Colormap stops
+    listColormapSummaries() { return request('/colormap-stops'); },
+    getColormapStops(cmapName) { return request(`/colormap-stops/${encodeURIComponent(cmapName)}`); },
+    deleteColormap(cmapName) { return request(`/colormap-stops/${encodeURIComponent(cmapName)}`, { method: 'DELETE' }); },
+    createColormapStop(payload) { return request('/colormap-stops', { method: 'POST', body: JSON.stringify(payload) }); },
+
+    // Colormap creator (hex stops → server-side channel conversion)
+    createColormapFromHex(payload) { return request('/colormap-from-hex', { method: 'POST', body: JSON.stringify(payload) }); },
+
+    // Product colormap options
+    listColormapOptions(productKey) {
+        const q = productKey ? buildQuery({ product_key: productKey }) : '';
+        return request(`/colormap-options${q}`);
+    },
+    createColormapOption(payload) { return request('/colormap-options', { method: 'POST', body: JSON.stringify(payload) }); },
+    deleteColormapOption(id) { return request(`/colormap-options/${id}`, { method: 'DELETE' }); },
+
     async bulkDelete(resource, filters) {
         const data = await request(`/${resource}${buildQuery(filters)}`, { method: 'DELETE' });
         return data?.deleted_count ?? 0;

@@ -281,3 +281,127 @@ th button {
         position: static;
     }
 }
+
+/* ── Colormap creator modal ───────────────────────────────────────────────── */
+
+.modal-card--wide {
+    max-width: 820px;
+    width: 95vw;
+}
+
+.creator-body {
+    display: flex;
+    gap: 24px;
+    padding: 16px 0 8px;
+}
+
+.creator-left {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+}
+
+.creator-left label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+}
+
+.creator-left label input[type="text"] {
+    padding: 6px 8px;
+    border-radius: 4px;
+    border: 1px solid #444;
+    background: #1e1e2e;
+    color: #eee;
+    font-size: 13px;
+}
+
+.creator-right {
+    width: 72px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #aaa;
+}
+
+#creator-canvas {
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.15);
+    flex-shrink: 0;
+}
+
+#creator-preview-labels {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 200px;
+    font-size: 10px;
+    color: #aaa;
+    font-family: 'Courier New', monospace;
+    align-items: flex-start;
+}
+
+.creator-stops-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+}
+
+#creator-stops-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.creator-stop-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.creator-stop-row input[type="number"] {
+    width: 72px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    border: 1px solid #444;
+    background: #1e1e2e;
+    color: #eee;
+    font-size: 12px;
+}
+
+.creator-stop-row input[type="color"] {
+    width: 40px;
+    height: 28px;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+#creator-products-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 4px;
+    font-size: 12px;
+}
+
+#creator-products-list label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    flex-direction: row;
+}
+
+.toolbar-note {
+    font-size: 12px;
+    color: #888;
+}

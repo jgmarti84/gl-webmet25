@@ -1,6 +1,6 @@
 import { adminApi, EXPIRED_SESSION_MESSAGE } from './admin-api.js';
 
-const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores'];
+const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'colormaps', 'colormap-options'];
 const STATUS_OPTIONS = ['available', 'missing', 'error', 'pending', 'processing', 'archived'];
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
@@ -14,6 +14,8 @@ const state = {
         references: 'id',
         estrategias: 'code',
         volumenes: 'id',
+        colormaps: 'cmap_name',
+        'colormap-options': 'product_key',
     },
     sortDir: {
         radars: 'asc',
@@ -21,6 +23,8 @@ const state = {
         references: 'asc',
         estrategias: 'asc',
         volumenes: 'asc',
+        colormaps: 'asc',
+        'colormap-options': 'asc',
     },
     cogs: {
         page: 1,
@@ -45,6 +49,7 @@ const elements = {
     formModalTitle: document.getElementById('form-modal-title'),
     formModalBody: document.getElementById('form-modal-body'),
     closeFormModal: document.getElementById('close-form-modal'),
+    creatorModal: document.getElementById('creator-modal'),
 };
 
 function showMessage(text, type = 'success') {
@@ -285,6 +290,7 @@ async function renderProducts() {
                     <th>Min</th>
                     <th>Max</th>
                     <th>Unit</th>
+                    <th>Default Cmap</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -299,6 +305,7 @@ async function renderProducts() {
                         <td>${safeText(product.min_value)}</td>
                         <td>${safeText(product.max_value)}</td>
                         <td>${safeText(product.unit)}</td>
+                        <td>${safeText(product.default_cmap)}</td>
                         <td class="table-actions">
                             <button class="btn-secondary" data-edit-product="${product.id}">Edit</button>
                             <button class="btn-danger" data-delete-product="${product.id}">Delete</button>
@@ -353,6 +360,7 @@ function openProductForm(product = null) {
             <label>Min Value <input name="min_value" type="number" step="any" value="${safeText(product?.min_value)}"></label>
             <label>Max Value <input name="max_value" type="number" step="any" value="${safeText(product?.max_value)}"></label>
             <label>Unit <input name="unit" value="${safeText(product?.unit)}"></label>
+            <label>Default Colormap <input name="default_cmap" maxlength="64" value="${safeText(product?.default_cmap)}" placeholder="e.g. grc_th"></label>
             <div class="form-actions"><button class="btn" type="submit">${isEdit ? 'Save' : 'Create'}</button></div>
         `,
         async (formData) => {
@@ -361,6 +369,7 @@ function openProductForm(product = null) {
             payload.see_in_open = payload.see_in_open === 'true';
             payload.min_value = payload.min_value ? Number(payload.min_value) : null;
             payload.max_value = payload.max_value ? Number(payload.max_value) : null;
+            payload.default_cmap = payload.default_cmap?.trim() || null;
             if (isEdit) {
                 await adminApi.updateProduct(product.id, payload);
                 showMessage(`Product ${product.id} updated`, 'success');
@@ -1055,6 +1064,318 @@ async function renderTopsCores() {
     };
 }
 
+// ── Colormap creator ──────────────────────────────────────────────────────────
+
+function openColormapCreator(products) {
+    /** In-memory stops state: array of {position: number, color: hex string} */
+    let creatorStops = [
+        { position: 0.0, color: '#000000' },
+        { position: 1.0, color: '#ffffff' },
+    ];
+
+    const modal = elements.creatorModal;
+    modal.classList.remove('hidden');
+
+    const stopsList = document.getElementById('creator-stops-list');
+    const canvas = document.getElementById('creator-canvas');
+    const previewLabels = document.getElementById('creator-preview-labels');
+    const productsList = document.getElementById('creator-products-list');
+
+    /** Populate product checkboxes (done once). */
+    productsList.innerHTML = products
+        .map((p) => `<label><input type="checkbox" value="${safeText(p.product_key)}"> ${safeText(p.product_key)}</label>`)
+        .join('');
+
+    /** Draw gradient preview on the canvas. */
+    function drawPreview() {
+        const ctx = canvas.getContext('2d');
+        const sorted = [...creatorStops].sort((a, b) => a.position - b.position);
+        const h = canvas.height;
+        for (let y = 0; y < h; y++) {
+            const t = 1 - y / (h - 1); // top = position 1, bottom = position 0
+            // Interpolate color at t.
+            let r = 0, g = 0, b = 0;
+            if (sorted.length === 0) {
+                // nothing
+            } else if (t <= sorted[0].position) {
+                const c = sorted[0].color;
+                r = parseInt(c.slice(1, 3), 16);
+                g = parseInt(c.slice(3, 5), 16);
+                b = parseInt(c.slice(5, 7), 16);
+            } else if (t >= sorted[sorted.length - 1].position) {
+                const c = sorted[sorted.length - 1].color;
+                r = parseInt(c.slice(1, 3), 16);
+                g = parseInt(c.slice(3, 5), 16);
+                b = parseInt(c.slice(5, 7), 16);
+            } else {
+                for (let i = 0; i < sorted.length - 1; i++) {
+                    const s0 = sorted[i], s1 = sorted[i + 1];
+                    if (t >= s0.position && t <= s1.position) {
+                        const frac = (t - s0.position) / (s1.position - s0.position);
+                        const parseHex = (hex) => [
+                            parseInt(hex.slice(1, 3), 16),
+                            parseInt(hex.slice(3, 5), 16),
+                            parseInt(hex.slice(5, 7), 16),
+                        ];
+                        const [r0, g0, b0] = parseHex(s0.color);
+                        const [r1, g1, b1] = parseHex(s1.color);
+                        r = Math.round(r0 + frac * (r1 - r0));
+                        g = Math.round(g0 + frac * (g1 - g0));
+                        b = Math.round(b0 + frac * (b1 - b0));
+                        break;
+                    }
+                }
+            }
+            ctx.fillStyle = `rgb(${r},${g},${b})`;
+            ctx.fillRect(0, y, canvas.width, 1);
+        }
+        // Update labels: top = position 1, bottom = position 0
+        previewLabels.innerHTML = '<span>1.0</span><span>0.5</span><span>0.0</span>';
+    }
+
+    /** Re-render the stops list and refresh the preview. */
+    function rebuildStops() {
+        stopsList.innerHTML = creatorStops
+            .map((s, i) => `
+                <div class="creator-stop-row" data-idx="${i}">
+                    <input type="number" class="stop-pos" min="0" max="1" step="0.01"
+                           value="${s.position}" data-idx="${i}">
+                    <input type="color" class="stop-color" value="${safeHexColor(s.color, '#888888')}" data-idx="${i}">
+                    <button type="button" class="btn-danger btn-sm stop-remove" data-idx="${i}">✕</button>
+                </div>
+            `)
+            .join('');
+
+        stopsList.querySelectorAll('.stop-pos').forEach((input) => {
+            input.oninput = () => {
+                const idx = parseInt(input.dataset.idx, 10);
+                const val = parseFloat(input.value);
+                if (!isNaN(val)) {
+                    creatorStops[idx].position = Math.min(1, Math.max(0, val));
+                    drawPreview();
+                }
+            };
+        });
+        stopsList.querySelectorAll('.stop-color').forEach((input) => {
+            input.oninput = () => {
+                const idx = parseInt(input.dataset.idx, 10);
+                creatorStops[idx].color = input.value;
+                drawPreview();
+            };
+        });
+        stopsList.querySelectorAll('.stop-remove').forEach((btn) => {
+            btn.onclick = () => {
+                const idx = parseInt(btn.dataset.idx, 10);
+                if (creatorStops.length <= 2) {
+                    showMessage('A colormap needs at least 2 stops.', 'error');
+                    return;
+                }
+                creatorStops.splice(idx, 1);
+                rebuildStops();
+                drawPreview();
+            };
+        });
+
+        drawPreview();
+    }
+
+    rebuildStops();
+
+    document.getElementById('creator-add-stop').onclick = () => {
+        creatorStops.push({ position: 0.5, color: '#888888' });
+        rebuildStops();
+    };
+
+    document.getElementById('creator-save').onclick = async () => {
+        const cmapName = document.getElementById('creator-name').value.trim();
+        if (!cmapName) {
+            showMessage('Colormap name is required.', 'error');
+            return;
+        }
+        if (creatorStops.length < 2) {
+            showMessage('At least 2 stops are required.', 'error');
+            return;
+        }
+        const productKeys = [...productsList.querySelectorAll('input[type=checkbox]:checked')]
+            .map((cb) => cb.value);
+        try {
+            await adminApi.createColormapFromHex({
+                cmap_name: cmapName,
+                stops: creatorStops.map((s) => ({ position: s.position, color: s.color })),
+                product_keys: productKeys,
+            });
+            // Invalidate the in-process cache so the API picks up the new colormap.
+            await fetch('/api/v1/colormap/cache/invalidate', { method: 'POST' });
+            modal.classList.add('hidden');
+            showMessage(`Colormap "${cmapName}" created`, 'success');
+            renderSection();
+        } catch (error) {
+            showMessage(error.message || 'Failed to create colormap', 'error');
+        }
+    };
+}
+
+async function renderColormaps() {
+    const [cmaps, products] = await Promise.all([
+        adminApi.listColormapSummaries(),
+        adminApi.listProducts(),
+    ]);
+    const sorted = sortItems(cmaps, 'colormaps');
+
+    elements.sectionContent.innerHTML = `
+        <div class="toolbar">
+            <button class="btn" id="cmap-creator-open">Create Colormap</button>
+            <span class="toolbar-note">${sorted.length} colormap(s). System colormaps cannot be deleted.</span>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th><button data-sort="cmap_name" data-section="colormaps">Name</button></th>
+                    <th><button data-sort="stop_count" data-section="colormaps">Stops</button></th>
+                    <th>System</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${sorted.map((c) => `
+                    <tr>
+                        <td>${safeText(c.cmap_name)}</td>
+                        <td>${c.stop_count}</td>
+                        <td>${c.is_system ? '✔' : ''}</td>
+                        <td class="table-actions">
+                            <button class="btn-secondary" data-view-cmap="${safeText(c.cmap_name)}">View Stops</button>
+                            ${!c.is_system ? `<button class="btn-danger" data-delete-cmap="${safeText(c.cmap_name)}">Delete</button>` : ''}
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+
+    elements.sectionContent.querySelectorAll('[data-sort]').forEach((btn) => {
+        btn.onclick = () => switchSort('colormaps', btn.dataset.sort);
+    });
+
+    document.getElementById('cmap-creator-open').onclick = () => openColormapCreator(products);
+
+    elements.sectionContent.querySelectorAll('[data-view-cmap]').forEach((btn) => {
+        btn.onclick = async () => {
+            const name = btn.dataset.viewCmap;
+            const stops = await adminApi.getColormapStops(name);
+            const rows = stops.map((s) => `
+                <tr>
+                    <td>${safeText(s.channel)}</td>
+                    <td>${s.position.toFixed(4)}</td>
+                    <td>${s.val_left.toFixed(4)}</td>
+                    <td>${s.val_right.toFixed(4)}</td>
+                    <td>${s.sort_order}</td>
+                </tr>
+            `).join('');
+            openFormModal(`Stops for ${name}`, `
+                <div style="overflow:auto;max-height:60vh;">
+                    <table>
+                        <thead><tr><th>Ch</th><th>Position</th><th>Val Left</th><th>Val Right</th><th>Order</th></tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+                <div style="text-align:right;margin-top:8px;">
+                    <button type="button" class="btn btn-secondary" id="close-stops-modal">Close</button>
+                </div>
+            `, async () => {});
+            document.getElementById('close-stops-modal')?.addEventListener('click', closeFormModal);
+        };
+    });
+
+    elements.sectionContent.querySelectorAll('[data-delete-cmap]').forEach((btn) => {
+        btn.onclick = async () => {
+            const name = btn.dataset.deleteCmap;
+            if (!requireConfirmation(`colormap "${name}"`)) return;
+            try {
+                await adminApi.deleteColormap(name);
+                showMessage(`Colormap "${name}" deleted`, 'success');
+                renderSection();
+            } catch (error) {
+                showMessage(error.message, 'error');
+            }
+        };
+    });
+}
+
+async function renderColormapOptions() {
+    const [options, cmaps, products] = await Promise.all([
+        adminApi.listColormapOptions(),
+        adminApi.listColormapSummaries(),
+        adminApi.listProducts(),
+    ]);
+    const sorted = sortItems(options, 'colormap-options');
+
+    const cmapOpts = cmaps.map((c) => `<option value="${safeText(c.cmap_name)}">${safeText(c.cmap_name)}</option>`).join('');
+    const productOpts = products.map((p) => `<option value="${safeText(p.product_key)}">${safeText(p.product_key)}</option>`).join('');
+
+    elements.sectionContent.innerHTML = `
+        <div class="toolbar">
+            <button class="btn" id="cmap-option-add">Add Option</button>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th><button data-sort="product_key" data-section="colormap-options">Product Key</button></th>
+                    <th><button data-sort="cmap_name" data-section="colormap-options">Colormap</button></th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${sorted.map((opt) => `
+                    <tr>
+                        <td>${safeText(opt.product_key)}</td>
+                        <td>${safeText(opt.cmap_name)}</td>
+                        <td class="table-actions">
+                            <button class="btn-danger" data-delete-cmap-option="${opt.id}">Remove</button>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+
+    elements.sectionContent.querySelectorAll('[data-sort]').forEach((btn) => {
+        btn.onclick = () => switchSort('colormap-options', btn.dataset.sort);
+    });
+
+    document.getElementById('cmap-option-add').onclick = () => {
+        openFormModal('Add Colormap Option', `
+            <label>Product Key
+                <select name="product_key" required>${productOpts}</select>
+            </label>
+            <label>Colormap
+                <select name="cmap_name" required>${cmapOpts}</select>
+            </label>
+            <button type="submit" class="btn">Add</button>
+        `, async (formData) => {
+            await adminApi.createColormapOption({
+                product_key: formData.get('product_key'),
+                cmap_name: formData.get('cmap_name'),
+            });
+            showMessage('Colormap option added', 'success');
+            renderSection();
+        });
+    };
+
+    elements.sectionContent.querySelectorAll('[data-delete-cmap-option]').forEach((btn) => {
+        btn.onclick = async () => {
+            const id = parseInt(btn.dataset.deleteCmapOption, 10);
+            if (!requireConfirmation(`colormap option #${id}`)) return;
+            try {
+                await adminApi.deleteColormapOption(id);
+                showMessage('Colormap option removed', 'success');
+                renderSection();
+            } catch (error) {
+                showMessage(error.message, 'error');
+            }
+        };
+    });
+}
+
 async function renderSection() {
     hideMessage();
     state.section = parseHashSection();
@@ -1069,6 +1390,8 @@ async function renderSection() {
         estrategias: 'Estrategias',
         volumenes: 'Volumenes',
         'tops-cores': 'Tops & Cores',
+        colormaps: 'Colormaps',
+        'colormap-options': 'Colormap Options',
     };
     elements.sectionTitle.textContent = titleBySection[state.section] || 'Dashboard';
 
@@ -1081,6 +1404,8 @@ async function renderSection() {
         if (state.section === 'estrategias') await renderEstrategias();
         if (state.section === 'volumenes') await renderVolumenes();
         if (state.section === 'tops-cores') await renderTopsCores();
+        if (state.section === 'colormaps') await renderColormaps();
+        if (state.section === 'colormap-options') await renderColormapOptions();
     } catch (error) {
         if ((error.message || '').includes(EXPIRED_SESSION_MESSAGE)) {
             showMessage(EXPIRED_SESSION_MESSAGE, 'error');
@@ -1095,6 +1420,14 @@ function init() {
     elements.formModal.addEventListener('click', (event) => {
         if (event.target === elements.formModal) {
             closeFormModal();
+        }
+    });
+    document.getElementById('close-creator-modal').onclick = () => {
+        elements.creatorModal.classList.add('hidden');
+    };
+    elements.creatorModal.addEventListener('click', (event) => {
+        if (event.target === elements.creatorModal) {
+            elements.creatorModal.classList.add('hidden');
         }
     });
     window.addEventListener('hashchange', renderSection);

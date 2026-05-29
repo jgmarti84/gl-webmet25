@@ -19,6 +19,8 @@
                 <a href="#estrategias" data-section="estrategias">Estrategias</a>
                 <a href="#volumenes" data-section="volumenes">Volumenes</a>
                 <a href="#tops-cores" data-section="tops-cores">Tops &amp; Cores</a>
+                <a href="#colormaps" data-section="colormaps">Colormaps</a>
+                <a href="#colormap-options" data-section="colormap-options">Colormap Options</a>
             </nav>
         </aside>
 
@@ -44,5 +46,45 @@
     </div>
 
     <script type="module" src="/js/admin.js"></script>
+
+    <!-- Colormap creator modal (separate from the generic form-modal) -->
+    <div id="creator-modal" class="modal hidden" role="dialog" aria-modal="true">
+        <div class="modal-card modal-card--wide">
+            <div class="modal-header">
+                <h2>Create Colormap</h2>
+                <button id="close-creator-modal" class="btn btn-secondary" type="button">Close</button>
+            </div>
+            <div class="creator-body">
+                <!-- Left column: controls -->
+                <div class="creator-left">
+                    <label>Name
+                        <input id="creator-name" type="text" maxlength="64" placeholder="my_colormap" required>
+                    </label>
+
+                    <div class="creator-stops-header">
+                        <strong>Stops</strong>
+                        <button id="creator-add-stop" type="button" class="btn btn-secondary btn-sm">+ Add Stop</button>
+                    </div>
+                    <div id="creator-stops-list"></div>
+
+                    <div id="creator-products-section">
+                        <strong>Assign to Products</strong>
+                        <div id="creator-products-list"></div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button id="creator-save" type="button" class="btn">Create Colormap</button>
+                    </div>
+                </div>
+
+                <!-- Right column: live preview -->
+                <div class="creator-right">
+                    <strong>Preview</strong>
+                    <canvas id="creator-canvas" width="32" height="200"></canvas>
+                    <div id="creator-preview-labels"></div>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
