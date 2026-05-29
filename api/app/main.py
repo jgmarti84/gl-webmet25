@@ -10,15 +10,23 @@ import rasterio
 from rasterio.env import Env
 
 from .config import settings
-from .routers import radars_router, products_router, cogs_router, tiles_router, colormap_router, frames_router, tops_cores_router
+from .routers import (
+    admin_router,
+    cogs_router,
+    colormap_router,
+    frames_router,
+    products_router,
+    radars_router,
+    tiles_router,
+    tops_cores_router,
+)
 from .schemas import HealthResponse
 from .services.tile_service import _tile_render_executor
 from .services.redis_client import get_redis, close_redis
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -144,10 +152,7 @@ async def add_timing_header(request: Request, call_next):
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error"}
-    )
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 # Include routers
@@ -158,6 +163,7 @@ app.include_router(tiles_router, prefix=settings.api_prefix)
 app.include_router(colormap_router, prefix=settings.api_prefix)
 app.include_router(frames_router, prefix=settings.api_prefix)
 app.include_router(tops_cores_router, prefix=settings.api_prefix)
+app.include_router(admin_router, prefix=settings.api_prefix)
 
 
 # Health check endpoints
@@ -166,13 +172,13 @@ def health_check():
     """Basic health check."""
     from radar_db import check_db_connection
     from datetime import datetime
-    
+
     db_ok = check_db_connection()
-    
+
     return HealthResponse(
         status="ok" if db_ok else "degraded",
         database=db_ok,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.utcnow(),
     )
 
 

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebMet25 Admin</title>
+    <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+    <div class="admin-layout">
+        <aside class="sidebar">
+            <div class="sidebar-brand">WebMet25 Admin</div>
+            <nav id="sidebar-nav">
+                <a href="#dashboard" data-section="dashboard" class="active">Dashboard</a>
+                <a href="#radars" data-section="radars">Radars</a>
+                <a href="#products" data-section="products">Products</a>
+                <a href="#references" data-section="references">References</a>
+                <a href="#cogs" data-section="cogs">COGs</a>
+                <a href="#estrategias" data-section="estrategias">Estrategias</a>
+                <a href="#volumenes" data-section="volumenes">Volumenes</a>
+                <a href="#tops-cores" data-section="tops-cores">Tops &amp; Cores</a>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <header class="page-header">
+                <h1 id="section-title">Dashboard</h1>
+                <p class="logout-hint">Logout note: HTTP Basic Auth is browser-managed. Close browser session or clear credentials to sign out.</p>
+            </header>
+
+            <div id="feedback-message" class="feedback-message hidden"></div>
+            <section id="section-content"></section>
+        </main>
+    </div>
+
+    <div id="form-modal" class="modal hidden" role="dialog" aria-modal="true">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2 id="form-modal-title">Edit</h2>
+                <button id="close-form-modal" class="btn btn-secondary" type="button">Close</button>
+            </div>
+            <form id="form-modal-body" class="form-grid"></form>
+        </div>
+    </div>
+
+    <script type="module" src="/js/admin.js"></script>
+</body>
+</html>

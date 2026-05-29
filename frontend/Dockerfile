@@ -16,6 +16,9 @@ FROM nginx:alpine
 
 ARG FE_VERSION=v1
 
+# Install htpasswd utility for admin basic auth file generation
+RUN apk add --no-cache apache2-utils
+
 # Copy all static files
 COPY frontend/public/ /usr/share/nginx/html/
 
@@ -27,5 +30,10 @@ RUN sed -i \
 # Copy unified nginx config
 COPY frontend/nginx.conf /etc/nginx/nginx.conf
 
+# Generate htpasswd at container startup
+COPY frontend/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
 EXPOSE 80
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]
