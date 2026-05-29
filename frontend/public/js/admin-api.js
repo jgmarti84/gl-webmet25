@@ -1,5 +1,5 @@
 const ADMIN_API_BASE = '/api/v1/admin';
-const EXPIRED_SESSION_MESSAGE = 'Your admin session has expired. Refresh the page and sign in again.';
+const EXPIRED_SESSION_MESSAGE = 'Authentication failed. Refresh the page and verify your admin credentials.';
 
 function buildQuery(params = {}) {
     const search = new URLSearchParams();

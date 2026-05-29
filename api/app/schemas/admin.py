@@ -1,4 +1,5 @@
 """Admin request/response schemas."""
+
 from datetime import datetime
 from typing import List, Optional
 
@@ -23,7 +24,9 @@ class AdminRadarBase(BaseModel):
     """Shared radar fields for admin requests."""
 
     title: str = Field(description="Radar display title", max_length=64)
-    description: Optional[str] = Field(default=None, description="Radar description", max_length=64)
+    description: Optional[str] = Field(
+        default=None, description="Radar description", max_length=64
+    )
     center_lat: float = Field(description="Radar center latitude")
     center_long: float = Field(description="Radar center longitude")
     img_radio: int = Field(description="Radar coverage radius")
@@ -47,24 +50,46 @@ class AdminRadarUpdate(AdminRadarBase):
 class AdminRadarPatch(BaseModel):
     """Partial radar update payload."""
 
-    title: Optional[str] = Field(default=None, description="Radar display title", max_length=64)
-    description: Optional[str] = Field(default=None, description="Radar description", max_length=64)
-    center_lat: Optional[float] = Field(default=None, description="Radar center latitude")
-    center_long: Optional[float] = Field(default=None, description="Radar center longitude")
+    title: Optional[str] = Field(
+        default=None, description="Radar display title", max_length=64
+    )
+    description: Optional[str] = Field(
+        default=None, description="Radar description", max_length=64
+    )
+    center_lat: Optional[float] = Field(
+        default=None, description="Radar center latitude"
+    )
+    center_long: Optional[float] = Field(
+        default=None, description="Radar center longitude"
+    )
     img_radio: Optional[int] = Field(default=None, description="Radar coverage radius")
-    is_active: Optional[bool] = Field(default=None, description="Whether radar is active")
-    point1_lat: Optional[float] = Field(default=None, description="Boundary point 1 latitude")
-    point1_long: Optional[float] = Field(default=None, description="Boundary point 1 longitude")
-    point2_lat: Optional[float] = Field(default=None, description="Boundary point 2 latitude")
-    point2_long: Optional[float] = Field(default=None, description="Boundary point 2 longitude")
+    is_active: Optional[bool] = Field(
+        default=None, description="Whether radar is active"
+    )
+    point1_lat: Optional[float] = Field(
+        default=None, description="Boundary point 1 latitude"
+    )
+    point1_long: Optional[float] = Field(
+        default=None, description="Boundary point 1 longitude"
+    )
+    point2_lat: Optional[float] = Field(
+        default=None, description="Boundary point 2 latitude"
+    )
+    point2_long: Optional[float] = Field(
+        default=None, description="Boundary point 2 longitude"
+    )
 
 
 class AdminRadarResponse(AdminRadarBase):
     """Radar admin response."""
 
     code: str = Field(description="Unique radar code")
-    created_at: Optional[datetime] = Field(default=None, description="Record creation time")
-    updated_at: Optional[datetime] = Field(default=None, description="Record update time")
+    created_at: Optional[datetime] = Field(
+        default=None, description="Record creation time"
+    )
+    updated_at: Optional[datetime] = Field(
+        default=None, description="Record update time"
+    )
 
     class Config:
         from_attributes = True
@@ -75,11 +100,17 @@ class AdminRadarProductBase(BaseModel):
 
     product_key: str = Field(description="Unique product key", max_length=16)
     product_title: str = Field(description="Product title", max_length=64)
-    product_description: Optional[str] = Field(default="", description="Product description")
+    product_description: Optional[str] = Field(
+        default="", description="Product description"
+    )
     enabled: bool = Field(description="Whether product is enabled")
     see_in_open: bool = Field(description="Whether product is shown in open view")
-    min_value: Optional[float] = Field(default=None, description="Minimum product value")
-    max_value: Optional[float] = Field(default=None, description="Maximum product value")
+    min_value: Optional[float] = Field(
+        default=None, description="Minimum product value"
+    )
+    max_value: Optional[float] = Field(
+        default=None, description="Maximum product value"
+    )
     unit: Optional[str] = Field(default=None, description="Product unit")
 
 
@@ -94,13 +125,27 @@ class AdminRadarProductUpdate(AdminRadarProductBase):
 class AdminRadarProductPatch(BaseModel):
     """Partial product update payload."""
 
-    product_key: Optional[str] = Field(default=None, description="Unique product key", max_length=16)
-    product_title: Optional[str] = Field(default=None, description="Product title", max_length=64)
-    product_description: Optional[str] = Field(default=None, description="Product description")
-    enabled: Optional[bool] = Field(default=None, description="Whether product is enabled")
-    see_in_open: Optional[bool] = Field(default=None, description="Whether product is shown in open view")
-    min_value: Optional[float] = Field(default=None, description="Minimum product value")
-    max_value: Optional[float] = Field(default=None, description="Maximum product value")
+    product_key: Optional[str] = Field(
+        default=None, description="Unique product key", max_length=16
+    )
+    product_title: Optional[str] = Field(
+        default=None, description="Product title", max_length=64
+    )
+    product_description: Optional[str] = Field(
+        default=None, description="Product description"
+    )
+    enabled: Optional[bool] = Field(
+        default=None, description="Whether product is enabled"
+    )
+    see_in_open: Optional[bool] = Field(
+        default=None, description="Whether product is shown in open view"
+    )
+    min_value: Optional[float] = Field(
+        default=None, description="Minimum product value"
+    )
+    max_value: Optional[float] = Field(
+        default=None, description="Maximum product value"
+    )
     unit: Optional[str] = Field(default=None, description="Product unit")
 
 
@@ -108,8 +153,12 @@ class AdminRadarProductResponse(AdminRadarProductBase):
     """Product admin response."""
 
     id: int = Field(description="Product ID")
-    created_at: Optional[datetime] = Field(default=None, description="Record creation time")
-    updated_at: Optional[datetime] = Field(default=None, description="Record update time")
+    created_at: Optional[datetime] = Field(
+        default=None, description="Record creation time"
+    )
+    updated_at: Optional[datetime] = Field(
+        default=None, description="Record update time"
+    )
 
     class Config:
         from_attributes = True
@@ -119,8 +168,12 @@ class AdminReferenceBase(BaseModel):
     """Shared reference fields."""
 
     product_id: int = Field(description="Associated product ID")
-    title: Optional[str] = Field(default="", description="Reference title", max_length=64)
-    description: Optional[str] = Field(default="", description="Reference description", max_length=255)
+    title: Optional[str] = Field(
+        default="", description="Reference title", max_length=64
+    )
+    description: Optional[str] = Field(
+        default="", description="Reference description", max_length=255
+    )
     unit: Optional[str] = Field(default="", description="Reference unit", max_length=64)
     value: float = Field(description="Reference scalar value")
     color: str = Field(description="Background color in hex format")
@@ -154,15 +207,25 @@ class AdminCOGResponse(BaseModel):
     observation_time: datetime = Field(description="Observation timestamp")
     file_path: str = Field(description="Absolute file path")
     file_name: str = Field(description="File name")
-    file_size_bytes: Optional[int] = Field(default=None, description="File size in bytes")
+    file_size_bytes: Optional[int] = Field(
+        default=None, description="File size in bytes"
+    )
     file_checksum: Optional[str] = Field(default=None, description="File checksum")
     status: str = Field(description="COG status value")
     vol_nr: Optional[str] = Field(default=None, description="Volume number")
-    polarimetric_var: Optional[str] = Field(default=None, description="Polarimetric variable")
+    polarimetric_var: Optional[str] = Field(
+        default=None, description="Polarimetric variable"
+    )
     indexed_at: Optional[datetime] = Field(default=None, description="Indexing time")
-    error_message: Optional[str] = Field(default=None, description="Latest ingestion error")
-    created_at: Optional[datetime] = Field(default=None, description="Record creation time")
-    updated_at: Optional[datetime] = Field(default=None, description="Record update time")
+    error_message: Optional[str] = Field(
+        default=None, description="Latest ingestion error"
+    )
+    created_at: Optional[datetime] = Field(
+        default=None, description="Record creation time"
+    )
+    updated_at: Optional[datetime] = Field(
+        default=None, description="Record update time"
+    )
 
 
 class AdminCOGPatchStatus(BaseModel):
@@ -181,15 +244,23 @@ class AdminEstrategiaCreate(BaseModel):
     """Create strategy payload."""
 
     code: str = Field(description="Unique strategy code", max_length=16)
-    description: Optional[str] = Field(default="", description="Strategy description", max_length=255)
-    volumen_ids: List[int] = Field(default_factory=list, description="Linked volumen IDs")
+    description: Optional[str] = Field(
+        default="", description="Strategy description", max_length=255
+    )
+    volumen_ids: List[int] = Field(
+        default_factory=list, description="Linked volumen IDs"
+    )
 
 
 class AdminEstrategiaUpdate(BaseModel):
     """Update strategy payload."""
 
-    description: Optional[str] = Field(default="", description="Strategy description", max_length=255)
-    volumen_ids: List[int] = Field(default_factory=list, description="Linked volumen IDs")
+    description: Optional[str] = Field(
+        default="", description="Strategy description", max_length=255
+    )
+    volumen_ids: List[int] = Field(
+        default_factory=list, description="Linked volumen IDs"
+    )
 
 
 class AdminEstrategiaResponse(BaseModel):
@@ -197,8 +268,12 @@ class AdminEstrategiaResponse(BaseModel):
 
     code: str = Field(description="Unique strategy code")
     description: Optional[str] = Field(default="", description="Strategy description")
-    volumen_ids: List[int] = Field(default_factory=list, description="Linked volumen IDs")
-    volumen_values: List[int] = Field(default_factory=list, description="Linked volumen values")
+    volumen_ids: List[int] = Field(
+        default_factory=list, description="Linked volumen IDs"
+    )
+    volumen_values: List[int] = Field(
+        default_factory=list, description="Linked volumen values"
+    )
 
     class Config:
         from_attributes = True
@@ -240,8 +315,12 @@ class AdminTopsAndCoresResponse(BaseModel):
     status: str = Field(description="Record status")
     strategy: Optional[str] = Field(default=None, description="Strategy code")
     vol_nr: Optional[str] = Field(default=None, description="Volume number")
-    created_at: Optional[datetime] = Field(default=None, description="Record creation time")
-    updated_at: Optional[datetime] = Field(default=None, description="Record update time")
+    created_at: Optional[datetime] = Field(
+        default=None, description="Record creation time"
+    )
+    updated_at: Optional[datetime] = Field(
+        default=None, description="Record update time"
+    )
 
 
 class AdminTopsAndCoresPatchStatus(BaseModel):

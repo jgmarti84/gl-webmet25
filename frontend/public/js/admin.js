@@ -62,7 +62,18 @@ function hideMessage() {
 }
 
 function safeText(value) {
-    return value === null || value === undefined ? '' : String(value);
+    const raw = value === null || value === undefined ? '' : String(value);
+    return raw
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
+
+function safeHexColor(value, fallback) {
+    const normalized = String(value || '').trim();
+    return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized : fallback;
 }
 
 function fmtDate(value) {
@@ -397,8 +408,8 @@ async function renderReferences() {
                         <td>${reference.id}</td>
                         <td>${safeText(productsById.get(reference.product_id)?.product_key || reference.product_id)}</td>
                         <td>${safeText(reference.value)}</td>
-                        <td><span class="color-preview" style="background:${reference.color}"></span>${safeText(reference.color)}</td>
-                        <td><span class="color-preview" style="background:${reference.color_font}"></span>${safeText(reference.color_font)}</td>
+                        <td><span class="color-preview" style="background:${safeHexColor(reference.color, '#000000')}"></span>${safeText(reference.color)}</td>
+                        <td><span class="color-preview" style="background:${safeHexColor(reference.color_font, '#ffffff')}"></span>${safeText(reference.color_font)}</td>
                         <td>${safeText(reference.title)}</td>
                         <td>${safeText(reference.unit)}</td>
                         <td class="table-actions">
@@ -556,12 +567,12 @@ async function renderCogs() {
 
     elements.sectionContent.innerHTML = `
         <div class="toolbar">
-            <select id="cogs-filter-radar"><option value="">All radars</option>${radars.map((item) => `<option value="${item.code}" ${filters.radar_code === item.code ? 'selected' : ''}>${item.code}</option>`).join('')}</select>
-            <select id="cogs-filter-product"><option value="">All products</option>${products.map((item) => `<option value="${item.product_key}" ${filters.product_key === item.product_key ? 'selected' : ''}>${item.product_key}</option>`).join('')}</select>
+            <select id="cogs-filter-radar"><option value="">All radars</option></select>
+            <select id="cogs-filter-product"><option value="">All products</option></select>
             <select id="cogs-filter-status"><option value="">All statuses</option>${STATUS_OPTIONS.map((item) => `<option value="${item}" ${filters.status === item ? 'selected' : ''}>${item}</option>`).join('')}</select>
-            <input id="cogs-filter-vol" placeholder="vol_nr" value="${safeText(filters.vol_nr)}">
-            <input id="cogs-filter-start" type="datetime-local" value="${safeText(filters.start_time)}">
-            <input id="cogs-filter-end" type="datetime-local" value="${safeText(filters.end_time)}">
+            <input id="cogs-filter-vol" placeholder="vol_nr">
+            <input id="cogs-filter-start" type="datetime-local">
+            <input id="cogs-filter-end" type="datetime-local">
             <button class="btn-secondary" id="cogs-apply-filters">Apply</button>
             <button class="btn-danger" id="cogs-delete-filtered">Delete by filters</button>
             <button class="btn-danger" id="cogs-delete-selected">Delete selected</button>
@@ -574,31 +585,85 @@ async function renderCogs() {
                     <th>Size</th><th>Status</th><th>Vol</th><th>Polarimetric</th><th>Indexed</th><th>Actions</th>
                 </tr>
             </thead>
-            <tbody>
-                ${response.items.map((item) => `
-                    <tr>
-                        <td><input type="checkbox" data-cog-select="${item.id}" ${state.cogs.selected.has(item.id) ? 'checked' : ''}></td>
-                        <td>${item.id}</td>
-                        <td>${safeText(item.radar_code)}</td>
-                        <td>${safeText(item.product_key)}</td>
-                        <td>${fmtDate(item.observation_time)}</td>
-                        <td>${safeText(item.file_name)}</td>
-                        <td>${safeText(item.file_size_bytes)}</td>
-                        <td>
-                            <select data-cog-status="${item.id}">
-                                ${STATUS_OPTIONS.map((statusValue) => `<option value="${statusValue}" ${item.status === statusValue ? 'selected' : ''}>${statusValue}</option>`).join('')}
-                            </select>
-                        </td>
-                        <td>${safeText(item.vol_nr)}</td>
-                        <td>${safeText(item.polarimetric_var)}</td>
-                        <td>${fmtDate(item.indexed_at)}</td>
-                        <td class="table-actions"><button class="btn-danger" data-cog-delete="${item.id}">Delete</button></td>
-                    </tr>
-                `).join('')}
-            </tbody>
+            <tbody id="cogs-table-body"></tbody>
         </table>
         ${renderPagination(response.page, response.page_size, response.total, 'cogs')}
     `;
+
+    const radarSelect = document.getElementById('cogs-filter-radar');
+    const productSelect = document.getElementById('cogs-filter-product');
+    radars.forEach((item) => {
+        const option = document.createElement('option');
+        option.value = item.code || '';
+        option.textContent = item.code || '';
+        radarSelect.appendChild(option);
+    });
+    products.forEach((item) => {
+        const option = document.createElement('option');
+        option.value = item.product_key || '';
+        option.textContent = item.product_key || '';
+        productSelect.appendChild(option);
+    });
+    radarSelect.value = filters.radar_code || '';
+    productSelect.value = filters.product_key || '';
+    document.getElementById('cogs-filter-vol').value = filters.vol_nr || '';
+    document.getElementById('cogs-filter-start').value = filters.start_time || '';
+    document.getElementById('cogs-filter-end').value = filters.end_time || '';
+
+    const cogsTableBody = document.getElementById('cogs-table-body');
+    response.items.forEach((item) => {
+        const itemId = Number(item.id);
+        const row = document.createElement('tr');
+
+        const selectCell = document.createElement('td');
+        const selectInput = document.createElement('input');
+        selectInput.type = 'checkbox';
+        selectInput.dataset.cogSelect = String(itemId);
+        selectInput.checked = state.cogs.selected.has(itemId);
+        selectCell.appendChild(selectInput);
+        row.appendChild(selectCell);
+
+        const idCell = document.createElement('td');
+        idCell.textContent = String(itemId);
+        row.appendChild(idCell);
+
+        [item.radar_code, item.product_key, fmtDate(item.observation_time), item.file_name, item.file_size_bytes].forEach((value) => {
+            const cell = document.createElement('td');
+            cell.textContent = value === null || value === undefined ? '' : String(value);
+            row.appendChild(cell);
+        });
+
+        const statusCell = document.createElement('td');
+        const statusSelect = document.createElement('select');
+        statusSelect.dataset.cogStatus = String(itemId);
+        STATUS_OPTIONS.forEach((statusValue) => {
+            const option = document.createElement('option');
+            option.value = statusValue;
+            option.textContent = statusValue;
+            option.selected = item.status === statusValue;
+            statusSelect.appendChild(option);
+        });
+        statusCell.appendChild(statusSelect);
+        row.appendChild(statusCell);
+
+        [item.vol_nr, item.polarimetric_var, fmtDate(item.indexed_at)].forEach((value) => {
+            const cell = document.createElement('td');
+            cell.textContent = value === null || value === undefined ? '' : String(value);
+            row.appendChild(cell);
+        });
+
+        const actionsCell = document.createElement('td');
+        actionsCell.className = 'table-actions';
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'btn-danger';
+        deleteButton.dataset.cogDelete = String(itemId);
+        deleteButton.type = 'button';
+        deleteButton.textContent = 'Delete';
+        actionsCell.appendChild(deleteButton);
+        row.appendChild(actionsCell);
+
+        cogsTableBody.appendChild(row);
+    });
 
     document.getElementById('cogs-apply-filters').onclick = () => { state.cogs.page = 1; renderSection(); };
     document.getElementById('cogs-prev').onclick = () => { if (state.cogs.page > 1) { state.cogs.page -= 1; renderSection(); } };
@@ -657,7 +722,7 @@ async function renderCogs() {
 
     document.getElementById('cogs-delete-filtered').onclick = async () => {
         const typed = window.prompt('Type DELETE to confirm deleting all COGs matching active filters');
-        if (typed !== 'DELETE') return;
+        if ((typed || '').trim().toUpperCase() !== 'DELETE') return;
         const deletedCount = await adminApi.bulkDelete('cogs', filters);
         showMessage(`Deleted ${deletedCount} COG records by filter`, 'success');
         state.cogs.selected.clear();
@@ -819,12 +884,12 @@ async function renderTopsCores() {
 
     elements.sectionContent.innerHTML = `
         <div class="toolbar">
-            <select id="tops-filter-radar"><option value="">All radars</option>${radars.map((item) => `<option value="${item.code}" ${filters.radar_code === item.code ? 'selected' : ''}>${item.code}</option>`).join('')}</select>
-            <input id="tops-filter-strategy" placeholder="strategy" value="${safeText(filters.strategy)}">
-            <input id="tops-filter-vol" placeholder="vol_nr" value="${safeText(filters.vol_nr)}">
+            <select id="tops-filter-radar"><option value="">All radars</option></select>
+            <input id="tops-filter-strategy" placeholder="strategy">
+            <input id="tops-filter-vol" placeholder="vol_nr">
             <select id="tops-filter-status"><option value="">All statuses</option>${STATUS_OPTIONS.map((item) => `<option value="${item}" ${filters.status === item ? 'selected' : ''}>${item}</option>`).join('')}</select>
-            <input id="tops-filter-start" type="datetime-local" value="${safeText(filters.start_time)}">
-            <input id="tops-filter-end" type="datetime-local" value="${safeText(filters.end_time)}">
+            <input id="tops-filter-start" type="datetime-local">
+            <input id="tops-filter-end" type="datetime-local">
             <button class="btn-secondary" id="tops-apply-filters">Apply</button>
             <button class="btn-danger" id="tops-delete-filtered">Delete by filters</button>
             <button class="btn-danger" id="tops-delete-selected">Delete selected</button>
@@ -837,35 +902,93 @@ async function renderTopsCores() {
                     <th>Cores</th><th>Tops</th><th>Features</th><th>Status</th><th>File</th><th>Created</th><th>Actions</th>
                 </tr>
             </thead>
-            <tbody>
-                ${response.items.map((item) => `
-                    <tr>
-                        <td><input type="checkbox" data-top-select="${item.id}" ${state.tops.selected.has(item.id) ? 'checked' : ''}></td>
-                        <td>${item.id}</td>
-                        <td>${safeText(item.radar_code)}</td>
-                        <td>${safeText(item.strategy)}</td>
-                        <td>${safeText(item.vol_nr)}</td>
-                        <td>${fmtDate(item.observation_time)}</td>
-                        <td>${item.core_count}</td>
-                        <td>${item.top_count}</td>
-                        <td>${item.feature_count}</td>
-                        <td>
-                            <select data-top-status="${item.id}">
-                                ${STATUS_OPTIONS.map((statusValue) => `<option value="${statusValue}" ${item.status === statusValue ? 'selected' : ''}>${statusValue}</option>`).join('')}
-                            </select>
-                        </td>
-                        <td>${safeText(item.file_name)}</td>
-                        <td>${fmtDate(item.created_at)}</td>
-                        <td class="table-actions">
-                            <a class="btn-secondary" target="_blank" href="/api/v1/tops-cores/${item.id}/features">View Features</a>
-                            <button class="btn-danger" data-top-delete="${item.id}">Delete</button>
-                        </td>
-                    </tr>
-                `).join('')}
-            </tbody>
+            <tbody id="tops-table-body"></tbody>
         </table>
         ${renderPagination(response.page, response.page_size, response.total, 'tops')}
     `;
+
+    const topsRadarSelect = document.getElementById('tops-filter-radar');
+    radars.forEach((item) => {
+        const option = document.createElement('option');
+        option.value = item.code || '';
+        option.textContent = item.code || '';
+        topsRadarSelect.appendChild(option);
+    });
+    topsRadarSelect.value = filters.radar_code || '';
+    document.getElementById('tops-filter-strategy').value = filters.strategy || '';
+    document.getElementById('tops-filter-vol').value = filters.vol_nr || '';
+    document.getElementById('tops-filter-start').value = filters.start_time || '';
+    document.getElementById('tops-filter-end').value = filters.end_time || '';
+
+    const topsTableBody = document.getElementById('tops-table-body');
+    response.items.forEach((item) => {
+        const itemId = Number(item.id);
+        const row = document.createElement('tr');
+
+        const selectCell = document.createElement('td');
+        const selectInput = document.createElement('input');
+        selectInput.type = 'checkbox';
+        selectInput.dataset.topSelect = String(itemId);
+        selectInput.checked = state.tops.selected.has(itemId);
+        selectCell.appendChild(selectInput);
+        row.appendChild(selectCell);
+
+        [
+            itemId,
+            item.radar_code,
+            item.strategy,
+            item.vol_nr,
+            fmtDate(item.observation_time),
+            item.core_count,
+            item.top_count,
+            item.feature_count,
+        ].forEach((value) => {
+            const cell = document.createElement('td');
+            cell.textContent = value === null || value === undefined ? '' : String(value);
+            row.appendChild(cell);
+        });
+
+        const statusCell = document.createElement('td');
+        const statusSelect = document.createElement('select');
+        statusSelect.dataset.topStatus = String(itemId);
+        STATUS_OPTIONS.forEach((statusValue) => {
+            const option = document.createElement('option');
+            option.value = statusValue;
+            option.textContent = statusValue;
+            option.selected = item.status === statusValue;
+            statusSelect.appendChild(option);
+        });
+        statusCell.appendChild(statusSelect);
+        row.appendChild(statusCell);
+
+        const fileCell = document.createElement('td');
+        fileCell.textContent = item.file_name || '';
+        row.appendChild(fileCell);
+
+        const createdCell = document.createElement('td');
+        createdCell.textContent = fmtDate(item.created_at);
+        row.appendChild(createdCell);
+
+        const actionsCell = document.createElement('td');
+        actionsCell.className = 'table-actions';
+        const featuresLink = document.createElement('a');
+        featuresLink.className = 'btn-secondary';
+        featuresLink.target = '_blank';
+        featuresLink.rel = 'noopener noreferrer';
+        featuresLink.href = `/api/v1/tops-cores/${itemId}/features`;
+        featuresLink.textContent = 'View Features';
+        actionsCell.appendChild(featuresLink);
+
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'btn-danger';
+        deleteButton.dataset.topDelete = String(itemId);
+        deleteButton.type = 'button';
+        deleteButton.textContent = 'Delete';
+        actionsCell.appendChild(deleteButton);
+        row.appendChild(actionsCell);
+
+        topsTableBody.appendChild(row);
+    });
 
     document.getElementById('tops-apply-filters').onclick = () => { state.tops.page = 1; renderSection(); };
     document.getElementById('tops-prev').onclick = () => { if (state.tops.page > 1) { state.tops.page -= 1; renderSection(); } };
@@ -924,7 +1047,7 @@ async function renderTopsCores() {
 
     document.getElementById('tops-delete-filtered').onclick = async () => {
         const typed = window.prompt('Type DELETE to confirm deleting all Tops & Cores matching active filters');
-        if (typed !== 'DELETE') return;
+        if ((typed || '').trim().toUpperCase() !== 'DELETE') return;
         const deletedCount = await adminApi.bulkDelete('tops-cores', filters);
         showMessage(`Deleted ${deletedCount} Tops & Cores records by filter`, 'success');
         state.tops.selected.clear();

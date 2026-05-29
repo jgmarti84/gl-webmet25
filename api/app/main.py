@@ -26,8 +26,7 @@ from .services.redis_client import get_redis, close_redis
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -153,10 +152,7 @@ async def add_timing_header(request: Request, call_next):
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error"}
-    )
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 # Include routers
@@ -176,13 +172,13 @@ def health_check():
     """Basic health check."""
     from radar_db import check_db_connection
     from datetime import datetime
-    
+
     db_ok = check_db_connection()
-    
+
     return HealthResponse(
         status="ok" if db_ok else "degraded",
         database=db_ok,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.utcnow(),
     )
 
 
