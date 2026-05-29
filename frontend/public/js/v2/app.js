@@ -30,6 +30,30 @@ import { LegendRenderer } from '../shared/legend.js';
 import { TopsCoresLayer } from '../shared/tops-cores.js';
 
 // =============================================================================
+// COVERAGE MODES — single source of truth for volume↔mode mapping.
+// Each entry defines which volumes (and strategy) belong to that mode, and
+// whether filtered (non-'o') fields should be available to the user.
+// Add / edit entries here to extend modes in the future.
+// =============================================================================
+
+const COVERAGE_MODES = [
+    {
+        id:                      'cd',
+        label:                   'C+D',
+        volNrs:                  ['01', '02'],
+        strategy:                '0315',
+        filteredFieldsAvailable: true,
+    },
+    {
+        id:                      'vig',
+        label:                   'VIG',
+        volNrs:                  ['04'],
+        strategy:                '0315',
+        filteredFieldsAvailable: false,
+    },
+];
+
+// =============================================================================
 // CONSTANTS (identical to app.js)
 // =============================================================================
 
@@ -76,6 +100,7 @@ const state = {
     topsCoresPointSize: 8,
     smoothingEnabled: false,
     smoothingSigma: 0.8,
+    coverageModeId: 'cd',
 };
 
 // =============================================================================
@@ -124,6 +149,14 @@ function selectDefaultProduct(availableProductKeys) {
 }
 
 /**
+ * Returns the COVERAGE_MODES entry that matches state.coverageModeId.
+ * Falls back to the first entry if the stored id is somehow unknown.
+ */
+function getActiveCoverageMode() {
+    return COVERAGE_MODES.find(m => m.id === state.coverageModeId) || COVERAGE_MODES[0];
+}
+
+/**
  * Convert a groupedFrames array (app.js state.cogs format) to the
  * Map<frameIndex, Map<radarCode, cogObject>> format expected by MapManager.loadFrames().
  *
@@ -150,6 +183,7 @@ const SETTINGS_KEY_REFRESH_INTERVAL   = 'webmet25_radar_refresh_interval_min';
 const SETTINGS_KEY_LIVE_REFRESH_INTERVAL = 'webmet25_live_refresh_interval_ms';
 const SETTINGS_KEY_COVERAGE_VISIBLE   = 'webmet25_coverage_visible';
 const SETTINGS_KEY_COVERAGE_OPACITY   = 'webmet25_coverage_opacity';
+const SETTINGS_KEY_COVERAGE_MODE      = 'webmet25_coverage_mode';
 const SETTINGS_KEY_TOPS_CORES_VISIBLE = 'webmet25_tops_cores_visible';
 const SETTINGS_KEY_TOPS_CORES_SIZE    = 'webmet25_tops_cores_size';
 const SETTINGS_KEY_ACTIVE_ONLY_LEGACY = 'webmet25_active_only';
@@ -321,9 +355,24 @@ const app = {
         state.radars = await api.getRadars(!state.showInactiveRadars);
         state.ui.populateRadarCheckboxes(state.radars, state.showInactiveRadars);
         this.updateActiveOnlyToggle();
-        state.products = await api.getProducts();
-        state.ui.populateProductSelect(state.products, state.showUnfilteredProducts);
+
+        // Restore coverage mode from localStorage before fetching products so
+        // that only products belonging to the current mode's volumes are loaded.
+        const storedMode = localStorage.getItem(SETTINGS_KEY_COVERAGE_MODE);
+        if (storedMode && COVERAGE_MODES.find(m => m.id === storedMode)) {
+            state.coverageModeId = storedMode;
+        }
+        const mode = getActiveCoverageMode();
+
+        // In VIG mode filtered fields are not available — force showUnfilteredProducts.
+        if (!mode.filteredFieldsAvailable) {
+            state.showUnfilteredProducts = true;
+        }
+
+        state.products = await api.getProducts(mode.volNrs, mode.strategy);
+        state.ui.populateProductSelect(state.products, state.showUnfilteredProducts, mode.filteredFieldsAvailable);
         state.ui.updateFilterToggle(state.showUnfilteredProducts);
+        state.ui.setFilterToggleEnabled(mode.filteredFieldsAvailable);
 
         const productSelect = document.getElementById('product-select');
         const availableKeys = getAvailableProductKeys(state.products, state.showUnfilteredProducts);
@@ -560,20 +609,57 @@ const app = {
             });
         }
 
-        // Coverage mode toggle — UI only, no functional behavior yet.
-        // Cycles between C+D (Conventional+Doppler) and VIG (Vigilant) modes.
-        const COVERAGE_MODES = [
-            { id: 'cd',  label: 'C+D' },
-            { id: 'vig', label: 'VIG' },
-        ];
-        let _coverageModeIndex = 0;
-
+        // Coverage mode toggle — cycles modes and reloads products / frames.
+        // COVERAGE_MODES is defined at module level and is the single source
+        // of truth for vol->mode mapping.
         const coverageToggleBtn = document.getElementById('coverage-toggle');
         if (coverageToggleBtn) {
-            coverageToggleBtn.textContent = COVERAGE_MODES[_coverageModeIndex].label;
-            coverageToggleBtn.addEventListener('click', () => {
-                _coverageModeIndex = (_coverageModeIndex + 1) % COVERAGE_MODES.length;
-                coverageToggleBtn.textContent = COVERAGE_MODES[_coverageModeIndex].label;
+            // Sync button label to current state (restored from localStorage in loadInitialData).
+            coverageToggleBtn.textContent = getActiveCoverageMode().label;
+
+            coverageToggleBtn.addEventListener('click', async () => {
+                const currentIdx = COVERAGE_MODES.findIndex(m => m.id === state.coverageModeId);
+                const nextMode   = COVERAGE_MODES[(currentIdx + 1) % COVERAGE_MODES.length];
+
+                state.coverageModeId = nextMode.id;
+                localStorage.setItem(SETTINGS_KEY_COVERAGE_MODE, nextMode.id);
+                coverageToggleBtn.textContent = nextMode.label;
+
+                // In VIG mode filtered fields don't exist — force raw/unfiltered.
+                if (!nextMode.filteredFieldsAvailable) {
+                    state.showUnfilteredProducts = true;
+                    localStorage.setItem(SETTINGS_KEY_SHOW_FILTERED, 'true');
+                }
+
+                // Re-fetch product list for the new volumes and refresh UI.
+                state.products = await api.getProducts(nextMode.volNrs, nextMode.strategy);
+                state.ui.populateProductSelect(
+                    state.products, state.showUnfilteredProducts, nextMode.filteredFieldsAvailable
+                );
+                state.ui.updateFilterToggle(state.showUnfilteredProducts);
+                state.ui.setFilterToggleEnabled(nextMode.filteredFieldsAvailable);
+
+                // If the currently selected product is no longer available in the
+                // new mode, fall back to the default for the new product list.
+                const availableKeys = state.products
+                    .map(p => p.product_key)
+                    .filter(k => nextMode.filteredFieldsAvailable ? !/o$/.test(k) : /o$/.test(k));
+                if (!availableKeys.includes(state.selectedProduct)) {
+                    state.selectedProduct = selectDefaultProduct(availableKeys) || availableKeys[0] || null;
+                    const productSelect = document.getElementById('product-select');
+                    if (productSelect && state.selectedProduct) productSelect.value = state.selectedProduct;
+                    this._updateFieldBadge();
+                }
+
+                // Reload animation frames for the new coverage mode.
+                if (state.animationMode === 'timerange') {
+                    await this._loadFramesWithContinuity(
+                        () => this._fetchTimeRangeFrames(),
+                        { showBadge: true, badgeText: 'Mode change…' }
+                    );
+                } else if (state.animationMode === 'latest') {
+                    await this.loadLatestCogs();
+                }
             });
         }
 
@@ -606,7 +692,8 @@ const app = {
                 // Toggle OFF → raw/unfiltered fields ('o' suffix)         → showUnfilteredProducts = true
                 state.showUnfilteredProducts = !e.target.checked;
                 localStorage.setItem(SETTINGS_KEY_SHOW_FILTERED, String(state.showUnfilteredProducts));
-                state.ui.populateProductSelect(state.products, state.showUnfilteredProducts);
+                const mode = getActiveCoverageMode();
+                state.ui.populateProductSelect(state.products, state.showUnfilteredProducts, mode.filteredFieldsAvailable);
                 state.ui.updateFilterToggle(state.showUnfilteredProducts);
             });
         }
@@ -940,8 +1027,10 @@ const app = {
         state.ui.setStatus(`Adding ${radarCode.toUpperCase()} to animation…`, 'loading');
 
         try {
+            const mode = getActiveCoverageMode();
             const newCogs = await api.getCogsForTimeRange(
-                [radarCode], state.selectedProduct, timeRange.start, timeRange.end, 100
+                [radarCode], state.selectedProduct, timeRange.start, timeRange.end, 100,
+                mode.volNrs, mode.strategy
             );
 
             if (newCogs.length === 0) {
@@ -1088,7 +1177,10 @@ const app = {
         state.ui.updatePlayButton(false);
 
         try {
-            const latestCogs = await api.getLatestCogsForRadars(state.selectedRadars, state.selectedProduct);
+            const mode = getActiveCoverageMode();
+            const latestCogs = await api.getLatestCogsForRadars(
+                state.selectedRadars, state.selectedProduct, mode.volNrs, mode.strategy
+            );
             const radarCodesWithData    = latestCogs.map(item => item.radarCode);
             const radarCodesWithoutData = state.selectedRadars.filter(c => !radarCodesWithData.includes(c));
 
@@ -1196,7 +1288,8 @@ const app = {
         try {
             const cogs = await api.getCogsForTimeRange(
                 state.selectedRadars, state.selectedProduct,
-                timeRange.start, timeRange.end, 100
+                timeRange.start, timeRange.end, 100,
+                getActiveCoverageMode().volNrs, getActiveCoverageMode().strategy
             );
 
             if (cogs.length === 0) {
@@ -1318,8 +1411,9 @@ const app = {
         state.ui.setStatus('Finding latest data…', 'loading');
 
         try {
+            const mode = getActiveCoverageMode();
             const latestItems = await api.getLatestCogsForRadars(
-                state.selectedRadars, state.selectedProduct
+                state.selectedRadars, state.selectedProduct, mode.volNrs, mode.strategy
             );
 
             if (latestItems.length === 0) {
@@ -1394,8 +1488,9 @@ const app = {
         try {
             const hours = state.liveHours;
 
+            const mode = getActiveCoverageMode();
             const latestItems = await api.getLatestCogsForRadars(
-                state.selectedRadars, state.selectedProduct
+                state.selectedRadars, state.selectedProduct, mode.volNrs, mode.strategy
             );
             if (!latestItems.length) return;
 
@@ -1407,7 +1502,8 @@ const app = {
 
             const allCogs = await api.getCogsForTimeRange(
                 state.selectedRadars, state.selectedProduct,
-                newStartTime, newEndTime, LIVE_REFRESH_MAX_COGS
+                newStartTime, newEndTime, LIVE_REFRESH_MAX_COGS,
+                mode.volNrs, mode.strategy
             );
 
             const cachedCogIds = new Set();
@@ -1844,9 +1940,11 @@ const app = {
         const timeRange = state.ui.getTimeRangeValues();
         if (!timeRange.start || !timeRange.end || timeRange.start >= timeRange.end) return null;
 
+        const mode = getActiveCoverageMode();
         const cogs = await api.getCogsForTimeRange(
             state.selectedRadars, state.selectedProduct,
-            timeRange.start, timeRange.end, 100
+            timeRange.start, timeRange.end, 100,
+            mode.volNrs, mode.strategy
         );
         if (!cogs || cogs.length === 0) return null;
 

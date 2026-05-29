@@ -1,9 +1,9 @@
 # api/app/routers/products.py
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 
-from radar_db import get_db, RadarProduct, Reference
+from radar_db import get_db, RadarProduct, Reference, RadarCOG, COGStatus
 from ..schemas import ProductResponse, ProductListResponse, ReferenceResponse, ColormapResponse, ColormapEntry
 
 router = APIRouter(prefix="/products", tags=["Products"])
@@ -12,6 +12,14 @@ router = APIRouter(prefix="/products", tags=["Products"])
 @router.get("", response_model=ProductListResponse)
 def list_products(
     enabled_only: bool = True,
+    vol_nr: Optional[List[str]] = Query(
+        default=None,
+        description="Filter to products that have COGs in these volume number(s). Repeatable: ?vol_nr=01&vol_nr=02",
+    ),
+    strategy: Optional[str] = Query(
+        default=None,
+        description="When vol_nr is set, also filter by strategy code, e.g. '0315'",
+    ),
     db: Session = Depends(get_db)
 ):
     """
@@ -23,7 +31,21 @@ def list_products(
     
     if enabled_only:
         query = query.filter(RadarProduct.enabled == True)
-    
+
+    if vol_nr:
+        # Only return products that actually have COGs in the requested volumes.
+        # Match via polarimetric_var (new-format COGs) which mirrors product_key.
+        subq = db.query(RadarCOG.polarimetric_var).filter(
+            RadarCOG.vol_nr.in_(vol_nr),
+            RadarCOG.status == COGStatus.AVAILABLE,
+            RadarCOG.polarimetric_var.isnot(None),
+            RadarCOG.polarimetric_var != "",
+        )
+        if strategy:
+            subq = subq.filter(RadarCOG.estrategia_code == strategy)
+        available_keys = {row[0] for row in subq.distinct().all()}
+        query = query.filter(RadarProduct.product_key.in_(available_keys))
+
     products = query.order_by(RadarProduct.product_key).all()
     
     product_responses = []

@@ -214,10 +214,15 @@ class RadarCOG(Base):
     estrategia = relationship("Estrategia", back_populates="cog_files")
     
     __table_args__ = (
-        Index('idx_cog_radar_product_time', 'radar_code', 'product_id', 'observation_time'),
+        Index('idx_cog_radar_product_time', 'radar_code', 'product_id', 'observation_time', 'vol_nr'),
         Index('idx_cog_bbox', 'bbox', postgresql_using='gist'),
-        UniqueConstraint('radar_code', 'product_id', 'observation_time', 'elevation_angle',
-                        name='uq_cog_radar_product_time_elev'),
+        # vol_nr is included so that the same field from different volumes
+        # (e.g. DBZH from vol 01 and DBZH from vol 04) are treated as
+        # distinct records.  PostgreSQL NULLs are not considered equal in
+        # UNIQUE constraints, so legacy rows (vol_nr IS NULL) remain
+        # independent.
+        UniqueConstraint('radar_code', 'product_id', 'observation_time', 'elevation_angle', 'vol_nr',
+                        name='uq_cog_radar_product_time_elev_vol'),
     )
     
     def __repr__(self):

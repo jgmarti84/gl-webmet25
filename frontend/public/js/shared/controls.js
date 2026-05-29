@@ -135,22 +135,45 @@ export class UIControls {
     }
     
     /**
-     * Populate product select with filtered/unfiltered products
+     * Populate product select with filtered/unfiltered products.
+     *
+     * @param {Array}   allProducts             - Full product list from API
+     * @param {boolean} showUnfiltered          - true = show raw ('o' suffix) products
+     * @param {boolean} filteredFieldsAvailable - When false (e.g. VIG mode) only raw
+     *                                            products are shown regardless of the
+     *                                            showUnfiltered toggle, because filtered
+     *                                            fields simply do not exist for that mode.
      */
-    populateProductSelect(allProducts, showUnfiltered = false) {
+    populateProductSelect(allProducts, showUnfiltered = false, filteredFieldsAvailable = true) {
         const select = document.getElementById('product-select');
         if (!select) return;
-        
+
+        // When filtered fields are not available for the current coverage mode,
+        // always show only raw/unfiltered products irrespective of the user toggle.
+        const effectiveShowUnfiltered = filteredFieldsAvailable ? showUnfiltered : true;
+
         // Filter products based on whether they end with 'o' (unfiltered) or not (filtered)
         // Check for uppercase letter followed by lowercase 'o' at the end (e.g., RHOHVo, COLMAXo)
         const filteredProducts = allProducts.filter(product => {
             const productKey = product.product_key;
             const isUnfiltered = /o$/.test(productKey); // product_key ends with 'o' = raw/unfiltered data
-            return showUnfiltered ? isUnfiltered : !isUnfiltered;
+            return effectiveShowUnfiltered ? isUnfiltered : !isUnfiltered;
         });
         
         // Populate the select
         this.populateSelect('product-select', filteredProducts, 'product_key', 'product_title', 'Select product...');
+    }
+
+    /**
+     * Enable or disable the filtered-fields toggle.
+     * Called when the coverage mode changes: in modes where only raw/unfiltered
+     * fields exist the toggle is meaningless and should be disabled.
+     *
+     * @param {boolean} enabled
+     */
+    setFilterToggleEnabled(enabled) {
+        const toggle = document.getElementById('toggle-show-filtered');
+        if (toggle) toggle.disabled = !enabled;
     }
     
     /**

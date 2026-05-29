@@ -346,6 +346,7 @@ Updates record status to MISSING in DB if file not found at serve time.
 | `webmet25_live_refresh_interval_ms` | number | 300000 | Live refresh interval (ms) |
 | `webmet25_coverage_visible` | boolean | false | Coverage circles toggle |
 | `webmet25_coverage_opacity` | number | 0.4 | Coverage circles opacity |
+| `webmet25_coverage_mode` | string | 'cd' | Active coverage mode id ('cd' or 'vig'). Determines which volumes are queried for products and COGs |
 | `webmet25_tops_cores_visible` | boolean | false | Tops & Cores layer toggle |
 | `webmet25_tops_cores_size` | number | 8 | Circle marker radius in px |
 
@@ -392,6 +393,10 @@ Updates record status to MISSING in DB if file not found at serve time.
 - ✅ RESOLVED: api.js uses relative /api/v1 path unconditionally.
 - ✅ Convective Cores & Storm Tops: IMPLEMENTED — radarlib generates GeoJSON,
 indexer registers, API serves, v2 frontend displays as CircleMarker layer.
+- ✅ Coverage Mode Toggle (C+D/VIG): IMPLEMENTED — cycles between Conventional+Doppler
+(vol 01+02) and Vigilant (vol 04) modes; product dropdown, filter toggle, and all
+COG queries are filtered by the active mode's volumes and strategy. Persisted to
+`webmet25_coverage_mode` in localStorage.
 - ❌ No pagination on products and references endpoints.
 - ❌ No automated tests.
 - ❌ No monitoring or log aggregation.

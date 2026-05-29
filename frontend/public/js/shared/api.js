@@ -26,10 +26,18 @@ export const api = {
     },
     
     /**
-     * Get all products
+     * Get all products, optionally filtered to those available in specific volumes.
+     * @param {string[]|null} volNrs   - Volume numbers to filter by, e.g. ['01','02']
+     * @param {string|null}   strategy - Strategy code, e.g. '0315'
      */
-    async getProducts() {
-        const data = await this.get('/products');
+    async getProducts(volNrs = null, strategy = null) {
+        const params = new URLSearchParams();
+        if (volNrs && volNrs.length > 0) {
+            volNrs.forEach(v => params.append('vol_nr', v));
+        }
+        if (strategy) params.append('strategy', strategy);
+        const query = params.toString() ? `?${params}` : '';
+        const data = await this.get(`/products${query}`);
         return data.products || [];
     },
     
@@ -48,18 +56,29 @@ export const api = {
     
     /**
      * Get latest COG for a radar/product
+     * @param {string}        radarCode
+     * @param {string}        productKey
+     * @param {string[]|null} volNrs   - Volume numbers to restrict search
+     * @param {string|null}   strategy - Strategy code
      */
-    async getLatestCog(radarCode, productKey) {
-        return this.get(`/cogs/latest?radar_code=${radarCode}&product_key=${productKey}`);
+    async getLatestCog(radarCode, productKey, volNrs = null, strategy = null) {
+        const params = new URLSearchParams({ radar_code: radarCode, product_key: productKey });
+        if (volNrs && volNrs.length > 0) volNrs.forEach(v => params.append('vol_nr', v));
+        if (strategy) params.append('strategy', strategy);
+        return this.get(`/cogs/latest?${params}`);
     },
     
     /**
      * Get latest COGs for multiple radars and a product
      * Returns array of {radarCode, cog} objects
+     * @param {string[]}      radarCodes
+     * @param {string}        productKey
+     * @param {string[]|null} volNrs
+     * @param {string|null}   strategy
      */
-    async getLatestCogsForRadars(radarCodes, productKey) {
+    async getLatestCogsForRadars(radarCodes, productKey, volNrs = null, strategy = null) {
         const promises = radarCodes.map(radarCode => 
-            this.getLatestCog(radarCode, productKey)
+            this.getLatestCog(radarCode, productKey, volNrs, strategy)
                 .catch(err => {
                     console.warn(`Failed to get latest COG for ${radarCode}:`, err);
                     return null;
@@ -77,8 +96,15 @@ export const api = {
     /**
      * Get COGs for multiple radars within a time range
      * Returns array of COG objects sorted by observation_time descending (newest first)
+     * @param {string[]}      radarCodes
+     * @param {string}        productKey
+     * @param {Date|null}     startTime
+     * @param {Date|null}     endTime
+     * @param {number}        limit
+     * @param {string[]|null} volNrs   - Volume numbers to restrict search
+     * @param {string|null}   strategy - Strategy code
      */
-    async getCogsForTimeRange(radarCodes, productKey, startTime, endTime, limit = 100) {
+    async getCogsForTimeRange(radarCodes, productKey, startTime, endTime, limit = 100, volNrs = null, strategy = null) {
         // Build query parameters
         const params = new URLSearchParams({
             product_key: productKey,
@@ -92,6 +118,11 @@ export const api = {
         if (endTime) {
             params.append('end_time', endTime.toISOString());
         }
+
+        if (volNrs && volNrs.length > 0) {
+            volNrs.forEach(v => params.append('vol_nr', v));
+        }
+        if (strategy) params.append('strategy', strategy);
         
         // Fetch COGs for each radar
         const promises = radarCodes.map(radarCode => {
