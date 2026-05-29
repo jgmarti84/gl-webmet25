@@ -11,9 +11,114 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from radar_db.database import db_manager
-from radar_db.models import Radar, RadarProduct, Reference, Volumen, Estrategia
+from radar_db.models import Radar, RadarProduct, Reference, Volumen, Estrategia, ColormapStop, ProductColormapOption
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# System colormap definitions
+#
+# Each entry is a dict with keys 'r', 'g', 'b'. Each channel is a list of
+# (position, val_left, val_right) triples — exactly what
+# matplotlib.colors.LinearSegmentedColormap expects.  When val_left != val_right
+# the triple models a colour discontinuity (hard jump) at that position.
+# sort_order within a channel is the list index.
+# ---------------------------------------------------------------------------
+_SYSTEM_COLORMAPS: Dict[str, Dict[str, list]] = {
+    "grc_th": {
+        "r": [(0.0, 1.0, 1.0), (0.2, 0.95, 0.95), (0.4, 0.24, 0.24), (0.45, 0.22, 0.22),
+              (0.55, 0.04, 0.04), (0.63, 0.95, 0.95), (0.85, 1.0, 1.0), (1.0, 1.0, 1.0)],
+        "g": [(0.0, 1.0, 1.0), (0.2, 0.97, 0.97), (0.4, 0.46, 0.46), (0.4, 0.98, 0.98),
+              (0.55, 0.62, 0.62), (0.63, 1.0, 1.0), (0.85, 0.0, 0.0), (1.0, 0.0, 0.0)],
+        "b": [(0.0, 1.0, 1.0), (0.2, 0.95, 0.95), (0.4, 0.78, 0.78), (0.4, 0.52, 0.52),
+              (0.55, 0.27, 0.27), (0.63, 0.0, 0.0), (0.85, 0.0, 0.0), (1.0, 1.0, 1.0)],
+    },
+    "grc_th2": {
+        "r": [(0.0, 1.0, 1.0), (0.27, 0.95, 0.95), (0.4, 0.24, 0.24), (0.45, 0.22, 0.22),
+              (0.55, 0.04, 0.04), (0.6, 0.95, 0.95), (0.84, 1.0, 1.0), (1.0, 1.0, 1.0)],
+        "g": [(0.0, 1.0, 1.0), (0.27, 0.97, 0.97), (0.4, 0.46, 0.46), (0.4, 0.98, 0.98),
+              (0.55, 0.62, 0.62), (0.6, 1.0, 1.0), (0.84, 0.0, 0.0), (1.0, 0.0, 0.0)],
+        "b": [(0.0, 1.0, 1.0), (0.27, 0.95, 0.95), (0.4, 0.78, 0.78), (0.4, 0.52, 0.52),
+              (0.55, 0.27, 0.27), (0.6, 0.0, 0.0), (0.84, 0.0, 0.0), (1.0, 1.0, 1.0)],
+    },
+    "grc_rain": {
+        "r": [(0.0, 1.0, 1.0), (0.01, 0.95, 0.95), (0.1, 0.24, 0.24), (0.2, 0.22, 0.22),
+              (0.3, 0.04, 0.04), (0.55, 0.95, 0.95), (0.8, 1.0, 1.0), (0.95, 1.0, 1.0),
+              (1.0, 1.0, 1.0)],
+        "g": [(0.0, 1.0, 1.0), (0.01, 0.97, 0.97), (0.1, 0.46, 0.46), (0.2, 0.98, 0.98),
+              (0.3, 0.62, 0.62), (0.55, 1.0, 1.0), (0.8, 0.0, 0.0), (0.95, 0.0, 0.0),
+              (1.0, 1.0, 1.0)],
+        "b": [(0.0, 1.0, 1.0), (0.01, 0.95, 0.95), (0.1, 0.88, 0.88), (0.2, 0.52, 0.52),
+              (0.3, 0.27, 0.27), (0.55, 0.0, 0.0), (0.8, 0.0, 0.0), (0.95, 1.0, 1.0),
+              (1.0, 1.0, 1.0)],
+    },
+    "grc_g": {
+        # Same visual result as grc_th — kept as a distinct named entry.
+        "r": [(0.0, 1.0, 1.0), (0.2, 0.95, 0.95), (0.4, 0.24, 0.24), (0.45, 0.22, 0.22),
+              (0.55, 0.04, 0.04), (0.63, 0.95, 0.95), (0.85, 1.0, 1.0), (1.0, 1.0, 1.0)],
+        "g": [(0.0, 1.0, 1.0), (0.2, 0.97, 0.97), (0.4, 0.46, 0.46), (0.4, 0.98, 0.98),
+              (0.55, 0.62, 0.62), (0.63, 1.0, 1.0), (0.85, 0.0, 0.0), (1.0, 0.0, 0.0)],
+        "b": [(0.0, 1.0, 1.0), (0.2, 0.95, 0.95), (0.4, 0.78, 0.78), (0.4, 0.52, 0.52),
+              (0.55, 0.27, 0.27), (0.63, 0.0, 0.0), (0.85, 0.0, 0.0), (1.0, 1.0, 1.0)],
+    },
+    "grc_rho": {
+        "r": [(0.0, 0.0, 0.0), (0.5, 0.3, 0.3), (0.725, 0.0, 0.0), (0.75, 1.0, 1.0),
+              (0.9, 1.0, 1.0), (0.95, 0.67, 0.67), (0.985, 0.67, 0.67), (1.0, 1.0, 1.0)],
+        "g": [(0.0, 0.2, 0.2), (0.5, 0.57, 0.57), (0.725, 0.81, 0.81), (0.75, 1.0, 1.0),
+              (0.9, 0.55, 0.55), (0.95, 0.0, 0.0), (0.985, 0.0, 0.0), (1.0, 0.0, 0.0)],
+        "b": [(0.0, 0.7, 0.7), (0.5, 1.0, 1.0), (0.725, 0.0, 0.0), (0.75, 0.0, 0.0),
+              (0.9, 0.45, 0.45), (0.95, 0.0, 0.0), (0.985, 0.0, 0.0), (1.0, 1.0, 1.0)],
+    },
+    # grc_zdr: derived from LinearSegmentedColormap.from_list with equidistant
+    # positions for the 11-colour hex list used in get_cmap_grc_zdr().
+    # RGB values rounded to 3 decimal places.
+    "grc_zdr": {
+        "r": [(0.0, 0.173, 0.173), (0.1, 0.541, 0.541), (0.2, 0.902, 0.902),
+              (0.3, 0.0, 0.0), (0.4, 0.580, 0.580), (0.5, 0.0, 0.0),
+              (0.6, 0.282, 0.282), (0.7, 0.976, 0.976), (0.8, 1.0, 1.0),
+              (0.9, 1.0, 1.0), (1.0, 1.0, 1.0)],
+        "g": [(0.0, 0.173, 0.173), (0.1, 0.541, 0.541), (0.2, 0.902, 0.902),
+              (0.3, 1.0, 1.0), (0.4, 0.804, 0.804), (0.5, 0.333, 0.333),
+              (0.6, 0.616, 0.616), (0.7, 0.918, 0.918), (0.8, 0.514, 0.514),
+              (0.9, 0.129, 0.129), (1.0, 0.027, 0.027)],
+        "b": [(0.0, 0.173, 0.173), (0.1, 0.541, 0.541), (0.2, 0.902, 0.902),
+              (0.3, 1.0, 1.0), (0.4, 1.0, 1.0), (0.5, 1.0, 1.0),
+              (0.6, 0.224, 0.224), (0.7, 0.235, 0.235), (0.8, 0.271, 0.271),
+              (0.9, 0.173, 0.173), (1.0, 0.545, 0.545)],
+    },
+    "grc_vrad": {
+        "r": [(0.0, 0.0, 0.0), (0.45, 0.0, 0.0), (0.5, 0.05, 0.05),
+              (0.55, 0.5, 0.5), (1.0, 1.0, 1.0)],
+        "g": [(0.0, 1.0, 1.0), (0.45, 0.5, 0.5), (0.5, 0.05, 0.05),
+              (0.55, 0.0, 0.0), (1.0, 0.0, 0.0)],
+        "b": [(0.0, 0.0, 0.0), (0.45, 0.0, 0.0), (0.5, 0.05, 0.05),
+              (0.55, 0.0, 0.0), (1.0, 0.0, 0.0)],
+    },
+    # Theodore16: derived from LinearSegmentedColormap.from_list with equidistant
+    # positions for the 16-colour hex list used in get_cmap_theodore16().
+    # Positions are i/15 for i in range(16).  RGB rounded to 3 decimal places.
+    "Theodore16": {
+        "r": [(0.0, 0.502, 0.502), (0.067, 0.0, 0.0), (0.133, 0.0, 0.0),
+              (0.2, 0.0, 0.0), (0.267, 0.0, 0.0), (0.333, 0.0, 0.0),
+              (0.4, 0.502, 0.502), (0.467, 1.0, 1.0), (0.533, 1.0, 1.0),
+              (0.6, 1.0, 1.0), (0.667, 1.0, 1.0), (0.733, 1.0, 1.0),
+              (0.8, 1.0, 1.0), (0.867, 1.0, 1.0), (0.933, 0.753, 0.753),
+              (1.0, 0.502, 0.502)],
+        "g": [(0.0, 0.0, 0.0), (0.067, 0.0, 0.0), (0.133, 0.502, 0.502),
+              (0.2, 1.0, 1.0), (0.267, 1.0, 1.0), (0.333, 1.0, 1.0),
+              (0.4, 1.0, 1.0), (0.467, 1.0, 1.0), (0.533, 0.753, 0.753),
+              (0.6, 0.502, 0.502), (0.667, 0.251, 0.251), (0.733, 0.0, 0.0),
+              (0.8, 0.0, 0.0), (0.867, 0.0, 0.0), (0.933, 0.0, 0.0),
+              (1.0, 0.0, 0.0)],
+        "b": [(0.0, 0.502, 0.502), (0.067, 1.0, 1.0), (0.133, 1.0, 1.0),
+              (0.2, 1.0, 1.0), (0.267, 0.667, 0.667), (0.333, 0.0, 0.0),
+              (0.4, 0.0, 0.0), (0.467, 0.0, 0.0), (0.533, 0.0, 0.0),
+              (0.6, 0.0, 0.0), (0.667, 0.0, 0.0), (0.733, 0.0, 0.0),
+              (0.8, 0.502, 0.502), (0.867, 1.0, 1.0), (0.933, 1.0, 1.0),
+              (1.0, 0.502, 0.502)],
+    },
+}
 
 
 class DataSeeder:
@@ -127,6 +232,10 @@ class DataSeeder:
                 product_description=fields.get('product_description', ''),
                 enabled=fields.get('enabled', True),
                 see_in_open=fields.get('see_in_open', False),
+                unit=fields.get('unit'),
+                min_value=fields.get('min_value'),
+                max_value=fields.get('max_value'),
+                default_cmap=fields.get('default_cmap'),
             )
             session.add(product)
             count += 1
@@ -134,6 +243,55 @@ class DataSeeder:
         
         return count
     
+    def seed_colormap_stops(self, session: Session) -> int:
+        """Seed system colormaps from the hardcoded _SYSTEM_COLORMAPS definition.
+
+        Idempotent: skips a cmap_name entirely if any row with that name already
+        exists in the table (avoids duplicating system data on re-seed).
+        """
+        total = 0
+        for cmap_name, channels in _SYSTEM_COLORMAPS.items():
+            exists = session.query(ColormapStop).filter_by(cmap_name=cmap_name).first()
+            if exists:
+                logger.debug(f"ColormapStop rows for '{cmap_name}' already exist, skipping")
+                continue
+
+            for channel, stops in channels.items():
+                for sort_order, (position, val_left, val_right) in enumerate(stops):
+                    session.add(ColormapStop(
+                        cmap_name=cmap_name,
+                        channel=channel,
+                        position=position,
+                        val_left=val_left,
+                        val_right=val_right,
+                        sort_order=sort_order,
+                        is_system=True,
+                    ))
+                    total += 1
+
+            logger.debug(f"Seeded colormap '{cmap_name}'")
+
+        return total
+
+    def seed_product_colormap_options(self, session: Session, records: List[Dict]) -> int:
+        """Seed product-colormap associations from JSON records."""
+        count = 0
+        for record in records:
+            fields = record.get('fields', {})
+            product_key = fields.get('product_key', '')
+            cmap_name = fields.get('cmap_name', '')
+            if not product_key or not cmap_name:
+                continue
+            exists = session.query(ProductColormapOption).filter_by(
+                product_key=product_key, cmap_name=cmap_name
+            ).first()
+            if exists:
+                logger.debug(f"ProductColormapOption {product_key}/{cmap_name} already exists, skipping")
+                continue
+            session.add(ProductColormapOption(product_key=product_key, cmap_name=cmap_name))
+            count += 1
+        return count
+
     def seed_references(self, session: Session, records: List[Dict]) -> int:
         """Seed color references."""
         count = 0
@@ -241,30 +399,44 @@ class DataSeeder:
         
         with db_manager.get_session() as session:
             # Order matters due to foreign key constraints!
-            
+
             # 1. Radars (no dependencies)
             if 'radar' in groups:
                 results['radars'] = self.seed_radars(session, groups['radar'])
                 session.flush()
-            
+
             # 2. Products (no dependencies)
             if 'radarproduct' in groups:
                 results['products'] = self.seed_products(session, groups['radarproduct'])
                 session.flush()
-            
+
             # 3. References (depends on products)
             if 'reference' in groups:
                 results['references'] = self.seed_references(session, groups['reference'])
                 session.flush()
-            
+
             # 4. Volumenes (no dependencies)
             if 'volumen' in groups:
                 results['volumenes'] = self.seed_volumenes(session, groups['volumen'])
                 session.flush()
-            
+
             # 5. Estrategias (depends on volumenes)
             if 'estrategia' in groups:
                 results['estrategias'] = self.seed_estrategias(session, groups['estrategia'])
+                session.flush()
+
+            # 6. Colormap stops (hardcoded Python data, no JSON dependency)
+            results['colormap_stops'] = self.seed_colormap_stops(session)
+            session.flush()
+
+            # 7. Product-colormap options (depends on products + colormap stops)
+            pco_key = next((k for k in groups if 'productcolormap' in k), None)
+            if pco_key:
+                results['product_colormap_options'] = self.seed_product_colormap_options(
+                    session, groups[pco_key]
+                )
+            else:
+                results['product_colormap_options'] = 0
         
         logger.info(f"Seeding complete: {results}")
         return results
@@ -302,6 +474,10 @@ class DataSeeder:
             product_description=fields.get('product_description', ''),
             enabled=fields.get('enabled', True),
             see_in_open=fields.get('see_in_open', False),
+            unit=fields.get('unit'),
+            min_value=fields.get('min_value'),
+            max_value=fields.get('max_value'),
+            default_cmap=fields.get('default_cmap'),
         )
         if existing:
             for k, v in kwargs.items():
@@ -435,6 +611,34 @@ class DataSeeder:
                         session, record['pk'], record.get('fields', {})
                     )
                     _tally(results, 'estrategias', action)
+                session.flush()
+
+            # 6. Colormap stops — always re-seed from hardcoded data;
+            #    upsert behaviour: skip names already present.
+            added = self.seed_colormap_stops(session)
+            results['colormap_stops_inserted'] = added
+            session.flush()
+
+            # 7. Product-colormap options — upsert from JSON
+            pco_key = next(
+                (k for k in groups if 'productcolormap' in k),
+                None,
+            )
+            if pco_key:
+                for record in groups[pco_key]:
+                    fields = record.get('fields', {})
+                    pk_key = fields.get('product_key', '')
+                    cmap = fields.get('cmap_name', '')
+                    if not pk_key or not cmap:
+                        continue
+                    exists = session.query(ProductColormapOption).filter_by(
+                        product_key=pk_key, cmap_name=cmap
+                    ).first()
+                    if not exists:
+                        session.add(ProductColormapOption(product_key=pk_key, cmap_name=cmap))
+                        _tally(results, 'product_colormap_options', 'inserted')
+                    else:
+                        _tally(results, 'product_colormap_options', 'skipped')
 
         logger.info(f"Sync complete: {results}")
         return results

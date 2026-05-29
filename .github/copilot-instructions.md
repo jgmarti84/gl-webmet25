@@ -170,6 +170,16 @@ tests/ # Automated tests
 - `radar_coverage_m` (Float): Radar coverage radius in metres, from radarlib COG tag. `NULL` for legacy files.
 - `polarimetric_var` (String 16): Exact field name including `o`-suffix, e.g. `"DBZHo"`. Used for exact-match filtering in the `/cogs` endpoint.
 
+**Key RadarProduct columns added in recent versions:**
+- `default_cmap` (String 64, nullable): DB-canonical default colormap name (e.g. `"grc_th"`).
+- `min_value`, `max_value`: Authoritative data range for colour scaling.
+
+**Colormap tables:**
+- `colormap_stops`: One row per channel point (`cmap_name`, `channel` r/g/b, `position`, `val_left`, `val_right`, `sort_order`, `is_system`). 8 system colormaps seeded: `grc_th`, `grc_th2`, `grc_rain`, `grc_g`, `grc_rho`, `grc_zdr`, `grc_vrad`, `Theodore16`.
+- `product_colormap_options`: Many-to-many between `product_key` and `cmap_name`.
+
+**ColormapService** (`api/app/services/colormap_service.py`): thread-safe singleton with 5-minute TTL cache. Exposes `get_cmap(name)`, `default_for_product(key)`, `options_for_product(key)`, `list_cmap_names()`, `invalidate()`. Colormap resolution order: DB → hardcoded builders in `utils/colormaps.py` → PyART → matplotlib.
+
 **Unique constraint on RadarCOG:** `(radar_code, product_id, observation_time, elevation_angle, vol_nr)` — allows the same field from different volumes (e.g. `DBZH` vol 01 vs vol 04) to coexist as distinct records.
 
 ---
@@ -184,7 +194,13 @@ tests/ # Automated tests
 | GET | `/cogs` | Query COG metadata. Supports `strategy` and `vol_nr` (repeatable) query params for coverage-mode filtering |
 | GET | `/tiles/{cog_id}/{z}/{x}/{y}.png` | Render Web Mercator tile (v1) |
 | GET | `/tiles/{cog_id}/metadata` | Get tile metadata |
-| GET | `/products/{product_key}/colormap` | Get product colormap |
+| GET | `/products/{product_key}/colormap` | Get product colormap (Reference table) |
+| GET | `/colormap/names` | List all DB-defined colormap names |
+| GET | `/colormap/options` | Per-product colormap option lists (DB-backed, `ProductColormapOption`) |
+| GET | `/colormap/defaults` | Per-product default colormap name (`RadarProduct.default_cmap`) |
+| GET | `/colormap/colors/{cmap_name}` | Hex color list for a colormap |
+| GET | `/colormap/info/{product_key}` | Full colormap info for a product |
+| POST | `/colormap/cache/invalidate` | Flush the in-process colormap cache after DB edits |
 | GET | `/frames/{cog_id}/image.png` | Full COG as single georeferenced PNG (v2). Supports `colormap`, `vmin`, `vmax`, `filter_vmin`, `filter_vmax`, `smooth`, `smooth_sigma` params. Returns bbox in `X-Bbox-*` headers |
 | GET | `/tops-cores` | Query TopsAndCores metadata records by `radar_codes[]` + `time_from` + `time_to` |
 | GET | `/tops-cores/{id}/features` | Fetch raw GeoJSON FeatureCollection from disk by record ID |

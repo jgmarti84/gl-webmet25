@@ -665,37 +665,43 @@ Fetch raw GeoJSON FeatureCollection from disk. Returns 404 if record not found; 
 
 ### 4.8 Colormap Endpoint
 
-**File:** [`api/app/routers/colormap.py`](../api/app/routers/colormap.py)
+**File:** [`api/app/routers/colormap.py`](../api/app/routers/colormap.py)  
+**Service:** [`api/app/services/colormap_service.py`](../api/app/services/colormap_service.py)
 
-```python
-@router.get("/products/{product_key}/colormap", response_model=ColormapResponse)
-def get_colormap(
-    product_key: str,
-    db: Session = Depends(get_db)
-) -> ColormapResponse:
-    """Get color scale (legend) for product."""
-    product = db.query(RadarProduct).filter_by(product_key=product_key).first()
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-    
-    # Get color scale entries, sorted by value
-    references = db.query(Reference)\
-        .filter_by(product_id=product.id)\
-        .order_by(Reference.value)\
-        .all()
-    
-    return ColormapResponse(
-        product_key=product_key,
-        entries=[
-            {
-                "value": ref.value,
-                "color": ref.color,
-                "label": ref.title or str(ref.value)
-            }
-            for ref in references
-        ]
-    )
-```
+Colormaps are now served from the DB via `ColormapService`. The hardcoded
+`FIELD_RENDER` / `FIELD_COLORMAP_OPTIONS` dicts in `utils/colormaps.py` remain
+as an emergency fallback only.
+
+#### ColormapService
+
+`ColormapService` is a thread-safe singleton that loads all colormap data from
+the DB on first access and keeps it in-process with a 5-minute TTL cache.
+
+| Method | Description |
+|---|---|
+| `get_cmap(name)` | Returns a `LinearSegmentedColormap` built from `colormap_stops` rows |
+| `default_for_product(key)` | Returns `(default_cmap, vmin, vmax)` from `RadarProduct.default_cmap` / `min_value` / `max_value` |
+| `options_for_product(key)` | Returns the `ProductColormapOption` list for a product; falls back to all cmap names |
+| `list_cmap_names()` | Sorted list of all colormap names defined in the DB |
+| `invalidate()` | Flushes the in-process cache; next access triggers a DB reload |
+
+#### Colormap resolution order (get_colormap / colormap_for_field)
+
+1. **DB** — `ColormapService.get_cmap(name)` / `default_for_product(key)`
+2. **Hardcoded builders** — `_HARDCODED_BUILDERS` dict in `utils/colormaps.py`
+3. **PyART** — if installed and name starts with `pyart_`
+4. **matplotlib built-ins** — `plt.get_cmap(name)`
+
+#### Endpoints
+
+| Method | Path | Description |
+|--------|------|--------------|
+| GET | `/colormap/names` | List all DB-defined colormap names |
+| GET | `/colormap/options` | Per-product colormap option lists (DB-backed) |
+| GET | `/colormap/defaults` | Per-product default colormap name (DB-backed) |
+| GET | `/colormap/colors/{cmap_name}` | List of hex colors for a colormap |
+| GET | `/colormap/info/{product_key}` | Full colormap info for a product |
+| POST | `/colormap/cache/invalidate` | Flush the in-process cache after DB edits |
 
 ---
 

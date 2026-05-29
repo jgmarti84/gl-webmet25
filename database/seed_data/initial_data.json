@@ -360,7 +360,10 @@
         "product_description": "COLMAX tipo DBZH",
         "enabled": true,
         "see_in_open": true,
-        "unit": "dBZ"
+        "unit": "dBZ",
+        "default_cmap": "grc_th",
+        "min_value": -30.0,
+        "max_value": 70.0
     }
 },
 {
@@ -372,7 +375,10 @@
         "product_description": "COLMAX sin filtrar",
         "enabled": true,
         "see_in_open": false,
-        "unit": "dBZ"
+        "unit": "dBZ",
+        "default_cmap": "grc_th",
+        "min_value": -30.0,
+        "max_value": 70.0
     }
 },
 {
@@ -384,7 +390,10 @@
         "product_description": "Coeficiente de correlacion co-polar",
         "enabled": false,
         "see_in_open": false,
-        "unit": "-"
+        "unit": "-",
+        "default_cmap": "grc_rho",
+        "min_value": 0.0,
+        "max_value": 1.0
     }
 },
 {
@@ -396,7 +405,10 @@
         "product_description": "Coeficiente de correlacion co-polar sin filtrar",
         "enabled": true,
         "see_in_open": false,
-        "unit": "-"
+        "unit": "-",
+        "default_cmap": "grc_rho",
+        "min_value": 0.0,
+        "max_value": 1.0
     }
 },
 {
@@ -408,7 +420,10 @@
         "product_description": "Factor de Reflectividad Equivalente",
         "enabled": true,
         "see_in_open": false,
-        "unit": "dBZ"
+        "unit": "dBZ",
+        "default_cmap": "grc_th",
+        "min_value": -30.0,
+        "max_value": 70.0
     }
 },
 {
@@ -420,7 +435,10 @@
         "product_description": "Factor de Reflectividad Equivalente sin filtrar",
         "enabled": true,
         "see_in_open": false,
-        "unit": "dBZ"
+        "unit": "dBZ",
+        "default_cmap": "grc_th",
+        "min_value": -30.0,
+        "max_value": 70.0
     }
 },
 {
@@ -432,7 +450,10 @@
         "product_description": "Diferencia de Propagaci\u00f3n de Fase",
         "enabled": false,
         "see_in_open": false,
-        "unit": "\u00b0 (degrees)"
+        "unit": "\u00b0 (degrees)",
+        "default_cmap": "Theodore16",
+        "min_value": 0.0,
+        "max_value": 360.0
     }
 },
 {
@@ -444,7 +465,10 @@
         "product_description": "Diferencia de Propagaci\u00f3n de Fase sin filtrar",
         "enabled": false,
         "see_in_open": false,
-        "unit": "\u00b0 (degrees)"
+        "unit": "\u00b0 (degrees)",
+        "default_cmap": "Theodore16",
+        "min_value": 0.0,
+        "max_value": 360.0
     }
 },
 {
@@ -456,7 +480,10 @@
         "product_description": "Factor de Reflectividad Vertical",
         "enabled": false,
         "see_in_open": false,
-        "unit": "dBZ"
+        "unit": "dBZ",
+        "default_cmap": "grc_th",
+        "min_value": -30.0,
+        "max_value": 70.0
     }
 },
 {
@@ -468,7 +495,10 @@
         "product_description": "Factor de Reflectividad Vertical sin filtrar",
         "enabled": false,
         "see_in_open": false,
-        "unit": "dBZ"
+        "unit": "dBZ",
+        "default_cmap": "grc_th",
+        "min_value": -30.0,
+        "max_value": 70.0
     }
 },
 {
@@ -480,7 +510,10 @@
         "product_description": "Velocidad Doppler",
         "enabled": false,
         "see_in_open": false,
-        "unit": "m/s"
+        "unit": "m/s",
+        "default_cmap": "grc_vrad",
+        "min_value": -35.0,
+        "max_value": 35.0
     }
 },
 {
@@ -492,7 +525,10 @@
         "product_description": "Velocidad Doppler sin filtrar",
         "enabled": true,
         "see_in_open": false,
-        "unit": "m/s"
+        "unit": "m/s",
+        "default_cmap": "grc_vrad",
+        "min_value": -35.0,
+        "max_value": 35.0
     }
 },
 {
@@ -504,7 +540,10 @@
         "product_description": "Ancho Espectral",
         "enabled": false,
         "see_in_open": false,
-        "unit": "m"
+        "unit": "m/s",
+        "default_cmap": "grc_vrad",
+        "min_value": 0.0,
+        "max_value": 10.0
     }
 },
 {
@@ -516,7 +555,10 @@
         "product_description": "Ancho Espectral sin filtrar",
         "enabled": true,
         "see_in_open": false,
-        "unit": "m"
+        "unit": "m/s",
+        "default_cmap": "grc_vrad",
+        "min_value": 0.0,
+        "max_value": 10.0
     }
 },
 {
@@ -528,7 +570,10 @@
         "product_description": "Reflectividad diferencial",
         "enabled": true,
         "see_in_open": false,
-        "unit": "dB"
+        "unit": "dB",
+        "default_cmap": "grc_zdr",
+        "min_value": -5.0,
+        "max_value": 10.5
     }
 },
 {
@@ -540,7 +585,10 @@
         "product_description": "Reflectividad diferencial sin filtrar",
         "enabled": true,
         "see_in_open": false,
-        "unit": "dB"
+        "unit": "dB",
+        "default_cmap": "grc_zdr",
+        "min_value": -5.0,
+        "max_value": 10.5
     }
 },
 {
@@ -552,7 +600,10 @@
         "product_description": "Diferencial de fase espec\u00edfico",
         "enabled": true,
         "see_in_open": false,
-        "unit": "\u00b0/km (degrees/km)"
+        "unit": "\u00b0/km (degrees/km)",
+        "default_cmap": "grc_rain",
+        "min_value": 0.0,
+        "max_value": 8.0
     }
 },
 {
@@ -564,7 +615,10 @@
         "product_description": "Diferencial de fase espec\u00edfico sin filtrar",
         "enabled": true,
         "see_in_open": false,
-        "unit": "\u00b0/km (degrees/km)"
+        "unit": "\u00b0/km (degrees/km)",
+        "default_cmap": "grc_rain",
+        "min_value": 0.0,
+        "max_value": 8.0
     }
 },
 {
@@ -575,7 +629,11 @@
         "product_title": "MOSAICO sf",
         "product_description": "MOSAICO sin filtros",
         "enabled": false,
-        "see_in_open": false
+        "see_in_open": false,
+        "unit": "dBZ",
+        "default_cmap": "grc_th",
+        "min_value": -30.0,
+        "max_value": 70.0
     }
 },
 {
@@ -586,7 +644,11 @@
         "product_title": "MOSAICO",
         "product_description": "MOSAICO",
         "enabled": false,
-        "see_in_open": false
+        "see_in_open": false,
+        "unit": "dBZ",
+        "default_cmap": "grc_th",
+        "min_value": -30.0,
+        "max_value": 70.0
     }
 },
 {
@@ -1802,5 +1864,235 @@
             4
         ]
     }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1000,
+    "fields": { "product_key": "COLMAX", "cmap_name": "grc_th" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1001,
+    "fields": { "product_key": "COLMAX", "cmap_name": "grc_th2" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1002,
+    "fields": { "product_key": "COLMAX", "cmap_name": "grc_rain" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1003,
+    "fields": { "product_key": "COLMAX", "cmap_name": "grc_g" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1004,
+    "fields": { "product_key": "COLMAXo", "cmap_name": "grc_th" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1005,
+    "fields": { "product_key": "COLMAXo", "cmap_name": "grc_th2" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1006,
+    "fields": { "product_key": "COLMAXo", "cmap_name": "grc_rain" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1007,
+    "fields": { "product_key": "COLMAXo", "cmap_name": "grc_g" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1008,
+    "fields": { "product_key": "RHOHV", "cmap_name": "grc_rho" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1009,
+    "fields": { "product_key": "RHOHVo", "cmap_name": "grc_rho" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1010,
+    "fields": { "product_key": "DBZH", "cmap_name": "grc_th" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1011,
+    "fields": { "product_key": "DBZH", "cmap_name": "grc_th2" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1012,
+    "fields": { "product_key": "DBZH", "cmap_name": "grc_rain" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1013,
+    "fields": { "product_key": "DBZH", "cmap_name": "grc_g" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1014,
+    "fields": { "product_key": "DBZHo", "cmap_name": "grc_th" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1015,
+    "fields": { "product_key": "DBZHo", "cmap_name": "grc_th2" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1016,
+    "fields": { "product_key": "DBZHo", "cmap_name": "grc_rain" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1017,
+    "fields": { "product_key": "DBZHo", "cmap_name": "grc_g" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1018,
+    "fields": { "product_key": "PHIDP", "cmap_name": "Theodore16" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1019,
+    "fields": { "product_key": "PHIDPo", "cmap_name": "Theodore16" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1020,
+    "fields": { "product_key": "DBZV", "cmap_name": "grc_th" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1021,
+    "fields": { "product_key": "DBZV", "cmap_name": "grc_th2" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1022,
+    "fields": { "product_key": "DBZV", "cmap_name": "grc_rain" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1023,
+    "fields": { "product_key": "DBZV", "cmap_name": "grc_g" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1024,
+    "fields": { "product_key": "DBZVo", "cmap_name": "grc_th" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1025,
+    "fields": { "product_key": "DBZVo", "cmap_name": "grc_th2" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1026,
+    "fields": { "product_key": "DBZVo", "cmap_name": "grc_rain" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1027,
+    "fields": { "product_key": "DBZVo", "cmap_name": "grc_g" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1028,
+    "fields": { "product_key": "VRAD", "cmap_name": "grc_vrad" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1029,
+    "fields": { "product_key": "VRADo", "cmap_name": "grc_vrad" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1030,
+    "fields": { "product_key": "WRAD", "cmap_name": "grc_vrad" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1031,
+    "fields": { "product_key": "WRADo", "cmap_name": "grc_vrad" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1032,
+    "fields": { "product_key": "ZDR", "cmap_name": "grc_zdr" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1033,
+    "fields": { "product_key": "ZDRo", "cmap_name": "grc_zdr" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1034,
+    "fields": { "product_key": "KDP", "cmap_name": "grc_rain" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1035,
+    "fields": { "product_key": "KDP", "cmap_name": "grc_th" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1036,
+    "fields": { "product_key": "KDPo", "cmap_name": "grc_rain" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1037,
+    "fields": { "product_key": "KDPo", "cmap_name": "grc_th" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1038,
+    "fields": { "product_key": "MOSAICO", "cmap_name": "grc_th" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1039,
+    "fields": { "product_key": "MOSAICO", "cmap_name": "grc_th2" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1040,
+    "fields": { "product_key": "MOSAICO", "cmap_name": "grc_rain" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1041,
+    "fields": { "product_key": "MOSAICO", "cmap_name": "grc_g" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1042,
+    "fields": { "product_key": "MOSAICOo", "cmap_name": "grc_th" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1043,
+    "fields": { "product_key": "MOSAICOo", "cmap_name": "grc_th2" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1044,
+    "fields": { "product_key": "MOSAICOo", "cmap_name": "grc_rain" }
+},
+{
+    "model": "radar_api.productcolormaporoption",
+    "pk": 1045,
+    "fields": { "product_key": "MOSAICOo", "cmap_name": "grc_g" }
 }
 ]
