@@ -8,7 +8,8 @@ utils/colormaps.py remain as an emergency fallback only.
 """
 
 import logging
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session, joinedload
 from typing import Dict, List
 from ..utils.colormaps import (
     FIELD_COLORMAP_OPTIONS,
@@ -18,6 +19,8 @@ from ..utils.colormaps import (
     colormap_options_for_field,
 )
 from ..services.colormap_service import ColormapService
+from radar_db.database import get_db
+from radar_db.models import RadarProduct
 
 logger = logging.getLogger(__name__)
 
@@ -112,30 +115,52 @@ async def get_colormap_color_list(
 @router.get("/info/{product_key}")
 async def get_product_colormap_info(
     product_key: str,
-    colormap: str = Query(None, description="Optional colormap override")
+    colormap: str = Query(None, description="Optional colormap override"),
+    db: Session = Depends(get_db),
 ):
     """
     Get colormap information for a specific product.
-    
-    Args:
-        product_key: Product key (e.g., 'DBZH', 'VRAD')
-        colormap: Optional colormap name to override default
-    
-    Returns:
-        Dictionary with colormap name, vmin, vmax, and color list
+
+    Returns colormap name, vmin, vmax, color list, available colormaps, and
+    ticks sourced from the Reference table (value + color per tick).
+    Ticks are sorted ascending by value. If no Reference rows exist for this
+    product the 'ticks' list will be empty and the legend will auto-generate
+    evenly-spaced ticks client-side.
     """
     try:
         cmap, vmin, vmax, cmap_name = colormap_for_field(product_key, override_cmap=colormap)
-        
-        # Get color list
         hex_colors = get_colormap_colors(cmap_name, steps=256)
-        
+
+        # Reference ticks — look up both exact key and without 'o' suffix.
+        lookup_key = product_key.upper()
+        product = (
+            db.query(RadarProduct)
+            .options(joinedload(RadarProduct.references))
+            .filter(RadarProduct.product_key == lookup_key)
+            .first()
+        )
+        if product is None and lookup_key.endswith("O"):
+            product = (
+                db.query(RadarProduct)
+                .options(joinedload(RadarProduct.references))
+                .filter(RadarProduct.product_key == lookup_key[:-1])
+                .first()
+            )
+
+        ticks = []
+        if product and product.references:
+            ticks = [
+                {"value": r.value, "color": r.color}
+                for r in sorted(product.references, key=lambda r: r.value)
+            ]
+
         return {
-            "product_key": product_key.upper(),
+            "product_key": lookup_key,
             "colormap": cmap_name,
             "vmin": vmin,
             "vmax": vmax,
             "colors": hex_colors,
+            "ticks": ticks,
             "available_colormaps": colormap_options_for_field(product_key),
         }
     except Exception as e:

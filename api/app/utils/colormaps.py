@@ -186,7 +186,7 @@ def get_cmap_nws_vel():
         'green': [(positions[i], colors[i][1], colors[i][1]) for i in range(n)],
         'blue':  [(positions[i], colors[i][2], colors[i][2]) for i in range(n)],
     }
-    return LinearSegmentedColormap('NWSVel', data)
+    return LinearSegmentedColormap('grc_vrad', data)
 
 
 def get_cmap_theodore16():
@@ -263,8 +263,8 @@ FIELD_RENDER = {
     "RHOHV": {"vmin": 0.0, "vmax": 1.0, "cmap": "grc_rho"},
     "RHOHVo": {"vmin": 0.0, "vmax": 1.0, "cmap": "grc_rho"},
     "KDP": {"vmin": 0.0, "vmax": 8.0, "cmap": "grc_rain"},
-    "VRAD": {"vmin": -35.0, "vmax": 35.0, "cmap": "NWSVel"},
-    "VRADo": {"vmin": -35.0, "vmax": 35.0, "cmap": "NWSVel"},
+    "VRAD": {"vmin": -35.0, "vmax": 35.0, "cmap": "grc_vrad"},
+    "VRADo": {"vmin": -35.0, "vmax": 35.0, "cmap": "grc_vrad"},
     "WRAD": {"vmin": 0.0, "vmax": 10.0, "cmap": "Oranges"},
     "WRADo": {"vmin": 0.0, "vmax": 10.0, "cmap": "Oranges"},
     "PHIDP": {"vmin": 0.0, "vmax": 360.0, "cmap": "Theodore16"},
@@ -288,8 +288,8 @@ FIELD_COLORMAP_OPTIONS = {
     "RHOHV": ["grc_rho", "Greys", "viridis"],
     "RHOHVo": ["grc_rho", "Greys", "viridis"],
     "KDP": ["grc_rain", "grc_th", "plasma"],
-    "VRAD": ["NWSVel", "seismic", "RdBu_r"],
-    "VRADo": ["NWSVel", "seismic", "RdBu_r"],
+    "VRAD": ["grc_vrad", "seismic", "RdBu_r"],
+    "VRADo": ["grc_vrad", "seismic", "RdBu_r"],
     "WRAD": ["Oranges", "YlOrRd", "hot", "plasma"],
     "WRADo": ["Oranges", "YlOrRd", "hot", "plasma"],
     "PHIDP": ["Theodore16", "hsv", "twilight", "twilight_shifted"],
@@ -307,7 +307,7 @@ _HARDCODED_BUILDERS = {
     "grc_zdr": lambda: get_cmap_grc_zdr2(),  # new canonical name
     "grc_zdr2": lambda: get_cmap_grc_zdr2(),
     "grc_vrad": lambda: get_cmap_nws_vel(),
-    "NWSVel": lambda: get_cmap_nws_vel(),
+    "grc_vrad": lambda: get_cmap_nws_vel(),
     "Theodore16": lambda: get_cmap_theodore16(),
 }
 

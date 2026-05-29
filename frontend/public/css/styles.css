@@ -1044,6 +1044,55 @@ code {
     letter-spacing: 0.5px;
 }
 
+/* ── Continuous gradient legend ── */
+.legend-gradient-wrapper {
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    height: 180px;
+    margin: 4px 0;
+}
+
+.legend-gradient-bar {
+    width: 18px;
+    flex-shrink: 0;
+    border-radius: 3px;
+    border: 1px solid rgba(255,255,255,0.15);
+}
+
+.legend-ticks {
+    position: relative;
+    flex: 1;
+    margin-left: 4px;
+}
+
+.legend-tick {
+    position: absolute;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    transform: translateY(50%);  /* centre tick on its value line */
+}
+
+.legend-tick-line {
+    width: 6px;
+    height: 1px;
+    background: rgba(255,255,255,0.45);
+    flex-shrink: 0;
+    margin-right: 4px;
+}
+
+.legend-tick-label {
+    font-size: 10px;
+    color: #ddd;
+    font-family: 'Courier New', monospace;
+    white-space: nowrap;
+    line-height: 1;
+}
+
+/* ── Legacy discrete-block legend (backward compat) ── */
 .legend-scale {
     display: flex;
     flex-direction: column;
