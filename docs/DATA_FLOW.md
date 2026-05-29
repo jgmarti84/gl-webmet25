@@ -31,68 +31,97 @@ webmet25 (consumer)
 def run_indexer():
     """Run the indexer service."""
     from radar_db import db_manager
-    from indexer.watcher import COGWatcher
-    
+    from indexer.watcher import COGWatcher, TopsAndCoresWatcher
+    import threading
+
     # Wait for database
     if not wait_for_database():
         sys.exit(1)
-    
-    # Create and run watcher
+
+    # Start TopsAndCores watcher in a background thread
+    tops_cores_watcher = TopsAndCoresWatcher()
+    t = threading.Thread(target=tops_cores_watcher.run_forever,
+                         args=(db_manager.get_session_direct,), daemon=True)
+    t.start()
+
+    # COG watcher runs in the main thread
     watcher = COGWatcher()
     watcher.run_forever(db_manager.get_session_direct)
 ```
 
 **Responsibility:**
 - Waits for PostgreSQL database to become available
-- Starts the file system watcher in an infinite loop
-- Passes database session factory to the watcher
+- Starts `TopsAndCoresWatcher` in a background thread (scans `TOPS_AND_CORES_DIR`)
+- Starts `COGWatcher` in the main loop (scans `ROOT_RADAR_PRODUCTS_PATH`)
 
 ### 2.2 File System Scanning: COGWatcher
 
-**File:** `indexer/indexer/watcher.py` (referenced in DISCOVERY_REPORT.md)
+**File:** [`indexer/indexer/watcher.py`](../indexer/indexer/watcher.py)
 
 **Responsibility:**
-- Monitors `/product_output` directory every `SCAN_INTERVAL` seconds (default: 30s)
-- Lists all `.tif` files matching radarlib's naming convention
-- For each file:
-  - Checks if already indexed (via `file_path` UNIQUE constraint)
-  - Parses filename to extract metadata
+- Monitors `ROOT_RADAR_PRODUCTS_PATH` every `SCAN_INTERVAL` seconds (default: 30s)
+- First run: full scan. Subsequent runs: incremental (files modified in last 5 min + overlap)
+- For each `.tif` file:
+  - Parses filename to extract metadata (supports both production and legacy formats)
   - Extracts COG metadata using rasterio
   - Registers in database or marks as MISSING
   - Handles errors gracefully (one bad file doesn't stop the scan)
+- **`update_radar_activity()`:** Called at the end of every scan cycle. Sets `Radar.is_active = True/False` based on whether a recent AVAILABLE COG exists within the last `RADAR_ACTIVE_THRESHOLD_HOURS` hours.
 
 **Configuration:** [`indexer/indexer/config.py`](../indexer/indexer/config.py)
 
 ```python
-# env vars read at startup:
 WATCH_PATH = "/product_output"
-SCAN_INTERVAL = 30  # seconds
+SCAN_INTERVAL = 30               # seconds
 FILE_PATTERN = "*.tif"
 COMPUTE_STATS = True
 COMPUTE_CHECKSUM = False
+RADAR_ACTIVE_THRESHOLD_HOURS = 2  # hours; used by update_radar_activity()
+TOPS_AND_CORES_DIR = "/tops_and_cores"
 ```
+
+### 2.2b TopsAndCores Scanning: TopsAndCoresWatcher
+
+**File:** [`indexer/indexer/watcher.py`](../indexer/indexer/watcher.py)
+
+**Responsibility:**
+- Monitors `TOPS_AND_CORES_DIR` recursively for `*_TOPS_CORES.geojson` files (same poll interval as COGWatcher)
+- For each new file:
+  - Parses filename to extract `radar_code`, `strategy`, `vol_nr`, `observation_time`
+  - Opens GeoJSON and counts cores, tops, and total features
+  - Inserts/updates `TopsAndCores` record
+  - Marks files as `MISSING` if previously indexed but no longer present
 
 ### 2.3 Filename Parsing: COGFilenameParser
 
 **File:** `indexer/indexer/parser.py` (referenced in DISCOVERY_REPORT.md)
 
-**Input Format (radarlib contract):**
+**Supported Filename Patterns:**
+
+**Pattern 0 — Current production format:**
 ```
-<RADAR_NAME>_<TIMESTAMP>_<FIELD>[o]_<ELEVATION>.<ext>
+<RADAR>_<STRATEGY>_<VOL_NR>_<TIMESTAMP>_<FIELD>[o].tif
+```
+Examples:
+```
+RMA1_0315_01_20260401T205000Z_DBZH.tif    # Filtered reflectivity, vol 01
+RMA1_0315_01_20260401T205000Z_DBZHo.tif   # Unfiltered (raw), vol 01
+RMA1_0315_04_20260401T205000Z_COLMAX.tif  # Column max, vol 04 (vigilant)
 ```
 
-**Example:**
+**Pattern 1 — Legacy format (backward compatibility):**
 ```
-RMA1_20260401T205000Z_DBZH_00.tif       # Filtered reflectivity
-RMA1_20260401T205000Z_DBZHo_00.tif      # Unfiltered (raw) reflectivity
-AR5_20260401T120000Z_COLMAX_00.tif      # Column-maximum product
+<RADAR>_<TIMESTAMP>_<FIELD>[o]_<ELEVATION>.tif
 ```
+Example: `RMA1_20260401T205000Z_DBZHo_00.tif`
+(Indexed with `strategy=None`, `vol_nr=None`. A WARNING is logged.)
 
-**Extraction:**
-- `radar_code` = "RMA1" (parsed from filename)
-- `product_key` = "DBZH" (with/without 'o' suffix)
-- `observation_time` = "20260401T205000Z" (ISO 8601 format)
-- `elevation` = "00" (currently always 00, reserved for future multi-elevation)
+**Extraction (Pattern 0):**
+- `radar_code` = `"RMA1"` (from filename)
+- `product_key` = `"DBZH"` or `"DBZHo"` (field name including optional `o` suffix)
+- `observation_time` = `"20260401T205000Z"` (ISO 8601 UTC)
+- `strategy` = `"0315"` (4-digit strategy code)
+- `vol_nr` = `"01"` (2-digit volume number)
 
 **Validation:**
 - Radar code must exist in `Radar` table
@@ -236,6 +265,10 @@ class RadarCOG(Base):
     cog_cmap: str                     # Colormap name
     cog_vmin, cog_vmax: float         # Data range for display
     
+    # radarlib production metadata (NULL for legacy files)
+    vol_nr: str(16)                   # Volume number: "01", "02", "04"
+    radar_coverage_m: float           # Coverage radius in metres
+    
     # Optional Statistics
     data_min, data_max, data_mean: float
     valid_pixel_count: int
@@ -256,6 +289,31 @@ class RadarCOG(Base):
     radar: Radar (M:1 back_populates)
     product: RadarProduct (M:1 back_populates)
     estrategia: Estrategia (M:1 back_populates, nullable)
+    
+    # Unique: (radar_code, product_id, observation_time, elevation_angle, vol_nr)
+    # vol_nr=NULL rows (legacy) are independent due to NULL != NULL in PostgreSQL
+```
+
+#### **TopsAndCores** (Indexed GeoJSON Files)
+```python
+class TopsAndCores(Base):
+    __tablename__ = 'tops_and_cores'
+    
+    id: int (PK)
+    radar_code: str (FK → Radar.code)
+    observation_time: DateTime(tz) (INDEX)
+    file_path: str (UNIQUE)
+    file_name: str
+    feature_count: int            # Total features (cores + tops)
+    core_count: int
+    top_count: int
+    status: COGStatus             # AVAILABLE or MISSING
+    strategy: str (nullable)      # e.g. "0315"
+    vol_nr: str (nullable)        # e.g. "00"
+    created_at: DateTime(tz)
+    updated_at: DateTime(tz)
+    
+    radar: Radar (M:1 back_populates)
 ```
 
 #### **Reference** (Color Scale Entries)
@@ -284,7 +342,14 @@ CREATE INDEX idx_radar_cog_product_id ON radar_cogs(product_id);
 CREATE INDEX idx_radar_cog_observation_time ON radar_cogs(observation_time);
 CREATE INDEX idx_radar_cog_status ON radar_cogs(status);
 CREATE INDEX idx_radar_cog_file_path ON radar_cogs(file_path);  -- UNIQUE
+CREATE INDEX idx_radar_cog_vol_nr ON radar_cogs(vol_nr);
 CREATE INDEX idx_reference_product_id ON references(product_id);
+CREATE INDEX idx_tops_cores_observation_time ON tops_and_cores(observation_time);
+CREATE INDEX idx_tops_cores_radar_code ON tops_and_cores(radar_code);
+-- Composite (radar_code, product_id, observation_time, vol_nr)
+CREATE INDEX idx_cog_radar_product_time ON radar_cogs(radar_code, product_id, observation_time, vol_nr);
+-- Spatial
+CREATE INDEX idx_cog_bbox ON radar_cogs USING GIST (bbox);
 ```
 
 ### 3.3 Initial Data: Seeds
@@ -336,13 +401,18 @@ class DataSeeder:
 **Entry point:** [`api/app/main.py`](../api/app/main.py)
 
 ```python
-from .routers import radars_router, products_router, cogs_router, tiles_router, colormap_router
+from .routers import (
+    radars_router, products_router, cogs_router,
+    tiles_router, colormap_router, frames_router, tops_cores_router
+)
 
 app.include_router(radars_router, prefix="/api/v1")
 app.include_router(products_router, prefix="/api/v1")
 app.include_router(cogs_router, prefix="/api/v1")
 app.include_router(tiles_router, prefix="/api/v1")
 app.include_router(colormap_router, prefix="/api/v1")
+app.include_router(frames_router, prefix="/api/v1")   # v2: full-image frames
+app.include_router(tops_cores_router, prefix="/api/v1")  # convective tops & cores
 ```
 
 ### 4.2 Radars Endpoint
@@ -422,38 +492,38 @@ class ProductResponse(BaseModel):
 @router.get("/cogs", response_model=COGListResponse)
 def list_cogs(
     radar_code: Optional[str] = None,
-    product_key: Optional[str] = None,
+    product_key: Optional[str] = None,     # Exact-match on polarimetric_var
+    strategy: Optional[str] = None,         # e.g. "0315"
+    vol_nr: Optional[List[str]] = Query(default=None),  # Repeatable: ?vol_nr=01&vol_nr=02
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
     page: int = 1,
-    page_size: int = 30,
+    page_size: int = 50,                   # max 200
     db: Session = Depends(get_db)
 ) -> COGListResponse:
     """Query COG metadata with filtering."""
-    query = db.query(RadarCOG).filter_by(status=COGStatus.AVAILABLE)
+    query = db.query(RadarCOG).filter(RadarCOG.status == COGStatus.AVAILABLE)
     
-    # Apply filters
     if radar_code:
-        query = query.filter_by(radar_code=radar_code)
+        query = query.filter(RadarCOG.radar_code == radar_code)
     if product_key:
-        query = query.join(RadarProduct).filter_by(product_key=product_key)
+        # Exact match on polarimetric_var (respects 'o' suffix)
+        query = query.filter(
+            (RadarCOG.polarimetric_var == product_key) |
+            (RadarCOG.product.has(RadarProduct.product_key == product_key))
+        )
+    if strategy:
+        query = query.filter(RadarCOG.estrategia_code == strategy)
+    if vol_nr:  # List[str] — repeatable: ?vol_nr=01&vol_nr=02
+        query = query.filter(RadarCOG.vol_nr.in_(vol_nr))
     if start_time:
         query = query.filter(RadarCOG.observation_time >= start_time)
     if end_time:
         query = query.filter(RadarCOG.observation_time <= end_time)
-    
-    # Sort newest first
-    query = query.order_by(RadarCOG.observation_time.desc())
-    
-    # Paginate
-    cogs = query.offset((page - 1) * page_size).limit(page_size).all()
-    total = query.count()
-    
-    return COGListResponse(
-        cogs=[COGResponse.from_orm(cog) for cog in cogs],
-        count=len(cogs),
-        total=total,
-        page=page,
+    ...
+```
+
+**Response includes:** `id`, `radar_code`, `product_key`, `observation_time`, `cog_cmap`, `cog_vmin`, `cog_vmax`, `bbox`, `strategy`, `vol_nr`, `radar_coverage_m`
         page_size=page_size
     )
 ```
@@ -540,7 +610,60 @@ class TileService:
             return png_bytes
 ```
 
-### 4.6 Colormap Endpoint
+### 4.6 Frames Endpoint (v2 — Full COG Image)
+
+**File:** [`api/app/routers/frames.py`](../api/app/routers/frames.py)
+
+```
+GET /frames/{cog_id}/image.png
+```
+
+Returns the entire COG as a single georeferenced RGBA PNG. Used by the v2 frontend (`L.imageOverlay`) to replace ~10 individual tile requests per frame with a single request.
+
+**Query Parameters:**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `colormap` | str | from COG tag | Matplotlib colormap name |
+| `vmin` / `vmax` | float | from COG tag | Color scale range |
+| `filter_vmin` / `filter_vmax` | float | null | Mask pixels outside range (transparent) |
+| `smooth` | bool | false | Apply Gaussian smoothing before colormap |
+| `smooth_sigma` | float | 0.8 | Gaussian sigma (ignored when `smooth=false`) |
+
+**Gaussian Smoothing Detail:**
+- Implemented in `api/app/services/smoothing.py` via `scipy.ndimage.gaussian_filter`
+- Applied to float data array **before** colormap lookup (not post-render pixel blur)
+- Cache key includes `(smooth, smooth_sigma)` only when `smooth=true`; unsmoothed requests always share the same L1/L2 cache key regardless of sigma sent by client
+
+**Response Headers:**
+- `X-Bbox-West`, `X-Bbox-South`, `X-Bbox-East`, `X-Bbox-North` — WGS84 bounds (reprojected from native CRS)
+- `X-Width`, `X-Height` — image dimensions in pixels
+- `ETag`, `Cache-Control` — caching headers
+
+**Caching:** L1 LRU in-process cache (750 entries) + L2 Redis cache (key prefix `frame:`). Independent from the tile cache (`tile:` prefix).
+
+---
+
+### 4.7 Tops & Cores Endpoints
+
+**File:** [`api/app/routers/tops_cores.py`](../api/app/routers/tops_cores.py)
+
+```
+GET /tops-cores
+```
+Query metadata records. Returns an empty list when no records match (never 404).
+
+**Query Parameters:** `radar_codes[]` (repeatable), `time_from`, `time_to`, `status` (default `available`)
+
+**Response:** List of `TopsAndCoresRecord` with `id`, `radar_code`, `observation_time`, `core_count`, `top_count`, `feature_count`, `strategy`, `vol_nr`, `status`.
+
+```
+GET /tops-cores/{id}/features
+```
+Fetch raw GeoJSON FeatureCollection from disk. Returns 404 if record not found; updates record status to `MISSING` in DB if file not found at serve time. Cache-Control: immutable 86400s.
+
+---
+
+### 4.8 Colormap Endpoint
 
 **File:** [`api/app/routers/colormap.py`](../api/app/routers/colormap.py)
 
@@ -578,9 +701,36 @@ def get_colormap(
 
 ## 5. Frontend Layer: Data Display & State
 
+> **v2 is the current production standard.** v1 (L.tileLayer + /tiles endpoint) is preserved for reference only. All new development targets v2.
+
+### 5.0 Frontend File Structure
+
+```
+frontend/public/js/
+├── shared/                # Shared by v1 and v2
+│   ├── api.js             # REST API client (all endpoints)
+│   ├── controls.js        # UI controls (panels, buttons, toggles)
+│   ├── legend.js          # Color scale legend renderer
+│   ├── tops-cores.js      # TopsCoresLayer (L.circleMarker)
+│   ├── cog-browser-api.js # COG browser alternative API client
+│   └── cog-browser.js     # COG browser alternative view
+└── v2/                    # Current production frontend
+    ├── app.js             # Main orchestrator (2300+ lines, state machine)
+    ├── map.js             # MapManager with L.imageOverlay
+    └── animation.js       # AnimationController with requestAnimationFrame
+```
+
+**v2 key properties:**
+- Uses `L.imageOverlay` (not `L.tileLayer`) — 1 overlay per radar, not ~180 tile layers
+- Uses `/frames/{id}/image.png` endpoint instead of `/tiles/{id}/{z}/{x}/{y}.png`
+- Uses `requestAnimationFrame` for animation loop
+- All field, colormap, and range-filter changes go through `_loadFramesWithContinuity()` — animation never stops
+- Coverage mask rendered as SVG inside `coverageMaskPane` (zIndex 300)
+- `TopsCoresLayer` renders cores (blue) and tops (red) as `L.circleMarker`
+
 ### 5.1 Global State Management
 
-**File:** [`frontend/public/js/app.js`](../frontend/public/js/app.js)
+**File:** [`frontend/public/js/v2/app.js`](../frontend/public/js/v2/app.js)
 
 ```javascript
 // Global state object
@@ -592,19 +742,23 @@ const state = {
     selectedProduct: null,         // User's dropdown choice
     showUnfilteredProducts: false, // Toggle for [o]-suffix fields
     showInactiveRadars: false,     // Toggle for inactive radars
-    activeTimeWindowHours: 3,      // Time window for loading COGs
-    selectedColormap: null,        // User's colormap choice
-    currentVmin: null,             // User's value range override
+    activeTimeWindowHours: 1.5,    // Default time window
+    selectedColormap: null,
+    currentVmin: null,
     currentVmax: null,
-    mapManager: null,              // MapManager instance
-    animator: null,                // AnimationController instance
-    ui: null,                      // UIControls instance
-    legend: null,                  // LegendRenderer instance
-    hasZoomedToBounds: false,      // Zoom flag
+    fieldOpacity: {},              // Per-radar opacity
+    mapManager: null,              // MapManager (v2) instance
+    animator: null,                // AnimationController (v2) instance
+    ui: null,
+    legend: null,
+    hasZoomedToBounds: false,
     animationMode: null,           // "live" or "replay" or null
-    liveHours: null,               // Live window (hours)
-    liveRefreshInterval: null,     // Interval ID for polling
+    liveHours: null,
+    liveRefreshInterval: null,
     radarStatusRefreshInterval: null,
+    topsCoresLayer: null,          // TopsCoresLayer instance
+    topsCoresVisible: false,
+    topsCoresPointSize: 8,
 };
 ```
 
@@ -1178,5 +1332,5 @@ Currently **not implemented**. Gaps noted:
 
 ---
 
-**Document Version:** 1.0.0  
-**Last Updated:** April 20, 2026
+**Document Version:** 2.0.0  
+**Last Updated:** May 29, 2026
