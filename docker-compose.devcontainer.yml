@@ -11,6 +11,9 @@ services:
   #   command: ["tail", "-f", "/dev/null"]
   
   frontend:
+    environment:
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin} # TODO: set a secure admin username in your .env file
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me} # TODO: set a strong admin password in your .env file
     command: ["tail", "-f", "/dev/null"]
 
   frontend-v2:
@@ -20,6 +23,9 @@ services:
       args:
         FE_VERSION: v2
     container_name: radar_frontend_v2
+    environment:
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin} # TODO: set a secure admin username in your .env file
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me} # TODO: set a strong admin password in your .env file
     ports:
       - "8090:80"
     depends_on:

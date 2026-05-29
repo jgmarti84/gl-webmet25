@@ -10,7 +10,16 @@ import rasterio
 from rasterio.env import Env
 
 from .config import settings
-from .routers import radars_router, products_router, cogs_router, tiles_router, colormap_router, frames_router, tops_cores_router
+from .routers import (
+    admin_router,
+    cogs_router,
+    colormap_router,
+    frames_router,
+    products_router,
+    radars_router,
+    tiles_router,
+    tops_cores_router,
+)
 from .schemas import HealthResponse
 from .services.tile_service import _tile_render_executor
 from .services.redis_client import get_redis, close_redis
@@ -158,6 +167,7 @@ app.include_router(tiles_router, prefix=settings.api_prefix)
 app.include_router(colormap_router, prefix=settings.api_prefix)
 app.include_router(frames_router, prefix=settings.api_prefix)
 app.include_router(tops_cores_router, prefix=settings.api_prefix)
+app.include_router(admin_router, prefix=settings.api_prefix)
 
 
 # Health check endpoints

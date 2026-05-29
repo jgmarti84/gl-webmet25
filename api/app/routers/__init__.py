@@ -6,6 +6,7 @@ from .tiles import router as tiles_router
 from .colormap import router as colormap_router
 from .frames import router as frames_router
 from .tops_cores import router as tops_cores_router
+from .admin import router as admin_router
 
 __all__ = [
     'radars_router',
@@ -15,4 +16,5 @@ __all__ = [
     'colormap_router',
     'frames_router',
     'tops_cores_router',
+    'admin_router',
 ]
