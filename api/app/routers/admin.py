@@ -922,7 +922,7 @@ def _hex_to_rgb(hex_color: str):
     h = hex_color.lstrip('#')
     if len(h) != 6:
         raise ValueError(f"Invalid hex color: {hex_color!r}")
-    return tuple(int(h[i:i+2], 16) / 255.0 for i in (0, 2, 4))
+    return (int(h[0:2], 16) / 255.0, int(h[2:4], 16) / 255.0, int(h[4:6], 16) / 255.0)
 
 
 @router.post("/colormap-from-hex", response_model=AdminColormapSummary, status_code=201)
@@ -968,7 +968,7 @@ def admin_create_colormap_from_hex(
                     is_system=False,
                 )
             )
-    db.bulk_save_objects(rows_to_add)
+    db.add_all(rows_to_add)
 
     # Link to products if requested.
     for key in payload.product_keys:
