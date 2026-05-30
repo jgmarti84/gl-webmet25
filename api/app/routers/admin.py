@@ -881,7 +881,7 @@ def admin_list_colormap_options(
         ProductColormapOption.product_key, ProductColormapOption.cmap_name
     )
     if product_key:
-        query = query.filter(ProductColormapOption.product_key == product_key.upper())
+        query = query.filter(ProductColormapOption.product_key == product_key)
     return query.all()
 
 
@@ -892,7 +892,7 @@ def admin_create_colormap_option(
 ):
     """Add a colormap option to a product."""
     option = ProductColormapOption(
-        product_key=payload.product_key.upper(),
+        product_key=payload.product_key,
         cmap_name=payload.cmap_name,
     )
     db.add(option)
@@ -972,18 +972,17 @@ def admin_create_colormap_from_hex(
 
     # Link to products if requested.
     for key in payload.product_keys:
-        norm_key = key.upper()
         # Skip if already linked.
         already = (
             db.query(ProductColormapOption)
             .filter(
-                ProductColormapOption.product_key == norm_key,
+                ProductColormapOption.product_key == key,
                 ProductColormapOption.cmap_name == payload.cmap_name,
             )
             .first()
         )
         if not already:
-            db.add(ProductColormapOption(product_key=norm_key, cmap_name=payload.cmap_name))
+            db.add(ProductColormapOption(product_key=key, cmap_name=payload.cmap_name))
 
     db.commit()
 
