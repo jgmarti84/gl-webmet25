@@ -37,19 +37,19 @@ const BLANK_PNG =
 const BASEMAPS = {
     'argenmap': {
         name:        'IGN Argenmap',
-        url:         'https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+        url:         '/ign-tiles/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png',
         attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
         maxZoom:     18,
     },
     'argenmap_gris': {
         name:        'IGN Argenmap Gris',
-        url:         'https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/mapabase_gris@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+        url:         '/ign-tiles/mapabase_gris@EPSG%3A3857@png/{z}/{x}/{-y}.png',
         attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
         maxZoom:     18,
     },
     'argenmap_topo': {
         name:        'IGN Argenmap Topo',
-        url:         'https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/mapabase_topo@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+        url:         '/ign-tiles/mapabase_topo@EPSG%3A3857@png/{z}/{x}/{-y}.png',
         attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
         maxZoom:     18,
     },
