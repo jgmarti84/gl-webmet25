@@ -9,25 +9,37 @@
 <body>
     <div class="admin-layout">
         <aside class="sidebar">
-            <div class="sidebar-brand">WebMet25 Admin</div>
+            <div class="sidebar-brand">
+                <span class="sidebar-brand-mark">◑</span>
+                <span class="sidebar-brand-text">WebMet25<small>Admin</small></span>
+            </div>
             <nav id="sidebar-nav">
-                <a href="#dashboard" data-section="dashboard" class="active">Dashboard</a>
-                <a href="#radars" data-section="radars">Radars</a>
-                <a href="#products" data-section="products">Products</a>
-                <a href="#references" data-section="references">References</a>
-                <a href="#cogs" data-section="cogs">COGs</a>
-                <a href="#estrategias" data-section="estrategias">Estrategias</a>
-                <a href="#volumenes" data-section="volumenes">Volumenes</a>
-                <a href="#tops-cores" data-section="tops-cores">Tops &amp; Cores</a>
-                <a href="#colormaps" data-section="colormaps">Colormaps</a>
-                <a href="#colormap-options" data-section="colormap-options">Colormap Options</a>
+                <a href="#dashboard" data-section="dashboard" class="active"><span class="nav-ico">▣</span> Dashboard</a>
+                <div class="nav-group-label">Data</div>
+                <a href="#radars" data-section="radars"><span class="nav-ico">📡</span> Radars</a>
+                <a href="#products" data-section="products"><span class="nav-ico">⊞</span> Products</a>
+                <a href="#references" data-section="references"><span class="nav-ico">▤</span> References</a>
+                <a href="#cogs" data-section="cogs"><span class="nav-ico">🗺</span> COGs</a>
+                <a href="#tops-cores" data-section="tops-cores"><span class="nav-ico">⛰</span> Tops &amp; Cores</a>
+                <div class="nav-group-label">Config</div>
+                <a href="#estrategias" data-section="estrategias"><span class="nav-ico">⚙</span> Estrategias</a>
+                <a href="#volumenes" data-section="volumenes"><span class="nav-ico">▦</span> Volumenes</a>
+                <div class="nav-group-label">Colormaps</div>
+                <a href="#colormaps" data-section="colormaps"><span class="nav-ico">🎨</span> Colormaps</a>
+                <a href="#colormap-options" data-section="colormap-options"><span class="nav-ico">⚭</span> Colormap Options</a>
             </nav>
+            <div class="sidebar-footer">
+                <button id="sidebar-back-map" class="btn btn-ghost btn-block" type="button">← Volver al mapa</button>
+            </div>
         </aside>
 
         <main class="main-content">
             <header class="page-header">
-                <h1 id="section-title">Dashboard</h1>
-                <p class="logout-hint">Logout note: HTTP Basic Auth is browser-managed. Close browser session or clear credentials to sign out.</p>
+                <div class="page-header-left">
+                    <button id="back-to-map" class="btn btn-ghost btn-back" type="button" title="Volver al mapa">←</button>
+                    <h1 id="section-title">Dashboard</h1>
+                </div>
+                <p class="logout-hint">HTTP Basic Auth is browser-managed. Close the browser session or clear credentials to sign out.</p>
             </header>
 
             <div id="feedback-message" class="feedback-message hidden"></div>
@@ -39,7 +51,7 @@
         <div class="modal-card">
             <div class="modal-header">
                 <h2 id="form-modal-title">Edit</h2>
-                <button id="close-form-modal" class="btn btn-secondary" type="button">Close</button>
+                <button id="close-form-modal" class="btn btn-secondary btn-sm" type="button">Close</button>
             </div>
             <form id="form-modal-body" class="form-grid"></form>
         </div>
@@ -49,40 +61,54 @@
 
     <!-- Colormap creator modal (separate from the generic form-modal) -->
     <div id="creator-modal" class="modal hidden" role="dialog" aria-modal="true">
-        <div class="modal-card modal-card--wide">
+        <div class="modal-card modal-card--wide creator-card">
             <div class="modal-header">
-                <h2>Create Colormap</h2>
-                <button id="close-creator-modal" class="btn btn-secondary" type="button">Close</button>
+                <h2>🎨 Crear mapa de colores</h2>
+                <button id="close-creator-modal" class="btn btn-secondary btn-sm" type="button">Close</button>
             </div>
+
             <div class="creator-body">
-                <!-- Left column: controls -->
-                <div class="creator-left">
-                    <label>Name
-                        <input id="creator-name" type="text" maxlength="64" placeholder="my_colormap" required>
-                    </label>
+                <!-- Name -->
+                <label class="creator-field">
+                    <span class="creator-field-label">Nombre</span>
+                    <input id="creator-name" type="text" maxlength="64" placeholder="mi_mapa_de_colores" required>
+                    <span class="creator-field-hint">Letras, números y guiones bajos. Debe ser único.</span>
+                </label>
 
-                    <div class="creator-stops-header">
-                        <strong>Stops</strong>
-                        <button id="creator-add-stop" type="button" class="btn btn-secondary btn-sm">+ Add Stop</button>
+                <!-- Live gradient preview -->
+                <div class="creator-preview-block">
+                    <span class="creator-field-label">Vista previa</span>
+                    <div class="creator-preview-wrap">
+                        <canvas id="creator-canvas" width="600" height="44"></canvas>
+                        <div id="creator-stop-ticks" class="creator-stop-ticks"></div>
                     </div>
-                    <div id="creator-stops-list"></div>
-
-                    <div id="creator-products-section">
-                        <strong>Assign to Products</strong>
-                        <div id="creator-products-list"></div>
-                    </div>
-
-                    <div class="form-actions">
-                        <button id="creator-save" type="button" class="btn">Create Colormap</button>
+                    <div id="creator-preview-labels" class="creator-preview-labels">
+                        <span>0.0</span><span>0.25</span><span>0.5</span><span>0.75</span><span>1.0</span>
                     </div>
                 </div>
 
-                <!-- Right column: live preview -->
-                <div class="creator-right">
-                    <strong>Preview</strong>
-                    <canvas id="creator-canvas" width="32" height="200"></canvas>
-                    <div id="creator-preview-labels"></div>
+                <!-- Stops -->
+                <div class="creator-section">
+                    <div class="creator-section-head">
+                        <strong>Puntos de color</strong>
+                        <button id="creator-add-stop" type="button" class="btn btn-secondary btn-sm">+ Agregar punto</button>
+                    </div>
+                    <div id="creator-stops-list" class="creator-stops-list"></div>
                 </div>
+
+                <!-- Product assignment -->
+                <div class="creator-section" id="creator-products-section">
+                    <div class="creator-section-head">
+                        <strong>Asignar a productos</strong>
+                        <span class="creator-field-hint">Opcional</span>
+                    </div>
+                    <div id="creator-products-list" class="creator-chips"></div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button id="creator-cancel" type="button" class="btn btn-secondary">Cancelar</button>
+                <button id="creator-save" type="button" class="btn">Crear mapa de colores</button>
             </div>
         </div>
     </div>

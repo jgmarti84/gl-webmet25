@@ -314,6 +314,10 @@
                     </div>
                 </details>
             </div>
+            <!-- Admin DB panel: sets a per-tab flag so the admin's "Back" button
+                 can restore this map exactly as left (via browser bfcache). -->
+            <a id="admin-link" href="/admin" class="nav-link" style="margin-top:10px;"
+               onclick="sessionStorage.setItem('webmet25_admin_from_main','1')">⚙ Panel de Administración →</a>
             <!-- COG Browser link: hidden by default; reveal with Ctrl+Shift+D -->
             <a id="cog-browser-link" href="cog-browser.html" class="nav-link" style="display:none; margin-top:10px;">Ir al Navegador COG →</a>
         </div>
