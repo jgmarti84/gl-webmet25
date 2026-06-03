@@ -61,7 +61,7 @@
     <!-- ===== MODULE A – Radar Selection ===== -->
     <div id="panel-module-a" class="floating-panel" style="display:none;">
         <div class="panel-header">
-            <span>📡 Radar Selection</span>
+            <span>📡 Selección de Radar</span>
             <button class="panel-close" data-close="panel-module-a" aria-label="Close panel">✕</button>
         </div>
         <div class="panel-body">
@@ -72,13 +72,13 @@
                         <input type="checkbox" id="toggle-show-inactive">
                         <span class="toggle-slider"></span>
                     </span>
-                    <span class="toggle-label">Show inactive</span>
+                    <span class="toggle-label">Mostrar inactivos</span>
                 </label>
             </div>
             <!-- Select / clear actions -->
             <div class="checkbox-actions">
-                <button id="btn-select-all-radars" class="small-btn">All</button>
-                <button id="btn-clear-all-radars" class="small-btn">None</button>
+                <button id="btn-select-all-radars" class="small-btn">Todos</button>
+                <button id="btn-clear-all-radars" class="small-btn">Ninguno</button>
             </div>
             <!-- Radar checkbox list -->
             <div id="radar-checkboxes" class="checkbox-container">
@@ -93,15 +93,15 @@
     <!-- ===== MODULE B – Field/Product Selection ===== -->
     <div id="panel-module-b" class="floating-panel" style="display:none;">
         <div class="panel-header">
-            <span>⊞ Field Selection</span>
+            <span>⊞ Selección de Campo</span>
             <button class="panel-close" data-close="panel-module-b" aria-label="Close panel">✕</button>
         </div>
         <div class="panel-body">
             <!-- Field dropdown -->
             <div class="control-group">
-                <label for="product-select">Field:</label>
+                <label for="product-select">Campo:</label>
                 <select id="product-select">
-                    <option value="">Select field...</option>
+                    <option value="">Seleccione un campo...</option>
                 </select>
             </div>
             <!-- Filtered/Unfiltered toggle switch
@@ -117,7 +117,7 @@
                         <span class="filter-info-tip" aria-label="What does filtered mean?">
                             ?
                             <span class="filter-info-popup">
-                                <strong>Polarimetric filter (GRC)</strong><br>
+                                <strong>Filtro polarimétrico</strong><br>
                                 &bull; RHOHV > 0.87 <br>
                                 <!-- &bull; &#x03C1;<sub>HV</sub> > 0.87<br> -->
                                 <!-- &bull; High texture in differential phase (&Phi;<sub>DP</sub>)<br> -->
@@ -134,18 +134,18 @@
                         <input type="checkbox" id="toggle-tops-cores">
                         <span class="toggle-slider"></span>
                     </span>
-                    <span class="toggle-label">Tops &amp; Cores</span>
+                    <span class="toggle-label">Topes &amp; Núcleos</span>
                 </label>
             </div>
             <div id="tops-cores-size-row" class="control-group" style="display:none;">
-                <label for="tops-cores-size">Point size:</label>
+                <label for="tops-cores-size">Tamaño del punto:</label>
                 <div class="opacity-control">
                     <input type="range" id="tops-cores-size" min="4" max="20" step="1" value="8">
                 </div>
             </div>
             <!-- Colormap Selection (hidden until product selected) -->
             <div class="control-group" id="colormap-group" style="display:none;">
-                <label for="colormap-select">Colormap:</label>
+                <label for="colormap-select">Mapa de colores:</label>
                 <!-- Fix 5: options populated via optgroups in JS; no static Default option -->
                 <select id="colormap-select"></select>
             </div>
@@ -156,7 +156,7 @@
                  TODO: Multi-field – instantiate a separate Module B panel per active field
                  and bind this slider to that field's opacity entry exclusively. -->
             <div class="control-group" id="field-opacity-group" style="display:none;">
-                <label for="field-opacity-slider">Opacity:</label>
+                <label for="field-opacity-slider">Opacidad:</label>
                 <div class="opacity-control">
                     <input type="range" id="field-opacity-slider" min="0" max="1" step="0.05" value="0.7">
                     <span id="field-opacity-value">70%</span>
@@ -177,7 +177,7 @@
                         <span class="range-label">Max</span>
                         <input type="number" id="vmax-input" class="range-input" step="any">
                     </div>
-                    <button id="btn-apply-range" class="small-btn apply-btn">Apply</button>
+                    <button id="btn-apply-range" class="small-btn apply-btn">Aplicar</button>
                 </div>
             </div>
             <!-- Gaussian Smoothing – hidden until product selected -->
@@ -187,15 +187,15 @@
                         <input type="checkbox" id="toggle-smoothing">
                         <span class="toggle-slider"></span>
                     </span>
-                    <span class="toggle-label">Smooth
-                        <span class="filter-info-tip" aria-label="What does smoothing do?">
+                    <span class="toggle-label">Suavizado
+                        <span class="filter-info-tip" aria-label="¿Qué hace el suavizado?">
                             ?
                             <span class="filter-info-popup">
-                                <strong>Gaussian smoothing</strong><br>
-                                Reduces pixel noise on the rendered image.<br>
-                                <!-- &bull; Applied server-side on the raw reflectivity values<br>
-                                &bull; Higher sigma = more blur<br>
-                                &bull; Recommended: sigma 0.5&ndash;1.2<br> -->
+                                <strong>Suavizado gaussiano</strong><br>
+                                Reduce el ruido de los píxeles en la imagen renderizada.<br>
+                                <!-- &bull; Aplicado del lado del servidor sobre los valores de reflectividad en bruto<br>
+                                &bull; Sigma más alto = más desenfoque<br>
+                                &bull; Recomendado: sigma 0.5&ndash;1.2<br> -->
                             </span>
                         </span>
                     </span>
@@ -213,33 +213,33 @@
     <!-- ===== MODULE C – Time Selection ===== -->
     <div id="panel-module-c" class="floating-panel" style="display:none;">
         <div class="panel-header">
-            <span>🕐 Time Window</span>
-            <button class="panel-close" data-close="panel-module-c" aria-label="Close panel">✕</button>
+            <span>🕐 Ventana de tiempo</span>
+            <button class="panel-close" data-close="panel-module-c" aria-label="Cerrar panel">✕</button>
         </div>
         <div class="panel-body">
             <!-- Predefined time window buttons (always one active) -->
             <div class="time-window-buttons">
-                <button class="time-window-btn active" data-hours="1.5">Last 1.5 hrs</button>
-                <button class="time-window-btn" data-hours="3">Last 3 hrs</button>
-                <button class="time-window-btn" data-hours="4.5">Last 4.5 hrs</button>
-                <button class="time-window-btn" data-hours="6">Last 6 hrs</button>
+                <button class="time-window-btn active" data-hours="1.5">Últimas 1.5 hrs</button>
+                <button class="time-window-btn" data-hours="3">Últimas 3 hrs</button>
+                <button class="time-window-btn" data-hours="4.5">Últimas 4.5 hrs</button>
+                <button class="time-window-btn" data-hours="6">Últimas 6 hrs</button>
             </div>
             <!-- Custom range reveal link -->
             <div class="custom-range-toggle">
-                <button id="btn-custom-range" class="link-btn">Custom range…</button>
+                <button id="btn-custom-range" class="link-btn">Rango personalizado…</button>
             </div>
             <!-- Custom datetime range (hidden by default, slides in) -->
             <div id="timerange-container" class="timerange-container" style="display: none;">
                 <div class="timerange-inputs">
                     <div class="input-group">
-                        <label for="start-date" class="input-label">From:</label>
+                        <label for="start-date" class="input-label">Desde:</label>
                         <input type="datetime-local" id="start-date" class="datetime-input">
                     </div>
                     <div class="input-group">
-                        <label for="end-date" class="input-label">To:</label>
+                        <label for="end-date" class="input-label">Hasta:</label>
                         <input type="datetime-local" id="end-date" class="datetime-input">
                     </div>
-                    <button id="btn-load-timerange" class="action-btn secondary" disabled>Load Range</button>
+                    <button id="btn-load-timerange" class="action-btn secondary" disabled>Cargar rango</button>
                 </div>
             </div>
         </div>
@@ -248,13 +248,13 @@
     <!-- ===== SETTINGS PANEL ===== -->
     <div id="settings-panel" class="floating-panel" style="display:none;">
         <div class="panel-header">
-            <span>⚙ Settings</span>
-            <button class="panel-close" data-close="settings-panel" aria-label="Close settings">✕</button>
+            <span>⚙ Configuración</span>
+            <button class="panel-close" data-close="settings-panel" aria-label="Cerrar configuración">✕</button>
         </div>
         <div class="panel-body">
             <!-- Basemap -->
             <div class="control-group">
-                <label for="basemap-select">Basemap:</label>
+                <label for="basemap-select">Mapa base:</label>
                 <select id="basemap-select">
                     <option value="argenmap" selected>IGN Argenmap</option>
                     <option value="argenmap_gris">IGN Argenmap Gris</option>
@@ -265,14 +265,14 @@
             <!-- Coverage mask controls -->
             <div class="coverage-controls">
                 <div class="control-group">
-                    <label>Coverage mode:</label>
+                    <label>Modo de cobertura:</label>
                     <button id="coverage-toggle" class="coverage-mode-btn">C+D</button>
                 </div>
                 <div class="coverage-mode-legend">
-                    C+D: Conventional+Doppler &middot; VIG: Vigilant
+                    C+D: Convencional+Doppler &middot; VIG: Vigilancia
                 </div>
                 <div class="control-group">
-                    <label for="coverage-opacity">Coverage opacity:</label>
+                    <label for="coverage-opacity">Opacidad de cobertura:</label>
                     <div class="opacity-control">
                         <input type="range" id="coverage-opacity" min="0" max="1" step="0.01" value="0.4">
                     </div>
@@ -286,7 +286,7 @@
             <div class="settings-row-sub">
                 <input type="number" id="settings-refresh-interval" min="1" max="60" step="1" value="10">
                 <span class="settings-unit">min</span>
-                <button id="settings-refresh-save" class="small-btn">Save</button>
+                <button id="settings-refresh-save" class="small-btn">Guardar</button>
             </div>
             <!-- Live window update — 2-row layout; ↻ is the COG refresh-now button -->
             <div class="settings-section-header">
@@ -296,26 +296,26 @@
             <div class="settings-row-sub">
                 <input type="number" id="settings-live-refresh-interval" min="1" max="30" step="1" value="5">
                 <span class="settings-unit">min</span>
-                <button id="settings-live-refresh-save" class="small-btn">Save</button>
+                <button id="settings-live-refresh-save" class="small-btn">Guardar</button>
             </div>
             <div class="settings-row settings-info">
-                <span>Radar activity threshold is set on the indexer via <code>RADAR_ACTIVE_THRESHOLD_HOURS</code>.</span>
+                <span>El umbral de actividad del radar se establece en el indexador mediante <code>RADAR_ACTIVE_THRESHOLD_HOURS</code>.</span>
             </div>
-            <!-- Keyboard shortcuts -->
+            <!-- Atajos de teclado -->
             <div class="shortcuts-info">
                 <details>
-                    <summary>⌨️ Shortcuts</summary>
+                    <summary>⌨️ Atajos</summary>
                     <div class="shortcuts-list">
-                        <div><kbd>Space</kbd> Play/Pause</div>
-                        <div><kbd>←</kbd> <kbd>→</kbd> Navigate</div>
-                        <div><kbd>Home</kbd> Latest</div>
-                        <div><kbd>L</kbd> Load Latest</div>
-                        <div><kbd>S</kbd> Speed</div>
+                        <div><kbd>Space</kbd> Reproducir/Pausar</div>
+                        <div><kbd>←</kbd> <kbd>→</kbd> Navegar</div>
+                        <div><kbd>Home</kbd> Último</div>
+                        <div><kbd>L</kbd> Cargar último</div>
+                        <div><kbd>S</kbd> Velocidad</div>
                     </div>
                 </details>
             </div>
             <!-- COG Browser link: hidden by default; reveal with Ctrl+Shift+D -->
-            <a id="cog-browser-link" href="cog-browser.html" class="nav-link" style="display:none; margin-top:10px;">Go to COG Browser →</a>
+            <a id="cog-browser-link" href="cog-browser.html" class="nav-link" style="display:none; margin-top:10px;">Ir al Navegador COG →</a>
         </div>
     </div>
 
@@ -347,7 +347,7 @@
             <button id="btn-cog-refresh-now" title="Fetch latest COGs now" aria-label="Fetch latest COGs now" disabled>↻</button>
             <!-- Item 4: continuous speed slider replacing the discrete button -->
             <div class="speed-control" title="Animation speed">
-                <span class="speed-label">Speed</span>
+                <span class="speed-label">Velocidad</span>
                 <input type="range" id="speed-slider" min="0.5" max="2" step="0.1" value="1">
                 <span id="speed-value">1.0x</span>
             </div>
