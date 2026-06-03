@@ -49,12 +49,16 @@ const state = {
 // from the data unless explicit options are supplied at render time.
 const FILTER_CONFIG = {
     radars: {
-        placeholder: 'Buscar por código, título, descripción…',
-        facets: [{ field: 'is_active', label: 'Activo', type: 'boolean' }],
+        facets: [
+            { field: 'code', label: 'Código', type: 'text' },
+            { field: 'title', label: 'Título', type: 'text' },
+            { field: 'is_active', label: 'Activo', type: 'boolean' },
+        ],
     },
     products: {
-        placeholder: 'Buscar por clave, título, unidad…',
         facets: [
+            { field: 'product_key', label: 'Clave', type: 'text' },
+            { field: 'product_title', label: 'Título', type: 'text' },
             { field: 'enabled', label: 'Habilitado', type: 'boolean' },
             { field: 'see_in_open', label: 'Visible público', type: 'boolean' },
             { field: 'unit', label: 'Unidad', type: 'select' },
@@ -62,32 +66,40 @@ const FILTER_CONFIG = {
         ],
     },
     references: {
-        placeholder: 'Buscar por título, unidad, color…',
         facets: [
             { field: 'product_id', label: 'Producto', type: 'select' },
+            { field: 'title', label: 'Título', type: 'text' },
             { field: 'unit', label: 'Unidad', type: 'select' },
         ],
     },
     estrategias: {
-        placeholder: 'Buscar por código o descripción…',
-        facets: [],
+        facets: [
+            { field: 'code', label: 'Código', type: 'text' },
+            { field: 'description', label: 'Descripción', type: 'text' },
+        ],
     },
     volumenes: {
-        placeholder: 'Buscar por valor…',
-        facets: [],
+        facets: [{ field: 'value', label: 'Valor', type: 'text' }],
     },
     colormaps: {
-        placeholder: 'Buscar mapas de colores…',
-        facets: [{ field: 'is_system', label: 'Sistema', type: 'boolean' }],
+        facets: [
+            { field: 'cmap_name', label: 'Nombre', type: 'text' },
+            { field: 'is_system', label: 'Sistema', type: 'boolean' },
+        ],
     },
     'colormap-options': {
-        placeholder: 'Buscar opciones…',
         facets: [
             { field: 'product_key', label: 'Producto', type: 'select' },
             { field: 'cmap_name', label: 'Colormap', type: 'select' },
         ],
     },
 };
+
+/** Facet definition type within a section ('text' | 'select' | 'boolean'). */
+function facetType(section, field) {
+    const facet = (FILTER_CONFIG[section]?.facets || []).find((f) => f.field === field);
+    return facet ? facet.type : 'select';
+}
 
 function getFilters(section) {
     if (!state.filters[section]) {
@@ -137,6 +149,13 @@ function renderFilterBar(section, items, options = {}) {
 
     const facetsHtml = (config.facets || []).map((facet) => {
         const selected = current.facets[facet.field] ?? '';
+        if (facet.type === 'text') {
+            return `
+                <label class="filter-field">
+                    <span>${safeText(facet.label)}</span>
+                    <input type="search" data-filter-facet="${safeText(facet.field)}" placeholder="${safeText(facet.label)}…" value="${safeText(selected)}">
+                </label>`;
+        }
         let optionsHtml;
         if (facet.type === 'boolean') {
             optionsHtml = `
@@ -162,8 +181,8 @@ function renderFilterBar(section, items, options = {}) {
     return `
         <div class="filter-bar" data-filter-section="${section}">
             <div class="filter-field filter-search">
-                <span>Buscar</span>
-                <input type="search" data-filter-search placeholder="${safeText(config.placeholder || 'Buscar…')}" value="${safeText(current.search)}">
+                <span>Buscar en toda la tabla</span>
+                <input type="search" data-filter-search placeholder="Buscar en todas las columnas…" value="${safeText(current.search)}">
             </div>
             ${facetsHtml}
             <div class="filter-spacer"></div>
@@ -196,7 +215,13 @@ function applyRowFilters(section) {
             }
             for (const [field, value] of Object.entries(filters.facets)) {
                 if (value === '' || value === null || value === undefined) continue;
-                if (String(rowFacets[field] ?? '') !== String(value)) {
+                const rowValue = String(rowFacets[field] ?? '');
+                if (facetType(section, field) === 'text') {
+                    if (!rowValue.toLowerCase().includes(String(value).toLowerCase().trim())) {
+                        show = false;
+                        break;
+                    }
+                } else if (rowValue !== String(value)) {
                     show = false;
                     break;
                 }
@@ -224,13 +249,19 @@ function wireFilterBar(section, onFacet) {
         };
     }
 
-    bar.querySelectorAll('[data-filter-facet]').forEach((select) => {
-        select.onchange = () => {
-            const field = select.dataset.filterFacet;
-            filters.facets[field] = select.value;
+    bar.querySelectorAll('[data-filter-facet]').forEach((control) => {
+        const handler = () => {
+            const field = control.dataset.filterFacet;
+            filters.facets[field] = control.value;
             applyRowFilters(section);
-            if (onFacet) onFacet(field, select.value);
+            if (onFacet) onFacet(field, control.value);
         };
+        // Text inputs filter live; selects fire on change.
+        if (control.tagName === 'INPUT') {
+            control.oninput = handler;
+        } else {
+            control.onchange = handler;
+        }
     });
 
     const clearButton = bar.querySelector('[data-filter-clear]');
@@ -394,6 +425,13 @@ function switchSort(sectionName, field) {
     renderSection();
 }
 
+/** Wire every [data-sort] header button in the current section to switchSort. */
+function wireSortHeaders(section) {
+    elements.sectionContent.querySelectorAll('[data-sort]').forEach((button) => {
+        button.onclick = () => switchSort(section, button.dataset.sort);
+    });
+}
+
 function requireConfirmation(label) {
     return window.confirm(`Confirm deletion of ${label}?`);
 }
@@ -474,12 +512,12 @@ async function renderRadars() {
             <thead>
                 <tr>
                     <th><button data-sort="code">Code</button></th>
-                    <th>Title</th>
-                    <th>Center Lat</th>
-                    <th>Center Long</th>
-                    <th>Img Radio</th>
-                    <th>Active</th>
-                    <th>Created</th>
+                    <th><button data-sort="title">Title</button></th>
+                    <th><button data-sort="center_lat">Center Lat</button></th>
+                    <th><button data-sort="center_long">Center Long</button></th>
+                    <th><button data-sort="img_radio">Img Radio</button></th>
+                    <th><button data-sort="is_active">Active</button></th>
+                    <th><button data-sort="created_at">Created</button></th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -506,7 +544,7 @@ async function renderRadars() {
 
     document.getElementById('radars-add').onclick = () => openRadarForm();
     wireFilterBar('radars');
-    elements.sectionContent.querySelector('[data-sort="code"]').onclick = () => switchSort('radars', 'code');
+    wireSortHeaders('radars');
 
     elements.sectionContent.querySelectorAll('[data-toggle-radar]').forEach((element) => {
         element.onchange = async (event) => {
@@ -581,14 +619,14 @@ async function renderProducts() {
             <thead>
                 <tr>
                     <th><button data-sort="id">ID</button></th>
-                    <th>Key</th>
-                    <th>Title</th>
-                    <th>Enabled</th>
-                    <th>See in Open</th>
-                    <th>Min</th>
-                    <th>Max</th>
-                    <th>Unit</th>
-                    <th>Default Cmap</th>
+                    <th><button data-sort="product_key">Key</button></th>
+                    <th><button data-sort="product_title">Title</button></th>
+                    <th><button data-sort="enabled">Enabled</button></th>
+                    <th><button data-sort="see_in_open">See in Open</button></th>
+                    <th><button data-sort="min_value">Min</button></th>
+                    <th><button data-sort="max_value">Max</button></th>
+                    <th><button data-sort="unit">Unit</button></th>
+                    <th><button data-sort="default_cmap">Default Cmap</button></th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -617,7 +655,7 @@ async function renderProducts() {
 
     document.getElementById('products-add').onclick = () => openProductForm();
     wireFilterBar('products');
-    elements.sectionContent.querySelector('[data-sort="id"]').onclick = () => switchSort('products', 'id');
+    wireSortHeaders('products');
 
     elements.sectionContent.querySelectorAll('[data-toggle-product-enabled]').forEach((element) => {
         element.onchange = async (event) => {
@@ -699,12 +737,12 @@ async function renderReferences() {
             <thead>
                 <tr>
                     <th><button data-sort="id">ID</button></th>
-                    <th>Product</th>
-                    <th>Value</th>
-                    <th>Color</th>
-                    <th>Color Font</th>
-                    <th>Title</th>
-                    <th>Unit</th>
+                    <th><button data-sort="product_id">Product</button></th>
+                    <th><button data-sort="value">Value</button></th>
+                    <th><button data-sort="color">Color</button></th>
+                    <th><button data-sort="color_font">Color Font</button></th>
+                    <th><button data-sort="title">Title</button></th>
+                    <th><button data-sort="unit">Unit</button></th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -730,7 +768,7 @@ async function renderReferences() {
     `;
 
     wireFilterBar('references');
-    elements.sectionContent.querySelector('[data-sort="id"]').onclick = () => switchSort('references', 'id');
+    wireSortHeaders('references');
     document.getElementById('references-add').onclick = () => openReferenceBulkForm(products);
     document.getElementById('references-bulk-delete').onclick = async () => {
         const selectedProductId = getFilters('references').facets.product_id || '';
@@ -1067,7 +1105,7 @@ async function renderEstrategias() {
         ${renderFilterBar('estrategias', sorted)}
         <div class="table-wrap">
         <table>
-            <thead><tr><th><button data-sort="code">Code</button></th><th>Description</th><th>Associated Volumenes</th><th>Actions</th></tr></thead>
+            <thead><tr><th><button data-sort="code">Code</button></th><th><button data-sort="description">Description</button></th><th>Associated Volumenes</th><th>Actions</th></tr></thead>
             <tbody>
                 ${sorted.map((item) => `
                     <tr${rowFacetAttr('estrategias', item)}>
@@ -1086,7 +1124,7 @@ async function renderEstrategias() {
     `;
 
     wireFilterBar('estrategias');
-    elements.sectionContent.querySelector('[data-sort="code"]').onclick = () => switchSort('estrategias', 'code');
+    wireSortHeaders('estrategias');
     document.getElementById('estrategias-add').onclick = () => openEstrategiaForm(null, volumenes);
     elements.sectionContent.querySelectorAll('[data-edit-estrategia]').forEach((element) => {
         element.onclick = async () => openEstrategiaForm(await adminApi.getEstrategia(element.dataset.editEstrategia), volumenes);
@@ -1141,7 +1179,7 @@ async function renderVolumenes() {
         ${renderFilterBar('volumenes', volumenes)}
         <div class="table-wrap">
         <table>
-            <thead><tr><th><button data-sort="id">ID</button></th><th>Value</th><th>Actions</th></tr></thead>
+            <thead><tr><th><button data-sort="id">ID</button></th><th><button data-sort="value">Value</button></th><th>Actions</th></tr></thead>
             <tbody>
                 ${volumenes.map((item) => `
                     <tr${rowFacetAttr('volumenes', item)}>
@@ -1159,7 +1197,7 @@ async function renderVolumenes() {
     `;
 
     wireFilterBar('volumenes');
-    elements.sectionContent.querySelector('[data-sort="id"]').onclick = () => switchSort('volumenes', 'id');
+    wireSortHeaders('volumenes');
     document.getElementById('volumenes-add').onclick = () => openVolumenForm();
     elements.sectionContent.querySelectorAll('[data-edit-volumen]').forEach((element) => {
         element.onclick = async () => openVolumenForm(await adminApi.getVolumen(element.dataset.editVolumen));
@@ -1409,32 +1447,93 @@ async function renderTopsCores() {
 
 // ── Colormap creator ──────────────────────────────────────────────────────────
 
-function openColormapCreator(products) {
+/** Convert three [0,1] channel floats to #RRGGBB. */
+function rgbFloatToHex(r, g, b) {
+    const channel = (v) => {
+        const n = Math.round(Math.min(1, Math.max(0, Number(v) || 0)) * 255);
+        return n.toString(16).padStart(2, '0');
+    };
+    return `#${channel(r)}${channel(g)}${channel(b)}`;
+}
+
+/** Reconstruct hex stops [{position, color}] from channel-based colormap_stops rows. */
+function stopsToHexStops(stops) {
+    const byOrder = new Map();
+    stops.forEach((s) => {
+        if (!byOrder.has(s.sort_order)) byOrder.set(s.sort_order, {});
+        const entry = byOrder.get(s.sort_order);
+        entry.position = s.position;
+        entry[s.channel] = s.val_left;
+    });
+    return [...byOrder.values()]
+        .sort((a, b) => a.position - b.position)
+        .map((e) => ({ position: e.position, color: rgbFloatToHex(e.r, e.g, e.b) }));
+}
+
+/** Fetch the rendered hex color list for a colormap from the public endpoint. */
+async function fetchColormapColors(name, steps = 64) {
+    try {
+        const res = await fetch(`/api/v1/colormap/colors/${encodeURIComponent(name)}?steps=${steps}`);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return Array.isArray(data.colors) ? data.colors : [];
+    } catch (error) {
+        return [];
+    }
+}
+
+/** Build a CSS left-to-right linear-gradient from a list of hex colors. */
+function gradientCss(colors) {
+    if (!colors.length) return 'transparent';
+    if (colors.length === 1) return colors[0];
+    const stops = colors
+        .map((c, i) => `${c} ${((i / (colors.length - 1)) * 100).toFixed(1)}%`)
+        .join(', ');
+    return `linear-gradient(to right, ${stops})`;
+}
+
+/**
+ * Open the colormap creator.
+ * @param {Array} products  Product list for the assignment chips.
+ * @param {Object|null} existing  When provided, opens in edit mode:
+ *   { cmap_name, stops: [{position, color}], product_keys: [], optionRows: [{id, product_key}] }
+ */
+function openColormapCreator(products, existing = null) {
+    const isEdit = Boolean(existing);
+
     /** In-memory stops state: array of {position: number, color: hex string} */
-    let creatorStops = [
-        { position: 0.0, color: '#000000' },
-        { position: 1.0, color: '#ffffff' },
-    ];
+    let creatorStops = isEdit && existing.stops.length >= 2
+        ? existing.stops.map((s) => ({ position: s.position, color: safeHexColor(s.color, '#888888') }))
+        : [
+            { position: 0.0, color: '#000000' },
+            { position: 1.0, color: '#ffffff' },
+        ];
 
     const modal = elements.creatorModal;
     modal.classList.remove('hidden');
 
+    const title = document.getElementById('creator-modal-title');
     const nameInput = document.getElementById('creator-name');
     const stopsList = document.getElementById('creator-stops-list');
     const canvas = document.getElementById('creator-canvas');
     const ticks = document.getElementById('creator-stop-ticks');
     const productsList = document.getElementById('creator-products-list');
+    const saveButton = document.getElementById('creator-save');
 
-    nameInput.value = '';
+    title.textContent = isEdit ? `🎨 Editar "${existing.cmap_name}"` : '🎨 Crear mapa de colores';
+    saveButton.textContent = isEdit ? 'Guardar cambios' : 'Crear mapa de colores';
+    nameInput.value = isEdit ? existing.cmap_name : '';
+    nameInput.readOnly = isEdit;  // renaming would orphan options/defaults
 
+    const assigned = isEdit ? new Set(existing.product_keys) : new Set();
     /** Product assignment chips (styled via CSS :has(:checked)). */
     productsList.innerHTML = products
-        .map((p) => `<label><input type="checkbox" value="${safeText(p.product_key)}"> ${safeText(p.product_key)}</label>`)
+        .map((p) => `<label><input type="checkbox" value="${safeText(p.product_key)}" ${assigned.has(p.product_key) ? 'checked' : ''}> ${safeText(p.product_key)}</label>`)
         .join('');
 
     const clamp01 = (value) => Math.min(1, Math.max(0, value));
 
-    /** Draw a horizontal gradient preview and position the stop ticks. */
+    /** Draw a horizontal gradient preview and position the (draggable) stop ticks. */
     function drawPreview() {
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1448,10 +1547,40 @@ function openColormapCreator(products) {
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
-        ticks.innerHTML = sorted
-            .map((s) => `<span class="creator-stop-tick" style="left:${(clamp01(s.position) * 100).toFixed(2)}%;--tick-color:${safeHexColor(s.color, '#000000')}"></span>`)
+        // Ticks use the original index so dragging maps to the right stop.
+        ticks.innerHTML = creatorStops
+            .map((s, i) => `<span class="creator-stop-tick" data-idx="${i}" title="Arrastrar para mover (${clamp01(s.position).toFixed(2)})" style="left:${(clamp01(s.position) * 100).toFixed(2)}%;--tick-color:${safeHexColor(s.color, '#000000')}"></span>`)
             .join('');
     }
+
+    // ── Drag stop ticks horizontally over the preview ──
+    const previewWrap = canvas.parentElement;
+    let dragIdx = null;
+    ticks.onpointerdown = (event) => {
+        const tick = event.target.closest('.creator-stop-tick');
+        if (!tick) return;
+        dragIdx = parseInt(tick.dataset.idx, 10);
+        ticks.setPointerCapture(event.pointerId);
+        event.preventDefault();
+    };
+    ticks.onpointermove = (event) => {
+        if (dragIdx === null) return;
+        const rect = previewWrap.getBoundingClientRect();
+        const pos = clamp01((event.clientX - rect.left) / rect.width);
+        creatorStops[dragIdx].position = pos;
+        const slider = stopsList.querySelector(`.stop-slider[data-idx="${dragIdx}"]`);
+        const number = stopsList.querySelector(`.stop-pos[data-idx="${dragIdx}"]`);
+        if (slider) slider.value = pos;
+        if (number) number.value = pos.toFixed(2);
+        drawPreview();
+    };
+    const endDrag = (event) => {
+        if (dragIdx === null) return;
+        dragIdx = null;
+        try { ticks.releasePointerCapture(event.pointerId); } catch (_) { /* noop */ }
+    };
+    ticks.onpointerup = endDrag;
+    ticks.onpointercancel = endDrag;
 
     /** Re-render the stops list and refresh the preview. */
     function rebuildStops() {
@@ -1515,8 +1644,8 @@ function openColormapCreator(products) {
         rebuildStops();
     };
 
-    document.getElementById('creator-save').onclick = async () => {
-        const cmapName = document.getElementById('creator-name').value.trim();
+    saveButton.onclick = async () => {
+        const cmapName = isEdit ? existing.cmap_name : nameInput.value.trim();
         if (!cmapName) {
             showMessage('Colormap name is required.', 'error');
             return;
@@ -1527,27 +1656,34 @@ function openColormapCreator(products) {
         }
         const productKeys = [...productsList.querySelectorAll('input[type=checkbox]:checked')]
             .map((cb) => cb.value);
+        const stops = creatorStops.map((s) => ({ position: s.position, color: s.color }));
         try {
-            await adminApi.createColormapFromHex({
-                cmap_name: cmapName,
-                stops: creatorStops.map((s) => ({ position: s.position, color: s.color })),
-                product_keys: productKeys,
-            });
-            // Invalidate the in-process cache so the API picks up the new colormap.
+            if (isEdit) {
+                // No update endpoint: delete then recreate with the same name.
+                await adminApi.deleteColormap(cmapName);
+                await adminApi.createColormapFromHex({ cmap_name: cmapName, stops, product_keys: productKeys });
+                // create-from-hex only ADDS options; remove the ones now unchecked.
+                const toRemove = (existing.optionRows || []).filter((o) => !productKeys.includes(o.product_key));
+                await Promise.all(toRemove.map((o) => adminApi.deleteColormapOption(o.id)));
+            } else {
+                await adminApi.createColormapFromHex({ cmap_name: cmapName, stops, product_keys: productKeys });
+            }
+            // Invalidate the in-process cache so the API picks up the change.
             await fetch('/api/v1/colormap/cache/invalidate', { method: 'POST' });
             modal.classList.add('hidden');
-            showMessage(`Colormap "${cmapName}" created`, 'success');
+            showMessage(`Colormap "${cmapName}" ${isEdit ? 'updated' : 'created'}`, 'success');
             renderSection();
         } catch (error) {
-            showMessage(error.message || 'Failed to create colormap', 'error');
+            showMessage(error.message || `Failed to ${isEdit ? 'update' : 'create'} colormap`, 'error');
         }
     };
 }
 
 async function renderColormaps() {
-    const [cmaps, products] = await Promise.all([
+    const [cmaps, products, allOptions] = await Promise.all([
         adminApi.listColormapSummaries(),
         adminApi.listProducts(),
+        adminApi.listColormapOptions(),
     ]);
     const sorted = sortItems(cmaps, 'colormaps');
 
@@ -1575,6 +1711,7 @@ async function renderColormaps() {
                         <td>${c.is_system ? '✔' : ''}</td>
                         <td class="table-actions">
                             <button class="btn-secondary" data-view-cmap="${safeText(c.cmap_name)}">View Stops</button>
+                            ${!c.is_system ? `<button class="btn-secondary" data-edit-cmap="${safeText(c.cmap_name)}">Edit</button>` : ''}
                             ${!c.is_system ? `<button class="btn-danger" data-delete-cmap="${safeText(c.cmap_name)}">Delete</button>` : ''}
                         </td>
                     </tr>
@@ -1594,7 +1731,10 @@ async function renderColormaps() {
     elements.sectionContent.querySelectorAll('[data-view-cmap]').forEach((btn) => {
         btn.onclick = async () => {
             const name = btn.dataset.viewCmap;
-            const stops = await adminApi.getColormapStops(name);
+            const [stops, colors] = await Promise.all([
+                adminApi.getColormapStops(name),
+                fetchColormapColors(name, 64),
+            ]);
             const rows = stops.map((s) => `
                 <tr>
                     <td>${safeText(s.channel)}</td>
@@ -1605,17 +1745,37 @@ async function renderColormaps() {
                 </tr>
             `).join('');
             openFormModal(`Stops for ${name}`, `
-                <div style="overflow:auto;max-height:60vh;">
+                <div class="cmap-view-gradient" style="background:${gradientCss(colors)}"></div>
+                <div class="cmap-view-scale"><span>0.0</span><span>0.5</span><span>1.0</span></div>
+                <div style="overflow:auto;max-height:50vh;">
                     <table>
                         <thead><tr><th>Ch</th><th>Position</th><th>Val Left</th><th>Val Right</th><th>Order</th></tr></thead>
                         <tbody>${rows}</tbody>
                     </table>
                 </div>
                 <div style="text-align:right;margin-top:8px;">
-                    <button type="button" class="btn btn-secondary" id="close-stops-modal">Close</button>
+                    <button type="button" class="btn btn-secondary" id="close-stops-modal">Cerrar</button>
                 </div>
             `, async () => {});
             document.getElementById('close-stops-modal')?.addEventListener('click', closeFormModal);
+        };
+    });
+
+    elements.sectionContent.querySelectorAll('[data-edit-cmap]').forEach((btn) => {
+        btn.onclick = async () => {
+            const name = btn.dataset.editCmap;
+            try {
+                const stops = await adminApi.getColormapStops(name);
+                const optionRows = allOptions.filter((o) => o.cmap_name === name);
+                openColormapCreator(products, {
+                    cmap_name: name,
+                    stops: stopsToHexStops(stops),
+                    product_keys: optionRows.map((o) => o.product_key),
+                    optionRows,
+                });
+            } catch (error) {
+                showMessage(error.message || 'Failed to load colormap for editing', 'error');
+            }
         };
     });
 
@@ -1665,6 +1825,7 @@ async function renderColormapOptions() {
                         <td>${safeText(opt.product_key)}</td>
                         <td>${safeText(opt.cmap_name)}</td>
                         <td class="table-actions">
+                            <button class="btn-secondary" data-edit-cmap-option="${opt.id}">Edit</button>
                             <button class="btn-danger" data-delete-cmap-option="${opt.id}">Remove</button>
                         </td>
                     </tr>
@@ -1679,24 +1840,46 @@ async function renderColormapOptions() {
         btn.onclick = () => switchSort('colormap-options', btn.dataset.sort);
     });
 
-    document.getElementById('cmap-option-add').onclick = () => {
-        openFormModal('Add Colormap Option', `
+    const withSelected = (optionsHtml, selected) => optionsHtml.replace(
+        `value="${safeText(selected)}"`,
+        `value="${safeText(selected)}" selected`,
+    );
+
+    const openColormapOptionForm = (option = null) => {
+        const isEdit = Boolean(option);
+        openFormModal(isEdit ? 'Edit Colormap Option' : 'Add Colormap Option', `
             <label>Product Key
-                <select name="product_key" required>${productOpts}</select>
+                <select name="product_key" required>${isEdit ? withSelected(productOpts, option.product_key) : productOpts}</select>
             </label>
             <label>Colormap
-                <select name="cmap_name" required>${cmapOpts}</select>
+                <select name="cmap_name" required>${isEdit ? withSelected(cmapOpts, option.cmap_name) : cmapOpts}</select>
             </label>
-            <button type="submit" class="btn">Add</button>
+            <div class="form-actions"><button type="submit" class="btn">${isEdit ? 'Save' : 'Add'}</button></div>
         `, async (formData) => {
-            await adminApi.createColormapOption({
-                product_key: formData.get('product_key'),
-                cmap_name: formData.get('cmap_name'),
-            });
-            showMessage('Colormap option added', 'success');
+            const productKey = formData.get('product_key');
+            const cmapName = formData.get('cmap_name');
+            if (isEdit && productKey === option.product_key && cmapName === option.cmap_name) {
+                return;  // unchanged
+            }
+            // No update endpoint: create the new pairing, then drop the old row.
+            await adminApi.createColormapOption({ product_key: productKey, cmap_name: cmapName });
+            if (isEdit) {
+                await adminApi.deleteColormapOption(option.id);
+            }
+            showMessage(`Colormap option ${isEdit ? 'updated' : 'added'}`, 'success');
             renderSection();
         });
     };
+
+    document.getElementById('cmap-option-add').onclick = () => openColormapOptionForm();
+
+    elements.sectionContent.querySelectorAll('[data-edit-cmap-option]').forEach((btn) => {
+        btn.onclick = () => {
+            const id = parseInt(btn.dataset.editCmapOption, 10);
+            const option = options.find((o) => o.id === id);
+            if (option) openColormapOptionForm(option);
+        };
+    });
 
     elements.sectionContent.querySelectorAll('[data-delete-cmap-option]').forEach((btn) => {
         btn.onclick = async () => {
