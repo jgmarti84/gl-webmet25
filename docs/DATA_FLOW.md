@@ -705,6 +705,25 @@ the DB on first access and keeps it in-process with a 5-minute TTL cache.
 
 ---
 
+### 4.9 Admin API & Panel
+
+**Router:** [`api/app/routers/admin.py`](../api/app/routers/admin.py) — base path `/api/v1/admin`
+**Frontend:** [`frontend/public/admin.html`](../frontend/public/admin.html) + [`js/admin.js`](../frontend/public/js/admin.js) + [`js/admin-api.js`](../frontend/public/js/admin-api.js), served at `/admin`.
+
+**Authentication (temporary):** both `/admin` and `/api/v1/admin/` are behind **nginx HTTP Basic Auth** (`admin.htpasswd`, see [`frontend/nginx.conf`](../frontend/nginx.conf)). The public `/api/v1/*` API stays open. ⚠️ TODO: replace Basic Auth with JWT before production.
+
+**Endpoint groups:**
+- **CRUD** for `radars`, `products`, `references` (+ bulk delete by `product_id`), `estrategias`, `volumenes`.
+- **COGs** and **tops-cores**: paginated `GET` with filters, `PATCH` status, single + bulk `DELETE`.
+- **Colormaps:** `GET /colormap-stops` (summaries), `GET /colormap-stops/{name}`, `POST /colormap-stops` (one row), `DELETE /colormap-stops/{name}` (non-system only). `POST /colormap-from-hex` builds a colormap from `{cmap_name, stops:[{position,color}], product_keys[]}` — **409 if the name already exists (no upsert).**
+- **Colormap options:** `GET /colormap-options[?product_key=]`, `POST`, `DELETE /{id}`.
+
+**Colormap edit pattern (no update endpoint):** the frontend edits a colormap by `DELETE /colormap-stops/{name}` → `POST /colormap-from-hex` with the same name, then reconciles product options. Stops are reconstructed to hex for prefill by grouping the channel rows (`stopsToHexStops`); the live gradient in *View Stops* comes from `GET /colormap/colors/{name}`. Any change is followed by `POST /colormap/cache/invalidate`.
+
+**Panel features:** Django-admin-style filtering (global search + per-column `text`/`select`/`boolean` facets, live count, all columns sortable), inline icon row actions (pencil/trash), a visual colormap creator/editor with draggable stops, and a "← Volver al mapa" button that restores the main map exactly as left (browser bfcache; flagged via `sessionStorage.webmet25_admin_from_main`, set on the Settings-panel link).
+
+---
+
 ## 5. Frontend Layer: Data Display & State
 
 > **v2 is the current production standard.** v1 (L.tileLayer + /tiles endpoint) is preserved for reference only. All new development targets v2.
@@ -718,6 +737,7 @@ frontend/public/js/
 │   ├── controls.js        # UI controls (panels, buttons, toggles)
 │   ├── legend.js          # Color scale legend renderer
 │   ├── tops-cores.js      # TopsCoresLayer (L.circleMarker)
+│   ├── time-wheel.js      # iOS-style HH:MM picker (custom time range)
 │   ├── cog-browser-api.js # COG browser alternative API client
 │   └── cog-browser.js     # COG browser alternative view
 └── v2/                    # Current production frontend
@@ -733,6 +753,9 @@ frontend/public/js/
 - All field, colormap, and range-filter changes go through `_loadFramesWithContinuity()` — animation never stops
 - Coverage mask rendered as SVG inside `coverageMaskPane` (zIndex 300)
 - `TopsCoresLayer` renders cores (blue) and tops (red) as `L.circleMarker`
+- Radar selection list ordered by `controls.js → sortRadarsForDisplay` (active first; RMA before AR; numeric ascending with `RMA00` last)
+- Custom time range uses a native date input + the iOS-style `TimeWheel` (`shared/time-wheel.js`); hidden `#start-date`/`#end-date` `datetime-local` inputs stay the canonical value
+- Links to the **admin panel** (`/admin`) from the Settings panel; the admin's back button restores this map via browser bfcache (see §4.9)
 
 ### 5.1 Global State Management
 
@@ -1338,5 +1361,5 @@ Currently **not implemented**. Gaps noted:
 
 ---
 
-**Document Version:** 2.0.0  
-**Last Updated:** May 29, 2026
+**Document Version:** 2.1.0  
+**Last Updated:** June 4, 2026

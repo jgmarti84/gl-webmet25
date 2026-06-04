@@ -238,6 +238,41 @@ tests/ # Automated tests
 
 ---
 
+## Admin Panel & Admin API
+
+A standalone admin SPA for CRUD over the database, served at `/admin` and backed by the `/api/v1/admin/*` routes ([`api/app/routers/admin.py`](../api/app/routers/admin.py)).
+
+### Authentication (temporary)
+- Both `/admin` (and `/admin/`) and `/api/v1/admin/` are protected by **nginx HTTP Basic Auth** (`admin.htpasswd`) — see [`frontend/nginx.conf`](../frontend/nginx.conf).
+- ⚠️ This is a stopgap. The public `/api/v1/*` API remains open. **TODO: replace Basic Auth with JWT before production.** Do not build new auth assumptions on Basic Auth.
+
+### Admin API endpoints (base `/api/v1/admin`)
+| Resource | Endpoints |
+|----------|-----------|
+| Radars | `GET /radars`, `GET /radars/{code}`, `POST /radars`, `PUT /radars/{code}`, `PATCH /radars/{code}`, `DELETE /radars/{code}` |
+| Products | `GET /products`, `GET /products/{id}`, `POST/PUT/PATCH/DELETE /products[/{id}]` |
+| References | `GET /references`, `GET /references/{id}`, `POST/PUT/DELETE /references[/{id}]`, `DELETE /references?product_id=` (bulk) |
+| COGs | `GET /cogs` (paginated + filters), `GET /cogs/{id}`, `PATCH /cogs/{id}` (status), `DELETE /cogs/{id}`, `DELETE /cogs?...` (bulk by filters) |
+| Estrategias | `GET /estrategias`, `GET/POST/PUT/DELETE /estrategias[/{code}]` |
+| Volumenes | `GET /volumenes`, `GET/POST/PUT/DELETE /volumenes[/{id}]` |
+| Tops & Cores | `GET /tops-cores` (paginated), `GET /tops-cores/{id}`, `PATCH /tops-cores/{id}` (status), `DELETE /tops-cores/{id}`, `DELETE /tops-cores?...` (bulk) |
+| Colormap stops | `GET /colormap-stops` (summaries: name, stop_count, is_system), `GET /colormap-stops/{cmap_name}`, `POST /colormap-stops` (single row), `DELETE /colormap-stops/{cmap_name}` (non-system only → 403) |
+| Colormap (hex) | `POST /colormap-from-hex` — create from `{cmap_name, stops:[{position,color}], product_keys[]}`; **409 if name exists** (no upsert) |
+| Colormap options | `GET /colormap-options[?product_key=]`, `POST /colormap-options`, `DELETE /colormap-options/{id}` |
+
+> There is **no colormap update endpoint**. The frontend edits a colormap by **delete-then-recreate** (`DELETE /colormap-stops/{name}` → `POST /colormap-from-hex`) and reconciles product options afterward.
+
+### Admin frontend ([`frontend/public/admin.html`](../frontend/public/admin.html), [`js/admin.js`](../frontend/public/js/admin.js), [`js/admin-api.js`](../frontend/public/js/admin-api.js), [`css/admin.css`](../frontend/public/css/admin.css))
+- Hash-routed SPA (sections: `dashboard`, `radars`, `products`, `references`, `cogs`, `tops-cores`, `estrategias`, `volumenes`, `colormaps`, `colormap-options`). Section nav uses `history.replaceState` so browsing the admin never pushes browser history.
+- **Modern-light theme** (`admin.css`), distinct from the dark main app. OHMC logo in the sidebar.
+- **Entry / return:** the main map links to `/admin` from the **Settings panel** (`#admin-link`), setting a per-tab `sessionStorage` flag `webmet25_admin_from_main`. The admin's **← Volver al mapa** button calls `history.back()` when that flag is set (browser bfcache restores the map exactly as left — selections, frame, zoom), else navigates to `/`.
+- **Filtering/sorting (Django-admin style):** every client-loaded table gets a config-driven filter bar (`FILTER_CONFIG`) = global search + per-column facets (`text` substring / `select` / `boolean`) + live result count, applied as pure DOM row show/hide (no refetch, no focus loss). All meaningful columns are sortable headers (▲/▼). COGs/Tops keep server-side filters + a quick page-search.
+- **Row actions** render as inline SVG icons (pencil = edit, trash = delete), `currentColor`-tinted.
+- **Colormap creator/editor** (`openColormapCreator`): live horizontal gradient preview with **draggable stop ticks**, slider+number+swatch stop rows, product-assignment chips. **Edit** mode prefills from reconstructed hex stops (`stopsToHexStops`) + assigned products, then delete-recreates and syncs options. **View Stops** shows the real gradient (from `/api/v1/colormap/colors/{name}`) plus the stop table. After any change the frontend calls `POST /api/v1/colormap/cache/invalidate`.
+- **Colormap Options** are addable and editable per row (edit = create new pairing + delete old, since there is no PUT).
+
+---
+
 ## Indexer
 - **COGWatcher:** Polls `ROOT_RADAR_PRODUCTS_PATH` every `SCAN_INTERVAL` seconds (default 30s). First run is a full scan; subsequent runs are incremental (files modified in last 5 min + overlap).
 - **COGFilenameParser:** Parses both the current production format (`RADAR_strategy_vol_TIMESTAMP_FIELD.tif`) and the legacy format (`RADAR_TIMESTAMP_FIELD_elev.tif`). Logs a WARNING for legacy files.
@@ -256,7 +291,10 @@ tests/ # Automated tests
 - Multiple radar selection with opacity control
 - Frame animation with speed control (0.5x–2x)
 - Periodic polling for new COGs (5 minute interval)
-- **Modules:** `v2/app.js`, `v2/map.js`, `v2/animation.js`, `shared/api.js`, `shared/controls.js`, `shared/legend.js`, `shared/tops-cores.js`
+- **Modules:** `v2/app.js`, `v2/map.js`, `v2/animation.js`, `shared/api.js`, `shared/controls.js`, `shared/legend.js`, `shared/tops-cores.js`, `shared/time-wheel.js`
+- **Radar selection order** (`controls.js` → `sortRadarsForDisplay`): active before inactive; within each, RMA group before AR group; numeric ascending with `RMA00` (number 0) sorted last (e.g. `RMA1…RMA17, RMA00, AR5…`).
+- **Custom time range** uses a native date input + an iOS-style scroll-snap **TimeWheel** (`shared/time-wheel.js`) for HH:MM. The hidden `#start-date`/`#end-date` `datetime-local` inputs remain the canonical value (read by `getTimeRangeValues`); the date input + wheel only drive them. Call `refreshTimeWheels()` after the panel becomes visible (scroll position can't be set while hidden).
+- **Admin panel** is a separate SPA — see the **Admin Panel & Admin API** section above. Linked from the Settings panel.
 
 **Tops & Cores Layer (v2 only):**
 - **Module:** `frontend/public/js/shared/tops-cores.js`
@@ -455,7 +493,7 @@ Updates record status to MISSING in DB if file not found at serve time.
 > touching these areas.
 
 ### Critical
-- ❌ No authentication or authorization. API is completely open.
+- ⚠️ PARTIAL: The public `/api/v1/*` API is still completely open. The admin panel/API (`/admin`, `/api/v1/admin/*`) is gated by **temporary nginx HTTP Basic Auth** (`admin.htpasswd`) — must be replaced with proper JWT before production.
 - ❌ No transactions in indexer. Partial failures corrupt DB state.
 - ❌ Missing files cause 500 errors. Must be handled gracefully.
 
