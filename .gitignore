@@ -33,3 +33,6 @@ Thumbs.db
 
 # Data
 /data/
+
+# Playwright e2e screenshots (captured on failure)
+tests/e2e/screenshots/

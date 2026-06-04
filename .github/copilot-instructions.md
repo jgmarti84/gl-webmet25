@@ -619,6 +619,7 @@ Every endpoint must have ALL of the following tests:
 
 ## Rules for Writing E2E Tests
 > Follow these rules when writing Playwright tests in tests/e2e/
+> **How to run them (Docker + bare-machine + CI) is documented in [`docs/E2E_TESTING.md`](../docs/E2E_TESTING.md).** The e2e suite targets the **v2 frontend** (`FRONTEND_URL`, default `http://frontend-v2:80`) and authenticates to `/admin` with `ADMIN_USERNAME`/`ADMIN_PASSWORD` via Playwright `http_credentials` (a shared `tests/e2e/conftest.py` provides the auth context, JS-error capture, and screenshot-on-failure).
 
 ### Required Setup
 ```python
