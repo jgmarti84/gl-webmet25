@@ -5,6 +5,10 @@ const STATUS_OPTIONS = ['available', 'missing', 'error', 'pending', 'processing'
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
 
+// Inline icons for row actions (inherit button text color via currentColor).
+const ICON_EDIT = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><title>Editar</title><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>';
+const ICON_TRASH = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><title>Eliminar</title><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
+
 const state = {
     section: 'dashboard',
     message: null,
@@ -532,8 +536,8 @@ async function renderRadars() {
                         <td class="toggle-cell"><input type="checkbox" data-toggle-radar="${radar.code}" ${radar.is_active ? 'checked' : ''}></td>
                         <td>${fmtDate(radar.created_at)}</td>
                         <td class="table-actions">
-                            <button class="btn-secondary" data-edit-radar="${radar.code}">Edit</button>
-                            <button class="btn-danger" data-delete-radar="${radar.code}">Delete</button>
+                            <button class="btn-secondary" data-edit-radar="${radar.code}">${ICON_EDIT}</button>
+                            <button class="btn-danger" data-delete-radar="${radar.code}">${ICON_TRASH}</button>
                         </td>
                     </tr>
                 `).join('')}
@@ -643,8 +647,8 @@ async function renderProducts() {
                         <td>${safeText(product.unit)}</td>
                         <td>${safeText(product.default_cmap)}</td>
                         <td class="table-actions">
-                            <button class="btn-secondary" data-edit-product="${product.id}">Edit</button>
-                            <button class="btn-danger" data-delete-product="${product.id}">Delete</button>
+                            <button class="btn-secondary" data-edit-product="${product.id}">${ICON_EDIT}</button>
+                            <button class="btn-danger" data-delete-product="${product.id}">${ICON_TRASH}</button>
                         </td>
                     </tr>
                 `).join('')}
@@ -757,8 +761,8 @@ async function renderReferences() {
                         <td>${safeText(reference.title)}</td>
                         <td>${safeText(reference.unit)}</td>
                         <td class="table-actions">
-                            <button class="btn-secondary" data-edit-reference="${reference.id}">Edit</button>
-                            <button class="btn-danger" data-delete-reference="${reference.id}">Delete</button>
+                            <button class="btn-secondary" data-edit-reference="${reference.id}">${ICON_EDIT}</button>
+                            <button class="btn-danger" data-delete-reference="${reference.id}">${ICON_TRASH}</button>
                         </td>
                     </tr>
                 `).join('')}
@@ -1014,7 +1018,8 @@ async function renderCogs() {
         deleteButton.className = 'btn-danger';
         deleteButton.dataset.cogDelete = String(itemId);
         deleteButton.type = 'button';
-        deleteButton.textContent = 'Delete';
+        deleteButton.innerHTML = ICON_TRASH;
+        deleteButton.title = 'Eliminar';
         actionsCell.appendChild(deleteButton);
         row.appendChild(actionsCell);
 
@@ -1113,8 +1118,8 @@ async function renderEstrategias() {
                         <td>${safeText(item.description)}</td>
                         <td>${(item.volumen_values || []).join(', ')}</td>
                         <td class="table-actions">
-                            <button class="btn-secondary" data-edit-estrategia="${item.code}">Edit</button>
-                            <button class="btn-danger" data-delete-estrategia="${item.code}">Delete</button>
+                            <button class="btn-secondary" data-edit-estrategia="${item.code}">${ICON_EDIT}</button>
+                            <button class="btn-danger" data-delete-estrategia="${item.code}">${ICON_TRASH}</button>
                         </td>
                     </tr>
                 `).join('')}
@@ -1186,8 +1191,8 @@ async function renderVolumenes() {
                         <td>${item.id}</td>
                         <td>${item.value}</td>
                         <td class="table-actions">
-                            <button class="btn-secondary" data-edit-volumen="${item.id}">Edit</button>
-                            <button class="btn-danger" data-delete-volumen="${item.id}">Delete</button>
+                            <button class="btn-secondary" data-edit-volumen="${item.id}">${ICON_EDIT}</button>
+                            <button class="btn-danger" data-delete-volumen="${item.id}">${ICON_TRASH}</button>
                         </td>
                     </tr>
                 `).join('')}
@@ -1363,7 +1368,8 @@ async function renderTopsCores() {
         deleteButton.className = 'btn-danger';
         deleteButton.dataset.topDelete = String(itemId);
         deleteButton.type = 'button';
-        deleteButton.textContent = 'Delete';
+        deleteButton.innerHTML = ICON_TRASH;
+        deleteButton.title = 'Eliminar';
         actionsCell.appendChild(deleteButton);
         row.appendChild(actionsCell);
 
@@ -1711,8 +1717,8 @@ async function renderColormaps() {
                         <td>${c.is_system ? '✔' : ''}</td>
                         <td class="table-actions">
                             <button class="btn-secondary" data-view-cmap="${safeText(c.cmap_name)}">View Stops</button>
-                            ${!c.is_system ? `<button class="btn-secondary" data-edit-cmap="${safeText(c.cmap_name)}">Edit</button>` : ''}
-                            ${!c.is_system ? `<button class="btn-danger" data-delete-cmap="${safeText(c.cmap_name)}">Delete</button>` : ''}
+                            ${!c.is_system ? `<button class="btn-secondary" data-edit-cmap="${safeText(c.cmap_name)}">${ICON_EDIT}</button>` : ''}
+                            ${!c.is_system ? `<button class="btn-danger" data-delete-cmap="${safeText(c.cmap_name)}">${ICON_TRASH}</button>` : ''}
                         </td>
                     </tr>
                 `).join('')}
@@ -1825,8 +1831,8 @@ async function renderColormapOptions() {
                         <td>${safeText(opt.product_key)}</td>
                         <td>${safeText(opt.cmap_name)}</td>
                         <td class="table-actions">
-                            <button class="btn-secondary" data-edit-cmap-option="${opt.id}">Edit</button>
-                            <button class="btn-danger" data-delete-cmap-option="${opt.id}">Remove</button>
+                            <button class="btn-secondary" data-edit-cmap-option="${opt.id}">${ICON_EDIT}</button>
+                            <button class="btn-danger" data-delete-cmap-option="${opt.id}">${ICON_TRASH}</button>
                         </td>
                     </tr>
                 `).join('')}

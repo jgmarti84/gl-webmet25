@@ -387,7 +387,18 @@ th button[data-sort] {
 th button[data-sort]:hover { color: var(--primary); }
 th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
 
-.table-actions { display: flex; gap: 6px; }
+.table-actions { display: flex; gap: 6px; align-items: center; }
+
+/* Icon action buttons (edit pencil / delete trash) */
+.ico { width: 15px; height: 15px; display: block; }
+.table-actions button:has(.ico) {
+    padding: 6px 8px;
+    line-height: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.table-actions button:has(.ico):hover { filter: brightness(0.97); }
 
 .color-preview {
     width: 18px; height: 18px;

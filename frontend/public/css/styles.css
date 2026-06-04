@@ -542,6 +542,81 @@ body {
     cursor: pointer;
 }
 
+/* ── Custom range: date input + iOS-style time wheel ── */
+.dt-hidden { display: none !important; }
+
+.dt-date {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 4px;
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.dt-date:focus {
+    outline: none;
+    border-color: #4fc3f7;
+    background: rgba(79,195,247,0.1);
+}
+.dt-date::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+
+.time-wheel {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 108px;            /* 3 rows × 36px */
+    margin-top: 4px;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    user-select: none;
+    overflow: hidden;
+}
+.tw-col {
+    height: 108px;
+    width: 52px;
+    overflow-y: scroll;
+    scroll-snap-type: y mandatory;
+    scrollbar-width: none;          /* Firefox */
+    -ms-overflow-style: none;
+    /* fade top/bottom rows for a wheel feel */
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 70%, transparent);
+            mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 70%, transparent);
+}
+.tw-col::-webkit-scrollbar { display: none; } /* Chrome/Safari */
+.tw-list { padding: 36px 0; }       /* allow first/last item to center */
+.tw-item {
+    height: 36px;
+    line-height: 36px;
+    text-align: center;
+    font-size: 18px;
+    font-family: 'Courier New', monospace;
+    color: #8a8a99;
+    scroll-snap-align: center;
+    cursor: pointer;
+    transition: color 0.15s ease, transform 0.15s ease;
+}
+.tw-item.tw-active { color: #fff; font-weight: 700; transform: scale(1.12); }
+.tw-sep { font-size: 20px; font-weight: 700; color: #fff; padding-bottom: 2px; }
+.tw-selection {
+    position: absolute;
+    left: 6px;
+    right: 6px;
+    top: 36px;
+    height: 36px;
+    border-top: 1px solid rgba(79,195,247,0.45);
+    border-bottom: 1px solid rgba(79,195,247,0.45);
+    background: rgba(79,195,247,0.08);
+    border-radius: 4px;
+    pointer-events: none;
+}
+
 /* ============================================================
    Fix 6: COVERAGE CONTROLS GROUP (inside settings panel)
    ============================================================ */

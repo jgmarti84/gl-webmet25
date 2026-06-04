@@ -860,6 +860,8 @@ const app = {
                 if (isHidden) {
                     document.querySelectorAll('[data-hours]').forEach(b => b.classList.remove('active'));
                     state.activeTimeWindowHours = null;
+                    // Wheels can only be positioned once visible — re-center now.
+                    state.ui.refreshTimeWheels();
                 }
             });
         }
@@ -868,6 +870,9 @@ const app = {
         const endInput   = document.getElementById('end-date');
         if (startInput) startInput.addEventListener('change', () => this.onTimeRangeChange());
         if (endInput)   endInput.addEventListener('change',   () => this.onTimeRangeChange());
+
+        // Build the iOS-style time wheels for the custom range.
+        state.ui.initTimeWheels();
 
         // Colormap
         const colormapSelect = document.getElementById('colormap-select');
