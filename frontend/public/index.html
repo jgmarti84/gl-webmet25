@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Radar Visualization - WebMet25</title>
+    <title>Visualización de Radar - WebMet25</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -25,30 +25,30 @@
          Positioned to the right of the map, above Leaflet's attribution. -->
     <div id="icon-bar">
         <!-- Module A – Radar Selection -->
-        <button id="btn-module-a" class="icon-btn" title="Radar Selection" aria-label="Radar Selection">
+        <button id="btn-module-a" class="icon-btn" title="Selección de radar" aria-label="Selección de radar">
             <span class="icon-glyph">📡</span>
             <span class="icon-badge" id="badge-module-a">0</span>
         </button>
 
         <!-- Module B – Field/Product Selection -->
-        <button id="btn-module-b" class="icon-btn" title="Field Selection" aria-label="Field Selection">
+        <button id="btn-module-b" class="icon-btn" title="Selección de campo" aria-label="Selección de campo">
             <span class="icon-glyph">⊞</span>
             <span class="icon-badge" id="badge-module-b">—</span>
         </button>
 
         <!-- Module C – Time Window -->
-        <button id="btn-module-c" class="icon-btn" title="Time Window" aria-label="Time Window">
+        <button id="btn-module-c" class="icon-btn" title="Ventana de tiempo" aria-label="Ventana de tiempo">
             <span class="icon-glyph">🕐</span>
             <span class="icon-badge" id="badge-module-c">1.5h</span>
         </button>
 
         <!-- Camera – Map Snapshot -->
-        <button id="btn-snapshot" class="icon-btn" title="Take map snapshot" aria-label="Take map snapshot">
+        <button id="btn-snapshot" class="icon-btn" title="Capturar imagen del mapa" aria-label="Capturar imagen del mapa">
             <span class="icon-glyph">📷</span>
         </button>
 
         <!-- Gear – Settings -->
-        <button id="btn-settings" class="icon-btn" title="Settings" aria-label="Open settings">
+        <button id="btn-settings" class="icon-btn" title="Configuración" aria-label="Abrir configuración">
             <span class="icon-glyph">⚙</span>
         </button>
     </div>
@@ -62,7 +62,7 @@
     <div id="panel-module-a" class="floating-panel" style="display:none;">
         <div class="panel-header">
             <span>📡 Selección de Radar</span>
-            <button class="panel-close" data-close="panel-module-a" aria-label="Close panel">✕</button>
+            <button class="panel-close" data-close="panel-module-a" aria-label="Cerrar panel">✕</button>
         </div>
         <div class="panel-body">
             <!-- Active/Inactive toggle switch (Change 1) -->
@@ -94,9 +94,10 @@
     <div id="panel-module-b" class="floating-panel" style="display:none;">
         <div class="panel-header">
             <span>⊞ Selección de Campo</span>
-            <button class="panel-close" data-close="panel-module-b" aria-label="Close panel">✕</button>
+            <button class="panel-close" data-close="panel-module-b" aria-label="Cerrar panel">✕</button>
         </div>
         <div class="panel-body">
+            <!-- ===== Always-visible top: field + filtered switch + opacity ===== -->
             <!-- Field dropdown -->
             <div class="control-group">
                 <label for="product-select">Campo:</label>
@@ -104,57 +105,30 @@
                     <option value="">Seleccione un campo...</option>
                 </select>
             </div>
-            <!-- Filtered/Unfiltered toggle switch
-                 ON  = show filtered fields (no 'o' suffix, quality-filtered/processed data)
-                 OFF = show unfiltered/raw fields ('o' suffix, no quality filter applied) -->
+            <!-- Filtered/Unfiltered switch. The switch toggles the SELECTED field
+                 between its filtered and unfiltered variant (it keeps the field).
+                 ON  = filtered variant (no 'o' suffix, polarimetric-filtered data)
+                 OFF = unfiltered variant ('o' suffix, raw data).
+                 Disabled (with a tooltip) when the field has no filtered variant. -->
             <div class="control-group toggle-row">
                 <label class="toggle-switch-wrapper" for="toggle-show-filtered">
                     <span class="toggle-switch">
                         <input type="checkbox" id="toggle-show-filtered">
                         <span class="toggle-slider"></span>
                     </span>
-                    <span class="toggle-label">Filtered
-                        <span class="filter-info-tip" aria-label="What does filtered mean?">
+                    <span class="toggle-label">Filtrado
+                        <span class="filter-info-tip" aria-label="¿Qué significa filtrado?">
                             ?
                             <span class="filter-info-popup">
                                 <strong>Filtro polarimétrico</strong><br>
                                 &bull; RHOHV > 0.87 <br>
-                                <!-- &bull; &#x03C1;<sub>HV</sub> > 0.87<br> -->
-                                <!-- &bull; High texture in differential phase (&Phi;<sub>DP</sub>)<br> -->
                                 &bull; DBZH > 30 dBZ <br>
                             </span>
                         </span>
                     </span>
                 </label>
             </div>
-            <!-- Tops & Cores layer controls -->
-            <div id="tops-cores-toggle-row" class="control-group toggle-row">
-                <label class="toggle-switch-wrapper" for="toggle-tops-cores">
-                    <span class="toggle-switch">
-                        <input type="checkbox" id="toggle-tops-cores">
-                        <span class="toggle-slider"></span>
-                    </span>
-                    <span class="toggle-label">Topes &amp; Núcleos</span>
-                </label>
-            </div>
-            <div id="tops-cores-size-row" class="control-group" style="display:none;">
-                <label for="tops-cores-size">Tamaño del punto:</label>
-                <div class="opacity-control">
-                    <input type="range" id="tops-cores-size" min="4" max="20" step="1" value="8">
-                </div>
-            </div>
-            <!-- Colormap Selection (hidden until product selected) -->
-            <div class="control-group" id="colormap-group" style="display:none;">
-                <label for="colormap-select">Mapa de colores:</label>
-                <!-- Fix 5: options populated via optgroups in JS; no static Default option -->
-                <select id="colormap-select"></select>
-            </div>
-            <!-- Fix 2: Opacity slider moved here from Settings.
-                 Per-field design: each field has its own opacity entry in state.fieldOpacity
-                 (keyed by product_key).  When multi-field support is added, each field
-                 panel instance will have its own independent slider.
-                 TODO: Multi-field – instantiate a separate Module B panel per active field
-                 and bind this slider to that field's opacity entry exclusively. -->
+            <!-- Opacity (per-field; hidden until a field is selected) -->
             <div class="control-group" id="field-opacity-group" style="display:none;">
                 <label for="field-opacity-slider">Opacidad:</label>
                 <div class="opacity-control">
@@ -162,49 +136,114 @@
                     <span id="field-opacity-value">70%</span>
                 </div>
             </div>
-            <!-- Range Filter (vmin/vmax) – hidden until product selected.
-                 vmin/vmax now act as DATA FILTERS: pixels outside the range
-                 are rendered transparent.  The colormap gradient always
-                 spans the full product range (see tile_service.py). -->
-            <div class="control-group" id="range-group" style="display:none;">
-                <label>Range Filter:</label>
-                <div class="range-control">
-                    <div class="range-row">
-                        <span class="range-label">Min</span>
-                        <input type="number" id="vmin-input" class="range-input" step="any">
-                    </div>
-                    <div class="range-row">
-                        <span class="range-label">Max</span>
-                        <input type="number" id="vmax-input" class="range-input" step="any">
-                    </div>
-                    <button id="btn-apply-range" class="small-btn apply-btn">Aplicar</button>
-                </div>
-            </div>
-            <!-- Gaussian Smoothing – hidden until product selected -->
-            <div class="control-group toggle-row" id="smoothing-toggle-row" style="display:none;">
-                <label class="toggle-switch-wrapper" for="toggle-smoothing">
-                    <span class="toggle-switch">
-                        <input type="checkbox" id="toggle-smoothing">
-                        <span class="toggle-slider"></span>
-                    </span>
-                    <span class="toggle-label">Suavizado
-                        <span class="filter-info-tip" aria-label="¿Qué hace el suavizado?">
+
+            <!-- ===== Collapsible sections (collapsed by default) ===== -->
+            <!-- Tops & Cores. The section header is grayed + non-expandable when
+                 Tops & Cores are not available for the selected field (see
+                 _updateTopsCoresUIVisibility). -->
+            <div class="field-section" id="section-tops-cores">
+                <button type="button" class="field-section-header" aria-expanded="false" aria-controls="section-tops-cores-body">
+                    <span class="field-section-title">Topes &amp; Núcleos
+                        <span class="filter-info-tip" aria-label="¿Qué son los topes y núcleos?">
                             ?
                             <span class="filter-info-popup">
-                                <strong>Suavizado gaussiano</strong><br>
-                                Reduce el ruido de los píxeles en la imagen renderizada.<br>
-                                <!-- &bull; Aplicado del lado del servidor sobre los valores de reflectividad en bruto<br>
-                                &bull; Sigma más alto = más desenfoque<br>
-                                &bull; Recomendado: sigma 0.5&ndash;1.2<br> -->
+                                <strong>Topes &amp; Núcleos</strong><br>
+                                Los núcleos se calculan en base a min dbz: 40,
+                                RHOHV &ge; 0.85, min pixels: 4, min range 10000.
                             </span>
                         </span>
                     </span>
-                </label>
+                    <span class="field-section-chevron" aria-hidden="true"></span>
+                </button>
+                <div class="field-section-body" id="section-tops-cores-body">
+                    <div id="tops-cores-toggle-row" class="control-group toggle-row">
+                        <label class="toggle-switch-wrapper" for="toggle-tops-cores">
+                            <span class="toggle-switch">
+                                <input type="checkbox" id="toggle-tops-cores">
+                                <span class="toggle-slider"></span>
+                            </span>
+                            <span class="toggle-label">Mostrar capa</span>
+                        </label>
+                    </div>
+                    <div id="tops-cores-size-row" class="control-group" style="display:none;">
+                        <label for="tops-cores-size">Tamaño del punto:</label>
+                        <div class="opacity-control">
+                            <input type="range" id="tops-cores-size" min="2" max="10" step="0.5" value="4">
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="control-group" id="smoothing-sigma-row" style="display:none;">
-                <label for="smoothing-sigma">Sigma: <span id="smoothing-sigma-value">0.8</span> px</label>
-                <div class="opacity-control">
-                    <input type="range" id="smoothing-sigma" min="0.3" max="3.0" step="0.1" value="0.8">
+
+            <!-- Colormap -->
+            <div class="field-section" id="section-colormap">
+                <button type="button" class="field-section-header" aria-expanded="false" aria-controls="section-colormap-body">
+                    <span class="field-section-title">Mapa de colores</span>
+                    <span class="field-section-chevron" aria-hidden="true"></span>
+                </button>
+                <div class="field-section-body" id="section-colormap-body">
+                    <div class="control-group" id="colormap-group" style="display:none;">
+                        <!-- options populated via optgroups in JS -->
+                        <select id="colormap-select"></select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Range Filter (vmin/vmax act as DATA FILTERS: pixels outside the
+                 range render transparent; the colormap always spans the full
+                 product range — see tile_service.py). The Apply button applies
+                 the range filter only; every other control auto-applies. -->
+            <div class="field-section" id="section-range">
+                <button type="button" class="field-section-header" aria-expanded="false" aria-controls="section-range-body">
+                    <span class="field-section-title">Filtro de rango</span>
+                    <span class="field-section-chevron" aria-hidden="true"></span>
+                </button>
+                <div class="field-section-body" id="section-range-body">
+                    <div class="control-group" id="range-group" style="display:none;">
+                        <div class="range-control">
+                            <div class="range-row">
+                                <span class="range-label">Mín</span>
+                                <input type="number" id="vmin-input" class="range-input" step="any">
+                            </div>
+                            <div class="range-row">
+                                <span class="range-label">Máx</span>
+                                <input type="number" id="vmax-input" class="range-input" step="any">
+                            </div>
+                            <button id="btn-apply-range" class="small-btn apply-btn">Aplicar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gaussian Smoothing -->
+            <div class="field-section" id="section-smoothing">
+                <button type="button" class="field-section-header" aria-expanded="false" aria-controls="section-smoothing-body">
+                    <span class="field-section-title">Suavizado gaussiano</span>
+                    <span class="field-section-chevron" aria-hidden="true"></span>
+                </button>
+                <div class="field-section-body" id="section-smoothing-body">
+                    <div class="control-group toggle-row" id="smoothing-toggle-row" style="display:none;">
+                        <label class="toggle-switch-wrapper" for="toggle-smoothing">
+                            <span class="toggle-switch">
+                                <input type="checkbox" id="toggle-smoothing">
+                                <span class="toggle-slider"></span>
+                            </span>
+                            <span class="toggle-label">Activar
+                                <span class="filter-info-tip" aria-label="¿Qué hace el suavizado?">
+                                    ?
+                                    <span class="filter-info-popup">
+                                        <strong>Suavizado gaussiano</strong><br>
+                                        Reduce el ruido de los píxeles en la imagen renderizada.<br>
+                                    </span>
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+                    <div class="control-group" id="smoothing-sigma-row" style="display:none;">
+                        <label for="smoothing-sigma">Sigma: <span id="smoothing-sigma-value">0.8</span> px</label>
+                        <div class="opacity-control">
+                            <input type="range" id="smoothing-sigma" min="0.3" max="3.0" step="0.1" value="0.8">
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -263,7 +302,10 @@
                     <option value="argenmap" selected>IGN Argenmap</option>
                     <option value="argenmap_gris">IGN Argenmap Gris</option>
                     <option value="argenmap_topo">IGN Argenmap Topo</option>
-                    <option value="osm">OpenStreetMap</option>
+                    <option value="argenmap_oscuro">IGN Argenmap Oscuro</option>
+                    <!-- OpenStreetMap removed per request; kept commented for easy restore
+                         (also re-enable the 'osm' entry in js/v2/map.js BASEMAPS).
+                    <option value="osm">OpenStreetMap</option> -->
                 </select>
             </div>
             <!-- Coverage mask controls -->
@@ -284,8 +326,8 @@
             </div>
             <!-- Radar status refresh — 2-row layout to avoid horizontal overflow -->
             <div class="settings-section-header">
-                <span title="How often to re-check which radars are online. Only updates the status indicator; does not reload images.">Radar Status Check</span>
-                <button id="btn-radar-refresh-now" class="icon-refresh-btn" title="Re-check radar status now">↻</button>
+                <span title="Con qué frecuencia se vuelve a verificar qué radares están en línea. Solo actualiza el indicador de estado; no recarga las imágenes.">Estado de los radares</span>
+                <button id="btn-radar-refresh-now" class="icon-refresh-btn" title="Verificar estado de los radares ahora">↻</button>
             </div>
             <div class="settings-row-sub">
                 <input type="number" id="settings-refresh-interval" min="1" max="60" step="1" value="10">
@@ -294,8 +336,8 @@
             </div>
             <!-- Live window update — 2-row layout; ↻ is the COG refresh-now button -->
             <div class="settings-section-header">
-                <span title="How often to fetch new radar images when a time window (e.g. Last 3h) is active. Lower values mean more up-to-date data but more server load.">Live Window Update</span>
-                <button id="btn-settings-cog-refresh-now" class="icon-refresh-btn" title="Fetch latest COGs now">↻</button>
+                <span title="Con qué frecuencia se buscan nuevas imágenes de radar cuando hay una ventana de tiempo activa (p. ej. Últimas 3h). Valores más bajos dan datos más actualizados pero más carga del servidor.">Actualización en vivo</span>
+                <button id="btn-settings-cog-refresh-now" class="icon-refresh-btn" title="Buscar COGs más recientes ahora">↻</button>
             </div>
             <div class="settings-row-sub">
                 <input type="number" id="settings-live-refresh-interval" min="1" max="30" step="1" value="5">
@@ -336,7 +378,7 @@
         <div class="animation-info-row">
             <span id="time-window-label" class="time-window-label">—</span>
             <!-- Item 8: live mode indicator -->
-            <span id="live-indicator" class="live-indicator live-off" title="Live mode status">○ Live</span>
+            <span id="live-indicator" class="live-indicator live-off" title="Estado del modo en vivo">○ En vivo</span>
             <span id="time-display" class="frame-time-display">—</span>
         </div>
         <!-- Slider -->
@@ -345,16 +387,26 @@
         </div>
         <!-- Control buttons + nav + frame counter + speed slider -->
         <div class="animation-buttons">
-            <button id="btn-first" title="First frame" aria-label="First frame">⏮</button>
-            <button id="btn-prev" title="Previous frame" aria-label="Previous frame">◀</button>
-            <button id="btn-play-pause" title="Play" aria-label="Play/Pause">▶</button>
+            <button id="btn-first" title="Primer fotograma" aria-label="Primer fotograma">⏮</button>
+            <button id="btn-prev" title="Fotograma anterior" aria-label="Fotograma anterior">◀</button>
+            <button id="btn-play-pause" title="Reproducir" aria-label="Reproducir/Pausar">
+                <!-- Both icons live in one fixed-viewBox SVG; .playing toggles which
+                     path is shown so the button geometry never changes between states. -->
+                <svg class="play-pause-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+                    <path class="icon-play" d="M8 5v14l11-7z"></path>
+                    <g class="icon-pause">
+                        <rect x="6" y="5" width="4" height="14" rx="1"></rect>
+                        <rect x="14" y="5" width="4" height="14" rx="1"></rect>
+                    </g>
+                </svg>
+            </button>
             <!-- Item 5: single triangle for next, double triangle for go-to-latest -->
-            <button id="btn-next" title="Next frame" aria-label="Next frame">▶</button>
-            <button id="btn-latest" title="Go to latest frame" aria-label="Go to latest frame">⏭</button>
+            <button id="btn-next" title="Fotograma siguiente" aria-label="Fotograma siguiente">▶</button>
+            <button id="btn-latest" title="Ir al último fotograma" aria-label="Ir al último fotograma">⏭</button>
             <!-- Item 10: COG refresh now (only active in live mode) -->
-            <button id="btn-cog-refresh-now" title="Fetch latest COGs now" aria-label="Fetch latest COGs now" disabled>↻</button>
+            <button id="btn-cog-refresh-now" title="Buscar COGs más recientes ahora" aria-label="Buscar COGs más recientes ahora" disabled>↻</button>
             <!-- Item 4: continuous speed slider replacing the discrete button -->
-            <div class="speed-control" title="Animation speed">
+            <div class="speed-control" title="Velocidad de animación">
                 <span class="speed-label">Velocidad</span>
                 <input type="range" id="speed-slider" min="0.5" max="2" step="0.1" value="1">
                 <span id="speed-value">1.0x</span>

@@ -930,7 +930,9 @@ code {
 }
 
 .range-input {
-    flex: 1;
+    /* Capped width so the box isn't full-panel-wide; sits left next to its label. */
+    flex: 0 1 96px;
+    max-width: 96px;
     padding: 5px 7px;
     border: 1px solid rgba(255,255,255,0.2);
     border-radius: 4px;
@@ -940,6 +942,52 @@ code {
     font-family: 'Courier New', monospace;
     min-width: 0;
 }
+
+/* Colormap picker only — narrower than the full-width product/basemap selects. */
+#colormap-select {
+    width: auto;
+    max-width: 100%;
+}
+
+/* ============================================================
+   FIELD-MENU COLLAPSIBLE SECTIONS (accordion, Module B)
+   ============================================================ */
+.field-section {
+    border-top: 1px solid rgba(255,255,255,0.08);
+}
+.field-section-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 2px;
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+}
+.field-section-header:hover { color: #4fc3f7; }
+.field-section-title { display: inline-flex; align-items: center; gap: 6px; }
+/* Right-pointing triangle; rotates to point down when the section is open. */
+.field-section-chevron {
+    width: 0; height: 0;
+    border-left: 5px solid currentColor;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    transition: transform 0.15s ease;
+    flex-shrink: 0;
+}
+.field-section.open .field-section-chevron { transform: rotate(90deg); }
+.field-section-body { display: none; padding-bottom: 6px; }
+.field-section.open .field-section-body { display: block; }
+/* Unavailable for the selected field: grayed + non-interactive. */
+.field-section.disabled .field-section-header { color: #666; cursor: not-allowed; }
+.field-section.disabled .field-section-header:hover { color: #666; }
 
 .range-input:focus {
     outline: none;
@@ -1340,6 +1388,13 @@ code {
 #btn-play-pause:hover  { opacity: 0.75; color: #4fc3f7; background: transparent; }
 #btn-play-pause:active { opacity: 0.6; }
 #btn-play-pause:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Fixed-geometry play/pause icon: both shapes share one SVG; .playing swaps
+   which is shown, so size/aspect/baseline stay identical in both states. */
+#btn-play-pause .play-pause-icon { display: block; fill: currentColor; pointer-events: none; }
+#btn-play-pause .icon-pause { display: none; }
+#btn-play-pause.playing .icon-play { display: none; }
+#btn-play-pause.playing .icon-pause { display: inline; }
 
 /* Speed slider (item 4: replaces discrete speed button) */
 .speed-control {

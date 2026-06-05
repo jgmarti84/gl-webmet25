@@ -1,5 +1,5 @@
 const ADMIN_API_BASE = '/api/v1/admin';
-const EXPIRED_SESSION_MESSAGE = 'Authentication failed. Refresh the page and verify your admin credentials.';
+const EXPIRED_SESSION_MESSAGE = 'Error de autenticación. Actualice la página y verifique sus credenciales de administrador.';
 
 function buildQuery(params = {}) {
     const search = new URLSearchParams();
@@ -27,7 +27,7 @@ async function request(path, options = {}) {
     }
 
     if (!response.ok) {
-        let detail = `API error: ${response.status}`;
+        let detail = `Error de API: ${response.status}`;
         try {
             const payload = await response.json();
             if (payload?.detail) {

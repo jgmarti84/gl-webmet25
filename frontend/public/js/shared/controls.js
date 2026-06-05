@@ -122,7 +122,7 @@ export class UIControls {
     /**
      * Populate a select dropdown with optional filtering
      */
-    populateSelect(selectId, items, valueKey, labelKey, placeholder = 'Select...') {
+    populateSelect(selectId, items, valueKey, labelKey, placeholder = 'Seleccione...') {
         const select = document.getElementById(selectId);
         if (!select) return;
         
@@ -163,7 +163,7 @@ export class UIControls {
         });
         
         // Populate the select
-        this.populateSelect('product-select', filteredProducts, 'product_key', 'product_title', 'Select product...');
+        this.populateSelect('product-select', filteredProducts, 'product_key', 'product_title', 'Seleccione un campo...');
     }
 
     /**
@@ -239,13 +239,19 @@ export class UIControls {
     updatePlayButton(isPlaying) {
         const btn = document.getElementById('btn-play-pause');
         if (!btn) return;
-        
-        if (isPlaying) {
-            btn.innerHTML = '⏸';
-            btn.title = 'Pause';
+
+        const label = isPlaying ? 'Pausar' : 'Reproducir';
+        btn.title = label;
+        btn.setAttribute('aria-label', label);
+
+        if (btn.querySelector('.play-pause-icon')) {
+            // v2: fixed-geometry SVG — toggle which icon shows via .playing
+            // (see #btn-play-pause rules in styles.css). NEVER set innerHTML here,
+            // or the button jumps size/aspect between states.
+            btn.classList.toggle('playing', isPlaying);
         } else {
-            btn.innerHTML = '▶';
-            btn.title = 'Play';
+            // v1 (legacy) fallback: glyph swap.
+            btn.innerHTML = isPlaying ? '⏸' : '▶';
         }
     }
     
@@ -257,7 +263,7 @@ export class UIControls {
         if (!btn) return;
         
         btn.textContent = `${speed}x`;
-        btn.title = `Speed: ${speed}x`;
+        btn.title = `Velocidad: ${speed}x`;
     }
     
     /**
@@ -346,7 +352,7 @@ export class UIControls {
             
             const dot = document.createElement('span');
             dot.className = `radar-status-dot ${radar.is_active ? 'radar-status-active' : 'radar-status-inactive'}`;
-            dot.title = radar.is_active ? 'Active' : 'Inactive';
+            dot.title = radar.is_active ? 'Activo' : 'Inactivo';
             
             const label = document.createElement('label');
             label.htmlFor = `radar-${radar.code}`;
@@ -518,7 +524,7 @@ export class UIControls {
      * The overlay is created dynamically on first call and reused thereafter.
      * @param {string} message - Text shown inside the overlay
      */
-    showMapOverlay(message = 'Loading\u2026') {
+    showMapOverlay(message = 'Cargando\u2026') {
         let overlay = document.getElementById('map-loading-overlay');
         if (!overlay) {
             overlay = document.createElement('div');

@@ -53,12 +53,21 @@ const BASEMAPS = {
         attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
         maxZoom:     18,
     },
-    'osm': {
-        name:        'OpenStreetMap',
-        url:         '/osm-tiles/{z}/{x}/{y}.png',
-        attribution: '© OpenStreetMap contributors',
-        maxZoom:     19,
+    'argenmap_oscuro': {
+        name:        'IGN Argenmap Oscuro',
+        url:         '/ign-tiles/argenmap_oscuro@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+        attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
+        maxZoom:     18,
     },
+    // OpenStreetMap basemap removed from the picker per request. Kept here
+    // (commented out) in case it needs to be restored — also re-enable the
+    // matching <option value="osm"> in index.html and the /osm-tiles/ proxy.
+    // 'osm': {
+    //     name:        'OpenStreetMap',
+    //     url:         '/osm-tiles/{z}/{x}/{y}.png',
+    //     attribution: '© OpenStreetMap contributors',
+    //     maxZoom:     19,
+    // },
 };
 
 export class MapManager {

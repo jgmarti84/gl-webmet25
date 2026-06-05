@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es-AR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -17,19 +17,19 @@
                 <span class="sidebar-brand-text">WebMet25<small>Admin</small></span>
             </div>
             <nav id="sidebar-nav">
-                <a href="#dashboard" data-section="dashboard" class="active"><span class="nav-ico">▣</span> Dashboard</a>
-                <div class="nav-group-label">Data</div>
-                <a href="#radars" data-section="radars"><span class="nav-ico">📡</span> Radars</a>
-                <a href="#products" data-section="products"><span class="nav-ico">⊞</span> Products</a>
-                <a href="#references" data-section="references"><span class="nav-ico">▤</span> References</a>
+                <a href="#dashboard" data-section="dashboard" class="active"><span class="nav-ico">▣</span> Panel</a>
+                <div class="nav-group-label">Datos</div>
+                <a href="#radars" data-section="radars"><span class="nav-ico">📡</span> Radares</a>
+                <a href="#products" data-section="products"><span class="nav-ico">⊞</span> Productos</a>
+                <a href="#references" data-section="references"><span class="nav-ico">▤</span> Referencias</a>
                 <a href="#cogs" data-section="cogs"><span class="nav-ico">🗺</span> COGs</a>
                 <a href="#tops-cores" data-section="tops-cores"><span class="nav-ico">⛰</span> Tops &amp; Cores</a>
-                <div class="nav-group-label">Config</div>
+                <div class="nav-group-label">Configuración</div>
                 <a href="#estrategias" data-section="estrategias"><span class="nav-ico">⚙</span> Estrategias</a>
                 <a href="#volumenes" data-section="volumenes"><span class="nav-ico">▦</span> Volumenes</a>
-                <div class="nav-group-label">Colormaps</div>
-                <a href="#colormaps" data-section="colormaps"><span class="nav-ico">🎨</span> Colormaps</a>
-                <a href="#colormap-options" data-section="colormap-options"><span class="nav-ico">⚭</span> Colormap Options</a>
+                <div class="nav-group-label">Mapas de colores</div>
+                <a href="#colormaps" data-section="colormaps"><span class="nav-ico">🎨</span> Mapas de colores</a>
+                <a href="#colormap-options" data-section="colormap-options"><span class="nav-ico">⚭</span> Opciones de mapa de colores</a>
             </nav>
             <div class="sidebar-footer">
                 <button id="sidebar-back-map" class="btn btn-ghost btn-block" type="button">← Volver al mapa</button>
@@ -40,9 +40,9 @@
             <header class="page-header">
                 <div class="page-header-left">
                     <button id="back-to-map" class="btn btn-ghost btn-back" type="button" title="Volver al mapa">←</button>
-                    <h1 id="section-title">Dashboard</h1>
+                    <h1 id="section-title">Panel</h1>
                 </div>
-                <p class="logout-hint">HTTP Basic Auth is browser-managed. Close the browser session or clear credentials to sign out.</p>
+                <p class="logout-hint">La autenticación HTTP Basic la gestiona el navegador. Cierre la sesión del navegador o borre las credenciales para salir.</p>
             </header>
 
             <div id="feedback-message" class="feedback-message hidden"></div>
@@ -53,8 +53,8 @@
     <div id="form-modal" class="modal hidden" role="dialog" aria-modal="true">
         <div class="modal-card">
             <div class="modal-header">
-                <h2 id="form-modal-title">Edit</h2>
-                <button id="close-form-modal" class="btn btn-secondary btn-sm" type="button">Close</button>
+                <h2 id="form-modal-title">Editar</h2>
+                <button id="close-form-modal" class="btn btn-secondary btn-sm" type="button">Cerrar</button>
             </div>
             <form id="form-modal-body" class="form-grid"></form>
         </div>

@@ -42,17 +42,41 @@ def browser_context_args(browser_context_args):
     }
 
 
+# Console-error noise that is NOT an app bug and must not fail a test.
+# The frontend's geolocation auto-init does a best-effort IP lookup against the
+# third-party ipapi.co service (handled/caught in app.js — the app degrades
+# gracefully). In sandboxed/CI environments that host is unreachable or
+# CORS-blocked, and the BROWSER logs a console.error for the failed request that
+# the app cannot suppress. Ignore only that source; real app errors still fail.
+_IGNORED_CONSOLE_SUBSTRINGS = ("ipapi.co",)
+
+
+def _is_ignored_console(msg) -> bool:
+    text = msg.text or ""
+    try:
+        url = (msg.location or {}).get("url", "")
+    except Exception:
+        url = ""
+    return any(s in text or s in url for s in _IGNORED_CONSOLE_SUBSTRINGS)
+
+
 @pytest.fixture
 def js_errors(page):
     """Collect page errors + console.error messages during a test.
 
     Usage: assert not js_errors  (at the end of a test)
+
+    Known external-service noise (see _IGNORED_CONSOLE_SUBSTRINGS) is filtered
+    out so the assertion reflects the app's own errors, not sandbox network
+    limitations.
     """
     errors: list[str] = []
     page.on("pageerror", lambda exc: errors.append(f"pageerror: {exc}"))
     page.on(
         "console",
-        lambda msg: errors.append(f"console.error: {msg.text}") if msg.type == "error" else None,
+        lambda msg: errors.append(f"console.error: {msg.text}")
+        if (msg.type == "error" and not _is_ignored_console(msg))
+        else None,
     )
     return errors
 

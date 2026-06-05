@@ -356,9 +356,10 @@ SVG mask inside Leaflet `coverageMaskPane` (zIndex 300).
 - Zero zoom lag: SVG is child of Leaflet pane transform group
 
 ### Basemap
-Default: OSM (`'osm'` key). Persisted to localStorage
-(`selectedBasemap`). Always call `setBasemap(key)` to change —
-never manipulate `_baseLayer` directly.
+Default: IGN Argenmap (`'argenmap'` key). Persisted to localStorage
+(`webmet25_selected_basemap`). Always call `setBasemap(key)` to change —
+never manipulate `_baseLayer` directly. Basemaps are defined in the
+`BASEMAPS` object in `js/v2/map.js`.
 
 ### Frame image rendering
 `image-rendering: pixelated` applied to all radar overlays via
@@ -380,7 +381,7 @@ UTC with "UTC" suffix is fallback only. No geolocation needed.
 | Setting | Default | localStorage key |
 |---|---|---|
 | Time window | 1.5h (90 min) | timeWindowHours |
-| Basemap | OSM | selectedBasemap |
+| Basemap | IGN Argenmap | webmet25_selected_basemap |
 | Coverage opacity | 0.4 | webmet25_coverage_opacity |
 | Radar status interval | 300s | radarStatusInterval |
 | Live window interval | 60min | liveWindowMinutes |
