@@ -1274,7 +1274,7 @@ code {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 6px;
-    gap: 8px;
+    gap: 5px;
     cursor: grab;
     user-select: none;
 }
@@ -1283,7 +1283,7 @@ code {
 }
 
 .time-window-label {
-    font-size: 11px;
+    font-size: 13px;
     color: #4fc3f7;
     font-family: 'Courier New', monospace;
     white-space: nowrap;
@@ -1293,7 +1293,7 @@ code {
 }
 
 .frame-time-display {
-    font-size: 11px;
+    font-size: 13px;
     color: #81d4fa;
     font-family: 'Courier New', monospace;
     white-space: nowrap;
@@ -1301,7 +1301,7 @@ code {
 }
 
 /* Slider */
-.animation-slider-container { margin-bottom: 8px; }
+.animation-slider-container { margin-bottom: 5px; }
 
 #animation-slider {
     width: 100%;
@@ -1337,7 +1337,7 @@ code {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 5px;
 }
 
 /* Navigation buttons (prev/next/latest/first/refresh) in animation bar */
@@ -1391,7 +1391,7 @@ code {
 
 /* Fixed-geometry play/pause icon: both shapes share one SVG; .playing swaps
    which is shown, so size/aspect/baseline stay identical in both states. */
-#btn-play-pause .play-pause-icon { display: block; fill: currentColor; pointer-events: none; }
+#btn-play-pause .play-pause-icon { display: block; fill: currentColor; pointer-events: none; width: 36px; height: 36px; }
 #btn-play-pause .icon-pause { display: none; }
 #btn-play-pause.playing .icon-play { display: none; }
 #btn-play-pause.playing .icon-pause { display: inline; }
