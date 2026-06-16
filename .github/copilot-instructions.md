@@ -56,26 +56,37 @@ webmet25 (consumer)
   Do not build new features around PNG output.
 
 ### File Naming Convention
-`<RADAR_NAME>_<TIMESTAMP>_<FIELD>[o]_<ELEVATION>.<ext>`
+
+#### Current Production Format (Pattern 0)
+`<RADAR_NAME>_<STRATEGY>_<VOL_NR>_<TIMESTAMP>_<FIELD>[o].<ext>`
 
 | Token | Description | Example |
 |-------|-------------|---------|
 | `RADAR_NAME` | Radar station identifier | `RMA1` |
+| `STRATEGY` | 4-digit scanning strategy code | `0315` |
+| `VOL_NR` | 2-digit volume number | `01`, `02`, `04` |
 | `TIMESTAMP` | ISO 8601 format: `YYYYMMDDTHHMMSSZ` | `20260401T205000Z` |
 | `FIELD` | Radar field/variable name | `ZDR`, `DBZH` |
 | `[o]` | Letter `o` suffix = raw/non-filtered data. Absent = filtered data | `ZDRo` vs `ZDR` |
-| `ELEVATION` | Elevation angle in degrees, zero-padded to 2 digits. Currently always `00`. Future versions will support other values | `00` |
 | `ext` | File extension | `tif` (primary), `png` (deprecated) |
 
-### Naming Examples
-Filtered ZDR field, elevation 00 degrees → GeoTIFF
-RMA1_20260401T205000Z_ZDR_00.tif
+Examples:
+```
+RMA1_0315_01_20260401T205000Z_DBZH.tif     # filtered reflectivity, vol 01
+RMA1_0315_01_20260401T205000Z_DBZHo.tif    # unfiltered (raw) reflectivity, vol 01
+RMA1_0315_04_20260401T205000Z_COLMAX.tif   # column max, vol 04 (vigilant)
+```
 
-Non-filtered (raw) ZDR field, elevation 00 degrees → GeoTIFF
-RMA1_20260401T205000Z_ZDRo_00.tif
+#### Legacy Format (Pattern 1 — backward compatibility only)
+`<RADAR_NAME>_<TIMESTAMP>_<FIELD>[o]_<ELEVATION>.<ext>`
 
-PNG equivalent (deprecated, backward compat only)
-RMA1_20260401T205000Z_ZDR_00.png
+Example: `RMA1_20260401T205000Z_ZDRo_00.tif`
+
+Legacy files are indexed with `strategy=None` and `vol_nr=None`. The indexer
+logs a WARNING for each legacy file encountered.
+
+PNG equivalent (deprecated, backward compat only):
+`RMA1_20260401T205000Z_ZDR_00.png`
 
 ### Folder Structure
 ```text
@@ -147,10 +158,29 @@ tests/ # Automated tests
 |-------|-------------|------------|
 | `Radar` | `code` | `title`, `center_lat`, `center_long`, `is_active` |
 | `RadarProduct` | `id` | `product_key` (UNIQUE), `product_title`, `min_value`, `max_value` |
-| `RadarCOG` | `id` | `radar_code` (FK), `product_id` (FK), `file_path` (UNIQUE), `observation_time`, `status` |
+| `RadarCOG` | `id` | `radar_code` (FK), `product_id` (FK), `estrategia_code` (FK), `file_path` (UNIQUE), `observation_time`, `polarimetric_var`, `vol_nr`, `radar_coverage_m`, `status` |
 | `TopsAndCores` | `id` | `radar_code` (FK), `observation_time` (indexed), `file_path` (UNIQUE), `core_count`, `top_count`, `feature_count`, `status` (COGStatus), `strategy`, `vol_nr` |
 | `Reference` | `id` | `product_id` (FK), `value`, `color` |
 | `Estrategia` | `code` | `description` |
+| `Volumen` | `id` | `value` (integer) |
+
+**Key RadarCOG columns added in recent versions:**
+- `vol_nr` (String 16): Volume number from filename, e.g. `"01"`, `"04"`. `NULL` for legacy files.
+- `estrategia_code` (FK → `Estrategia.code`): Strategy code, e.g. `"0315"`. `NULL` for legacy files.
+- `radar_coverage_m` (Float): Radar coverage radius in metres, from radarlib COG tag. `NULL` for legacy files.
+- `polarimetric_var` (String 16): Exact field name including `o`-suffix, e.g. `"DBZHo"`. Used for exact-match filtering in the `/cogs` endpoint.
+
+**Key RadarProduct columns added in recent versions:**
+- `default_cmap` (String 64, nullable): DB-canonical default colormap name (e.g. `"grc_th"`).
+- `min_value`, `max_value`: Authoritative data range for colour scaling.
+
+**Colormap tables:**
+- `colormap_stops`: One row per channel point (`cmap_name`, `channel` r/g/b, `position`, `val_left`, `val_right`, `sort_order`, `is_system`). 8 system colormaps seeded: `grc_th`, `grc_th2`, `grc_rain`, `grc_g`, `grc_rho`, `grc_zdr`, `grc_vrad`, `Theodore16`.
+- `product_colormap_options`: Many-to-many between `product_key` and `cmap_name`.
+
+**ColormapService** (`api/app/services/colormap_service.py`): thread-safe singleton with 5-minute TTL cache. Exposes `get_cmap(name)`, `default_for_product(key)`, `options_for_product(key)`, `list_cmap_names()`, `invalidate()`. Colormap resolution order: DB → hardcoded builders in `utils/colormaps.py` → PyART → matplotlib.
+
+**Unique constraint on RadarCOG:** `(radar_code, product_id, observation_time, elevation_angle, vol_nr)` — allows the same field from different volumes (e.g. `DBZH` vol 01 vs vol 04) to coexist as distinct records.
 
 ---
 
@@ -161,32 +191,98 @@ tests/ # Automated tests
 | GET | `/radars` | List all radars |
 | GET | `/radars/{radar_code}` | Get radar details |
 | GET | `/products` | List radar products |
-| GET | `/cogs` | Query COG metadata |
-| GET | `/tiles/{cog_id}/{z}/{x}/{y}.png` | Render tile image |
+| GET | `/cogs` | Query COG metadata. Supports `strategy` and `vol_nr` (repeatable) query params for coverage-mode filtering |
+| GET | `/tiles/{cog_id}/{z}/{x}/{y}.png` | Render Web Mercator tile (v1) |
 | GET | `/tiles/{cog_id}/metadata` | Get tile metadata |
-| GET | `/products/{product_key}/colormap` | Get product colormap |
-| GET | `/frames/{cog_id}/image.png` | Full COG as single PNG (v2) |
-| GET | `/tops-cores` | Query TopsAndCores records by radar codes + time range |
-| GET | `/tops-cores/{id}/features` | Fetch GeoJSON FeatureCollection from disk by record ID |
+| GET | `/products/{product_key}/colormap` | Get product colormap (Reference table) |
+| GET | `/colormap/names` | List all DB-defined colormap names |
+| GET | `/colormap/options` | Per-product colormap option lists (DB-backed, `ProductColormapOption`) |
+| GET | `/colormap/defaults` | Per-product default colormap name (`RadarProduct.default_cmap`) |
+| GET | `/colormap/colors/{cmap_name}` | Hex color list for a colormap |
+| GET | `/colormap/info/{product_key}` | Full colormap info for a product |
+| POST | `/colormap/cache/invalidate` | Flush the in-process colormap cache after DB edits |
+| GET | `/frames/{cog_id}/image.png` | Full COG as single georeferenced PNG (v2). Supports `colormap`, `vmin`, `vmax`, `filter_vmin`, `filter_vmax`, `smooth`, `smooth_sigma` params. Returns bbox in `X-Bbox-*` headers |
+| GET | `/tops-cores` | Query TopsAndCores metadata records by `radar_codes[]` + `time_from` + `time_to` |
+| GET | `/tops-cores/{id}/features` | Fetch raw GeoJSON FeatureCollection from disk by record ID |
+
+### `/cogs` query parameters
+| Param | Type | Description |
+|-------|------|-------------|
+| `radar_code` | str | Filter by radar |
+| `product_key` | str | Exact-match on `polarimetric_var` or product |
+| `strategy` | str | Filter by volume strategy, e.g. `0315` |
+| `vol_nr` | str (repeatable) | Filter by volume number(s), e.g. `?vol_nr=01&vol_nr=02` |
+| `start_time` | ISO 8601 | Lower bound on `observation_time` |
+| `end_time` | ISO 8601 | Upper bound on `observation_time` |
+| `page` / `page_size` | int | Pagination (default 1 / 50, max 200) |
 
 ### frames endpoint response headers
-- X-Bbox-West/South/East/North — WGS84 bounding box
-- X-Width, X-Height — image dimensions in pixels
-- X-Overview-Factor — overview level used (always 1 currently)
-- Cache-Control, ETag — same strategy as tile endpoint
+- `X-Bbox-West/South/East/North` — WGS84 bounding box (reprojected from native CRS)
+- `X-Width`, `X-Height` — image dimensions in pixels
+- `X-Overview-Factor` — overview level used (always 1 currently)
+- `Cache-Control`, `ETag` — same strategy as tile endpoint
+
+### frames endpoint query parameters
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `colormap` | str | from COG tag | Matplotlib colormap name |
+| `vmin` / `vmax` | float | from COG tag | Color scale range |
+| `filter_vmin` / `filter_vmax` | float | null | Mask pixels outside range (transparent) |
+| `smooth` | bool | false | Apply Gaussian smoothing before colormap |
+| `smooth_sigma` | float | 0.8 | Gaussian sigma (ignored when `smooth=false`) |
+
+### Gaussian Smoothing
+- **Implementation:** `api/app/services/smoothing.py` — `scipy.ndimage.gaussian_filter` applied to the raw float data array **before** colormap lookup.
+- **Cache:** When `smooth=false` the sigma slot in the cache key is `None`, so all unsmoothed requests share the same L1/L2 entry. Smoothed variants get their own keys.
+- **Frontend:** `smooth` and `smooth_sigma` are appended to the `/frames/{id}/image.png` URL by `shared/api.js`. The settings panel exposes a toggle and a sigma slider.
+
+---
+
+## Admin Panel & Admin API
+
+A standalone admin SPA for CRUD over the database, served at `/admin` and backed by the `/api/v1/admin/*` routes ([`api/app/routers/admin.py`](../api/app/routers/admin.py)).
+
+### Authentication (temporary)
+- Both `/admin` (and `/admin/`) and `/api/v1/admin/` are protected by **nginx HTTP Basic Auth** (`admin.htpasswd`) — see [`frontend/nginx.conf`](../frontend/nginx.conf).
+- ⚠️ This is a stopgap. The public `/api/v1/*` API remains open. **TODO: replace Basic Auth with JWT before production.** Do not build new auth assumptions on Basic Auth.
+
+### Admin API endpoints (base `/api/v1/admin`)
+| Resource | Endpoints |
+|----------|-----------|
+| Radars | `GET /radars`, `GET /radars/{code}`, `POST /radars`, `PUT /radars/{code}`, `PATCH /radars/{code}`, `DELETE /radars/{code}` |
+| Products | `GET /products`, `GET /products/{id}`, `POST/PUT/PATCH/DELETE /products[/{id}]` |
+| References | `GET /references`, `GET /references/{id}`, `POST/PUT/DELETE /references[/{id}]`, `DELETE /references?product_id=` (bulk) |
+| COGs | `GET /cogs` (paginated + filters), `GET /cogs/{id}`, `PATCH /cogs/{id}` (status), `DELETE /cogs/{id}`, `DELETE /cogs?...` (bulk by filters) |
+| Estrategias | `GET /estrategias`, `GET/POST/PUT/DELETE /estrategias[/{code}]` |
+| Volumenes | `GET /volumenes`, `GET/POST/PUT/DELETE /volumenes[/{id}]` |
+| Tops & Cores | `GET /tops-cores` (paginated), `GET /tops-cores/{id}`, `PATCH /tops-cores/{id}` (status), `DELETE /tops-cores/{id}`, `DELETE /tops-cores?...` (bulk) |
+| Colormap stops | `GET /colormap-stops` (summaries: name, stop_count, is_system), `GET /colormap-stops/{cmap_name}`, `POST /colormap-stops` (single row), `DELETE /colormap-stops/{cmap_name}` (non-system only → 403) |
+| Colormap (hex) | `POST /colormap-from-hex` — create from `{cmap_name, stops:[{position,color}], product_keys[]}`; **409 if name exists** (no upsert) |
+| Colormap options | `GET /colormap-options[?product_key=]`, `POST /colormap-options`, `DELETE /colormap-options/{id}` |
+
+> There is **no colormap update endpoint**. The frontend edits a colormap by **delete-then-recreate** (`DELETE /colormap-stops/{name}` → `POST /colormap-from-hex`) and reconciles product options afterward.
+
+### Admin frontend ([`frontend/public/admin.html`](../frontend/public/admin.html), [`js/admin.js`](../frontend/public/js/admin.js), [`js/admin-api.js`](../frontend/public/js/admin-api.js), [`css/admin.css`](../frontend/public/css/admin.css))
+- Hash-routed SPA (sections: `dashboard`, `radars`, `products`, `references`, `cogs`, `tops-cores`, `estrategias`, `volumenes`, `colormaps`, `colormap-options`). Section nav uses `history.replaceState` so browsing the admin never pushes browser history.
+- **Modern-light theme** (`admin.css`), distinct from the dark main app. OHMC logo in the sidebar.
+- **Entry / return:** the main map links to `/admin` from the **Settings panel** (`#admin-link`), setting a per-tab `sessionStorage` flag `webmet25_admin_from_main`. The admin's **← Volver al mapa** button calls `history.back()` when that flag is set (browser bfcache restores the map exactly as left — selections, frame, zoom), else navigates to `/`.
+- **Filtering/sorting (Django-admin style):** every client-loaded table gets a config-driven filter bar (`FILTER_CONFIG`) = global search + per-column facets (`text` substring / `select` / `boolean`) + live result count, applied as pure DOM row show/hide (no refetch, no focus loss). All meaningful columns are sortable headers (▲/▼). COGs/Tops keep server-side filters + a quick page-search.
+- **Row actions** render as inline SVG icons (pencil = edit, trash = delete), `currentColor`-tinted.
+- **Colormap creator/editor** (`openColormapCreator`): live horizontal gradient preview with **draggable stop ticks**, slider+number+swatch stop rows, product-assignment chips. **Edit** mode prefills from reconstructed hex stops (`stopsToHexStops`) + assigned products, then delete-recreates and syncs options. **View Stops** shows the real gradient (from `/api/v1/colormap/colors/{name}`) plus the stop table. After any change the frontend calls `POST /api/v1/colormap/cache/invalidate`.
+- **Colormap Options** are addable and editable per row (edit = create new pairing + delete old, since there is no PUT).
 
 ---
 
 ## Indexer
-- **COGWatcher:** Scans `ROOT_RADAR_PRODUCTS_PATH` for new/modified files
-- **COGFilenameParser:** Parses filenames using radarlib naming convention
-- **COGRegistrar:** Extracts metadata, inserts/updates `RadarCOG` records
-- Marks missing files as `MISSING` status in database
-- **TopsAndCoresWatcher:** Scans `TOPS_AND_CORES_DIR` recursively for `*_TOPS_CORES.geojson` files
-- **TopsAndCoresFilenameParser:** Parses `{radar_code}_{strategy}_{vol_nr}_{timestamp}_TOPS_CORES.geojson`
-- **TopsAndCoresRegistrar:** Opens GeoJSON, counts features, inserts/updates `TopsAndCores` records
-- `TOPS_AND_CORES_DIR` env var controls the watch root (default `/tops_and_cores`)
-- New classes are additions alongside existing classes — never modify COG* classes when working on tops & cores
+- **COGWatcher:** Polls `ROOT_RADAR_PRODUCTS_PATH` every `SCAN_INTERVAL` seconds (default 30s). First run is a full scan; subsequent runs are incremental (files modified in last 5 min + overlap).
+- **COGFilenameParser:** Parses both the current production format (`RADAR_strategy_vol_TIMESTAMP_FIELD.tif`) and the legacy format (`RADAR_TIMESTAMP_FIELD_elev.tif`). Logs a WARNING for legacy files.
+- **COGRegistrar:** Extracts COG metadata via rasterio (CRS, bounds, tags), inserts/updates `RadarCOG` records, marks missing files as `MISSING`.
+- **`update_radar_activity()`:** Called at the end of every scan cycle. Sets `Radar.is_active = True/False` based on whether a recent AVAILABLE COG exists within the last `RADAR_ACTIVE_THRESHOLD_HOURS` (configurable).
+- **TopsAndCoresWatcher:** Scans `TOPS_AND_CORES_DIR` recursively for `*_TOPS_CORES.geojson` files.
+- **TopsAndCoresFilenameParser:** Parses `{radar_code}_{strategy}_{vol_nr}_{timestamp}_TOPS_CORES.geojson`. Timestamp format: `YYYYMMDDHHMMSS` (no `T`, no `Z`).
+- **TopsAndCoresRegistrar:** Opens GeoJSON, counts cores/tops/features, inserts/updates `TopsAndCores` records.
+- `TOPS_AND_CORES_DIR` env var controls the watch root (default `/tops_and_cores`).
+- Never modify `COG*` classes when working on tops & cores — they are independent parallel hierarchies.
 
 ---
 
@@ -195,7 +291,10 @@ tests/ # Automated tests
 - Multiple radar selection with opacity control
 - Frame animation with speed control (0.5x–2x)
 - Periodic polling for new COGs (5 minute interval)
-- **Modules:** `app.js`, `api.js`, `map.js`, `animation.js`
+- **Modules:** `v2/app.js`, `v2/map.js`, `v2/animation.js`, `shared/api.js`, `shared/controls.js`, `shared/legend.js`, `shared/tops-cores.js`, `shared/time-wheel.js`
+- **Radar selection order** (`controls.js` → `sortRadarsForDisplay`): active before inactive; within each, RMA group before AR group; numeric ascending with `RMA00` (number 0) sorted last (e.g. `RMA1…RMA17, RMA00, AR5…`).
+- **Custom time range** uses a native date input + an iOS-style scroll-snap **TimeWheel** (`shared/time-wheel.js`) for HH:MM. The hidden `#start-date`/`#end-date` `datetime-local` inputs remain the canonical value (read by `getTimeRangeValues`); the date input + wheel only drive them. Call `refreshTimeWheels()` after the panel becomes visible (scroll position can't be set while hidden).
+- **Admin panel** is a separate SPA — see the **Admin Panel & Admin API** section above. Linked from the Settings panel.
 
 **Tops & Cores Layer (v2 only):**
 - **Module:** `frontend/public/js/shared/tops-cores.js`
@@ -207,6 +306,22 @@ tests/ # Automated tests
 - State persisted in `localStorage`: `webmet25_tops_cores_visible`, `webmet25_tops_cores_size`
 
 ## v2 Frontend Architecture (current production standard)
+
+### File Structure
+```
+frontend/public/js/
+├── shared/          # Shared across v1 and v2
+│   ├── api.js       # REST API client
+│   ├── controls.js  # UI control handlers
+│   ├── legend.js    # Legend renderer
+│   ├── tops-cores.js # TopsCoresLayer (L.circleMarker)
+│   └── cog-browser*.js # COG browser alternative view
+└── v2/              # v2-specific (current production)
+    ├── app.js       # Main orchestrator (2300+ lines)
+    ├── map.js       # MapManager with L.imageOverlay
+    └── animation.js # AnimationController with requestAnimationFrame
+```
+
 ### Key differences from v1
 | Aspect | v1 | v2 |
 |---|---|---|
@@ -241,9 +356,10 @@ SVG mask inside Leaflet `coverageMaskPane` (zIndex 300).
 - Zero zoom lag: SVG is child of Leaflet pane transform group
 
 ### Basemap
-Default: OSM (`'osm'` key). Persisted to localStorage
-(`selectedBasemap`). Always call `setBasemap(key)` to change —
-never manipulate `_baseLayer` directly.
+Default: IGN Argenmap (`'argenmap'` key). Persisted to localStorage
+(`webmet25_selected_basemap`). Always call `setBasemap(key)` to change —
+never manipulate `_baseLayer` directly. Basemaps are defined in the
+`BASEMAPS` object in `js/v2/map.js`.
 
 ### Frame image rendering
 `image-rendering: pixelated` applied to all radar overlays via
@@ -265,7 +381,7 @@ UTC with "UTC" suffix is fallback only. No geolocation needed.
 | Setting | Default | localStorage key |
 |---|---|---|
 | Time window | 1.5h (90 min) | timeWindowHours |
-| Basemap | OSM | selectedBasemap |
+| Basemap | IGN Argenmap | webmet25_selected_basemap |
 | Coverage opacity | 0.4 | webmet25_coverage_opacity |
 | Radar status interval | 300s | radarStatusInterval |
 | Live window interval | 60min | liveWindowMinutes |
@@ -346,6 +462,7 @@ Updates record status to MISSING in DB if file not found at serve time.
 | `webmet25_live_refresh_interval_ms` | number | 300000 | Live refresh interval (ms) |
 | `webmet25_coverage_visible` | boolean | false | Coverage circles toggle |
 | `webmet25_coverage_opacity` | number | 0.4 | Coverage circles opacity |
+| `webmet25_coverage_mode` | string | 'cd' | Active coverage mode id (`'cd'` or `'vig'`). Determines which volumes are queried for products and COGs |
 | `webmet25_tops_cores_visible` | boolean | false | Tops & Cores layer toggle |
 | `webmet25_tops_cores_size` | number | 8 | Circle marker radius in px |
 
@@ -377,21 +494,27 @@ Updates record status to MISSING in DB if file not found at serve time.
 > touching these areas.
 
 ### Critical
-- ❌ No authentication or authorization. API is completely open.
+- ⚠️ PARTIAL: The public `/api/v1/*` API is still completely open. The admin panel/API (`/admin`, `/api/v1/admin/*`) is gated by **temporary nginx HTTP Basic Auth** (`admin.htpasswd`) — must be replaced with proper JWT before production.
 - ❌ No transactions in indexer. Partial failures corrupt DB state.
 - ❌ Missing files cause 500 errors. Must be handled gracefully.
 
 ### High Priority
 - ✅ RESOLVED: L1 LRU + L2 Redis tile cache implemented.
-   Frame cache also implemented (key prefix: frame:).
+   Frame cache also implemented (key prefix: `frame:`, independent from tile `tile:` prefix).
+- ✅ RESOLVED: Gaussian smoothing implemented in frames endpoint (`smooth=true`, `smooth_sigma`).
 - ❌ Incomplete error handling in tile rendering and indexer.
 - ❌ No rate limiting. API is vulnerable to DOS attacks.
 - ❌ Database credentials in plaintext in `docker-compose.yml`.
 
 ### Medium Priority
 - ✅ RESOLVED: api.js uses relative /api/v1 path unconditionally.
-- ✅ Convective Cores & Storm Tops: IMPLEMENTED — radarlib generates GeoJSON,
-indexer registers, API serves, v2 frontend displays as CircleMarker layer.
+- ✅ RESOLVED: Convective Cores & Storm Tops implemented — radarlib generates GeoJSON,
+  indexer registers, API serves, v2 frontend displays as `L.circleMarker` layer via `TopsCoresLayer`.
+- ✅ RESOLVED: Coverage Mode Toggle (C+D/VIG) implemented — `COVERAGE_MODES` constant in
+  `v2/app.js` defines mode↔volume mapping. Mode persisted to `webmet25_coverage_mode` in localStorage.
+- ✅ RESOLVED: Vigilant mode (vol 04) properly disambiguated from C+D (vol 01+02) via `vol_nr`
+  column in `radar_cogs` table and `?vol_nr=` filter on `/cogs` endpoint.
+- ✅ RESOLVED: Radar activity auto-updated by indexer (`update_radar_activity()`) based on recent COG availability.
 - ❌ No pagination on products and references endpoints.
 - ❌ No automated tests.
 - ❌ No monitoring or log aggregation.
@@ -497,6 +620,7 @@ Every endpoint must have ALL of the following tests:
 
 ## Rules for Writing E2E Tests
 > Follow these rules when writing Playwright tests in tests/e2e/
+> **How to run them (Docker + bare-machine + CI) is documented in [`docs/E2E_TESTING.md`](../docs/E2E_TESTING.md).** The e2e suite targets the **v2 frontend** (`FRONTEND_URL`, default `http://frontend-v2:80`) and authenticates to `/admin` with `ADMIN_USERNAME`/`ADMIN_PASSWORD` via Playwright `http_credentials` (a shared `tests/e2e/conftest.py` provides the auth context, JS-error capture, and screenshot-on-failure).
 
 ### Required Setup
 ```python

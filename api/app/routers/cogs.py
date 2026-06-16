@@ -5,6 +5,7 @@ from sqlalchemy import desc, func
 from typing import List, Optional
 from datetime import datetime, timedelta
 
+
 from radar_db import get_db, RadarCOG, RadarProduct, COGStatus
 from ..schemas import COGResponse, COGListResponse, TimelineResponse
 from ..config import settings
@@ -68,7 +69,7 @@ def list_cogs(
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
     strategy: Optional[str] = Query(default=None, description="Filter by volume strategy, e.g. '0315'"),
-    vol_nr: Optional[str] = Query(default=None, description="Filter by volume number, e.g. '01'"),
+    vol_nr: Optional[List[str]] = Query(default=None, description="Filter by volume number(s), e.g. '01'. Repeatable: ?vol_nr=01&vol_nr=02"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db)
@@ -110,8 +111,8 @@ def list_cogs(
         query = query.filter(RadarCOG.estrategia_code == strategy)
 
     if vol_nr:
-        query = query.filter(RadarCOG.vol_nr == vol_nr)
-    
+        query = query.filter(RadarCOG.vol_nr.in_(vol_nr))
+
     # Get total count
     total = query.count()
     
@@ -135,20 +136,25 @@ def list_cogs(
 def get_latest_cog(
     radar_code: str,
     product_key: str,
+    vol_nr: Optional[List[str]] = Query(default=None, description="Filter by volume number(s). Repeatable: ?vol_nr=01&vol_nr=02"),
+    strategy: Optional[str] = Query(default=None, description="Filter by strategy code, e.g. '0315'"),
     db: Session = Depends(get_db)
 ):
     """
     Get the most recent COG for a radar and product combination.
     """
-    cog = db.query(RadarCOG)\
+    q = db.query(RadarCOG)\
         .filter(
             RadarCOG.radar_code == radar_code,
             (RadarCOG.polarimetric_var == product_key) |
             (RadarCOG.product.has(RadarProduct.product_key == product_key)),
             RadarCOG.status == COGStatus.AVAILABLE
-        )\
-        .order_by(desc(RadarCOG.observation_time))\
-        .first()
+        )
+    if vol_nr:
+        q = q.filter(RadarCOG.vol_nr.in_(vol_nr))
+    if strategy:
+        q = q.filter(RadarCOG.estrategia_code == strategy)
+    cog = q.order_by(desc(RadarCOG.observation_time)).first()
     
     if not cog:
         raise HTTPException(

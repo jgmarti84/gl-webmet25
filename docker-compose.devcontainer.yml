@@ -11,6 +11,9 @@ services:
   #   command: ["tail", "-f", "/dev/null"]
   
   frontend:
+    environment:
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin} # TODO: set a secure admin username in your .env file
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me} # TODO: set a strong admin password in your .env file
     command: ["tail", "-f", "/dev/null"]
 
   frontend-v2:
@@ -20,6 +23,9 @@ services:
       args:
         FE_VERSION: v2
     container_name: radar_frontend_v2
+    environment:
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin} # TODO: set a secure admin username in your .env file
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me} # TODO: set a strong admin password in your .env file
     ports:
       - "8090:80"
     depends_on:
@@ -81,7 +87,11 @@ services:
     environment:
       # API connection
       API_BASE_URL: http://api:8000
-      FRONTEND_URL: http://frontend:80
+      # E2E target: the v2 frontend (the time wheel is only wired by v2).
+      FRONTEND_URL: http://frontend-v2:80
+      # Admin Basic Auth creds — must match the frontend's ADMIN_USERNAME/PASSWORD.
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me}
       # Production database (read only reference, never written by tests)
       DB_HOST: radar_db
       DB_PORT: 5432
@@ -100,6 +110,8 @@ services:
       - ../product_output:/product_output:ro
     depends_on:
       api:
+        condition: service_started
+      frontend-v2:
         condition: service_started
       radar_db_test:
         condition: service_healthy

@@ -30,6 +30,34 @@ import { LegendRenderer } from '../shared/legend.js';
 import { TopsCoresLayer } from '../shared/tops-cores.js';
 
 // =============================================================================
+// COVERAGE MODES — single source of truth for volume↔mode mapping.
+// Each entry defines which volumes (and strategy) belong to that mode, and
+// whether filtered (non-'o') fields should be available to the user.
+// Add / edit entries here to extend modes in the future.
+// =============================================================================
+
+const COVERAGE_MODES = [
+    {
+        id:                      'cd',
+        label:                   'C+D',
+        volNrs:                  ['01', '02'],
+        strategy:                '0315',
+        filteredFieldsAvailable: true,
+        // Field selected when switching INTO this mode and the previous field
+        // is not available here (see the coverage-mode handler).
+        defaultProductKey:       'COLMAXo',
+    },
+    {
+        id:                      'vig',
+        label:                   'VIG',
+        volNrs:                  ['04'],
+        strategy:                '0315',
+        filteredFieldsAvailable: false,
+        defaultProductKey:       'DBZHo',
+    },
+];
+
+// =============================================================================
 // CONSTANTS (identical to app.js)
 // =============================================================================
 
@@ -73,7 +101,13 @@ const state = {
     radarStatusRefreshInterval: null,
     topsCoresLayer: null,
     topsCoresVisible: false,
-    topsCoresPointSize: 8,
+    topsCoresPointSize: 4,
+    smoothingEnabled: false,
+    smoothingSigma: 0.8,
+    coverageModeId: 'cd',
+    // Set when the animation was torn down because the last radar was removed,
+    // so re-selecting a radar resumes the same field + time window (see #1).
+    resumePending: false,
 };
 
 // =============================================================================
@@ -121,6 +155,34 @@ function selectDefaultProduct(availableProductKeys) {
         || null;
 }
 
+// Field-key helpers. Convention: a trailing 'o' marks the UNFILTERED variant
+// (e.g. COLMAXo); no suffix is the filtered/polarimetric variant (COLMAX).
+function baseFieldKey(productKey) {
+    return (productKey || '').replace(/o$/, '');
+}
+
+// Does the product list contain BOTH the filtered and unfiltered variant of the
+// field that `productKey` belongs to? (i.e. can the Filtered switch toggle it?)
+function fieldHasBothVariants(products, productKey) {
+    const base = baseFieldKey(productKey);
+    const keys = products.map(p => p.product_key);
+    return keys.includes(base) && keys.includes(`${base}o`);
+}
+
+// The key for the requested variant of a field, or null if it isn't available.
+function fieldVariantKey(products, productKey, unfiltered) {
+    const target = unfiltered ? `${baseFieldKey(productKey)}o` : baseFieldKey(productKey);
+    return products.some(p => p.product_key === target) ? target : null;
+}
+
+/**
+ * Returns the COVERAGE_MODES entry that matches state.coverageModeId.
+ * Falls back to the first entry if the stored id is somehow unknown.
+ */
+function getActiveCoverageMode() {
+    return COVERAGE_MODES.find(m => m.id === state.coverageModeId) || COVERAGE_MODES[0];
+}
+
 /**
  * Convert a groupedFrames array (app.js state.cogs format) to the
  * Map<frameIndex, Map<radarCode, cogObject>> format expected by MapManager.loadFrames().
@@ -148,9 +210,12 @@ const SETTINGS_KEY_REFRESH_INTERVAL   = 'webmet25_radar_refresh_interval_min';
 const SETTINGS_KEY_LIVE_REFRESH_INTERVAL = 'webmet25_live_refresh_interval_ms';
 const SETTINGS_KEY_COVERAGE_VISIBLE   = 'webmet25_coverage_visible';
 const SETTINGS_KEY_COVERAGE_OPACITY   = 'webmet25_coverage_opacity';
+const SETTINGS_KEY_COVERAGE_MODE      = 'webmet25_coverage_mode';
 const SETTINGS_KEY_TOPS_CORES_VISIBLE = 'webmet25_tops_cores_visible';
 const SETTINGS_KEY_TOPS_CORES_SIZE    = 'webmet25_tops_cores_size';
 const SETTINGS_KEY_ACTIVE_ONLY_LEGACY = 'webmet25_active_only';
+const SETTINGS_KEY_SMOOTH_ENABLED     = 'webmet25_smooth_enabled';
+const SETTINGS_KEY_SMOOTH_SIGMA       = 'webmet25_smooth_sigma';
 
 function getSettingShowInactive() {
     const stored = localStorage.getItem(SETTINGS_KEY_SHOW_INACTIVE);
@@ -197,6 +262,22 @@ function setLiveRefreshIntervalMs(ms) {
 // GEOLOCATION HELPERS (identical to app.js)
 // =============================================================================
 
+/**
+ * Returns a debounced version of *fn* that only fires after *ms* milliseconds
+ * of inactivity. Useful for sliders whose `input` events fire at high frequency.
+ *
+ * @param {Function} fn
+ * @param {number}   ms
+ * @returns {Function}
+ */
+function debounce(fn, ms) {
+    let timer = null;
+    return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), ms);
+    };
+}
+
 function haversineKm(lat1, lon1, lat2, lon2) {
     const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -234,7 +315,7 @@ async function getIPGeolocation() {
 const app = {
     async init() {
         state.ui = new UIControls();
-        state.ui.setStatus('Initializing...', 'loading');
+        state.ui.setStatus('Inicializando...', 'loading');
 
         state.showInactiveRadars    = getSettingShowInactive();
         state.showUnfilteredProducts = getSettingShowFiltered();
@@ -277,7 +358,7 @@ const app = {
             state.ui.enableAnimationControls(false);
             state.ui.enableNavButtons(false);
 
-            state.ui.setStatus('Ready', 'success');
+            state.ui.setStatus('Listo', 'success');
             this.startRadarStatusRefresh();
             this.tryGeolocationAutoInit();
 
@@ -301,9 +382,24 @@ const app = {
         state.radars = await api.getRadars(!state.showInactiveRadars);
         state.ui.populateRadarCheckboxes(state.radars, state.showInactiveRadars);
         this.updateActiveOnlyToggle();
-        state.products = await api.getProducts();
-        state.ui.populateProductSelect(state.products, state.showUnfilteredProducts);
+
+        // Restore coverage mode from localStorage before fetching products so
+        // that only products belonging to the current mode's volumes are loaded.
+        const storedMode = localStorage.getItem(SETTINGS_KEY_COVERAGE_MODE);
+        if (storedMode && COVERAGE_MODES.find(m => m.id === storedMode)) {
+            state.coverageModeId = storedMode;
+        }
+        const mode = getActiveCoverageMode();
+
+        // In VIG mode filtered fields are not available — force showUnfilteredProducts.
+        if (!mode.filteredFieldsAvailable) {
+            state.showUnfilteredProducts = true;
+        }
+
+        state.products = await api.getProducts(mode.volNrs, mode.strategy);
+        state.ui.populateProductSelect(state.products, state.showUnfilteredProducts, mode.filteredFieldsAvailable);
         state.ui.updateFilterToggle(state.showUnfilteredProducts);
+        state.ui.setFilterToggleEnabled(mode.filteredFieldsAvailable);
 
         const productSelect = document.getElementById('product-select');
         const availableKeys = getAvailableProductKeys(state.products, state.showUnfilteredProducts);
@@ -311,6 +407,7 @@ const app = {
 
         state.selectedProduct = defaultProduct;
         if (productSelect) productSelect.value = defaultProduct || '';
+        this._updateFilteredSwitchAvailability();
     },
 
     updateActiveOnlyToggle() {
@@ -376,9 +473,28 @@ const app = {
         }
         const topsCoresSizeSlider = document.getElementById('tops-cores-size');
         if (topsCoresSizeSlider) {
+            // Slider range is 2–10 (step 0.5). Clamp any value persisted under the
+            // old 4–20 range so the thumb stays inside the rescaled track.
             const stored = localStorage.getItem(SETTINGS_KEY_TOPS_CORES_SIZE);
-            state.topsCoresPointSize = stored ? parseInt(stored, 10) : 8;
+            const parsed = stored !== null ? parseFloat(stored) : 4;
+            state.topsCoresPointSize = Math.min(10, Math.max(2, isNaN(parsed) ? 4 : parsed));
             topsCoresSizeSlider.value = state.topsCoresPointSize;
+        }
+        // Smooth: restore from localStorage
+        const smoothToggle = document.getElementById('toggle-smoothing');
+        if (smoothToggle) {
+            const stored = localStorage.getItem(SETTINGS_KEY_SMOOTH_ENABLED);
+            state.smoothingEnabled = stored === 'true';
+            smoothToggle.checked = state.smoothingEnabled;
+        }
+        const smoothSigmaSlider = document.getElementById('smoothing-sigma');
+        const smoothSigmaValue  = document.getElementById('smoothing-sigma-value');
+        if (smoothSigmaSlider) {
+            const stored = localStorage.getItem(SETTINGS_KEY_SMOOTH_SIGMA);
+            const sigma  = stored !== null ? parseFloat(stored) : 0.8;
+            state.smoothingSigma = isNaN(sigma) ? 0.8 : Math.min(Math.max(sigma, 0.3), 3.0);
+            smoothSigmaSlider.value = state.smoothingSigma;
+            if (smoothSigmaValue) smoothSigmaValue.textContent = state.smoothingSigma.toFixed(1);
         }
         const speedSlider = document.getElementById('speed-slider');
         const speedValue  = document.getElementById('speed-value');
@@ -406,7 +522,7 @@ const app = {
             }
         }
         if (!location) {
-            state.ui.setStatus('Select radar(s) and product to start', '');
+            state.ui.setStatus('Seleccione radar(es) y campo para comenzar', '');
             return;
         }
         await this.runGeolocationAutoInit(location.lat, location.lon);
@@ -452,6 +568,7 @@ const app = {
             this._updateFieldBadge();
             await this.loadColormapOptions();
             this._updateTopsCoresUIVisibility();
+            this._updateFilteredSwitchAvailability();
 
             await this.loadLastNHours(GEOLOCATION_AUTO_LOAD_HOURS);
             if (state.animator.getFrameCount() > 1) {
@@ -503,7 +620,7 @@ const app = {
                 if (!isNaN(minutes) && minutes > 0) {
                     setSettingRefreshIntervalMin(minutes);
                     this.startRadarStatusRefresh();
-                    state.ui.setStatus(`Radar refresh interval set to ${minutes} min`, 'success');
+                    state.ui.setStatus(`Intervalo de actualización de radares: ${minutes} min`, 'success');
                 }
             });
         }
@@ -517,27 +634,86 @@ const app = {
                     const ms = Math.round(minutes * 60 * 1000);
                     setLiveRefreshIntervalMs(ms);
                     if (state.liveHours !== null) this.startLiveRefresh(state.liveHours);
-                    state.ui.setStatus(`Live refresh interval set to ${minutes} min`, 'success');
+                    state.ui.setStatus(`Intervalo de actualización en vivo: ${minutes} min`, 'success');
                 } else {
-                    state.ui.setStatus('Live refresh: enter a value between 1 and 30 min', 'error');
+                    state.ui.setStatus('Actualización en vivo: ingrese un valor entre 1 y 30 min', 'error');
                 }
             });
         }
 
-        // Coverage mode toggle — UI only, no functional behavior yet.
-        // Cycles between C+D (Conventional+Doppler) and VIG (Vigilant) modes.
-        const COVERAGE_MODES = [
-            { id: 'cd',  label: 'C+D' },
-            { id: 'vig', label: 'VIG' },
-        ];
-        let _coverageModeIndex = 0;
-
+        // Coverage mode toggle — cycles modes and reloads products / frames.
+        // COVERAGE_MODES is defined at module level and is the single source
+        // of truth for vol->mode mapping.
         const coverageToggleBtn = document.getElementById('coverage-toggle');
         if (coverageToggleBtn) {
-            coverageToggleBtn.textContent = COVERAGE_MODES[_coverageModeIndex].label;
-            coverageToggleBtn.addEventListener('click', () => {
-                _coverageModeIndex = (_coverageModeIndex + 1) % COVERAGE_MODES.length;
-                coverageToggleBtn.textContent = COVERAGE_MODES[_coverageModeIndex].label;
+            // Sync button label to current state (restored from localStorage in loadInitialData).
+            coverageToggleBtn.textContent = getActiveCoverageMode().label;
+
+            // Disable the button while a switch is in flight so a quick second
+            // click can't race the async product/frame reload of the first.
+            let coverageSwitching = false;
+            coverageToggleBtn.addEventListener('click', async () => {
+                if (coverageSwitching) return;
+                coverageSwitching = true;
+                coverageToggleBtn.disabled = true;
+                try {
+                    const currentIdx = COVERAGE_MODES.findIndex(m => m.id === state.coverageModeId);
+                    const nextMode   = COVERAGE_MODES[(currentIdx + 1) % COVERAGE_MODES.length];
+
+                    state.coverageModeId = nextMode.id;
+                    localStorage.setItem(SETTINGS_KEY_COVERAGE_MODE, nextMode.id);
+                    coverageToggleBtn.textContent = nextMode.label;
+
+                    // In VIG mode filtered fields don't exist — force raw/unfiltered.
+                    if (!nextMode.filteredFieldsAvailable) {
+                        state.showUnfilteredProducts = true;
+                        localStorage.setItem(SETTINGS_KEY_SHOW_FILTERED, 'true');
+                    }
+
+                    // Re-fetch the product list for the new volumes.
+                    state.products = await api.getProducts(nextMode.volNrs, nextMode.strategy);
+
+                    // Field persistence (#10): keep the current field if the new
+                    // mode has it (preferring the same filtered/unfiltered variant);
+                    // otherwise fall back to the mode's default field
+                    // (vig → DBZHo, cd → COLMAXo).
+                    const keptVariant =
+                        fieldVariantKey(state.products, state.selectedProduct, state.showUnfilteredProducts)
+                        || state.products
+                            .map(p => p.product_key)
+                            .find(k => baseFieldKey(k) === baseFieldKey(state.selectedProduct));
+                    if (keptVariant) {
+                        state.selectedProduct = keptVariant;
+                    } else {
+                        const productKeys = state.products.map(p => p.product_key);
+                        state.selectedProduct = productKeys.includes(nextMode.defaultProductKey)
+                            ? nextMode.defaultProductKey
+                            : (getAvailableProductKeys(state.products, state.showUnfilteredProducts)[0]
+                                || productKeys[0] || null);
+                        // Align the filtered view with the default field's variant
+                        // so the dropdown actually shows the selected default.
+                        if (state.selectedProduct && nextMode.filteredFieldsAvailable) {
+                            state.showUnfilteredProducts = /o$/.test(state.selectedProduct);
+                            localStorage.setItem(SETTINGS_KEY_SHOW_FILTERED, String(state.showUnfilteredProducts));
+                        }
+                    }
+
+                    // Refresh the dropdown + filtered toggle for the resolved view.
+                    state.ui.populateProductSelect(
+                        state.products, state.showUnfilteredProducts, nextMode.filteredFieldsAvailable
+                    );
+                    state.ui.updateFilterToggle(state.showUnfilteredProducts);
+                    const productSelect = document.getElementById('product-select');
+                    if (productSelect && state.selectedProduct) productSelect.value = state.selectedProduct;
+
+                    // Apply the field change consistently (colormap, range, Tops&Cores,
+                    // filtered-switch availability, frame reload) in ONE pass — this is
+                    // what makes the mode switch take effect on a single click.
+                    await this._onProductChanged();
+                } finally {
+                    coverageSwitching = false;
+                    coverageToggleBtn.disabled = false;
+                }
             });
         }
 
@@ -565,13 +741,31 @@ const app = {
 
         const showFilteredToggle = document.getElementById('toggle-show-filtered');
         if (showFilteredToggle) {
-            showFilteredToggle.addEventListener('change', (e) => {
-                // Toggle ON  → filtered/processed fields (no 'o' suffix) → showUnfilteredProducts = false
-                // Toggle OFF → raw/unfiltered fields ('o' suffix)         → showUnfilteredProducts = true
+            showFilteredToggle.addEventListener('change', async (e) => {
+                // #2: the switch toggles the SELECTED field between its filtered
+                // and unfiltered variant — it keeps the same field.
+                // Toggle ON  → filtered variant (no 'o' suffix) → showUnfilteredProducts = false
+                // Toggle OFF → unfiltered variant ('o' suffix)  → showUnfilteredProducts = true
                 state.showUnfilteredProducts = !e.target.checked;
                 localStorage.setItem(SETTINGS_KEY_SHOW_FILTERED, String(state.showUnfilteredProducts));
-                state.ui.populateProductSelect(state.products, state.showUnfilteredProducts);
+                const mode = getActiveCoverageMode();
+
+                // Remap the current field to the requested variant (if it exists),
+                // keeping the field the same.
+                const variant = fieldVariantKey(
+                    state.products, state.selectedProduct, state.showUnfilteredProducts
+                );
+                if (variant) state.selectedProduct = variant;
+
+                state.ui.populateProductSelect(state.products, state.showUnfilteredProducts, mode.filteredFieldsAvailable);
                 state.ui.updateFilterToggle(state.showUnfilteredProducts);
+                const productSelect = document.getElementById('product-select');
+                if (productSelect && state.selectedProduct) productSelect.value = state.selectedProduct;
+
+                if (variant) {
+                    // Same field, different variant → reload colormap/range/frames.
+                    await this._onProductChanged();
+                }
             });
         }
 
@@ -593,7 +787,7 @@ const app = {
         const topsCoresSizeSlider = document.getElementById('tops-cores-size');
         if (topsCoresSizeSlider) {
             topsCoresSizeSlider.addEventListener('input', (e) => {
-                const size = parseInt(e.target.value, 10);
+                const size = parseFloat(e.target.value);
                 if (!isNaN(size)) {
                     state.topsCoresPointSize = size;
                     localStorage.setItem(SETTINGS_KEY_TOPS_CORES_SIZE, String(size));
@@ -603,6 +797,65 @@ const app = {
                 }
             });
         }
+
+        // Gaussian smoothing toggle
+        const smoothToggle = document.getElementById('toggle-smoothing');
+        const smoothSigmaRow = document.getElementById('smoothing-sigma-row');
+        if (smoothToggle) {
+            smoothToggle.addEventListener('change', async (e) => {
+                state.smoothingEnabled = e.target.checked;
+                localStorage.setItem(SETTINGS_KEY_SMOOTH_ENABLED, String(state.smoothingEnabled));
+                if (smoothSigmaRow) {
+                    smoothSigmaRow.style.display = state.smoothingEnabled ? 'block' : 'none';
+                }
+                if (state.animationMode === 'timerange') {
+                    await this._loadFramesWithContinuity(
+                        () => this._fetchTimeRangeFrames(),
+                        { showBadge: true, badgeText: 'Applying…' }
+                    );
+                } else if (state.animationMode === 'latest') {
+                    await this.loadLatestCogs();
+                }
+            });
+        }
+
+        // Gaussian smoothing sigma slider (debounced 400 ms)
+        const smoothSigmaSlider = document.getElementById('smoothing-sigma');
+        const smoothSigmaValue  = document.getElementById('smoothing-sigma-value');
+        if (smoothSigmaSlider) {
+            const debouncedSigmaReload = debounce(async () => {
+                if (state.animationMode === 'timerange') {
+                    await this._loadFramesWithContinuity(
+                        () => this._fetchTimeRangeFrames(),
+                        { showBadge: false }
+                    );
+                } else if (state.animationMode === 'latest') {
+                    await this.loadLatestCogs();
+                }
+            }, 400);
+
+            smoothSigmaSlider.addEventListener('input', (e) => {
+                const sigma = parseFloat(e.target.value);
+                if (!isNaN(sigma)) {
+                    state.smoothingSigma = sigma;
+                    if (smoothSigmaValue) smoothSigmaValue.textContent = sigma.toFixed(1);
+                    localStorage.setItem(SETTINGS_KEY_SMOOTH_SIGMA, String(sigma));
+                    if (state.smoothingEnabled) debouncedSigmaReload();
+                }
+            });
+        }
+
+        // Field-menu accordion (#9): each section header toggles its body open/
+        // closed. A section marked .disabled (e.g. Tops & Cores for a field that
+        // doesn't support it) is grayed and does not expand.
+        document.querySelectorAll('#panel-module-b .field-section-header').forEach(header => {
+            header.addEventListener('click', () => {
+                const section = header.closest('.field-section');
+                if (!section || section.classList.contains('disabled')) return;
+                const open = section.classList.toggle('open');
+                header.setAttribute('aria-expanded', String(open));
+            });
+        });
 
         const radarCheckboxes = document.getElementById('radar-checkboxes');
         if (radarCheckboxes) {
@@ -631,23 +884,7 @@ const app = {
         if (productSelect) {
             productSelect.addEventListener('change', async (e) => {
                 state.selectedProduct = e.target.value || null;
-                state.selectedColormap = null;
-                state.currentVmin = null;
-                state.currentVmax = null;
-                this.onTimeRangeChange();
-                this._updateFieldBadge();
-                await this.loadColormapOptions();
-                this._updateTopsCoresUIVisibility();
-                if (state.animationMode === 'timerange') {
-                    // Load new field frames in background — animation continues
-                    // with old field until new frames are ready.
-                    await this._loadFramesWithContinuity(
-                        () => this._fetchTimeRangeFrames(),
-                        { showBadge: true, badgeText: 'Loading field…' }
-                    );
-                } else {
-                    await this.loadLatestCogs();
-                }
+                await this._onProductChanged();
             });
         }
 
@@ -690,6 +927,8 @@ const app = {
                 if (isHidden) {
                     document.querySelectorAll('[data-hours]').forEach(b => b.classList.remove('active'));
                     state.activeTimeWindowHours = null;
+                    // Wheels can only be positioned once visible — re-center now.
+                    state.ui.refreshTimeWheels();
                 }
             });
         }
@@ -698,6 +937,9 @@ const app = {
         const endInput   = document.getElementById('end-date');
         if (startInput) startInput.addEventListener('change', () => this.onTimeRangeChange());
         if (endInput)   endInput.addEventListener('change',   () => this.onTimeRangeChange());
+
+        // Build the iOS-style time wheels for the custom range.
+        state.ui.initTimeWheels();
 
         // Colormap
         const colormapSelect = document.getElementById('colormap-select');
@@ -805,8 +1047,72 @@ const app = {
         if (settingsCogRefreshBtn) {
             settingsCogRefreshBtn.addEventListener('click', () => {
                 if (state.liveHours !== null) this.refreshLiveWindow();
-                else state.ui.setStatus('Live mode is not active', 'error');
+                else state.ui.setStatus('El modo en vivo no está activo', 'error');
             });
+        }
+    },
+
+    // =========================================================================
+    // Field change (shared by the product dropdown AND the coverage-mode switch)
+    // =========================================================================
+
+    /**
+     * Apply all side effects of the selected field changing: reset the
+     * colormap/range, refresh the field badge + colormap options + Tops&Cores
+     * visibility, recompute the Filtered switch availability, then reload frames.
+     * Both the product dropdown and the coverage-mode switch call this so the
+     * two paths stay consistent — routing the mode switch through here is what
+     * fixes its "needs two clicks to apply" behaviour (it previously did a
+     * partial, out-of-order update that never reloaded the colormap).
+     * Assumes state.selectedProduct is already set to the new field.
+     */
+    async _onProductChanged() {
+        state.selectedColormap = null;
+        state.currentVmin = null;
+        state.currentVmax = null;
+        this.onTimeRangeChange();
+        this._updateFieldBadge();
+        await this.loadColormapOptions();
+        this._updateTopsCoresUIVisibility();
+        this._updateFilteredSwitchAvailability();
+        if (state.animationMode === 'timerange') {
+            // Load new field frames in background — animation continues with the
+            // old field until the new frames are ready.
+            await this._loadFramesWithContinuity(
+                () => this._fetchTimeRangeFrames(),
+                { showBadge: true, badgeText: 'Cargando campo…' }
+            );
+        } else {
+            await this.loadLatestCogs();
+        }
+    },
+
+    /**
+     * Enable/disable the Filtered switch based on whether the SELECTED field has
+     * both a filtered and an unfiltered variant in the current product list (#2).
+     * When it can't be toggled, a native tooltip explains why.
+     */
+    _updateFilteredSwitchAvailability() {
+        const toggle = document.getElementById('toggle-show-filtered');
+        if (!toggle) return;
+        const mode = getActiveCoverageMode();
+        const hasBoth = !!state.selectedProduct
+            && fieldHasBothVariants(state.products, state.selectedProduct);
+        const enabled = mode.filteredFieldsAvailable && hasBoth;
+
+        if (state.ui.setFilterToggleEnabled) {
+            state.ui.setFilterToggleEnabled(enabled);
+        } else {
+            toggle.disabled = !enabled;
+        }
+        // Reflect the current field's variant on the switch (checked = filtered).
+        toggle.checked = !state.showUnfilteredProducts;
+
+        const wrapper = toggle.closest('.toggle-switch-wrapper') || toggle.parentElement;
+        if (wrapper) {
+            wrapper.title = enabled
+                ? ''
+                : 'No hay COGs filtrados para este campo';
         }
     },
 
@@ -832,12 +1138,45 @@ const app = {
         });
         removed.forEach(code => state.mapManager.removeRadarCoverage(code));
 
-        // Incremental add/remove while animation is running
-        if (state.animationMode === 'timerange') {
+        const hasLiveFrames = state.animationMode === 'timerange'
+            && Array.isArray(state.cogs) && state.cogs.length > 0;
+        if (hasLiveFrames) {
+            // Mid-animation: incremental add/remove keeps playback continuous.
+            // (Removing the LAST radar tears the animation down and arms
+            //  state.resumePending — see removeRadarIncremental.)
             added.forEach(code => this.addRadarIncremental(code));
             removed.forEach(code => this.removeRadarIncremental(code));
+        } else if (state.resumePending && newSelection.length > 0 && state.selectedProduct) {
+            // Resuming after a deselect-all teardown: there are no live frames to
+            // merge into, so do a full load for the SAME field + the currently
+            // selected time window, and start playback again (#1).
+            this._resumeAnimationForSelection();
         }
         this._updateRadarBadge();
+    },
+
+    /**
+     * Full reload + auto-play after the animation was torn down by clearing all
+     * radars (#1). Uses whatever time window is currently selected — including a
+     * different one chosen WHILE no radars were selected (the spec's exception),
+     * because that choice already updated state.activeTimeWindowHours / the
+     * custom-range inputs.
+     */
+    async _resumeAnimationForSelection() {
+        state.resumePending = false;
+        if (state.selectedRadars.length === 0 || !state.selectedProduct) return;
+        if (state.activeTimeWindowHours != null) {
+            await this.loadLastNHours(state.activeTimeWindowHours);
+        } else {
+            const tr = state.ui.getTimeRangeValues();
+            if (tr.start && tr.end) await this.loadTimeRangeCogs();
+            else await this.loadLastNHours(DEFAULT_TIME_WINDOW_HOURS);
+        }
+        if (state.animationMode === 'timerange'
+            && Array.isArray(state.cogs) && state.cogs.length > 1) {
+            state.animator.play();
+            state.ui.updatePlayButton(true);
+        }
     },
 
     onRadarSelectionChange() {
@@ -854,16 +1193,18 @@ const app = {
         const timeRange = state.ui.getTimeRangeValues();
         if (!timeRange.start || !timeRange.end) return;
 
-        state.ui.setStatus(`Adding ${radarCode.toUpperCase()} to animation…`, 'loading');
+        state.ui.setStatus(`Agregando ${radarCode.toUpperCase()} a la animación…`, 'loading');
 
         try {
+            const mode = getActiveCoverageMode();
             const newCogs = await api.getCogsForTimeRange(
-                [radarCode], state.selectedProduct, timeRange.start, timeRange.end, 100
+                [radarCode], state.selectedProduct, timeRange.start, timeRange.end, 100,
+                mode.volNrs, mode.strategy
             );
 
             if (newCogs.length === 0) {
                 state.ui.setStatus(
-                    `⚠️ No data for ${radarCode.toUpperCase()} in current time range`, 'error'
+                    `⚠️ Sin datos para ${radarCode.toUpperCase()} en el rango de tiempo actual`, 'error'
                 );
                 return;
             }
@@ -934,11 +1275,11 @@ const app = {
 
             state.ui.updateFrameCounter(newCurrentIndex, state.cogs.length);
             state.ui.updateAnimationSlider(newCurrentIndex, state.cogs.length);
-            state.ui.setStatus(`✓ Added ${radarCode.toUpperCase()} — ${state.cogs.length} frames`, 'success');
+            state.ui.setStatus(`✓ Agregado ${radarCode.toUpperCase()} — ${state.cogs.length} fotogramas`, 'success');
 
         } catch (err) {
             console.error('addRadarIncremental error:', err);
-            state.ui.setStatus(`Error adding ${radarCode.toUpperCase()}: ${err.message}`, 'error');
+            state.ui.setStatus(`Error al agregar ${radarCode.toUpperCase()}: ${err.message}`, 'error');
         }
     },
 
@@ -969,9 +1310,12 @@ const app = {
         if (newFrames.length === 0) {
             state.animator.updateFrames([], null);
             state.animationMode = null;
+            // Remember that an animation was torn down by clearing radars, so
+            // re-selecting a radar resumes the same field + window (#1).
+            state.resumePending = true;
             state.ui.enableAnimationControls(false);
             state.ui.enableNavButtons(false);
-            state.ui.setStatus(`All frames empty after removing ${radarCode.toUpperCase()}`, 'error');
+            state.ui.setStatus(`No quedan fotogramas tras quitar ${radarCode.toUpperCase()}`, 'error');
             return;
         }
 
@@ -988,7 +1332,7 @@ const app = {
         state.ui.updateAnimationSlider(newCurrentIndex, newFrames.length);
         const _td1 = document.getElementById('time-display');
         if (_td1) _td1.textContent = formatTimestamp(newFrames[newCurrentIndex].timestamp);
-        state.ui.setStatus(`✓ Removed ${radarCode.toUpperCase()} from animation`, 'success');
+        state.ui.setStatus(`✓ Quitado ${radarCode.toUpperCase()} de la animación`, 'success');
     },
 
     // =========================================================================
@@ -997,15 +1341,18 @@ const app = {
 
     async loadLatestCogs() {
         if (state.selectedRadars.length === 0 || !state.selectedProduct) {
-            state.ui.setStatus('Select radar(s) and product', 'error');
+            state.ui.setStatus('Seleccione radar(es) y campo', 'error');
             return;
         }
-        state.ui.setStatus('Loading latest images...', 'loading');
+        state.ui.setStatus('Cargando imágenes más recientes...', 'loading');
         state.animator.stop();
         state.ui.updatePlayButton(false);
 
         try {
-            const latestCogs = await api.getLatestCogsForRadars(state.selectedRadars, state.selectedProduct);
+            const mode = getActiveCoverageMode();
+            const latestCogs = await api.getLatestCogsForRadars(
+                state.selectedRadars, state.selectedProduct, mode.volNrs, mode.strategy
+            );
             const radarCodesWithData    = latestCogs.map(item => item.radarCode);
             const radarCodesWithoutData = state.selectedRadars.filter(c => !radarCodesWithData.includes(c));
 
@@ -1013,7 +1360,7 @@ const app = {
                 const radarList   = state.selectedRadars.join(', ').toUpperCase();
                 const productName = state.products.find(p => p.product_key === state.selectedProduct)?.product_title || state.selectedProduct;
                 state.ui.setStatus(
-                    `⚠️ No data available for ${radarList} with product "${productName}". Try a different product or radar.`,
+                    `⚠️ Sin datos para ${radarList} con el campo "${productName}". Pruebe con otro campo o radar.`,
                     'error'
                 );
                 return;
@@ -1041,7 +1388,7 @@ const app = {
             state.animationMode = 'latest';
 
             const params = this.getTileParams();
-            state.ui.setStatus('Loading frame image…', 'loading');
+            state.ui.setStatus('Cargando imagen del fotograma…', 'loading');
             await state.mapManager.loadFrames(cogsByFrame, state.selectedProduct, params, null);
 
             // Zoom to all selected radar bounds
@@ -1074,10 +1421,10 @@ const app = {
             }
 
             const loadedRadars = latestCogs.map(item => item.radarCode.toUpperCase()).join(', ');
-            const radarText    = latestCogs.length === 1 ? 'radar' : 'radars';
-            let msg = `✓ Showing latest from ${latestCogs.length} ${radarText}: ${loadedRadars}`;
+            const radarText    = latestCogs.length === 1 ? 'radar' : 'radares';
+            let msg = `✓ Mostrando lo más reciente de ${latestCogs.length} ${radarText}: ${loadedRadars}`;
             if (radarCodesWithoutData.length > 0) {
-                msg += ` (${radarCodesWithoutData.map(c => c.toUpperCase()).join(', ')} has no data)`;
+                msg += ` (${radarCodesWithoutData.map(c => c.toUpperCase()).join(', ')} sin datos)`;
             }
             state.ui.setStatus(msg, 'success');
 
@@ -1095,32 +1442,33 @@ const app = {
         this._showFieldLoadingBadge();
         try {
         if (state.selectedRadars.length === 0 || !state.selectedProduct) {
-            state.ui.setStatus('Select radar(s) and product', 'error');
+            state.ui.setStatus('Seleccione radar(es) y campo', 'error');
             return;
         }
         const timeRange = state.ui.getTimeRangeValues();
         if (!timeRange.start || !timeRange.end) {
-            state.ui.setStatus('Select valid time range', 'error');
+            state.ui.setStatus('Seleccione un rango de tiempo válido', 'error');
             return;
         }
         if (timeRange.start >= timeRange.end) {
-            state.ui.setStatus('Start time must be before end time', 'error');
+            state.ui.setStatus('La hora de inicio debe ser anterior a la de fin', 'error');
             return;
         }
 
-        state.ui.setStatus('Loading time range data...', 'loading');
+        state.ui.setStatus('Cargando datos del rango de tiempo...', 'loading');
 
         try {
             const cogs = await api.getCogsForTimeRange(
                 state.selectedRadars, state.selectedProduct,
-                timeRange.start, timeRange.end, 100
+                timeRange.start, timeRange.end, 100,
+                getActiveCoverageMode().volNrs, getActiveCoverageMode().strategy
             );
 
             if (cogs.length === 0) {
                 const radarList   = state.selectedRadars.join(', ').toUpperCase();
                 const productName = state.products.find(p => p.product_key === state.selectedProduct)?.product_title || state.selectedProduct;
                 state.ui.setStatus(
-                    `⚠️ No data available for ${radarList} with product "${productName}" in selected time range.`,
+                    `⚠️ Sin datos para ${radarList} con el campo "${productName}" en el rango de tiempo seleccionado.`,
                     'error'
                 );
                 return;
@@ -1149,7 +1497,7 @@ const app = {
             await state.mapManager.loadFrames(cogsByFrame, state.selectedProduct, params,
                 (loaded, total) => {
                     state.ui.setStatus(
-                        `Loading frames… ${loaded} / ${total} (${Math.round(loaded / total * 100)}%)`,
+                        `Cargando fotogramas… ${loaded} / ${total} (${Math.round(loaded / total * 100)}%)`,
                         'loading'
                     );
                 }
@@ -1192,7 +1540,7 @@ const app = {
 
             const radarCodes  = [...new Set(groupedFrames.flatMap(f => Object.keys(f.cogsByRadar)))];
             const loadedRadars = radarCodes.map(c => c.toUpperCase()).join(', ');
-            const radarText    = radarCodes.length === 1 ? 'radar' : 'radars';
+            const radarText    = radarCodes.length === 1 ? 'radar' : 'radares';
 
             let liveNote = '';
             if (state.liveHours !== null && groupedFrames.length > 0) {
@@ -1203,13 +1551,13 @@ const app = {
                     const gapHours = (oldestFrameTime - requestedStart) / MS_PER_HOUR;
                     if (gapHours > 0.5) {
                         const availableHours = ((newestFrameTime - oldestFrameTime) / MS_PER_HOUR).toFixed(1);
-                        liveNote = ` ⚠️ Only ${availableHours}h of data available (${state.liveHours}h requested)`;
+                        liveNote = ` ⚠️ Solo ${availableHours}h de datos disponibles (${state.liveHours}h solicitadas)`;
                     }
                 }
             }
 
             state.ui.setStatus(
-                `✓ Loaded ${groupedFrames.length} frames from ${radarCodes.length} ${radarText}: ${loadedRadars}${liveNote}`,
+                `✓ Cargados ${groupedFrames.length} fotogramas de ${radarCodes.length} ${radarText}: ${loadedRadars}${liveNote}`,
                 'success'
             );
 
@@ -1228,22 +1576,23 @@ const app = {
 
     async loadLastNHours(hours) {
         if (state.selectedRadars.length === 0 || !state.selectedProduct) {
-            state.ui.setStatus('Select radar(s) and product first', 'error');
+            state.ui.setStatus('Primero seleccione radar(es) y campo', 'error');
             return;
         }
         this.stopLiveRefresh();
-        state.ui.setStatus('Finding latest data…', 'loading');
+        state.ui.setStatus('Buscando los datos más recientes…', 'loading');
 
         try {
+            const mode = getActiveCoverageMode();
             const latestItems = await api.getLatestCogsForRadars(
-                state.selectedRadars, state.selectedProduct
+                state.selectedRadars, state.selectedProduct, mode.volNrs, mode.strategy
             );
 
             if (latestItems.length === 0) {
                 const radarList   = state.selectedRadars.join(', ').toUpperCase();
                 const productName = state.products.find(p => p.product_key === state.selectedProduct)?.product_title || state.selectedProduct;
                 state.ui.setStatus(
-                    `⚠️ No data available for ${radarList} with product "${productName}". Try a different product or radar.`,
+                    `⚠️ Sin datos para ${radarList} con el campo "${productName}". Pruebe con otro campo o radar.`,
                     'error'
                 );
                 return;
@@ -1265,7 +1614,7 @@ const app = {
             if (state.animationMode === 'timerange' && state.animator.getIsPlaying()) {
                 await this._loadFramesWithContinuity(
                     () => this._fetchTimeRangeFrames(),
-                    { showBadge: true, badgeText: 'Loading…' }
+                    { showBadge: true, badgeText: 'Cargando…' }
                 );
             } else {
                 await this.loadTimeRangeCogs();
@@ -1311,8 +1660,9 @@ const app = {
         try {
             const hours = state.liveHours;
 
+            const mode = getActiveCoverageMode();
             const latestItems = await api.getLatestCogsForRadars(
-                state.selectedRadars, state.selectedProduct
+                state.selectedRadars, state.selectedProduct, mode.volNrs, mode.strategy
             );
             if (!latestItems.length) return;
 
@@ -1324,7 +1674,8 @@ const app = {
 
             const allCogs = await api.getCogsForTimeRange(
                 state.selectedRadars, state.selectedProduct,
-                newStartTime, newEndTime, LIVE_REFRESH_MAX_COGS
+                newStartTime, newEndTime, LIVE_REFRESH_MAX_COGS,
+                mode.volNrs, mode.strategy
             );
 
             const cachedCogIds = new Set();
@@ -1527,6 +1878,10 @@ const app = {
             document.getElementById('colormap-group').style.display = 'none';
             document.getElementById('range-group').style.display = 'none';
             document.getElementById('field-opacity-group').style.display = 'none';
+            const smoothToggleRowHide = document.getElementById('smoothing-toggle-row');
+            const smoothSigmaRowHide  = document.getElementById('smoothing-sigma-row');
+            if (smoothToggleRowHide) smoothToggleRowHide.style.display = 'none';
+            if (smoothSigmaRowHide)  smoothSigmaRowHide.style.display  = 'none';
             return;
         }
         try {
@@ -1573,6 +1928,13 @@ const app = {
             document.getElementById('colormap-group').style.display = 'block';
             document.getElementById('range-group').style.display = 'block';
             document.getElementById('field-opacity-group').style.display = 'block';
+            // Reveal smoothing toggle; sigma slider follows current state
+            const smoothToggleRow = document.getElementById('smoothing-toggle-row');
+            const smoothSigmaRow  = document.getElementById('smoothing-sigma-row');
+            if (smoothToggleRow) smoothToggleRow.style.display = 'flex';
+            if (smoothSigmaRow) {
+                smoothSigmaRow.style.display = state.smoothingEnabled ? 'block' : 'none';
+            }
             this._syncFieldOpacitySlider();
         } catch (err) {
             console.warn('Failed to load colormap options:', err);
@@ -1619,9 +1981,11 @@ const app = {
      */
     getTileParams() {
         return {
-            colormap: state.selectedColormap || null,
-            vmin:     state.currentVmin,
-            vmax:     state.currentVmax,
+            colormap:    state.selectedColormap || null,
+            vmin:        state.currentVmin,
+            vmax:        state.currentVmax,
+            smooth:      state.smoothingEnabled,
+            smoothSigma: state.smoothingSigma,
         };
     },
 
@@ -1635,7 +1999,7 @@ const app = {
         if (state.mapManager) state.mapManager.setOpacity(opacity);
     },
 
-    _showFieldLoadingBadge(message = 'Loading field…') {
+    _showFieldLoadingBadge(message = 'Cargando campo…') {
         const badge = document.getElementById('field-loading-badge');
         if (badge) {
             badge.textContent = message;
@@ -1748,9 +2112,11 @@ const app = {
         const timeRange = state.ui.getTimeRangeValues();
         if (!timeRange.start || !timeRange.end || timeRange.start >= timeRange.end) return null;
 
+        const mode = getActiveCoverageMode();
         const cogs = await api.getCogsForTimeRange(
             state.selectedRadars, state.selectedProduct,
-            timeRange.start, timeRange.end, 100
+            timeRange.start, timeRange.end, 100,
+            mode.volNrs, mode.strategy
         );
         if (!cogs || cogs.length === 0) return null;
 
@@ -1774,7 +2140,7 @@ const app = {
      * @param {boolean}  opts.showBadge  - show loading badge during preload
      * @param {string}   opts.badgeText  - initial badge label
      */
-    async _loadFramesWithContinuity(loadFn, { showBadge = true, badgeText = 'Loading\u2026' } = {}) {
+    async _loadFramesWithContinuity(loadFn, { showBadge = true, badgeText = 'Cargando\u2026' } = {}) {
         if (showBadge) this._showFieldLoadingBadge(badgeText);
         try {
             const result = await loadFn();
@@ -1817,7 +2183,7 @@ const app = {
                 }
             } catch (_) { /* legend update is best-effort */ }
 
-            state.ui.setStatus('Updated \u2713', 'success');
+            state.ui.setStatus('Actualizado \u2713', 'success');
         } catch (err) {
             console.error('[continuity] Background load failed:', err);
             // Animation continues unchanged \u2014 no error propagated to animator.
@@ -1830,10 +2196,10 @@ const app = {
         const el = document.getElementById('live-indicator');
         if (!el) return;
         if (state.liveHours !== null) {
-            el.textContent = '● LIVE';
+            el.textContent = '● EN VIVO';
             el.className = 'live-indicator live-on';
         } else {
-            el.textContent = '○ Live';
+            el.textContent = '○ En vivo';
             el.className = 'live-indicator live-off';
         }
         const cogRefreshBtn = document.getElementById('btn-cog-refresh-now');
@@ -1864,15 +2230,26 @@ const app = {
     },
 
     _updateTopsCoresUIVisibility() {
-        const topsCoresToggleRow = document.getElementById('tops-cores-toggle-row');
         const topsCoresToggle = document.getElementById('toggle-tops-cores');
         const topsCoresSizeRow = document.getElementById('tops-cores-size-row');
         if (!topsCoresToggle) return;
 
         const isAvailable = this.isTopsCoresAvailableForField();
-        if (topsCoresToggleRow) {
-            topsCoresToggleRow.style.display = isAvailable ? 'block' : 'none';
+
+        // Accordion (#9): when Tops & Cores aren't available for the selected
+        // field, gray the section header and make it non-expandable (collapse it)
+        // rather than hiding it — so the option stays visible but evidently off.
+        const section = document.getElementById('section-tops-cores');
+        if (section) {
+            section.classList.toggle('disabled', !isAvailable);
+            const header = section.querySelector('.field-section-header');
+            if (!isAvailable) {
+                section.classList.remove('open');
+                if (header) header.setAttribute('aria-expanded', 'false');
+            }
+            if (header) header.disabled = !isAvailable;
         }
+
         topsCoresToggle.disabled = !isAvailable;
         topsCoresToggle.checked = state.topsCoresVisible;
 
@@ -2025,7 +2402,7 @@ const app = {
             link.click();
         } catch (err) {
             console.warn('Snapshot failed:', err);
-            state.ui.setStatus('Snapshot failed: ' + err.message, 'error');
+            state.ui.setStatus('Error al capturar la imagen: ' + err.message, 'error');
         }
     },
 

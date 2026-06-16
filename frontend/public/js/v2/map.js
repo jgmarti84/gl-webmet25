@@ -37,28 +37,37 @@ const BLANK_PNG =
 const BASEMAPS = {
     'argenmap': {
         name:        'IGN Argenmap',
-        url:         'https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+        url:         '/ign-tiles/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png',
         attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
         maxZoom:     18,
     },
     'argenmap_gris': {
         name:        'IGN Argenmap Gris',
-        url:         'https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/mapabase_gris@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+        url:         '/ign-tiles/mapabase_gris@EPSG%3A3857@png/{z}/{x}/{-y}.png',
         attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
         maxZoom:     18,
     },
     'argenmap_topo': {
         name:        'IGN Argenmap Topo',
-        url:         'https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/mapabase_topo@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+        url:         '/ign-tiles/mapabase_topo@EPSG%3A3857@png/{z}/{x}/{-y}.png',
         attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
         maxZoom:     18,
     },
-    'osm': {
-        name:        'OpenStreetMap',
-        url:         '/osm-tiles/{z}/{x}/{y}.png',
-        attribution: '© OpenStreetMap contributors',
-        maxZoom:     19,
+    'argenmap_oscuro': {
+        name:        'IGN Argenmap Oscuro',
+        url:         '/ign-tiles/argenmap_oscuro@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+        attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
+        maxZoom:     18,
     },
+    // OpenStreetMap basemap removed from the picker per request. Kept here
+    // (commented out) in case it needs to be restored — also re-enable the
+    // matching <option value="osm"> in index.html and the /osm-tiles/ proxy.
+    // 'osm': {
+    //     name:        'OpenStreetMap',
+    //     url:         '/osm-tiles/{z}/{x}/{y}.png',
+    //     attribution: '© OpenStreetMap contributors',
+    //     maxZoom:     19,
+    // },
 };
 
 export class MapManager {
@@ -211,6 +220,8 @@ export class MapManager {
         if (params.colormap)                            qs.set('colormap', params.colormap);
         if (params.vmin !== undefined && params.vmin !== null) qs.set('vmin', params.vmin);
         if (params.vmax !== undefined && params.vmax !== null) qs.set('vmax', params.vmax);
+        if (params.smooth)                              qs.set('smooth', 'true');
+        if (params.smooth && params.smoothSigma != null) qs.set('smooth_sigma', params.smoothSigma);
         const str = qs.toString();
         return str ? `${base}?${str}` : base;
     }

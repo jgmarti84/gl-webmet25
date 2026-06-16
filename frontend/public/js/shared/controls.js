@@ -2,6 +2,8 @@
  * Controls Module - Handles UI control interactions
  */
 
+import { TimeWheel } from './time-wheel.js';
+
 // Fix 3: message queue constants
 const MSG_AUTO_CLEAR_MS  = 4000; // non-error messages auto-clear after 4 s
 const MSG_MIN_DISPLAY_MS = 2000; // minimum time each message stays visible
@@ -120,7 +122,7 @@ export class UIControls {
     /**
      * Populate a select dropdown with optional filtering
      */
-    populateSelect(selectId, items, valueKey, labelKey, placeholder = 'Select...') {
+    populateSelect(selectId, items, valueKey, labelKey, placeholder = 'Seleccione...') {
         const select = document.getElementById(selectId);
         if (!select) return;
         
@@ -135,22 +137,45 @@ export class UIControls {
     }
     
     /**
-     * Populate product select with filtered/unfiltered products
+     * Populate product select with filtered/unfiltered products.
+     *
+     * @param {Array}   allProducts             - Full product list from API
+     * @param {boolean} showUnfiltered          - true = show raw ('o' suffix) products
+     * @param {boolean} filteredFieldsAvailable - When false (e.g. VIG mode) only raw
+     *                                            products are shown regardless of the
+     *                                            showUnfiltered toggle, because filtered
+     *                                            fields simply do not exist for that mode.
      */
-    populateProductSelect(allProducts, showUnfiltered = false) {
+    populateProductSelect(allProducts, showUnfiltered = false, filteredFieldsAvailable = true) {
         const select = document.getElementById('product-select');
         if (!select) return;
-        
+
+        // When filtered fields are not available for the current coverage mode,
+        // always show only raw/unfiltered products irrespective of the user toggle.
+        const effectiveShowUnfiltered = filteredFieldsAvailable ? showUnfiltered : true;
+
         // Filter products based on whether they end with 'o' (unfiltered) or not (filtered)
         // Check for uppercase letter followed by lowercase 'o' at the end (e.g., RHOHVo, COLMAXo)
         const filteredProducts = allProducts.filter(product => {
             const productKey = product.product_key;
             const isUnfiltered = /o$/.test(productKey); // product_key ends with 'o' = raw/unfiltered data
-            return showUnfiltered ? isUnfiltered : !isUnfiltered;
+            return effectiveShowUnfiltered ? isUnfiltered : !isUnfiltered;
         });
         
         // Populate the select
-        this.populateSelect('product-select', filteredProducts, 'product_key', 'product_title', 'Select product...');
+        this.populateSelect('product-select', filteredProducts, 'product_key', 'product_title', 'Seleccione un campo...');
+    }
+
+    /**
+     * Enable or disable the filtered-fields toggle.
+     * Called when the coverage mode changes: in modes where only raw/unfiltered
+     * fields exist the toggle is meaningless and should be disabled.
+     *
+     * @param {boolean} enabled
+     */
+    setFilterToggleEnabled(enabled) {
+        const toggle = document.getElementById('toggle-show-filtered');
+        if (toggle) toggle.disabled = !enabled;
     }
     
     /**
@@ -214,13 +239,19 @@ export class UIControls {
     updatePlayButton(isPlaying) {
         const btn = document.getElementById('btn-play-pause');
         if (!btn) return;
-        
-        if (isPlaying) {
-            btn.innerHTML = '⏸';
-            btn.title = 'Pause';
+
+        const label = isPlaying ? 'Pausar' : 'Reproducir';
+        btn.title = label;
+        btn.setAttribute('aria-label', label);
+
+        if (btn.querySelector('.play-pause-icon')) {
+            // v2: fixed-geometry SVG — toggle which icon shows via .playing
+            // (see #btn-play-pause rules in styles.css). NEVER set innerHTML here,
+            // or the button jumps size/aspect between states.
+            btn.classList.toggle('playing', isPlaying);
         } else {
-            btn.innerHTML = '▶';
-            btn.title = 'Play';
+            // v1 (legacy) fallback: glyph swap.
+            btn.innerHTML = isPlaying ? '⏸' : '▶';
         }
     }
     
@@ -232,7 +263,7 @@ export class UIControls {
         if (!btn) return;
         
         btn.textContent = `${speed}x`;
-        btn.title = `Speed: ${speed}x`;
+        btn.title = `Velocidad: ${speed}x`;
     }
     
     /**
@@ -271,13 +302,42 @@ export class UIControls {
      * @param {Array} radars - Array of radar objects (must include is_active field)
      * @param {boolean} showInactive - If true, inactive radars are visible but dimmed
      */
+    /**
+     * Order radars for the selection list:
+     *   1. active before inactive
+     *   2. RMA group before AR group (then any other prefix)
+     *   3. numeric ascending within a group, with number 0 (e.g. RMA00) sorted last
+     */
+    sortRadarsForDisplay(radars) {
+        const keyOf = (radar) => {
+            const code = (radar.code || '').toUpperCase();
+            const match = code.match(/^([A-Z]+)(\d+)$/);
+            const prefix = match ? match[1] : code;
+            const num = match ? parseInt(match[2], 10) : Number.MAX_SAFE_INTEGER;
+            const prefixOrder = prefix === 'RMA' ? 0 : prefix === 'AR' ? 1 : 2;
+            // 0 (RMA00) goes last within its prefix.
+            const numKey = num === 0 ? Number.MAX_SAFE_INTEGER : num;
+            return { prefixOrder, numKey, code };
+        };
+        return [...radars].sort((a, b) => {
+            if (Boolean(a.is_active) !== Boolean(b.is_active)) {
+                return a.is_active ? -1 : 1;
+            }
+            const ka = keyOf(a);
+            const kb = keyOf(b);
+            if (ka.prefixOrder !== kb.prefixOrder) return ka.prefixOrder - kb.prefixOrder;
+            if (ka.numKey !== kb.numKey) return ka.numKey - kb.numKey;
+            return ka.code.localeCompare(kb.code);
+        });
+    }
+
     populateRadarCheckboxes(radars, showInactive = false) {
         const container = document.getElementById('radar-list');
         if (!container) return;
-        
+
         container.innerHTML = '';
-        
-        radars.forEach(radar => {
+
+        this.sortRadarsForDisplay(radars).forEach(radar => {
             const item = document.createElement('div');
             item.className = 'radar-checkbox-item';
             if (!radar.is_active) {
@@ -292,7 +352,7 @@ export class UIControls {
             
             const dot = document.createElement('span');
             dot.className = `radar-status-dot ${radar.is_active ? 'radar-status-active' : 'radar-status-inactive'}`;
-            dot.title = radar.is_active ? 'Active' : 'Inactive';
+            dot.title = radar.is_active ? 'Activo' : 'Inactivo';
             
             const label = document.createElement('label');
             label.htmlFor = `radar-${radar.code}`;
@@ -351,14 +411,81 @@ export class UIControls {
     setTimeRangeValues(startDate, endDate) {
         const startInput = document.getElementById('start-date');
         const endInput = document.getElementById('end-date');
-        
+
         if (startInput && startDate) {
             startInput.value = this.formatDateTimeLocal(startDate);
         }
-        
+
         if (endInput && endDate) {
             endInput.value = this.formatDateTimeLocal(endDate);
         }
+
+        // Keep the visible date input + time wheel in sync with the canonical value.
+        this._syncCompositeFromCanonical('start');
+        this._syncCompositeFromCanonical('end');
+    }
+
+    // ── iOS-style time wheels for the custom range ──────────────────────────
+    // The hidden `#start-date` / `#end-date` datetime-local inputs remain the
+    // single source of truth; the date input + TimeWheel just drive them.
+
+    initTimeWheels() {
+        const startWheelEl = document.getElementById('start-time-wheel');
+        const endWheelEl = document.getElementById('end-time-wheel');
+        if (startWheelEl && !this.startWheel) {
+            this.startWheel = new TimeWheel(startWheelEl, { onChange: () => this._composeDateTime('start') });
+        }
+        if (endWheelEl && !this.endWheel) {
+            this.endWheel = new TimeWheel(endWheelEl, { onChange: () => this._composeDateTime('end') });
+        }
+        ['start', 'end'].forEach((prefix) => {
+            const dateInput = document.getElementById(`${prefix}-date-date`);
+            if (dateInput && !dateInput.dataset.bound) {
+                dateInput.dataset.bound = '1';
+                dateInput.addEventListener('change', () => this._composeDateTime(prefix));
+            }
+        });
+    }
+
+    /** Re-center wheels + re-sync from canonical after the panel becomes visible. */
+    refreshTimeWheels() {
+        this._syncCompositeFromCanonical('start');
+        this._syncCompositeFromCanonical('end');
+        if (this.startWheel) this.startWheel.refresh();
+        if (this.endWheel) this.endWheel.refresh();
+    }
+
+    /** Combine the date input + wheel into the canonical datetime-local input. */
+    _composeDateTime(prefix) {
+        const dateInput = document.getElementById(`${prefix}-date-date`);
+        const canonical = document.getElementById(`${prefix}-date`);
+        const wheel = prefix === 'start' ? this.startWheel : this.endWheel;
+        if (!dateInput || !canonical || !wheel) return;
+        if (!dateInput.value) {
+            canonical.value = '';
+        } else {
+            const hh = String(wheel.hour).padStart(2, '0');
+            const mm = String(wheel.minute).padStart(2, '0');
+            canonical.value = `${dateInput.value}T${hh}:${mm}`;
+        }
+        canonical.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    /** Push the canonical datetime-local value into the date input + wheel. */
+    _syncCompositeFromCanonical(prefix) {
+        const canonical = document.getElementById(`${prefix}-date`);
+        const dateInput = document.getElementById(`${prefix}-date-date`);
+        const wheel = prefix === 'start' ? this.startWheel : this.endWheel;
+        if (!canonical || !canonical.value) return;
+        const dt = new Date(canonical.value);
+        if (Number.isNaN(dt.getTime())) return;
+        if (dateInput) {
+            const y = dt.getFullYear();
+            const m = String(dt.getMonth() + 1).padStart(2, '0');
+            const d = String(dt.getDate()).padStart(2, '0');
+            dateInput.value = `${y}-${m}-${d}`;
+        }
+        if (wheel) wheel.set(dt.getHours(), dt.getMinutes());
     }
     
     /**
@@ -397,7 +524,7 @@ export class UIControls {
      * The overlay is created dynamically on first call and reused thereafter.
      * @param {string} message - Text shown inside the overlay
      */
-    showMapOverlay(message = 'Loading\u2026') {
+    showMapOverlay(message = 'Cargando\u2026') {
         let overlay = document.getElementById('map-loading-overlay');
         if (!overlay) {
             overlay = document.createElement('div');

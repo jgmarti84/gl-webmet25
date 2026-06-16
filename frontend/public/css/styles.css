@@ -542,6 +542,81 @@ body {
     cursor: pointer;
 }
 
+/* ── Custom range: date input + iOS-style time wheel ── */
+.dt-hidden { display: none !important; }
+
+.dt-date {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 4px;
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.dt-date:focus {
+    outline: none;
+    border-color: #4fc3f7;
+    background: rgba(79,195,247,0.1);
+}
+.dt-date::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+
+.time-wheel {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 108px;            /* 3 rows × 36px */
+    margin-top: 4px;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    user-select: none;
+    overflow: hidden;
+}
+.tw-col {
+    height: 108px;
+    width: 52px;
+    overflow-y: scroll;
+    scroll-snap-type: y mandatory;
+    scrollbar-width: none;          /* Firefox */
+    -ms-overflow-style: none;
+    /* fade top/bottom rows for a wheel feel */
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 70%, transparent);
+            mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 70%, transparent);
+}
+.tw-col::-webkit-scrollbar { display: none; } /* Chrome/Safari */
+.tw-list { padding: 36px 0; }       /* allow first/last item to center */
+.tw-item {
+    height: 36px;
+    line-height: 36px;
+    text-align: center;
+    font-size: 18px;
+    font-family: 'Courier New', monospace;
+    color: #8a8a99;
+    scroll-snap-align: center;
+    cursor: pointer;
+    transition: color 0.15s ease, transform 0.15s ease;
+}
+.tw-item.tw-active { color: #fff; font-weight: 700; transform: scale(1.12); }
+.tw-sep { font-size: 20px; font-weight: 700; color: #fff; padding-bottom: 2px; }
+.tw-selection {
+    position: absolute;
+    left: 6px;
+    right: 6px;
+    top: 36px;
+    height: 36px;
+    border-top: 1px solid rgba(79,195,247,0.45);
+    border-bottom: 1px solid rgba(79,195,247,0.45);
+    background: rgba(79,195,247,0.08);
+    border-radius: 4px;
+    pointer-events: none;
+}
+
 /* ============================================================
    Fix 6: COVERAGE CONTROLS GROUP (inside settings panel)
    ============================================================ */
@@ -855,7 +930,9 @@ code {
 }
 
 .range-input {
-    flex: 1;
+    /* Capped width so the box isn't full-panel-wide; sits left next to its label. */
+    flex: 0 1 96px;
+    max-width: 96px;
     padding: 5px 7px;
     border: 1px solid rgba(255,255,255,0.2);
     border-radius: 4px;
@@ -865,6 +942,52 @@ code {
     font-family: 'Courier New', monospace;
     min-width: 0;
 }
+
+/* Colormap picker only — narrower than the full-width product/basemap selects. */
+#colormap-select {
+    width: auto;
+    max-width: 100%;
+}
+
+/* ============================================================
+   FIELD-MENU COLLAPSIBLE SECTIONS (accordion, Module B)
+   ============================================================ */
+.field-section {
+    border-top: 1px solid rgba(255,255,255,0.08);
+}
+.field-section-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 2px;
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+}
+.field-section-header:hover { color: #4fc3f7; }
+.field-section-title { display: inline-flex; align-items: center; gap: 6px; }
+/* Right-pointing triangle; rotates to point down when the section is open. */
+.field-section-chevron {
+    width: 0; height: 0;
+    border-left: 5px solid currentColor;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    transition: transform 0.15s ease;
+    flex-shrink: 0;
+}
+.field-section.open .field-section-chevron { transform: rotate(90deg); }
+.field-section-body { display: none; padding-bottom: 6px; }
+.field-section.open .field-section-body { display: block; }
+/* Unavailable for the selected field: grayed + non-interactive. */
+.field-section.disabled .field-section-header { color: #666; cursor: not-allowed; }
+.field-section.disabled .field-section-header:hover { color: #666; }
 
 .range-input:focus {
     outline: none;
@@ -1044,6 +1167,55 @@ code {
     letter-spacing: 0.5px;
 }
 
+/* ── Continuous gradient legend ── */
+.legend-gradient-wrapper {
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    height: 180px;
+    margin: 4px 0;
+}
+
+.legend-gradient-bar {
+    width: 18px;
+    flex-shrink: 0;
+    border-radius: 3px;
+    border: 1px solid rgba(255,255,255,0.15);
+}
+
+.legend-ticks {
+    position: relative;
+    flex: 1;
+    margin-left: 4px;
+}
+
+.legend-tick {
+    position: absolute;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    transform: translateY(50%);  /* centre tick on its value line */
+}
+
+.legend-tick-line {
+    width: 6px;
+    height: 1px;
+    background: rgba(255,255,255,0.45);
+    flex-shrink: 0;
+    margin-right: 4px;
+}
+
+.legend-tick-label {
+    font-size: 10px;
+    color: #ddd;
+    font-family: 'Courier New', monospace;
+    white-space: nowrap;
+    line-height: 1;
+}
+
+/* ── Legacy discrete-block legend (backward compat) ── */
 .legend-scale {
     display: flex;
     flex-direction: column;
@@ -1102,7 +1274,7 @@ code {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 6px;
-    gap: 8px;
+    gap: 5px;
     cursor: grab;
     user-select: none;
 }
@@ -1111,7 +1283,7 @@ code {
 }
 
 .time-window-label {
-    font-size: 11px;
+    font-size: 13px;
     color: #4fc3f7;
     font-family: 'Courier New', monospace;
     white-space: nowrap;
@@ -1121,7 +1293,7 @@ code {
 }
 
 .frame-time-display {
-    font-size: 11px;
+    font-size: 13px;
     color: #81d4fa;
     font-family: 'Courier New', monospace;
     white-space: nowrap;
@@ -1129,7 +1301,7 @@ code {
 }
 
 /* Slider */
-.animation-slider-container { margin-bottom: 8px; }
+.animation-slider-container { margin-bottom: 5px; }
 
 #animation-slider {
     width: 100%;
@@ -1165,7 +1337,7 @@ code {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 5px;
 }
 
 /* Navigation buttons (prev/next/latest/first/refresh) in animation bar */
@@ -1216,6 +1388,13 @@ code {
 #btn-play-pause:hover  { opacity: 0.75; color: #4fc3f7; background: transparent; }
 #btn-play-pause:active { opacity: 0.6; }
 #btn-play-pause:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Fixed-geometry play/pause icon: both shapes share one SVG; .playing swaps
+   which is shown, so size/aspect/baseline stay identical in both states. */
+#btn-play-pause .play-pause-icon { display: block; fill: currentColor; pointer-events: none; width: 36px; height: 36px; }
+#btn-play-pause .icon-pause { display: none; }
+#btn-play-pause.playing .icon-play { display: none; }
+#btn-play-pause.playing .icon-pause { display: inline; }
 
 /* Speed slider (item 4: replaces discrete speed button) */
 .speed-control {

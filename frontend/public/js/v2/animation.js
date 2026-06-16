@@ -389,8 +389,13 @@ export class AnimationController {
 
     _updatePlayPauseButton() {
         if (!this._playPauseBtn) return;
-        this._playPauseBtn.innerHTML = this._playing ? '&#9646;&#9646;' : '&#9654;';
+        // The SVG holds both icons; toggling .playing swaps which one is visible
+        // (see #btn-play-pause rules in styles.css). Do NOT replace innerHTML — that
+        // is what made the button jump size/aspect between play and pause states.
         this._playPauseBtn.classList.toggle('playing', this._playing);
+        const label = this._playing ? 'Pausar' : 'Reproducir';
+        this._playPauseBtn.title = label;
+        this._playPauseBtn.setAttribute('aria-label', label);
     }
 
     _updateSlider() {

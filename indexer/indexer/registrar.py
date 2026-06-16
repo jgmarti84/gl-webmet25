@@ -197,18 +197,27 @@ class COGRegistrar:
             logger.warning(f"Unknown product: {parsed.product_key} for file {file_path}")
             # Continue anyway - product_id can be null
 
-        # Check unique constraint (radar, product, time, elevation) to avoid duplicate inserts
+        # Check unique constraint (radar, product, time, elevation, vol_nr) to avoid
+        # duplicate inserts.  vol_nr is included so that the same field produced by
+        # different volumes (e.g. DBZH from vol 01 and DBZH from vol 04 at the same
+        # timestamp) are correctly recognised as *different* records.
         if product_id is not None:
-            existing = self.session.query(RadarCOG).filter_by(
+            query = self.session.query(RadarCOG).filter_by(
                 radar_code=parsed.radar_code,
                 product_id=product_id,
                 observation_time=parsed.observation_time,
-                elevation_angle=parsed.elevation_angle
-            ).first()
+                elevation_angle=parsed.elevation_angle,
+            )
+            # vol_nr may be None for legacy files; filter explicitly only when present.
+            if parsed.vol_nr is not None:
+                query = query.filter(RadarCOG.vol_nr == parsed.vol_nr)
+            else:
+                query = query.filter(RadarCOG.vol_nr.is_(None))
+            existing = query.first()
             if existing:
                 logger.info(
                     f"Skipping already-recorded observation for {parsed.radar_code} "
-                    f"{parsed.product_key} at {parsed.observation_time}"
+                    f"{parsed.product_key} vol_nr={parsed.vol_nr} at {parsed.observation_time}"
                 )
                 return None
         

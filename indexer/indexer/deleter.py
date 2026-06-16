@@ -16,7 +16,7 @@ Deletion is atomic: all file deletions happen, then database records are removed
 in a single transaction. If database cleanup fails, no files are deleted.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List, Tuple
 
@@ -254,7 +254,8 @@ class ProductDeleter:
         try:
             # Parse the date — delete all COGs up to and including this date
             observation_date = datetime.strptime(date_str, "%Y%m%d").date()
-            date_cutoff = datetime.combine(observation_date, datetime.max.time())
+            # Create end-of-day cutoff in UTC timezone
+            date_cutoff = datetime.combine(observation_date, datetime.max.time(), tzinfo=timezone.utc)
         except ValueError as e:
             errors.append(f"Invalid date format '{date_str}': {e}")
             return 0, 0, 0, errors

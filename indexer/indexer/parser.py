@@ -204,19 +204,19 @@ class COGFilenameParser:
                         dt_combined = f"{groups[0]}{groups[1]}"
                         y = int(dt_combined[0:4]); mo = int(dt_combined[4:6]); d = int(dt_combined[6:8])
                         h = int(dt_combined[8:10]); mi = int(dt_combined[10:12]); s = int(dt_combined[12:14])
-                        obs_time = datetime(y, mo, d) + timedelta(hours=h, minutes=mi, seconds=s)
+                        obs_time = datetime(y, mo, d, tzinfo=timezone.utc) + timedelta(hours=h, minutes=mi, seconds=s)
                     elif len(groups) == 6:
-                        obs_time = datetime(int(groups[0]), int(groups[1]), int(groups[2])) + \
+                        obs_time = datetime(int(groups[0]), int(groups[1]), int(groups[2]), tzinfo=timezone.utc) + \
                             timedelta(hours=int(groups[3]), minutes=int(groups[4]), seconds=int(groups[5]))
                     elif len(groups) == 1:
                         g = groups[0]
-                        obs_time = datetime(int(g[0:4]), int(g[4:6]), int(g[6:8])) + \
+                        obs_time = datetime(int(g[0:4]), int(g[4:6]), int(g[6:8]), tzinfo=timezone.utc) + \
                             timedelta(hours=int(g[8:10]), minutes=int(g[10:12]), seconds=int(g[12:14]))
                     break
             
             if obs_time is None:
-                # Last resort: use file modification time
-                obs_time = datetime.fromtimestamp(path.stat().st_mtime)
+                # Last resort: use file modification time as UTC
+                obs_time = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
                 logger.warning(f"Could not parse datetime from {filename}, using mtime")
             
             return ParsedCOGInfo(
@@ -231,7 +231,7 @@ class COGFilenameParser:
             return ParsedCOGInfo(
                 radar_code="",
                 product_key="",
-                observation_time=datetime.now(),
+                observation_time=datetime.now(tz=timezone.utc),
                 is_valid=False,
                 error=str(e)
             )

@@ -43,6 +43,7 @@ from ..services.tile_service import (
     CACHE_KEY_FLOAT_PRECISION,
 )
 from ..services.redis_client import get_redis
+from ..services.smoothing import apply_smoothing
 from ..utils.colormaps import colormap_for_field, get_colormap
 from .tiles import _get_cog_by_id, CogSnapshot
 
@@ -53,8 +54,13 @@ router = APIRouter(prefix="/frames", tags=["Frames"])
 # ---------------------------------------------------------------------------
 # L1 in-memory LRU cache — independent from the tile cache so that frame
 # and tile caches can be monitored and flushed separately.
+#
+# Max size bumped from 500 → 750 to accommodate smoothed + unsmoothed
+# variants of the same frame in cache simultaneously without evicting too
+# aggressively.  Each entry is a PNG blob (~15–40 KB), so 750 entries ≈
+# 11–30 MB resident — well within typical container memory budgets.
 # ---------------------------------------------------------------------------
-_FRAME_CACHE_MAX_SIZE: int = 500
+_FRAME_CACHE_MAX_SIZE: int = 750
 
 _frame_cache: LRUCache = LRUCache(maxsize=_FRAME_CACHE_MAX_SIZE)
 _frame_cache_lock: threading.Lock = threading.Lock()
@@ -76,9 +82,19 @@ def _build_frame_cache_key(
     cmap_vmax: float,
     filter_vmin: Optional[float],
     filter_vmax: Optional[float],
+    smooth: bool = False,
+    smooth_sigma: float = 0.8,
 ) -> tuple:
-    """Build a hashable L1 cache key for a rendered frame."""
+    """Build a hashable L1 cache key for a rendered frame.
+
+    Smoothing parameters are included only when smoothing is active so that
+    unsmoothed requests always hit the same key regardless of the sigma value
+    the client sends.
+    """
     rnd = CACHE_KEY_FLOAT_PRECISION
+    # Normalise: when smoothing is off the sigma slot is None so all
+    # unsmoothed requests share identical cache keys.
+    smooth_slot = round(smooth_sigma, rnd) if smooth else None
     return (
         file_path,
         cmap_name,
@@ -86,6 +102,8 @@ def _build_frame_cache_key(
         round(cmap_vmax, rnd),
         round(filter_vmin, rnd) if filter_vmin is not None else None,
         round(filter_vmax, rnd) if filter_vmax is not None else None,
+        smooth,
+        smooth_slot,
     )
 
 
@@ -157,14 +175,18 @@ def _build_frame_headers(
     north: float,
     width: int,
     height: int,
+    smooth: bool = False,
+    smooth_sigma: float = 0.8,
 ) -> dict:
     """Build HTTP response headers for a frame response."""
     fv_min = _fmt_float(filter_vmin) if filter_vmin is not None else "none"
     fv_max = _fmt_float(filter_vmax) if filter_vmax is not None else "none"
+    smooth_tag = f"-smooth{_fmt_float(smooth_sigma)}" if smooth else "-nosmooth"
     etag_raw = (
         f"frame-{cog_id}-{cmap}"
         f"-{_fmt_float(cmap_vmin)}-{_fmt_float(cmap_vmax)}"
         f"-{fv_min}-{fv_max}"
+        f"{smooth_tag}"
     )
     etag = f'"{hashlib.sha256(etag_raw.encode()).hexdigest()[:32]}"'
 
@@ -208,6 +230,8 @@ def _render_frame_sync(
     filter_vmin: Optional[float],
     filter_vmax: Optional[float],
     observation_time: Optional[datetime] = None,
+    smooth: bool = False,
+    smooth_sigma: float = 0.8,
 ) -> Optional[bytes]:
     """Render the full COG raster extent as an RGBA PNG.
 
@@ -217,7 +241,8 @@ def _render_frame_sync(
     Returns PNG bytes, or None if the file is not accessible.
     """
     cache_key = _build_frame_cache_key(
-        file_path, cmap_name, cmap_vmin, cmap_vmax, filter_vmin, filter_vmax
+        file_path, cmap_name, cmap_vmin, cmap_vmax, filter_vmin, filter_vmax,
+        smooth, smooth_sigma,
     )
 
     # --- L1 check ---
@@ -256,6 +281,14 @@ def _render_frame_sync(
         data = ds.read(1).astype(np.float32)  # (H, W)
         # rasterio dataset_mask: 0 = nodata, 255 = valid
         mask = ds.dataset_mask()              # (H, W)
+
+        # Optional Gaussian smoothing — applied on a masked array so that
+        # nodata pixels never bleed into valid neighbours.
+        if smooth:
+            nodata_for_smooth = (mask == 0) | np.isnan(data)
+            masked_arr = np.ma.array(data, mask=nodata_for_smooth)
+            smoothed = apply_smoothing(masked_arr, sigma=smooth_sigma)
+            data = np.ma.filled(smoothed, fill_value=np.nan)
 
         # NaN pixels are treated as nodata
         nan_pixels = np.isnan(data)
@@ -358,6 +391,16 @@ async def get_frame_image(
             "rendered transparent. Colormap scaling always uses product defaults."
         ),
     ),
+    smooth: bool = Query(
+        False,
+        description="Apply Gaussian smoothing to the raster before colormap mapping.",
+    ),
+    smooth_sigma: float = Query(
+        0.8,
+        ge=0.1,
+        le=3.0,
+        description="Gaussian standard deviation in pixels (0.1–3.0). Only used when smooth=true.",
+    ),
     db: Session = Depends(get_db),
 ) -> Response:
     """
@@ -410,6 +453,8 @@ async def get_frame_image(
                 filter_vmin,
                 filter_vmax,
                 cog.observation_time,
+                smooth,
+                smooth_sigma,
             ),
         )
     except rasterio.errors.RasterioIOError as exc:
@@ -467,6 +512,8 @@ async def get_frame_image(
         north,
         img_width,
         img_height,
+        smooth,
+        smooth_sigma,
     )
 
     return Response(

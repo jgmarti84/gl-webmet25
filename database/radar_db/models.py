@@ -82,6 +82,7 @@ class RadarProduct(Base):
     min_value = Column(Float)
     max_value = Column(Float)
     unit = Column(String(32))
+    default_cmap = Column(String(64), nullable=True, comment="Default colormap name for this product")
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -89,9 +90,79 @@ class RadarProduct(Base):
     # Relationships
     references = relationship("Reference", back_populates="product", cascade="all, delete-orphan")
     cog_files = relationship("RadarCOG", back_populates="product")
+    colormap_options = relationship("ProductColormapOption", back_populates="product", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<RadarProduct(key='{self.product_key}')>"
+
+
+class ColormapStop(Base):
+    """
+    Single channel breakpoint for a LinearSegmentedColormap definition.
+
+    Each colormap is described by a set of (position, val_left, val_right) triples
+    for each of the three channels r/g/b, exactly matching the format expected by
+    matplotlib.colors.LinearSegmentedColormap.  When val_left != val_right the
+    breakpoint models a colour discontinuity (hard jump) at that position.
+
+    sort_order is required because the same position may appear twice in a channel
+    (one row for the departing colour, one for the arriving colour), and Python dicts
+    do not guarantee stable ordering when keys repeat.
+    """
+    __tablename__ = 'colormap_stops'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cmap_name = Column(String(64), nullable=False, index=True,
+                       comment="Colormap identifier, e.g. grc_th, grc_vrad")
+    channel = Column(String(1), nullable=False,
+                     comment="Colour channel: r, g or b")
+    position = Column(Float, nullable=False,
+                      comment="Normalised position in [0, 1]")
+    val_left = Column(Float, nullable=False,
+                      comment="Channel value approaching this position from the left (y0)")
+    val_right = Column(Float, nullable=False,
+                       comment="Channel value leaving this position to the right (y1); equals val_left for continuous points")
+    sort_order = Column(Integer, nullable=False, default=0,
+                        comment="Stable ordering within (cmap_name, channel); required when position repeats")
+    is_system = Column(Boolean, nullable=False, default=True,
+                       comment="System colormaps cannot be deleted via the API")
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (
+        Index('idx_cmap_stop_name_channel_order', 'cmap_name', 'channel', 'sort_order'),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<ColormapStop(cmap='{self.cmap_name}', ch='{self.channel}', "
+            f"pos={self.position}, [{self.val_left}->{self.val_right}])>"
+        )
+
+
+class ProductColormapOption(Base):
+    """
+    Many-to-many link between a product key and the colormaps available
+    in its UI dropdown.  When no rows exist for a product_key the frontend
+    falls back to showing every colormap defined in colormap_stops.
+    """
+    __tablename__ = 'product_colormap_options'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    product_key = Column(String(16), ForeignKey('radar_products.product_key', ondelete='CASCADE'),
+                         nullable=False, index=True)
+    cmap_name = Column(String(64), nullable=False,
+                       comment="Colormap name; must match ColormapStop.cmap_name")
+
+    product = relationship("RadarProduct", back_populates="colormap_options")
+
+    __table_args__ = (
+        UniqueConstraint('product_key', 'cmap_name', name='uq_product_colormap_option'),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ProductColormapOption(product='{self.product_key}', cmap='{self.cmap_name}')>"
 
 
 class Reference(Base):
@@ -214,10 +285,15 @@ class RadarCOG(Base):
     estrategia = relationship("Estrategia", back_populates="cog_files")
     
     __table_args__ = (
-        Index('idx_cog_radar_product_time', 'radar_code', 'product_id', 'observation_time'),
+        Index('idx_cog_radar_product_time', 'radar_code', 'product_id', 'observation_time', 'vol_nr'),
         Index('idx_cog_bbox', 'bbox', postgresql_using='gist'),
-        UniqueConstraint('radar_code', 'product_id', 'observation_time', 'elevation_angle',
-                        name='uq_cog_radar_product_time_elev'),
+        # vol_nr is included so that the same field from different volumes
+        # (e.g. DBZH from vol 01 and DBZH from vol 04) are treated as
+        # distinct records.  PostgreSQL NULLs are not considered equal in
+        # UNIQUE constraints, so legacy rows (vol_nr IS NULL) remain
+        # independent.
+        UniqueConstraint('radar_code', 'product_id', 'observation_time', 'elevation_angle', 'vol_nr',
+                        name='uq_cog_radar_product_time_elev_vol'),
     )
     
     def __repr__(self):

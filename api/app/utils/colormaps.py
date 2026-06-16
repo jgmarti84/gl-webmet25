@@ -1,7 +1,13 @@
 # api/app/utils/colormaps.py
 """
 Colormap utilities for radar products.
-Based on radar-visualization-tool colormaps.
+
+Primary source: DB (colormap_stops table), loaded via ColormapService.
+Fallback chain:
+  1. DB colormaps (ColormapService)
+  2. Hardcoded get_cmap_*() functions below
+  3. PyART colormaps (if available)
+  4. matplotlib built-ins
 """
 
 from matplotlib.colors import LinearSegmentedColormap
@@ -180,7 +186,7 @@ def get_cmap_nws_vel():
         'green': [(positions[i], colors[i][1], colors[i][1]) for i in range(n)],
         'blue':  [(positions[i], colors[i][2], colors[i][2]) for i in range(n)],
     }
-    return LinearSegmentedColormap('NWSVel', data)
+    return LinearSegmentedColormap('grc_vrad', data)
 
 
 def get_cmap_theodore16():
@@ -257,8 +263,8 @@ FIELD_RENDER = {
     "RHOHV": {"vmin": 0.0, "vmax": 1.0, "cmap": "grc_rho"},
     "RHOHVo": {"vmin": 0.0, "vmax": 1.0, "cmap": "grc_rho"},
     "KDP": {"vmin": 0.0, "vmax": 8.0, "cmap": "grc_rain"},
-    "VRAD": {"vmin": -35.0, "vmax": 35.0, "cmap": "NWSVel"},
-    "VRADo": {"vmin": -35.0, "vmax": 35.0, "cmap": "NWSVel"},
+    "VRAD": {"vmin": -35.0, "vmax": 35.0, "cmap": "grc_vrad"},
+    "VRADo": {"vmin": -35.0, "vmax": 35.0, "cmap": "grc_vrad"},
     "WRAD": {"vmin": 0.0, "vmax": 10.0, "cmap": "Oranges"},
     "WRADo": {"vmin": 0.0, "vmax": 10.0, "cmap": "Oranges"},
     "PHIDP": {"vmin": 0.0, "vmax": 360.0, "cmap": "Theodore16"},
@@ -282,8 +288,8 @@ FIELD_COLORMAP_OPTIONS = {
     "RHOHV": ["grc_rho", "Greys", "viridis"],
     "RHOHVo": ["grc_rho", "Greys", "viridis"],
     "KDP": ["grc_rain", "grc_th", "plasma"],
-    "VRAD": ["NWSVel", "seismic", "RdBu_r"],
-    "VRADo": ["NWSVel", "seismic", "RdBu_r"],
+    "VRAD": ["grc_vrad", "seismic", "RdBu_r"],
+    "VRADo": ["grc_vrad", "seismic", "RdBu_r"],
     "WRAD": ["Oranges", "YlOrRd", "hot", "plasma"],
     "WRADo": ["Oranges", "YlOrRd", "hot", "plasma"],
     "PHIDP": ["Theodore16", "hsv", "twilight", "twilight_shifted"],
@@ -292,102 +298,147 @@ FIELD_COLORMAP_OPTIONS = {
 }
 
 
+_HARDCODED_BUILDERS = {
+    "grc_th": lambda: get_cmap_grc_th(),
+    "grc_th2": lambda: get_cmap_grc_th2(),
+    "grc_rain": lambda: get_cmap_grc_rain(),
+    "grc_rho": lambda: get_cmap_grc_rho(),
+    "grc_g": lambda: get_cmap_grc_rho(),   # alias kept for back-compat
+    "grc_zdr": lambda: get_cmap_grc_zdr2(),  # new canonical name
+    "grc_zdr2": lambda: get_cmap_grc_zdr2(),
+    "grc_vrad": lambda: get_cmap_nws_vel(),
+    "grc_vrad": lambda: get_cmap_nws_vel(),
+    "Theodore16": lambda: get_cmap_theodore16(),
+}
+
+
 def get_colormap(cmap_name: str):
     """
     Get a matplotlib colormap by name.
-    Supports custom GRC colormaps, PyART colormaps, and standard matplotlib colormaps.
-    
+
+    Resolution order:
+      1. DB (ColormapService) — covers all 8 system colormaps and any
+         admin-created custom ones.
+      2. Hardcoded _HARDCODED_BUILDERS — emergency fallback if the DB is
+         down or the cmap has not been seeded yet.
+      3. PyART colormaps (if pyart is installed).
+      4. Standard matplotlib built-ins.
+
     Args:
         cmap_name: Name of the colormap
         
     Returns:
         matplotlib colormap object
     """
-    # Custom GRC colormaps
-    if cmap_name == "grc_th":
-        return get_cmap_grc_th()
-    elif cmap_name == "grc_th2":
-        return get_cmap_grc_th2()
-    elif cmap_name == "grc_rain":
-        return get_cmap_grc_rain()
-    elif cmap_name == "grc_rho":
-        return get_cmap_grc_rho()
-    elif cmap_name == "grc_zdr2":
-        return get_cmap_grc_zdr2()
+    # 1. Try DB-backed service first.
+    try:
+        from app.services.colormap_service import ColormapService
+        cmap = ColormapService.get_instance().get_cmap(cmap_name)
+        if cmap is not None:
+            return cmap
+    except Exception:
+        pass  # DB unavailable — fall through to hardcoded builders
 
-    # Built-in colormaps that are also available in PyART but must work without it
-    elif cmap_name == "NWSVel":
-        return get_cmap_nws_vel()
-    elif cmap_name == "Theodore16":
-        return get_cmap_theodore16()
-    
-    # PyART colormaps
-    elif cmap_name.startswith("pyart_") and PYART_AVAILABLE:
+    # 2. Hardcoded builders (emergency fallback).
+    builder = _HARDCODED_BUILDERS.get(cmap_name)
+    if builder is not None:
+        return builder()
+
+    # 3. PyART colormaps.
+    if cmap_name.startswith("pyart_") and PYART_AVAILABLE:
         pyart_name = cmap_name.replace("pyart_", "")
         try:
             return pyart.graph.cm.get_colormap(pyart_name)
         except (AttributeError, KeyError):
             pass
-    
-    # Standard matplotlib/PyART colormaps
+
     if PYART_AVAILABLE:
         try:
             return pyart.graph.cm.get_colormap(cmap_name)
         except (AttributeError, KeyError):
             pass
-    
-    # Fallback to matplotlib
+
+    # 4. Standard matplotlib.
     return plt.get_cmap(cmap_name)
 
 
 def colormap_for_field(field_key: str, override_cmap: Optional[str] = None) -> Tuple:
     """
     Get colormap configuration for a radar field/product.
-    
+
+    Resolution order:
+      1. DB (ColormapService.default_for_product) — populated by seeds.
+      2. FIELD_RENDER hardcoded dict — emergency fallback.
+      3. Built-in defaults (vmin=-30, vmax=70, cmap=grc_th).
+
     Args:
         field_key: Product key (e.g., 'DBZH', 'VRAD')
         override_cmap: Optional colormap name to override default
-        
+
     Returns:
         Tuple of (cmap_object, vmin, vmax, cmap_name)
     """
-    # Lookup order:
-    #   1. Exact key (preserves 'o' suffix like 'VRADo', 'RHOHVo')
-    #   2. Uppercase version (e.g. 'dbzh' -> 'DBZH')
-    #   3. Strip trailing 'o' and look up base key (e.g. 'COLMAXo' -> 'COLMAX')
     _fallback = {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"}
-    spec = FIELD_RENDER.get(field_key)
-    if spec is None:
-        spec = FIELD_RENDER.get(field_key.upper())
-    if spec is None and field_key.endswith('o'):
-        base_key = field_key[:-1]
-        spec = FIELD_RENDER.get(base_key, FIELD_RENDER.get(base_key.upper()))
-    if spec is None:
-        spec = _fallback
+
+    # 1. DB via ColormapService.
+    db_cmap, db_vmin, db_vmax = None, None, None
+    try:
+        from app.services.colormap_service import ColormapService
+        db_cmap, db_vmin, db_vmax = ColormapService.get_instance().default_for_product(field_key)
+    except Exception:
+        pass
+
+    if db_cmap is not None:
+        vmin = db_vmin if db_vmin is not None else _fallback["vmin"]
+        vmax = db_vmax if db_vmax is not None else _fallback["vmax"]
+        cmap_name = override_cmap if override_cmap else db_cmap
+        return get_colormap(cmap_name), vmin, vmax, cmap_name
+
+    # 2. Hardcoded FIELD_RENDER dict.
+    spec = (
+        FIELD_RENDER.get(field_key)
+        or FIELD_RENDER.get(field_key.upper())
+        or (
+            FIELD_RENDER.get(field_key[:-1]) or FIELD_RENDER.get(field_key[:-1].upper())
+            if field_key.endswith("o")
+            else None
+        )
+        or _fallback
+    )
     vmin, vmax = spec["vmin"], spec["vmax"]
     cmap_name = override_cmap if override_cmap else spec["cmap"]
-    
-    # Get the colormap object
-    cmap = get_colormap(cmap_name)
-    
-    return cmap, vmin, vmax, cmap_name
+    return get_colormap(cmap_name), vmin, vmax, cmap_name
 
 
 def colormap_options_for_field(field_key: str) -> list:
     """
     Get available colormap options for a field key.
 
-    Lookup order mirrors colormap_for_field:
-      1. Exact key
-      2. Uppercase key
-      3. Strip trailing 'o' and look up base key
+    Resolution order:
+      1. DB (ColormapService.options_for_product)
+      2. FIELD_COLORMAP_OPTIONS hardcoded dict
+      3. Empty list
     """
-    options = FIELD_COLORMAP_OPTIONS.get(field_key)
-    if options is None:
-        options = FIELD_COLORMAP_OPTIONS.get(field_key.upper())
-    if options is None and field_key.endswith('o'):
-        base_key = field_key[:-1]
-        options = FIELD_COLORMAP_OPTIONS.get(base_key, FIELD_COLORMAP_OPTIONS.get(base_key.upper()))
+    # 1. DB.
+    try:
+        from app.services.colormap_service import ColormapService
+        opts = ColormapService.get_instance().options_for_product(field_key)
+        if opts:
+            return opts
+    except Exception:
+        pass
+
+    # 2. Hardcoded dict.
+    options = (
+        FIELD_COLORMAP_OPTIONS.get(field_key)
+        or FIELD_COLORMAP_OPTIONS.get(field_key.upper())
+        or (
+            FIELD_COLORMAP_OPTIONS.get(field_key[:-1])
+            or FIELD_COLORMAP_OPTIONS.get(field_key[:-1].upper())
+            if field_key.endswith("o")
+            else None
+        )
+    )
     return options or []
 
 
