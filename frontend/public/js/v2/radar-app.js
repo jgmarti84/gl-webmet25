@@ -425,8 +425,8 @@ async function loadLayerFramesForRange(layer, startTime, endTime) {
  */
 function updateCoverageRadius() {
     if (!state.radar || !state.mapManager) return;
-    const layer    = state.layers.find(l => l.coverageRadius != null);
-    const radius_m = layer?.coverageRadius ?? (state.radar.img_radio * 1000);
+    const radii    = state.layers.map(l => l.coverageRadius).filter(r => r != null);
+    const radius_m = radii.length > 0 ? Math.max(...radii) : state.radar.img_radio * 1000;
     state.mapManager.addRadarCoverage(
         state.radar.code,
         state.radar.center_lat,
