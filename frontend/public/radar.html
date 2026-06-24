@@ -93,15 +93,19 @@
             </div>
             <div id="timerange-container" class="timerange-container" style="display:none;">
                 <div class="timerange-inputs">
-                    <div class="input-group">
-                        <label for="start-date" class="input-label">Desde:</label>
-                        <input type="datetime-local" id="start-date" class="datetime-input">
+                    <div class="input-group dt-group">
+                        <label for="start-date-date" class="input-label">Desde:</label>
+                        <input type="date" id="start-date-date" class="dt-date">
+                        <div id="start-time-wheel" class="dt-wheel"></div>
+                        <input type="datetime-local" id="start-date" class="dt-hidden" tabindex="-1" aria-hidden="true">
                     </div>
-                    <div class="input-group">
-                        <label for="end-date" class="input-label">Hasta:</label>
-                        <input type="datetime-local" id="end-date" class="datetime-input">
+                    <div class="input-group dt-group">
+                        <label for="end-date-date" class="input-label">Hasta:</label>
+                        <input type="date" id="end-date-date" class="dt-date">
+                        <div id="end-time-wheel" class="dt-wheel"></div>
+                        <input type="datetime-local" id="end-date" class="dt-hidden" tabindex="-1" aria-hidden="true">
                     </div>
-                    <button id="btn-load-timerange" class="action-btn secondary" disabled>Cargar Rango</button>
+                    <button id="btn-load-timerange" class="action-btn secondary" disabled>Cargar rango</button>
                 </div>
             </div>
         </div>

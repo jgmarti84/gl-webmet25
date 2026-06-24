@@ -14,7 +14,12 @@ import {
     MS_PER_HOUR,
     DEFAULT_FIELD_OPACITY,
     DEFAULT_TIME_WINDOW_HOURS,
+    DEFAULT_LIVE_REFRESH_INTERVAL_MS,
+    COVERAGE_MODES,
 } from './constants.js';
+
+const LIVE_REFRESH_INTERVAL_MS = DEFAULT_LIVE_REFRESH_INTERVAL_MS;
+const CD_MODE = COVERAGE_MODES.find(m => m.id === 'cd');
 
 const SETTINGS_KEY_BASEMAP          = 'webmet25_selected_basemap';
 const SETTINGS_KEY_COVERAGE_OPACITY = 'webmet25_coverage_opacity';
@@ -22,8 +27,9 @@ const SETTINGS_KEY_TIME_HOURS        = 'webmet25_time_window_hours';
 
 // ─── URL param ───────────────────────────────────────────────────────────────
 
-const urlParams  = new URLSearchParams(window.location.search);
-const RADAR_CODE = urlParams.get('code');
+const urlParams   = new URLSearchParams(window.location.search);
+const RADAR_CODE  = urlParams.get('code');
+const INITIAL_FIELD = urlParams.get('field') || null;
 
 if (!RADAR_CODE) window.location.href = 'index.html';
 
@@ -653,8 +659,17 @@ function initTimeWindowControls() {
             const hidden = timerangeContainer.style.display === 'none'
                         || timerangeContainer.style.display === '';
             timerangeContainer.style.display = hidden ? 'block' : 'none';
+            if (hidden) {
+                document.querySelectorAll('.time-window-btn')
+                    .forEach(b => b.classList.remove('active'));
+                // Wheels must be visible before they can be positioned
+                state.ui.refreshTimeWheels();
+            }
         });
     }
+
+    // iOS-style time wheels (same pattern as main page)
+    state.ui.initTimeWheels();
 
     const startInput = document.getElementById('start-date');
     const endInput   = document.getElementById('end-date');
@@ -812,7 +827,8 @@ const app = {
 
             const [radars, products] = await Promise.all([
                 api.getRadars(false),
-                api.getProducts(),
+                // Always fetch cd-mode (Conventional + Doppler) products only
+                api.getProducts(CD_MODE.volNrs, CD_MODE.strategy),
             ]);
 
             state.radar    = radars.find(r => r.code === RADAR_CODE) || null;
@@ -827,10 +843,10 @@ const app = {
 
             updateRadarHeader(state.radar);
             fitMapToRadar(state.radar, state.mapManager);
-            
+
             const storedHours = parseFloat(
                 localStorage.getItem(SETTINGS_KEY_TIME_HOURS)
-            ) || DEFAULT_HOURS;
+            ) || DEFAULT_TIME_WINDOW_HOURS;
             document.querySelectorAll('.time-window-btn').forEach(btn => {
                 btn.classList.toggle(
                     'active', parseFloat(btn.dataset.hours) === storedHours
@@ -839,7 +855,27 @@ const app = {
             updateTimeBadge(storedHours);
             updateTimeWindowLabel(storedHours);
 
-            state.ui.setStatus('Seleccione un campo para comenzar →  ⊞', 'success');
+            // Resolve the initial product: use the field passed from the main
+            // page if it's a cd-mode product, otherwise fall back to DBZHo.
+            const cdProductKeys = state.products.map(p => p.product_key);
+            let initialProductKey = null;
+            if (INITIAL_FIELD && cdProductKeys.includes(INITIAL_FIELD)) {
+                initialProductKey = INITIAL_FIELD;
+            } else {
+                const fallbacks = ['DBZHo', 'COLMAXo'];
+                initialProductKey = fallbacks.find(k => cdProductKeys.includes(k))
+                    || cdProductKeys[0]
+                    || null;
+            }
+
+            if (initialProductKey) {
+                state.ui.setStatus('Cargando datos…', 'loading');
+                await addLayer(initialProductKey);
+                startLiveRefresh(storedHours);
+                if (state.frames.length) state.animator.play();
+            } else {
+                state.ui.setStatus('Seleccione un campo para comenzar →  ⊞', 'success');
+            }
 
 
         } catch (err) {

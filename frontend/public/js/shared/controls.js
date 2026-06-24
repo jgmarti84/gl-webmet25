@@ -365,7 +365,9 @@ export class UIControls {
             drillBtn.textContent = '›';
             drillBtn.addEventListener('click', (e) => {
                 e.stopPropagation(); // don't trigger checkbox
-                window.location.href = `radar.html?code=${encodeURIComponent(radar.code)}`;
+                const currentField = document.getElementById('product-select')?.value || '';
+                const fieldParam = currentField ? `&field=${encodeURIComponent(currentField)}` : '';
+                window.location.href = `radar.html?code=${encodeURIComponent(radar.code)}${fieldParam}`;
             });
 
             item.appendChild(checkbox);
