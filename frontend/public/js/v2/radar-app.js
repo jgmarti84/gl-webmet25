@@ -275,6 +275,7 @@ async function removeLayer(layerId) {
 
     state.layers.splice(idx, 1);
     state.layers.forEach((l, i) => { l.zIndex = i; });
+    updateCoverageRadius();
 
     if (state.layers.length === 0) {
         state.mapManager._clearAllOverlays();
@@ -336,6 +337,10 @@ async function loadLayerFramesForRange(layer, startTime, endTime) {
             state.ui.setStatus(`⚠️ Sin datos para ${layer.productKey}`, 'error');
             return;
         }
+
+        // Capture the first non-null coverage radius from this layer's COGs
+        const coverageM = cogs.find(c => c.radar_coverage_m != null)?.radar_coverage_m ?? null;
+        if (coverageM !== null) layer.coverageRadius = coverageM;
 
         const newFrames = groupCogsByTimestamp(cogs);
 
@@ -405,10 +410,29 @@ async function loadLayerFramesForRange(layer, startTime, endTime) {
             'success'
         );
 
+        updateCoverageRadius();
+
     } catch (err) {
         console.error('loadLayerFramesForRange error:', err);
         state.ui.setStatus(`Error cargando ${layer.productKey}: ${err.message}`, 'error');
     }
+}
+
+/**
+ * Recompute the coverage circle radius from the active layers' COG data.
+ * Picks the first layer that carries a radar_coverage_m value; falls back to
+ * the radar's static img_radio when no layer has COG-derived data.
+ */
+function updateCoverageRadius() {
+    if (!state.radar || !state.mapManager) return;
+    const layer    = state.layers.find(l => l.coverageRadius != null);
+    const radius_m = layer?.coverageRadius ?? (state.radar.img_radio * 1000);
+    state.mapManager.addRadarCoverage(
+        state.radar.code,
+        state.radar.center_lat,
+        state.radar.center_long,
+        radius_m,
+    );
 }
 
 async function addLayer(productKey) {
@@ -424,13 +448,14 @@ async function addLayer(productKey) {
     }
 
     const layer = {
-        id:           state.nextLayerId++,
+        id:             state.nextLayerId++,
         productKey,
-        productTitle: product.product_title,
-        opacity:      state.layers.length === 0 ? 1.0 : DEFAULT_FIELD_OPACITY,
-        visible:      true,
+        productTitle:   product.product_title,
+        opacity:        state.layers.length === 0 ? 1.0 : DEFAULT_FIELD_OPACITY,
+        visible:        true,
         colormap,
-        zIndex:       state.layers.length,
+        zIndex:         state.layers.length,
+        coverageRadius: null,
     };
     state.layers.push(layer);
 
