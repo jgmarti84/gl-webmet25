@@ -338,10 +338,9 @@ async function loadLayerFramesForRange(layer, startTime, endTime) {
             return;
         }
 
-        // Capture coverage radius from COG metadata. Products without the tag
-        // (e.g. COLMAX, derived products) are full-range — fall back to img_radio.
-        const coverageM = cogs.find(c => c.radar_coverage_m != null)?.radar_coverage_m
-            ?? (state.radar?.img_radio ? state.radar.img_radio * 1000 : null);
+        // Store actual COG-derived coverage radius when the tag is present.
+        // Layers without it stay null and updateCoverageRadius treats them as full-range.
+        const coverageM = cogs.find(c => c.radar_coverage_m != null)?.radar_coverage_m ?? null;
         if (coverageM !== null) layer.coverageRadius = coverageM;
 
         const newFrames = groupCogsByTimestamp(cogs);
@@ -421,14 +420,16 @@ async function loadLayerFramesForRange(layer, startTime, endTime) {
 }
 
 /**
- * Recompute the coverage circle radius from the active layers' COG data.
- * Picks the first layer that carries a radar_coverage_m value; falls back to
- * the radar's static img_radio when no layer has COG-derived data.
+ * Recompute and apply the coverage circle radius.
+ * For every active layer: use its COG-derived radius when known, otherwise
+ * treat it as full-range (img_radio). The largest radius across all layers wins.
  */
 function updateCoverageRadius() {
     if (!state.radar || !state.mapManager) return;
-    const radii    = state.layers.map(l => l.coverageRadius).filter(r => r != null);
-    const radius_m = radii.length > 0 ? Math.max(...radii) : state.radar.img_radio * 1000;
+    const fullRange = state.radar.img_radio * 1000;
+    const radius_m  = state.layers.length > 0
+        ? Math.max(...state.layers.map(l => l.coverageRadius ?? fullRange))
+        : fullRange;
     state.mapManager.addRadarCoverage(
         state.radar.code,
         state.radar.center_lat,
@@ -460,6 +461,7 @@ async function addLayer(productKey) {
         coverageRadius: null,
     };
     state.layers.push(layer);
+    updateCoverageRadius(); // immediate update: new layer contributes full-range until COGs load
 
     // Load frames for this new layer into the existing frame structure
     const storedHours = parseFloat(
@@ -500,9 +502,11 @@ async function swapLayerField(layerId, newProductKey) {
         try { colormap = await api.getColormap(newProductKey); } catch (_) {}
     }
 
-    layer.productKey   = newProductKey;
-    layer.productTitle = product.product_title;
-    layer.colormap     = colormap;
+    layer.productKey    = newProductKey;
+    layer.productTitle  = product.product_title;
+    layer.colormap      = colormap;
+    layer.coverageRadius = null; // reset so updateCoverageRadius treats it as full-range until COGs load
+    updateCoverageRadius();
 
     const storedHours = parseFloat(
         localStorage.getItem(SETTINGS_KEY_TIME_HOURS)
