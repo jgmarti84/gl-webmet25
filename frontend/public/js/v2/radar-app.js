@@ -770,6 +770,11 @@ function initPanelControls() {
         });
     }
 
+    const btnSnapshot = document.getElementById('btn-snapshot');
+    if (btnSnapshot) {
+        btnSnapshot.addEventListener('click', () => captureMapSnapshot());
+    }
+
     const btnAddField = document.getElementById('btn-add-field');
     if (btnAddField) {
         console.log('btnAddField:', btnAddField);
@@ -787,6 +792,239 @@ function initPanelControls() {
             if (e.target === modal) closeFieldPicker();
         });
     }
+}
+
+// =============================================================================
+// MAIN APPLICATION
+// =============================================================================
+
+// =============================================================================
+// SNAPSHOT
+// =============================================================================
+
+async function captureMapSnapshot() {
+    try {
+        const canvas  = document.createElement('canvas');
+        const mapEl   = document.getElementById('map');
+        canvas.width  = mapEl.offsetWidth;
+        canvas.height = mapEl.offsetHeight;
+        const ctx = canvas.getContext('2d');
+
+        // Basemap tiles + radar overlay images
+        const imgs = Array.from(
+            document.querySelectorAll('.leaflet-tile-pane img, .leaflet-overlay-pane img')
+        );
+        for (const img of imgs) {
+            if (!img.complete || img.naturalWidth === 0) continue;
+            const rect    = img.getBoundingClientRect();
+            const mapRect = mapEl.getBoundingClientRect();
+            ctx.globalAlpha = parseFloat(img.style.opacity || '1');
+            ctx.drawImage(img, rect.left - mapRect.left, rect.top - mapRect.top,
+                rect.width, rect.height);
+        }
+        ctx.globalAlpha = 1;
+
+        // Coverage SVG mask
+        const coverageSvg = state.mapManager?._coverageSvgEl;
+        if (coverageSvg) {
+            try {
+                const svgData = new XMLSerializer().serializeToString(coverageSvg);
+                const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+                const svgUrl  = URL.createObjectURL(svgBlob);
+                await new Promise((resolve) => {
+                    const svgImg = new Image();
+                    svgImg.onload = () => {
+                        ctx.drawImage(svgImg, 0, 0, canvas.width, canvas.height);
+                        URL.revokeObjectURL(svgUrl);
+                        resolve();
+                    };
+                    svgImg.onerror = () => { URL.revokeObjectURL(svgUrl); resolve(); };
+                    svgImg.src = svgUrl;
+                });
+            } catch (_) { /* best-effort */ }
+        }
+
+        // ── Modular overlays ─────────────────────────────────────────────────
+        // Comment out any line to disable that overlay element.
+        const timeText = document.getElementById('time-display')?.textContent?.trim() || '';
+        await radarSnapshotOverlayLogo(ctx);
+        radarSnapshotOverlayHeader(ctx, canvas);
+        radarSnapshotOverlayLayerLegends(ctx, canvas, timeText);
+        radarSnapshotOverlayInfoPanel(ctx, canvas, timeText);
+        // ────────────────────────────────────────────────────────────────────
+
+        const link = document.createElement('a');
+        const code = state.radarCode || 'radar';
+        link.download = `${code}-snapshot-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    } catch (err) {
+        console.warn('Snapshot failed:', err);
+        if (state.ui) state.ui.setStatus('Error al capturar la imagen: ' + err.message, 'error');
+    }
+}
+
+/** Draw the OHMC logo (top-left). */
+async function radarSnapshotOverlayLogo(ctx) {
+    const img = document.querySelector('#logo-container img');
+    if (!img || !img.complete || img.naturalWidth === 0) return;
+    const displayH = 50;
+    const displayW = Math.round(img.naturalWidth * (displayH / img.naturalHeight));
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.drawImage(img, 16, 16, displayW, displayH);
+    ctx.restore();
+}
+
+/**
+ * Draw a panel showing the radar code + title (top-center, below the
+ * on-screen radar header bar).
+ */
+function radarSnapshotOverlayHeader(ctx, canvas) {
+    if (!state.radar) return;
+    const text = `${state.radar.code}  —  ${state.radar.title}`;
+    const FONT_SZ = 14;
+    const PAD     = 10;
+    ctx.save();
+    ctx.font        = `bold ${FONT_SZ}px "Inter", sans-serif`;
+    ctx.textBaseline = 'top';
+    ctx.textAlign   = 'center';
+    const textW = ctx.measureText(text).width;
+    const boxW  = textW + PAD * 2;
+    const boxH  = FONT_SZ + PAD * 2;
+    const x     = (canvas.width - boxW) / 2;
+    const y     = 16;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    _radarSnapshotRoundRect(ctx, x, y, boxW, boxH, 6);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, canvas.width / 2, y + PAD);
+    ctx.restore();
+}
+
+/**
+ * Draw compact horizontal colormap strips for every active layer (bottom-left).
+ * Each row: [field name] [gradient strip] — mirroring the layer list in the panel.
+ * The current frame datetime appears above the strip stack.
+ */
+function radarSnapshotOverlayLayerLegends(ctx, canvas, timeText) {
+    const visibleLayers = state.layers.filter(l => l.visible && l.colormap?.colors?.length);
+    if (!visibleLayers.length) return;
+
+    const LABEL_W   = 70;
+    const STRIP_W   = 160;
+    const STRIP_H   = 14;
+    const ROW_GAP   = 6;
+    const FONT_SZ   = 11;
+    const TIME_SZ   = 11;
+    const PAD       = 10;
+    const SAMPLES   = 64;
+
+    const rowH  = STRIP_H + ROW_GAP;
+    const timeH = timeText && timeText !== '—' ? TIME_SZ + 6 : 0;
+    const totalH = timeH + visibleLayers.length * rowH - ROW_GAP + PAD * 2;
+    const totalW = PAD + LABEL_W + 6 + STRIP_W + PAD;
+    const x0 = 16;
+    const y0 = canvas.height - totalH - 16;
+
+    ctx.save();
+
+    // Background panel
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    _radarSnapshotRoundRect(ctx, x0, y0, totalW, totalH, 6);
+    ctx.fill();
+
+    let curY = y0 + PAD;
+
+    // Datetime line above the layer rows
+    if (timeH) {
+        ctx.font        = `${TIME_SZ}px "Inter", monospace`;
+        ctx.fillStyle   = 'rgba(255,255,255,0.75)';
+        ctx.textBaseline = 'top';
+        ctx.textAlign   = 'left';
+        ctx.fillText(timeText, x0 + PAD, curY);
+        curY += timeH;
+    }
+
+    visibleLayers.forEach(layer => {
+        const cm = layer.colormap;
+
+        // Field name label (truncated to fit LABEL_W)
+        ctx.font        = `bold ${FONT_SZ}px "Inter", sans-serif`;
+        ctx.fillStyle   = '#ffffff';
+        ctx.textBaseline = 'middle';
+        ctx.textAlign   = 'left';
+        let label = layer.productKey;
+        while (label.length > 1 && ctx.measureText(label).width > LABEL_W) {
+            label = label.slice(0, -1);
+        }
+        ctx.fillText(label, x0 + PAD, curY + STRIP_H / 2);
+
+        // Horizontal gradient strip
+        const stripX = x0 + PAD + LABEL_W + 6;
+        const grad   = ctx.createLinearGradient(stripX, 0, stripX + STRIP_W, 0);
+        for (let i = 0; i < SAMPLES; i++) {
+            const t   = i / (SAMPLES - 1);
+            const idx = Math.round(t * (cm.colors.length - 1));
+            grad.addColorStop(t, cm.colors[idx]);
+        }
+        ctx.fillStyle = grad;
+        ctx.fillRect(stripX, curY, STRIP_W, STRIP_H);
+
+        // Opacity indicator: dim unfilled bar portion if opacity < 1
+        if (layer.opacity < 1) {
+            ctx.fillStyle = `rgba(0,0,0,${1 - layer.opacity})`;
+            ctx.fillRect(stripX, curY, STRIP_W, STRIP_H);
+        }
+
+        curY += rowH;
+    });
+
+    ctx.restore();
+}
+
+/**
+ * Draw the current frame datetime in a small panel (bottom-right) when there
+ * is only one layer or when the layer legends panel is absent.
+ * Skipped if the layer legends panel already shows the time.
+ */
+function radarSnapshotOverlayInfoPanel(ctx, canvas, timeText) {
+    // If there are visible layers the legends panel already shows the time.
+    const hasLegends = state.layers.some(l => l.visible && l.colormap?.colors?.length);
+    if (hasLegends) return;
+    if (!timeText || timeText === '—') return;
+
+    const FONT_SZ = 13;
+    const PAD     = 10;
+    ctx.save();
+    ctx.font        = `${FONT_SZ}px "Inter", monospace`;
+    ctx.textBaseline = 'top';
+    const textW = ctx.measureText(timeText).width;
+    const boxW  = textW + PAD * 2;
+    const boxH  = FONT_SZ + PAD * 2;
+    const x = canvas.width  - boxW - 16;
+    const y = canvas.height - boxH - 16;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    _radarSnapshotRoundRect(ctx, x, y, boxW, boxH, 6);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(timeText, x + PAD, y + PAD);
+    ctx.restore();
+}
+
+/** Helper: filled rounded rectangle path. */
+function _radarSnapshotRoundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
 }
 
 // =============================================================================

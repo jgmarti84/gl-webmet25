@@ -159,6 +159,170 @@ function setLiveRefreshIntervalMs(ms) {
 }
 
 // =============================================================================
+// SNAPSHOT OVERLAY HELPERS
+// Each function draws one element onto an existing canvas context.
+// They are intentionally standalone so any can be commented out in
+// captureMapSnapshot() without touching the others.
+// =============================================================================
+
+/**
+ * Draw the OHMC logo onto the canvas (top-left corner).
+ * The source asset is a @3x PNG, so we render it at its CSS display size.
+ */
+async function snapshotOverlayLogo(ctx) {
+    const img = document.querySelector('#logo-container img');
+    if (!img || !img.complete || img.naturalWidth === 0) return;
+    // Respect the 50 px CSS height; derive width proportionally.
+    const displayH = 50;
+    const displayW = Math.round(img.naturalWidth * (displayH / img.naturalHeight));
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.drawImage(img, 16, 16, displayW, displayH);
+    ctx.restore();
+}
+
+/**
+ * Draw a vertical colormap legend (bottom-left).
+ * Draws: product title → gradient bar with tick marks → unit label.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {HTMLCanvasElement}        canvas
+ * @param {object|null}              colormapData  - LegendRenderer.currentColormap
+ */
+function snapshotOverlayVerticalLegend(ctx, canvas, colormapData) {
+    if (!colormapData?.colors?.length) return;
+
+    const cm        = colormapData;
+    const BAR_W     = 18;
+    const BAR_H     = 180;
+    const TICK_LEN  = 6;
+    const LABEL_SZ  = 11;
+    const TITLE_SZ  = 12;
+    const PAD       = 12;
+    const marginL   = 16;
+    // Reserve space for title above and unit below the bar
+    const totalH    = TITLE_SZ + 6 + BAR_H + 18;
+    const x0        = marginL;
+    const y0        = canvas.height - totalH - 20;
+
+    const vmin        = cm.vmin ?? 0;
+    const vmax        = cm.vmax ?? 100;
+    const range       = vmax - vmin;
+    const decimals    = range >= 10 ? 0 : range >= 1 ? 1 : 2;
+    const labelColW   = 42; // estimated max label width
+    const bgW         = PAD + BAR_W + TICK_LEN + 4 + labelColW + PAD;
+    const bgH         = totalH + PAD;
+
+    ctx.save();
+
+    // Semi-transparent background panel
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    _snapshotRoundRect(ctx, x0 - PAD, y0 - PAD, bgW, bgH, 6);
+    ctx.fill();
+
+    // Title
+    ctx.fillStyle   = '#ffffff';
+    ctx.font        = `bold ${TITLE_SZ}px "Inter", sans-serif`;
+    ctx.textAlign   = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(cm.product_title || cm.product_key || '', x0, y0);
+
+    const barY = y0 + TITLE_SZ + 6;
+
+    // Gradient bar (bottom → top = vmin → vmax)
+    const grad = ctx.createLinearGradient(0, barY + BAR_H, 0, barY);
+    const SAMPLES = 64;
+    for (let i = 0; i < SAMPLES; i++) {
+        const t   = i / (SAMPLES - 1);
+        const idx = Math.round(t * (cm.colors.length - 1));
+        grad.addColorStop(t, cm.colors[idx]);
+    }
+    ctx.fillStyle = grad;
+    ctx.fillRect(x0, barY, BAR_W, BAR_H);
+
+    // Tick marks + labels
+    const tickVals = (cm.ticks?.length)
+        ? cm.ticks.map(t => t.value).filter(v => v >= vmin && v <= vmax)
+        : Array.from({ length: 5 }, (_, i) => vmin + (i / 4) * range);
+
+    ctx.font        = `${LABEL_SZ}px "Inter", monospace`;
+    ctx.fillStyle   = '#ffffff';
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth   = 1;
+    ctx.textBaseline = 'middle';
+    tickVals.forEach(v => {
+        const frac = range > 0 ? (v - vmin) / range : 0;
+        const ty   = barY + BAR_H - frac * BAR_H;
+        ctx.beginPath();
+        ctx.moveTo(x0 + BAR_W, ty);
+        ctx.lineTo(x0 + BAR_W + TICK_LEN, ty);
+        ctx.stroke();
+        ctx.fillText(v.toFixed(decimals), x0 + BAR_W + TICK_LEN + 4, ty);
+    });
+
+    // Unit label
+    ctx.font        = `${LABEL_SZ}px "Inter", sans-serif`;
+    ctx.textBaseline = 'top';
+    ctx.fillText(cm.unit?.trim() || '', x0, barY + BAR_H + 4);
+
+    ctx.restore();
+}
+
+/**
+ * Draw an info panel (bottom-right) showing the selected field and current
+ * frame datetime.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {HTMLCanvasElement}        canvas
+ * @param {string}                   fieldLabel
+ * @param {string}                   timeText
+ */
+function snapshotOverlayInfoPanel(ctx, canvas, fieldLabel, timeText) {
+    const lines = [fieldLabel, timeText].filter(s => s && s !== '—');
+    if (!lines.length) return;
+
+    const FONT_SZ  = 13;
+    const LINE_H   = FONT_SZ + 5;
+    const PAD      = 10;
+    const boxW     = 260;
+    const boxH     = lines.length * LINE_H + PAD * 2;
+    const x        = canvas.width  - boxW - 16;
+    const y        = canvas.height - boxH - 16;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    _snapshotRoundRect(ctx, x, y, boxW, boxH, 6);
+    ctx.fill();
+
+    ctx.fillStyle   = '#ffffff';
+    ctx.textAlign   = 'left';
+    ctx.textBaseline = 'top';
+    lines.forEach((line, i) => {
+        const isFirst = i === 0;
+        ctx.font = isFirst
+            ? `bold ${FONT_SZ}px "Inter", sans-serif`
+            : `${FONT_SZ}px "Inter", sans-serif`;
+        ctx.fillText(line, x + PAD, y + PAD + i * LINE_H);
+    });
+    ctx.restore();
+}
+
+/** Helper: draw a filled rounded rectangle path (Canvas 2D). */
+function _snapshotRoundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+// =============================================================================
 // MAIN APPLICATION
 // =============================================================================
 
@@ -2236,6 +2400,18 @@ const app = {
                     });
                 } catch (_) { /* coverage overlay is best-effort */ }
             }
+
+            // ── Modular overlays ─────────────────────────────────────────────────
+            // Comment out any line to disable that overlay element.
+            const colormapData = state.legend?.currentColormap || null;
+            const fieldLabel   = colormapData?.product_title || colormapData?.product_key
+                               || state.selectedProduct || '';
+            const timeText     = document.getElementById('time-display')?.textContent?.trim() || '';
+
+            await snapshotOverlayLogo(ctx);
+            snapshotOverlayVerticalLegend(ctx, canvas, colormapData);
+            snapshotOverlayInfoPanel(ctx, canvas, fieldLabel, timeText);
+            // ────────────────────────────────────────────────────────────────────
 
             const link = document.createElement('a');
             link.download = `radar-snapshot-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
