@@ -338,8 +338,10 @@ async function loadLayerFramesForRange(layer, startTime, endTime) {
             return;
         }
 
-        // Capture the first non-null coverage radius from this layer's COGs
-        const coverageM = cogs.find(c => c.radar_coverage_m != null)?.radar_coverage_m ?? null;
+        // Capture coverage radius from COG metadata. Products without the tag
+        // (e.g. COLMAX, derived products) are full-range — fall back to img_radio.
+        const coverageM = cogs.find(c => c.radar_coverage_m != null)?.radar_coverage_m
+            ?? (state.radar?.img_radio ? state.radar.img_radio * 1000 : null);
         if (coverageM !== null) layer.coverageRadius = coverageM;
 
         const newFrames = groupCogsByTimestamp(cogs);
