@@ -846,12 +846,12 @@ export class MapManager {
                 cy = (swPx.y + nePx.y) / 2;
                 const rx = (nePx.x - swPx.x) / 2;   // E-W half-width in px
                 const ry = (swPx.y - nePx.y) / 2;   // N-S half-height in px
-                console.log(
-                    `[coverage] ${radarCode} ellipse:`,
-                    `N=${bbox.north.toFixed(4)} S=${bbox.south.toFixed(4)}`,
-                    `W=${bbox.west.toFixed(4)} E=${bbox.east.toFixed(4)}`,
-                    `→ cx=${cx.toFixed(1)} cy=${cy.toFixed(1)} rx=${rx.toFixed(1)} ry=${ry.toFixed(1)}`
-                );
+                // console.log(
+                //     `[coverage] ${radarCode} ellipse:`,
+                //     `N=${bbox.north.toFixed(4)} S=${bbox.south.toFixed(4)}`,
+                //     `W=${bbox.west.toFixed(4)} E=${bbox.east.toFixed(4)}`,
+                //     `→ cx=${cx.toFixed(1)} cy=${cy.toFixed(1)} rx=${rx.toFixed(1)} ry=${ry.toFixed(1)}`
+                // );
                 const ellipse = document.createElementNS(svgNS, 'ellipse');
                 ellipse.setAttribute('cx', String(cx));
                 ellipse.setAttribute('cy', String(cy));
@@ -868,10 +868,10 @@ export class MapManager {
                 cx = pt.x;
                 cy = pt.y;
                 radiusPx = this._metersToPixels(coverage.lat, coverage.radius_m);
-                console.log(
-                    `[coverage] ${radarCode} circle fallback (no bbox yet):`,
-                    `lat=${coverage.lat} lng=${coverage.lng}`
-                );
+                // console.log(
+                //     `[coverage] ${radarCode} circle fallback (no bbox yet):`,
+                //     `lat=${coverage.lat} lng=${coverage.lng}`
+                // );
                 const circle = document.createElementNS(svgNS, 'circle');
                 circle.setAttribute('cx', String(cx));
                 circle.setAttribute('cy', String(cy));
