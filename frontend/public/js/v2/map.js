@@ -117,6 +117,8 @@ export class MapManager {
         ) || 0.4;
         // Map of radarCode → { lat, lng, radius_m }
         this._activeRadarCoverages = new Map();
+        // Map of radarCode → { lat, lng, radii_m: number[] }  (one ring per unique radius)
+        this._activeRadarCoverageRings = new Map();
     }
 
     // =========================================================================
@@ -761,6 +763,12 @@ export class MapManager {
         overlay.setAttribute('mask', 'url(#radar-coverage-mask)');
         svg.appendChild(overlay);
 
+        // Ring lines group — drawn above the dark overlay so they are
+        // visible on both the bright (inside coverage) and dark regions.
+        const ringsGroup = document.createElementNS(svgNS, 'g');
+        ringsGroup.setAttribute('id', 'radar-coverage-rings');
+        svg.appendChild(ringsGroup);
+
         this._coverageSvgEl = svg;
 
         // Append directly to the map container (not a pane) so the SVG
@@ -895,6 +903,39 @@ export class MapManager {
         if (overlayRect) {
             overlayRect.setAttribute('opacity', String(this._coverageOpacity));
         }
+
+        // ── Coverage ring lines ───────────────────────────────────────────────
+        // One stroke-only circle per unique coverage radius. The smallest ring
+        // (inside the bright coverage area) gets a heavier stroke; larger rings
+        // get a lighter dashed stroke since they sit at/near the dark edge.
+        const ringsGroup = this._coverageSvgEl.querySelector('#radar-coverage-rings');
+        if (ringsGroup) {
+            while (ringsGroup.firstChild) ringsGroup.removeChild(ringsGroup.firstChild);
+            for (const [, ringsData] of this._activeRadarCoverageRings) {
+                const { lat, lng, radii_m } = ringsData;
+                const pt = this._map.latLngToContainerPoint(L.latLng(lat, lng));
+                const sortedRadii = [...radii_m].sort((a, b) => a - b);
+                const hasMultiple = sortedRadii.length > 1;
+                sortedRadii.forEach((radius_m, i) => {
+                    const radiusPx  = this._metersToPixels(lat, radius_m);
+                    const isSmallest = i === 0;
+                    const ring = document.createElementNS(svgNS, 'circle');
+                    ring.setAttribute('cx', pt.x.toFixed(1));
+                    ring.setAttribute('cy', pt.y.toFixed(1));
+                    ring.setAttribute('r',  radiusPx.toFixed(1));
+                    ring.setAttribute('fill', 'none');
+                    ring.setAttribute('stroke', 'white');
+                    // Smallest ring is more prominent (inside the bright area);
+                    // larger rings are lighter and dashed (at the coverage edge).
+                    ring.setAttribute('stroke-opacity', hasMultiple && !isSmallest ? '0.45' : '0.80');
+                    ring.setAttribute('stroke-width',   hasMultiple &&  isSmallest ? '2'    : '1.5');
+                    if (hasMultiple && !isSmallest) {
+                        ring.setAttribute('stroke-dasharray', '5 4');
+                    }
+                    ringsGroup.appendChild(ring);
+                });
+            }
+        }
     }
 
     /**
@@ -932,6 +973,24 @@ export class MapManager {
      */
     removeRadarCoverage(radarCode) {
         this._activeRadarCoverages.delete(radarCode);
+        this._activeRadarCoverageRings.delete(radarCode);
+        this._updateCoverageMask();
+    }
+
+    /**
+     * Set the visible ring lines for a radar — one ring per unique coverage radius.
+     * Pass an empty array to remove all rings for this radar.
+     * @param {string}   radarCode
+     * @param {number}   lat       Radar center latitude (WGS84)
+     * @param {number}   lng       Radar center longitude (WGS84)
+     * @param {number[]} radii_m   Unique coverage radii in meters
+     */
+    setRadarCoverageRings(radarCode, lat, lng, radii_m) {
+        if (!radii_m || radii_m.length === 0) {
+            this._activeRadarCoverageRings.delete(radarCode);
+        } else {
+            this._activeRadarCoverageRings.set(radarCode, { lat, lng, radii_m: [...radii_m] });
+        }
         this._updateCoverageMask();
     }
 

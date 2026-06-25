@@ -538,21 +538,37 @@ async function loadLayerFramesForRange(layer, startTime, endTime) {
 }
 
 /**
- * Recompute and apply the coverage circle radius.
+ * Recompute and apply the coverage mask + ring lines.
  * For every active layer: use its COG-derived radius when known, otherwise
- * treat it as full-range (img_radio). The largest radius across all layers wins.
+ * treat it as full-range (img_radio).
+ * - The mask cutout uses the largest radius (union of all coverage areas).
+ * - A visible ring is drawn for each unique radius; the smallest ring gets
+ *   heavier styling since it lies inside the lit coverage area.
  */
 function updateCoverageRadius() {
     if (!state.radar || !state.mapManager) return;
     const fullRange = state.radar.img_radio * 1000;
-    const radius_m  = state.layers.length > 0
-        ? Math.max(...state.layers.map(l => l.coverageRadius ?? fullRange))
-        : fullRange;
+
+    // Collect unique radii from active layers (null → fullRange).
+    // When no layers are active, show no rings but keep the mask at full range.
+    let uniqueRadii = [];
+    if (state.layers.length > 0) {
+        const allRadii = state.layers.map(l => l.coverageRadius ?? fullRange);
+        uniqueRadii = [...new Set(allRadii)];
+    }
+
+    const maxRadius = uniqueRadii.length > 0 ? Math.max(...uniqueRadii) : fullRange;
     state.mapManager.addRadarCoverage(
         state.radar.code,
         state.radar.center_lat,
         state.radar.center_long,
-        radius_m,
+        maxRadius,
+    );
+    state.mapManager.setRadarCoverageRings(
+        state.radar.code,
+        state.radar.center_lat,
+        state.radar.center_long,
+        uniqueRadii,
     );
 }
 
