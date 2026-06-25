@@ -292,6 +292,7 @@ A standalone admin SPA for CRUD over the database, served at `/admin` and backed
 - Frame animation with speed control (0.5x–2x)
 - Periodic polling for new COGs (5 minute interval)
 - **Modules:** `v2/app.js`, `v2/map.js`, `v2/animation.js`, `shared/api.js`, `shared/controls.js`, `shared/legend.js`, `shared/tops-cores.js`, `shared/time-wheel.js`
+- **One-radar page:** `radar.html` + `v2/radar-app.js` — see dedicated section below.
 - **Radar selection order** (`controls.js` → `sortRadarsForDisplay`): active before inactive; within each, RMA group before AR group; numeric ascending with `RMA00` (number 0) sorted last (e.g. `RMA1…RMA17, RMA00, AR5…`).
 - **Custom time range** uses a native date input + an iOS-style scroll-snap **TimeWheel** (`shared/time-wheel.js`) for HH:MM. The hidden `#start-date`/`#end-date` `datetime-local` inputs remain the canonical value (read by `getTimeRangeValues`); the date input + wheel only drive them. Call `refreshTimeWheels()` after the panel becomes visible (scroll position can't be set while hidden).
 - **Admin panel** is a separate SPA — see the **Admin Panel & Admin API** section above. Linked from the Settings panel.
@@ -309,17 +310,24 @@ A standalone admin SPA for CRUD over the database, served at `/admin` and backed
 
 ### File Structure
 ```
-frontend/public/js/
-├── shared/          # Shared across v1 and v2
-│   ├── api.js       # REST API client
-│   ├── controls.js  # UI control handlers
-│   ├── legend.js    # Legend renderer
-│   ├── tops-cores.js # TopsCoresLayer (L.circleMarker)
-│   └── cog-browser*.js # COG browser alternative view
-└── v2/              # v2-specific (current production)
-    ├── app.js       # Main orchestrator (2300+ lines)
-    ├── map.js       # MapManager with L.imageOverlay
-    └── animation.js # AnimationController with requestAnimationFrame
+frontend/public/
+├── index.html        # Main multi-radar map page
+├── radar.html        # One-radar detail page (entry: radar.html?code=AR5)
+├── admin.html        # Admin SPA
+└── js/
+    ├── shared/          # Shared across v1 and v2
+    │   ├── api.js       # REST API client
+    │   ├── controls.js  # UI control handlers
+    │   ├── legend.js    # Legend renderer
+    │   ├── tops-cores.js # TopsCoresLayer (L.circleMarker)
+    │   └── cog-browser*.js # COG browser alternative view
+    └── v2/              # v2-specific (current production)
+        ├── app.js       # Main orchestrator — multi-radar map (2300+ lines)
+        ├── radar-app.js # One-radar page orchestrator (1500+ lines)
+        ├── map.js       # MapManager with L.imageOverlay
+        ├── animation.js # AnimationController with requestAnimationFrame
+        ├── radar-utils.js # Shared helpers for radar-app.js
+        └── constants.js   # Shared constants (MS_PER_HOUR, COVERAGE_MODES, …)
 ```
 
 ### Key differences from v1
@@ -330,6 +338,77 @@ frontend/public/js/
 | Animation | setTimeout opacity toggle | requestAnimationFrame |
 | DOM objects | ~180 TileLayers per session | 1 overlay per radar |
 | HTTP requests | ~1800 per session | ~180 per session |
+
+### One-Radar Page (`radar.html` + `v2/radar-app.js`)
+
+A dedicated single-radar detail view reachable from the main map or directly as
+`/radar.html?code=AR5`. Always operates in **CD mode** (vol_nr 01/02, strategy 0315)
+with no coverage-mode toggle.
+
+**URL parameters:**
+- `code` (required) — radar station code; missing → redirect to `index.html`
+- `field` (optional) — initial product key (e.g. `DBZHo`); falls back to `DBZHo` → `COLMAXo` → first available
+
+**Layer system (`state.layers[]`):** Each selected field is a layer object:
+```javascript
+{
+    id, productKey, productTitle,
+    opacity,           // 0–1 (default 1.0 for first layer, DEFAULT_FIELD_OPACITY for others)
+    visible,           // eye toggle
+    colormap,          // object from api.getColormapInfo() — {vmin, vmax, colors, ticks, …}
+    selectedColormap,  // overridden colormap name (null = product default)
+    vmin, vmax,        // filter bounds (null = no filter; pre-populated from colormap defaults in UI)
+    smoothingEnabled,  // Gaussian smooth toggle
+    smoothingSigma,    // 0.3–3.0 (default 0.8)
+    coverageRadius,    // metres from COG tag (null = full img_radio range)
+    zIndex,            // render order
+    settingsExpanded,  // collapse state of the Ajustes sub-panel
+}
+```
+
+**Key functions:**
+- `addLayer(productKey)` — fetches colormap, creates layer object, loads frames, calls `renderLayerList()`
+- `removeLayer(layerId)` — tears down overlays + frame entries, refreshes display
+- `swapLayerField(layerId, newProductKey)` — replaces field in-place; resets vmin/vmax/colormap
+- `getTileParamsForLayer(layer)` → `{colormap, vmin, vmax, smooth, smoothSigma}` passed to `_buildFrameUrl`
+- `reloadLayerWithNewParams(layer)` — re-fetches all frame images for one layer in parallel;
+  does **not** call `renderLayerList()` (strip ticks remain at product defaults, confirming
+  the range filter only alpha-masks without changing the colormap normalization range)
+- `setLayerColormap(layerId, name)` — fetches new colormap info, re-renders strip, reloads frames
+- `showAllLayersAtFrame(index)` — composites all visible layers at a given frame; called on every
+  animation tick and on visibility/opacity changes
+- `loadLayerFramesForRange(layer, start, end)` — merges new frames into the shared
+  `state.mapManager._frameImages` structure; layers share the same timestamp buckets
+- `refreshLiveWindow()` — anchors to latest data for first layer, resets frame structure,
+  reloads all layers; runs on `LIVE_REFRESH_INTERVAL_MS` timer
+
+**Panel-module-b — Field / Layer selection:**
+- Active layer list (`#layer-list`) rendered by `renderLayerList()`: drag-to-reorder handle,
+  eye-toggle, field name (click = swap modal), remove button, colormap strip + ticks, opacity
+  slider, collapsible "Ajustes" sub-panel with colormap select / range inputs / smoothing
+- Collapsible "Añadir campo" section: checkbox list filtered by unfiltered/filtered toggle
+  (`state.pickerShowFiltered`); checking a box calls `addLayer`, unchecking calls `removeLayer`
+- Swap modal (`#field-picker-modal`): grid of all products; clicking replaces the target layer
+
+**Range filter vs colormap normalization (critical invariant):**
+The `vmin`/`vmax` inputs in the Ajustes panel are **filter bounds only** (sent to the frames
+endpoint as `?vmin=…&vmax=…`), which the backend uses for **alpha-masking** (pixels outside
+the range are transparent). The colormap normalization range always comes from
+`colormap_for_field()` (product defaults) — it is never changed by the filter.
+The inputs are pre-populated with `layer.colormap.vmin/vmax` when `layer.vmin == null`
+so clicking "Aplicar" without narrowing the range sends the full product range (no visual
+difference), matching the main page's behavior.
+
+**Coverage rings:** `updateCoverageRadius()` draws one SVG ring per unique
+`layer.coverageRadius` value (from the COG tag); the mask cutout uses the largest radius.
+`setRadarCoverageRings()` on `MapManager` manages these ring elements.
+
+**Snapshot (`captureMapSnapshot`):** Canvas compositing of basemap tiles + radar overlays +
+SVG coverage mask; overlaid with OHMC logo, radar header panel, per-layer colormap strips
+(bottom-left, with current timestamp), and a fallback time panel (bottom-right when no
+layers are visible).
+
+---
 
 ### Animation continuity pattern
 Field changes, time-window changes, colormap changes, and range
