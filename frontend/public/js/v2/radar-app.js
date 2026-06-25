@@ -273,7 +273,6 @@ function renderLayerList() {
 
         const strip     = document.createElement('div');
         strip.className = 'layer-colormap-strip';
-        strip.title     = 'Colormap editor — coming soon';
         if (layer.colormap?.colors?.length) {
             strip.style.background = buildHorizontalGradient(layer.colormap.colors);
         } else {
@@ -312,6 +311,150 @@ function renderLayerList() {
 
         body.appendChild(cmapWrapper);
         body.appendChild(sliderRow);
+
+        // ── Settings toggle ──
+        const settingsToggle     = document.createElement('button');
+        settingsToggle.className = 'layer-settings-toggle';
+        settingsToggle.textContent = (layer.settingsExpanded ? '▾' : '▸') + ' Ajustes';
+
+        // ── Settings body: colormap / range / smoothing ──
+        const settingsBody     = document.createElement('div');
+        settingsBody.className = 'layer-settings-body';
+        settingsBody.style.display = layer.settingsExpanded ? 'flex' : 'none';
+
+        // — Colormap select —
+        const cmapSetRow     = document.createElement('div');
+        cmapSetRow.className = 'layer-setting-row';
+        const cmapSetLabel       = document.createElement('span');
+        cmapSetLabel.className   = 'layer-setting-label';
+        cmapSetLabel.textContent = 'Colormap';
+        const cmapSetSel     = document.createElement('select');
+        cmapSetSel.className = 'layer-setting-select';
+        const availCmaps    = layer.colormap?.available_colormaps || [];
+        const defaultCmName = layer.colormap?.colormap || null;
+        if (defaultCmName) {
+            const grp = document.createElement('optgroup');
+            grp.label = 'Default';
+            const opt = document.createElement('option');
+            opt.value = defaultCmName; opt.textContent = defaultCmName;
+            grp.appendChild(opt);
+            cmapSetSel.appendChild(grp);
+        }
+        const otherCmaps = availCmaps.filter(c => c !== defaultCmName).sort();
+        if (otherCmaps.length > 0) {
+            const grp = document.createElement('optgroup');
+            grp.label = 'Otros';
+            otherCmaps.forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = name; opt.textContent = name;
+                grp.appendChild(opt);
+            });
+            cmapSetSel.appendChild(grp);
+        }
+        cmapSetSel.value = layer.selectedColormap || defaultCmName || '';
+        cmapSetSel.addEventListener('mousedown', e => e.stopPropagation());
+        cmapSetSel.addEventListener('change', async (e) => {
+            e.stopPropagation();
+            await setLayerColormap(layer.id, e.target.value);
+        });
+        cmapSetRow.appendChild(cmapSetLabel);
+        cmapSetRow.appendChild(cmapSetSel);
+
+        // — Range filter —
+        const rangeSetRow     = document.createElement('div');
+        rangeSetRow.className = 'layer-setting-row';
+        const rangeSetLabel       = document.createElement('span');
+        rangeSetLabel.className   = 'layer-setting-label';
+        rangeSetLabel.textContent = 'Rango';
+        const vminInp       = document.createElement('input');
+        vminInp.type        = 'number';
+        vminInp.className   = 'layer-setting-range-input';
+        vminInp.placeholder = 'mín';
+        vminInp.step        = 'any';
+        vminInp.value       = layer.vmin != null ? String(layer.vmin) : '';
+        vminInp.addEventListener('mousedown', e => e.stopPropagation());
+        const vmaxInp       = document.createElement('input');
+        vmaxInp.type        = 'number';
+        vmaxInp.className   = 'layer-setting-range-input';
+        vmaxInp.placeholder = 'máx';
+        vmaxInp.step        = 'any';
+        vmaxInp.value       = layer.vmax != null ? String(layer.vmax) : '';
+        vmaxInp.addEventListener('mousedown', e => e.stopPropagation());
+        const rangeApplyBtn       = document.createElement('button');
+        rangeApplyBtn.className   = 'layer-setting-apply-btn';
+        rangeApplyBtn.textContent = 'Aplicar';
+        rangeApplyBtn.addEventListener('mousedown', e => e.stopPropagation());
+        rangeApplyBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            layer.vmin = vminInp.value !== '' ? parseFloat(vminInp.value) : null;
+            layer.vmax = vmaxInp.value !== '' ? parseFloat(vmaxInp.value) : null;
+            await reloadLayerWithNewParams(layer);
+        });
+        rangeSetRow.appendChild(rangeSetLabel);
+        rangeSetRow.appendChild(vminInp);
+        rangeSetRow.appendChild(vmaxInp);
+        rangeSetRow.appendChild(rangeApplyBtn);
+
+        // — Gaussian smoothing —
+        const smoothSetRow     = document.createElement('div');
+        smoothSetRow.className = 'layer-setting-row';
+        const smoothSetLabel       = document.createElement('span');
+        smoothSetLabel.className   = 'layer-setting-label';
+        smoothSetLabel.textContent = 'Suavizado';
+        const smoothChk     = document.createElement('input');
+        smoothChk.type      = 'checkbox';
+        smoothChk.className = 'layer-setting-smooth-toggle';
+        smoothChk.checked   = layer.smoothingEnabled;
+        const smoothSlider     = document.createElement('input');
+        smoothSlider.type      = 'range';
+        smoothSlider.className = 'layer-setting-sigma-slider';
+        smoothSlider.min       = '0.3';
+        smoothSlider.max       = '3.0';
+        smoothSlider.step      = '0.1';
+        smoothSlider.value     = String(layer.smoothingSigma);
+        smoothSlider.disabled  = !layer.smoothingEnabled;
+        const smoothSigmaLbl       = document.createElement('span');
+        smoothSigmaLbl.className   = 'layer-setting-sigma-val';
+        smoothSigmaLbl.textContent = layer.smoothingSigma.toFixed(1);
+        let _sigmaTimer = null;
+        smoothChk.addEventListener('mousedown', e => e.stopPropagation());
+        smoothChk.addEventListener('change', async (e) => {
+            e.stopPropagation();
+            layer.smoothingEnabled = e.target.checked;
+            smoothSlider.disabled  = !layer.smoothingEnabled;
+            await reloadLayerWithNewParams(layer);
+        });
+        smoothSlider.addEventListener('mousedown', e => e.stopPropagation());
+        smoothSlider.addEventListener('input', (e) => {
+            e.stopPropagation();
+            const val = parseFloat(e.target.value);
+            layer.smoothingSigma   = val;
+            smoothSigmaLbl.textContent = val.toFixed(1);
+            if (_sigmaTimer) clearTimeout(_sigmaTimer);
+            if (layer.smoothingEnabled) {
+                _sigmaTimer = setTimeout(async () => {
+                    await reloadLayerWithNewParams(layer);
+                }, 400);
+            }
+        });
+        smoothSetRow.appendChild(smoothSetLabel);
+        smoothSetRow.appendChild(smoothChk);
+        smoothSetRow.appendChild(smoothSlider);
+        smoothSetRow.appendChild(smoothSigmaLbl);
+
+        settingsBody.appendChild(cmapSetRow);
+        settingsBody.appendChild(rangeSetRow);
+        settingsBody.appendChild(smoothSetRow);
+
+        settingsToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            layer.settingsExpanded     = !layer.settingsExpanded;
+            settingsBody.style.display = layer.settingsExpanded ? 'flex' : 'none';
+            settingsToggle.textContent = (layer.settingsExpanded ? '▾' : '▸') + ' Ajustes';
+        });
+
+        body.appendChild(settingsToggle);
+        body.appendChild(settingsBody);
 
         row.appendChild(header);
         row.appendChild(body);
@@ -486,7 +629,7 @@ async function loadLayerFramesForRange(layer, startTime, endTime) {
             if (!cog) return;
 
             const key = `${state.radarCode}__${layer.productKey}`;
-            const url = state.mapManager._buildFrameUrl(cog.id, layer.productKey, {});
+            const url = state.mapManager._buildFrameUrl(cog.id, layer.productKey, getTileParamsForLayer(layer));
 
             try {
                 const { img, bbox, objectUrl } = await state.mapManager._loadImage(url);
@@ -580,6 +723,70 @@ function updateCoverageRadius() {
     );
 }
 
+// ─── Per-layer render params ──────────────────────────────────────────────────
+
+function getTileParamsForLayer(layer) {
+    return {
+        colormap:    layer.selectedColormap || null,
+        vmin:        layer.vmin,
+        vmax:        layer.vmax,
+        smooth:      layer.smoothingEnabled,
+        smoothSigma: layer.smoothingSigma,
+    };
+}
+
+/**
+ * Re-fetch frame images for one layer using its current render params,
+ * replacing cached entries in-place. Leaves all other layers untouched.
+ */
+async function reloadLayerWithNewParams(layer) {
+    if (!state.frames.length) return;
+    state.ui.setStatus(`Actualizando ${layer.productKey}…`, 'loading');
+    const key    = `${state.radarCode}__${layer.productKey}`;
+    const params = getTileParamsForLayer(layer);
+
+    const promises = state.frames.map(async (frame, frameIdx) => {
+        const cog = frame.cogsByRadar?.[state.radarCode];
+        if (!cog) return;
+        const url = state.mapManager._buildFrameUrl(cog.id, layer.productKey, params);
+        try {
+            const { img, objectUrl } = await state.mapManager._loadImage(url);
+            if (!state.mapManager._frameImages[frameIdx]) {
+                state.mapManager._frameImages[frameIdx] = new Map();
+            }
+            const old = state.mapManager._frameImages[frameIdx].get(key);
+            if (old?.objectUrl) URL.revokeObjectURL(old.objectUrl);
+            state.mapManager._frameImages[frameIdx].set(key, { img, loaded: true, url, objectUrl });
+        } catch (err) {
+            console.warn(`reloadLayerWithNewParams: failed ${key} frame ${frameIdx}:`, err);
+        }
+    });
+
+    await Promise.all(promises);
+
+    const ci = state.mapManager._currentFrameIndex;
+    if (ci >= 0) showAllLayersAtFrame(ci);
+    state.ui.setStatus(`✓ ${layer.productKey} actualizado`, 'success');
+}
+
+/**
+ * Change the colormap for a layer: fetch new colormap info, update the strip,
+ * re-render the layer list, then reload frame images.
+ */
+async function setLayerColormap(layerId, colormapName) {
+    const layer = state.layers.find(l => l.id === layerId);
+    if (!layer) return;
+    layer.selectedColormap = colormapName;
+    try {
+        const info = await api.getColormapInfo(layer.productKey, colormapName);
+        layer.colormap = info;
+    } catch (err) {
+        console.warn('setLayerColormap: could not fetch colormap info:', err);
+    }
+    renderLayerList();
+    await reloadLayerWithNewParams(layer);
+}
+
 async function addLayer(productKey) {
     const product = state.products.find(p => p.product_key === productKey);
     if (!product) return;
@@ -600,7 +807,13 @@ async function addLayer(productKey) {
         visible:        true,
         colormap,
         zIndex:         state.layers.length,
-        coverageRadius: null,
+        coverageRadius:   null,
+        selectedColormap: colormap?.colormap || null,
+        vmin:             null,
+        vmax:             null,
+        smoothingEnabled: false,
+        smoothingSigma:   0.8,
+        settingsExpanded: false,
     };
     state.layers.push(layer);
     updateCoverageRadius(); // immediate update: new layer contributes full-range until COGs load
@@ -644,10 +857,13 @@ async function swapLayerField(layerId, newProductKey) {
         try { colormap = await api.getColormap(newProductKey); } catch (_) {}
     }
 
-    layer.productKey    = newProductKey;
-    layer.productTitle  = product.product_title;
-    layer.colormap      = colormap;
-    layer.coverageRadius = null; // reset so updateCoverageRadius treats it as full-range until COGs load
+    layer.productKey       = newProductKey;
+    layer.productTitle     = product.product_title;
+    layer.colormap         = colormap;
+    layer.coverageRadius   = null;
+    layer.selectedColormap = colormap?.colormap || null;
+    layer.vmin             = null;
+    layer.vmax             = null;
     updateCoverageRadius();
 
     const storedHours = parseFloat(

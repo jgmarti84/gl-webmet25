@@ -2040,3 +2040,110 @@ code {
     min-width: 28px;
     text-align: right;
 }
+
+/* ─── Layer settings section ─────────────────────────────────────────────── */
+
+.layer-settings-toggle {
+    background: none;
+    border: none;
+    color: #555;
+    font-size: 10px;
+    cursor: pointer;
+    padding: 2px 0;
+    text-align: left;
+    width: 100%;
+    transition: color 0.15s;
+    user-select: none;
+    letter-spacing: 0.02em;
+}
+.layer-settings-toggle:hover { color: #999; }
+
+.layer-settings-body {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255,255,255,0.07);
+}
+
+.layer-setting-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+}
+
+.layer-setting-label {
+    font-size: 10px;
+    color: #777;
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 52px;
+}
+
+.layer-setting-select {
+    flex: 1;
+    font-size: 10px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 3px;
+    color: #ccc;
+    padding: 2px 4px;
+    min-width: 0;
+    cursor: pointer;
+}
+.layer-setting-select:focus { outline: none; border-color: #4fc3f7; }
+
+.layer-setting-range-input {
+    width: 46px;
+    font-size: 10px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 3px;
+    color: #ccc;
+    padding: 2px 4px;
+    text-align: center;
+    flex-shrink: 0;
+}
+.layer-setting-range-input:focus { outline: none; border-color: #4fc3f7; }
+.layer-setting-range-input::placeholder { color: #444; }
+
+.layer-setting-apply-btn {
+    background: rgba(79,195,247,0.12);
+    border: 1px solid rgba(79,195,247,0.25);
+    border-radius: 3px;
+    color: #4fc3f7;
+    font-size: 10px;
+    cursor: pointer;
+    padding: 2px 7px;
+    flex-shrink: 0;
+    transition: background 0.15s;
+}
+.layer-setting-apply-btn:hover { background: rgba(79,195,247,0.22); }
+
+.layer-setting-smooth-toggle {
+    flex-shrink: 0;
+    cursor: pointer;
+    accent-color: #4fc3f7;
+    width: 13px;
+    height: 13px;
+}
+
+.layer-setting-sigma-slider {
+    flex: 1;
+    height: 2px;
+    cursor: pointer;
+    accent-color: #4fc3f7;
+    min-width: 0;
+}
+.layer-setting-sigma-slider:disabled { opacity: 0.3; cursor: default; }
+
+.layer-setting-sigma-val {
+    font-size: 10px;
+    color: #777;
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 24px;
+    text-align: right;
+    font-family: 'Courier New', monospace;
+}
