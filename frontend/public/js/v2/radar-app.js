@@ -48,7 +48,8 @@ const state = {
     animationMode:    null,
     layers:           [],
     nextLayerId:      1,
-    pickerContext:    null,
+    pickerContext:        null,
+    pickerShowFiltered:   false,
 };
 
 function updateTimeBadge(hours) {
@@ -242,6 +243,50 @@ function renderLayerList() {
         row.appendChild(pctLabel);
         row.appendChild(removeBtn);
         container.appendChild(row);
+    });
+
+    renderFieldPickerDropdown();
+}
+
+function renderFieldPickerDropdown() {
+    const list = document.getElementById('field-picker-list');
+    if (!list) return;
+
+    const activeKeys = new Set(state.layers.map(l => l.productKey));
+    const visible    = state.products.filter(p =>
+        state.pickerShowFiltered
+            ? !p.product_key.endsWith('o')
+            :  p.product_key.endsWith('o')
+    );
+
+    list.innerHTML = '';
+    visible.forEach(product => {
+        const item = document.createElement('div');
+        item.className = 'radar-checkbox-item';
+
+        const cbId = `field-picker-cb-${product.product_key}`;
+        const cb   = document.createElement('input');
+        cb.type    = 'checkbox';
+        cb.id      = cbId;
+        cb.checked = activeKeys.has(product.product_key);
+
+        cb.addEventListener('change', async () => {
+            if (cb.checked) {
+                await addLayer(product.product_key);
+            } else {
+                const layer = state.layers.find(l => l.productKey === product.product_key);
+                if (layer) await removeLayer(layer.id);
+            }
+        });
+
+        const label      = document.createElement('label');
+        label.htmlFor    = cbId;
+        label.textContent = product.product_key;
+        label.title       = product.product_title;
+
+        item.appendChild(cb);
+        item.appendChild(label);
+        list.appendChild(item);
     });
 }
 
@@ -806,10 +851,25 @@ function initPanelControls() {
         btnSnapshot.addEventListener('click', () => captureMapSnapshot());
     }
 
-    const btnAddField = document.getElementById('btn-add-field');
-    if (btnAddField) {
-        console.log('btnAddField:', btnAddField);
-        btnAddField.addEventListener('click', () => openFieldPicker('add'));
+    // ── Section-add-field: collapsible dropdown with checkbox list ──
+    const sectionAddField = document.getElementById('section-add-field');
+    if (sectionAddField) {
+        const sectionHeader = sectionAddField.querySelector('.field-section-header');
+        if (sectionHeader) {
+            sectionHeader.addEventListener('click', () => {
+                const isOpen = sectionAddField.classList.toggle('open');
+                sectionHeader.setAttribute('aria-expanded', String(isOpen));
+                if (isOpen) renderFieldPickerDropdown();
+            });
+        }
+    }
+
+    const togglePickerFiltered = document.getElementById('toggle-field-picker-filtered');
+    if (togglePickerFiltered) {
+        togglePickerFiltered.addEventListener('change', () => {
+            state.pickerShowFiltered = togglePickerFiltered.checked;
+            renderFieldPickerDropdown();
+        });
     }
 
     const btnCloseFieldPicker = document.getElementById('btn-close-field-picker');

@@ -63,16 +63,38 @@
             <div id="layer-list">
                 <!-- Populated dynamically -->
             </div>
-            <button id="btn-add-field" class="add-field-btn">+ Añadir campo</button>
+            <!-- Collapsible field picker (replaces modal add button) -->
+            <div class="field-section" id="section-add-field">
+                <button type="button" class="field-section-header" aria-expanded="false" aria-controls="section-add-field-body">
+                    <span class="field-section-title">Añadir campo</span>
+                    <span class="field-section-chevron" aria-hidden="true"></span>
+                </button>
+                <div class="field-section-body" id="section-add-field-body">
+                    <div class="control-group toggle-row">
+                        <label class="toggle-switch-wrapper" for="toggle-field-picker-filtered">
+                            <span class="toggle-switch">
+                                <input type="checkbox" id="toggle-field-picker-filtered">
+                                <span class="toggle-slider"></span>
+                            </span>
+                            <span class="toggle-label">Filtrado</span>
+                        </label>
+                    </div>
+                    <div class="checkbox-container">
+                        <div id="field-picker-list">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- ===== FIELD PICKER MODAL ===== -->
+    <!-- ===== FIELD PICKER MODAL (used for swap only) ===== -->
     <div id="field-picker-modal" class="modal-backdrop" style="display:none;">
         <div class="modal-box">
             <div class="modal-header">
-                <span>Seleccionar Campo</span>
-                <button id="btn-close-field-picker" class="panel-close" aria-label="Close">✕</button>
+                <span>Cambiar Campo</span>
+                <button id="btn-close-field-picker" class="panel-close" aria-label="Cerrar">✕</button>
             </div>
             <div id="field-picker-grid" class="field-picker-grid">
                 <!-- Populated dynamically -->
