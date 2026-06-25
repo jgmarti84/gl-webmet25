@@ -371,14 +371,16 @@ function renderLayerList() {
         vminInp.className   = 'layer-setting-range-input';
         vminInp.placeholder = 'mín';
         vminInp.step        = 'any';
-        vminInp.value       = layer.vmin != null ? String(layer.vmin) : '';
+        vminInp.value       = layer.vmin != null ? String(layer.vmin)
+            : (layer.colormap?.vmin != null ? String(layer.colormap.vmin) : '');
         vminInp.addEventListener('mousedown', e => e.stopPropagation());
         const vmaxInp       = document.createElement('input');
         vmaxInp.type        = 'number';
         vmaxInp.className   = 'layer-setting-range-input';
         vmaxInp.placeholder = 'máx';
         vmaxInp.step        = 'any';
-        vmaxInp.value       = layer.vmax != null ? String(layer.vmax) : '';
+        vmaxInp.value       = layer.vmax != null ? String(layer.vmax)
+            : (layer.colormap?.vmax != null ? String(layer.colormap.vmax) : '');
         vmaxInp.addEventListener('mousedown', e => e.stopPropagation());
         const rangeApplyBtn       = document.createElement('button');
         rangeApplyBtn.className   = 'layer-setting-apply-btn';
