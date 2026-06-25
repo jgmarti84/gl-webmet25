@@ -549,15 +549,23 @@ function updateCoverageRadius() {
     if (!state.radar || !state.mapManager) return;
     const fullRange = state.radar.img_radio * 1000;
 
-    // Collect unique radii from active layers (null → fullRange).
+    // Collect unique {radius_m, productKey} pairs from active layers.
     // When no layers are active, show no rings but keep the mask at full range.
-    let uniqueRadii = [];
+    let uniqueRings = [];
     if (state.layers.length > 0) {
-        const allRadii = state.layers.map(l => l.coverageRadius ?? fullRange);
-        uniqueRadii = [...new Set(allRadii)];
+        const seen = new Set();
+        for (const l of state.layers) {
+            const r = l.coverageRadius ?? fullRange;
+            if (!seen.has(r)) {
+                seen.add(r);
+                uniqueRings.push({ radius_m: r, productKey: l.productKey });
+            }
+        }
     }
 
-    const maxRadius = uniqueRadii.length > 0 ? Math.max(...uniqueRadii) : fullRange;
+    const maxRadius = uniqueRings.length > 0
+        ? Math.max(...uniqueRings.map(r => r.radius_m))
+        : fullRange;
     state.mapManager.addRadarCoverage(
         state.radar.code,
         state.radar.center_lat,
@@ -568,7 +576,7 @@ function updateCoverageRadius() {
         state.radar.code,
         state.radar.center_lat,
         state.radar.center_long,
-        uniqueRadii,
+        uniqueRings,
     );
 }
 
@@ -1222,6 +1230,7 @@ const app = {
             state.mapManager = new MapManager('map');
             state.mapManager.init();
             state.animator   = new AnimationController(state.mapManager);
+            window.__radarMapManager = state.mapManager; // exposed for e2e/debug
 
             // Override the animator's _showCurrentFrame to call our multi-layer renderer
             state.animator._showCurrentFrame = function () {

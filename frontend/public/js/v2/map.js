@@ -905,34 +905,68 @@ export class MapManager {
         }
 
         // ── Coverage ring lines ───────────────────────────────────────────────
-        // One stroke-only circle per unique coverage radius. The smallest ring
-        // (inside the bright coverage area) gets a heavier stroke; larger rings
-        // get a lighter dashed stroke since they sit at/near the dark edge.
+        // One stroke-only ellipse per unique coverage radius.
+        // Uses the same bbox-derived geometry as the mask cutout so the ring
+        // sits exactly on the data edge.  Falls back to _metersToPixels only
+        // before frames are loaded (no bbox yet).
+        // The smallest ring (inside the bright area) gets a heavier stroke;
+        // larger rings get a lighter dashed stroke since they sit at/near the
+        // dark coverage edge.
         const ringsGroup = this._coverageSvgEl.querySelector('#radar-coverage-rings');
         if (ringsGroup) {
             while (ringsGroup.firstChild) ringsGroup.removeChild(ringsGroup.firstChild);
-            for (const [, ringsData] of this._activeRadarCoverageRings) {
-                const { lat, lng, radii_m } = ringsData;
-                const pt = this._map.latLngToContainerPoint(L.latLng(lat, lng));
-                const sortedRadii = [...radii_m].sort((a, b) => a - b);
-                const hasMultiple = sortedRadii.length > 1;
-                sortedRadii.forEach((radius_m, i) => {
-                    const radiusPx  = this._metersToPixels(lat, radius_m);
+            for (const [radarCode, ringsData] of this._activeRadarCoverageRings) {
+                const { lat, lng, rings } = ringsData;
+                const sortedRings = [...rings].sort((a, b) => a.radius_m - b.radius_m);
+                const hasMultiple = sortedRings.length > 1;
+
+                sortedRings.forEach(({ radius_m, productKey }, i) => {
                     const isSmallest = i === 0;
-                    const ring = document.createElementNS(svgNS, 'circle');
-                    ring.setAttribute('cx', pt.x.toFixed(1));
-                    ring.setAttribute('cy', pt.y.toFixed(1));
-                    ring.setAttribute('r',  radiusPx.toFixed(1));
-                    ring.setAttribute('fill', 'none');
-                    ring.setAttribute('stroke', 'white');
-                    // Smallest ring is more prominent (inside the bright area);
-                    // larger rings are lighter and dashed (at the coverage edge).
-                    ring.setAttribute('stroke-opacity', hasMultiple && !isSmallest ? '0.45' : '0.80');
-                    ring.setAttribute('stroke-width',   hasMultiple &&  isSmallest ? '2'    : '1.5');
-                    if (hasMultiple && !isSmallest) {
-                        ring.setAttribute('stroke-dasharray', '5 4');
+                    const strokeOpacity = hasMultiple && !isSmallest ? '0.45' : '0.80';
+                    const strokeWidth   = hasMultiple &&  isSmallest ? '2'    : '1.5';
+                    const dasharray     = hasMultiple && !isSmallest ? '5 4'  : null;
+
+                    // Prefer the bbox-derived ellipse (exact match with mask cutout).
+                    const bboxKey = `${radarCode}__${productKey}`;
+                    const bbox = this._bboxes.get(bboxKey);
+
+                    if (bbox) {
+                        const swPx = this._map.latLngToContainerPoint(
+                            L.latLng(bbox.south, bbox.west)
+                        );
+                        const nePx = this._map.latLngToContainerPoint(
+                            L.latLng(bbox.north, bbox.east)
+                        );
+                        const cx = ((swPx.x + nePx.x) / 2).toFixed(1);
+                        const cy = ((swPx.y + nePx.y) / 2).toFixed(1);
+                        const rx = ((nePx.x - swPx.x) / 2).toFixed(1);
+                        const ry = ((swPx.y - nePx.y) / 2).toFixed(1);
+                        const el = document.createElementNS(svgNS, 'ellipse');
+                        el.setAttribute('cx', cx);
+                        el.setAttribute('cy', cy);
+                        el.setAttribute('rx', rx);
+                        el.setAttribute('ry', ry);
+                        el.setAttribute('fill', 'none');
+                        el.setAttribute('stroke', 'white');
+                        el.setAttribute('stroke-opacity', strokeOpacity);
+                        el.setAttribute('stroke-width',   strokeWidth);
+                        if (dasharray) el.setAttribute('stroke-dasharray', dasharray);
+                        ringsGroup.appendChild(el);
+                    } else {
+                        // Fallback before frames load: symmetric circle from meters.
+                        const pt = this._map.latLngToContainerPoint(L.latLng(lat, lng));
+                        const radiusPx = this._metersToPixels(lat, radius_m);
+                        const el = document.createElementNS(svgNS, 'circle');
+                        el.setAttribute('cx', pt.x.toFixed(1));
+                        el.setAttribute('cy', pt.y.toFixed(1));
+                        el.setAttribute('r',  radiusPx.toFixed(1));
+                        el.setAttribute('fill', 'none');
+                        el.setAttribute('stroke', 'white');
+                        el.setAttribute('stroke-opacity', strokeOpacity);
+                        el.setAttribute('stroke-width',   strokeWidth);
+                        if (dasharray) el.setAttribute('stroke-dasharray', dasharray);
+                        ringsGroup.appendChild(el);
                     }
-                    ringsGroup.appendChild(ring);
                 });
             }
         }
@@ -979,17 +1013,18 @@ export class MapManager {
 
     /**
      * Set the visible ring lines for a radar — one ring per unique coverage radius.
+     * Each entry pairs a radius with the productKey whose bbox defines the exact edge.
      * Pass an empty array to remove all rings for this radar.
-     * @param {string}   radarCode
-     * @param {number}   lat       Radar center latitude (WGS84)
-     * @param {number}   lng       Radar center longitude (WGS84)
-     * @param {number[]} radii_m   Unique coverage radii in meters
+     * @param {string} radarCode
+     * @param {number} lat   Radar center latitude (WGS84)
+     * @param {number} lng   Radar center longitude (WGS84)
+     * @param {Array<{radius_m: number, productKey: string}>} rings
      */
-    setRadarCoverageRings(radarCode, lat, lng, radii_m) {
-        if (!radii_m || radii_m.length === 0) {
+    setRadarCoverageRings(radarCode, lat, lng, rings) {
+        if (!rings || rings.length === 0) {
             this._activeRadarCoverageRings.delete(radarCode);
         } else {
-            this._activeRadarCoverageRings.set(radarCode, { lat, lng, radii_m: [...radii_m] });
+            this._activeRadarCoverageRings.set(radarCode, { lat, lng, rings: [...rings] });
         }
         this._updateCoverageMask();
     }
