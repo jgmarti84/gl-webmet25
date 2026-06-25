@@ -817,13 +817,20 @@ export class MapManager {
         for (const [radarCode, coverage] of this._activeRadarCoverages) {
             let cx, cy, radiusPx;
 
-            // Search case-insensitively so 'RMA9__DBZH' matches radarCode 'RMA9'
+            // Compute the union of all bboxes for this radar so the mask covers
+            // the outermost extent across all active layers (not just the first one).
             let bbox = null;
             const prefix = radarCode.toUpperCase() + '__';
             for (const [key, b] of this._bboxes) {
                 if (key.toUpperCase().startsWith(prefix)) {
-                    bbox = b;
-                    break;
+                    if (!bbox) {
+                        bbox = { north: b.north, south: b.south, east: b.east, west: b.west };
+                    } else {
+                        bbox.north = Math.max(bbox.north, b.north);
+                        bbox.south = Math.min(bbox.south, b.south);
+                        bbox.east  = Math.max(bbox.east,  b.east);
+                        bbox.west  = Math.min(bbox.west,  b.west);
+                    }
                 }
             }
 
