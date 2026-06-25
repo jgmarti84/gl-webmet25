@@ -123,6 +123,63 @@ function buildHorizontalGradient(colors) {
     return `linear-gradient(to right, ${stops.join(', ')})`;
 }
 
+function buildColormapHticks(colormap) {
+    if (!colormap?.colors?.length) return null;
+
+    const vmin  = colormap.vmin ?? 0;
+    const vmax  = colormap.vmax ?? 100;
+    const range = vmax - vmin;
+    const MAX_TICKS = 5;
+
+    let tickValues = [];
+
+    if (colormap.ticks?.length > 0) {
+        const raw = colormap.ticks
+            .map(t => t.value)
+            .filter(v => v >= vmin && v <= vmax)
+            .sort((a, b) => a - b);
+        if (raw.length === 0 || raw[0] > vmin)               raw.unshift(vmin);
+        if (raw[raw.length - 1] < vmax)                       raw.push(vmax);
+        if (raw.length <= MAX_TICKS) {
+            tickValues = raw;
+        } else {
+            tickValues = Array.from({ length: MAX_TICKS },
+                (_, i) => raw[Math.round(i * (raw.length - 1) / (MAX_TICKS - 1))]);
+        }
+    } else {
+        for (let i = 0; i < MAX_TICKS; i++) {
+            tickValues.push(vmin + (i / (MAX_TICKS - 1)) * range);
+        }
+    }
+
+    const absRange = Math.abs(range);
+    const decimals = absRange >= 10 ? 0 : absRange >= 1 ? 1 : 2;
+
+    const container = document.createElement('div');
+    container.className = 'layer-colormap-hticks';
+
+    tickValues.forEach(value => {
+        const leftPct = range > 0 ? ((value - vmin) / range) * 100 : 0;
+
+        const tick = document.createElement('div');
+        tick.className = 'layer-htick';
+        tick.style.left = `${leftPct.toFixed(2)}%`;
+
+        const line = document.createElement('div');
+        line.className = 'layer-htick-line';
+
+        const label = document.createElement('span');
+        label.className = 'layer-htick-label';
+        label.textContent = value.toFixed(decimals);
+
+        tick.appendChild(line);
+        tick.appendChild(label);
+        container.appendChild(tick);
+    });
+
+    return container;
+}
+
 function renderLayerList() {
     const container = document.getElementById('layer-list');
     if (!container) return;
@@ -171,19 +228,18 @@ function renderLayerList() {
             reorderLayers(fromIdx, idx);
         });
 
-        // ── Eye toggle ──
+        // ── Header row: drag | eye | name | remove ──
+        const header     = document.createElement('div');
+        header.className = 'layer-row-header';
+
         const eyeBtn       = document.createElement('button');
         eyeBtn.className   = `layer-eye-btn${layer.visible ? '' : ' hidden-layer'}`;
         eyeBtn.textContent = layer.visible ? '👁' : '🚫';
-        eyeBtn.title       = layer.visible ? 'Hide layer' : 'Show layer';
+        eyeBtn.title       = layer.visible ? 'Ocultar capa' : 'Mostrar capa';
         eyeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             setLayerVisible(layer.id, !layer.visible);
         });
-
-        // ── Center column ──
-        const center     = document.createElement('div');
-        center.className = 'layer-center';
 
         const nameEl       = document.createElement('div');
         nameEl.className   = 'layer-field-name';
@@ -194,6 +250,27 @@ function renderLayerList() {
             openFieldPicker(layer.id);
         });
 
+        const removeBtn       = document.createElement('button');
+        removeBtn.className   = 'layer-remove-btn';
+        removeBtn.textContent = '✕';
+        removeBtn.title       = 'Quitar capa';
+        removeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            removeLayer(layer.id);
+        });
+
+        header.appendChild(handle);
+        header.appendChild(eyeBtn);
+        header.appendChild(nameEl);
+        header.appendChild(removeBtn);
+
+        // ── Body: colormap strip + ticks + slider ──
+        const body     = document.createElement('div');
+        body.className = 'layer-row-body';
+
+        const cmapWrapper     = document.createElement('div');
+        cmapWrapper.className = 'layer-cmap-wrapper';
+
         const strip     = document.createElement('div');
         strip.className = 'layer-colormap-strip';
         strip.title     = 'Colormap editor — coming soon';
@@ -202,6 +279,18 @@ function renderLayerList() {
         } else {
             strip.style.background = 'rgba(255,255,255,0.15)';
         }
+
+        cmapWrapper.appendChild(strip);
+        const hticks = buildColormapHticks(layer.colormap);
+        if (hticks) cmapWrapper.appendChild(hticks);
+
+        // ── Opacity % label (declared before slider so slider's input handler can reference it) ──
+        const pctLabel       = document.createElement('span');
+        pctLabel.className   = 'layer-opacity-pct';
+        pctLabel.textContent = `${Math.round(layer.opacity * 100)}%`;
+
+        const sliderRow     = document.createElement('div');
+        sliderRow.className = 'layer-slider-row';
 
         const slider     = document.createElement('input');
         slider.type      = 'range';
@@ -213,35 +302,19 @@ function renderLayerList() {
         slider.addEventListener('mousedown', e => e.stopPropagation());
         slider.addEventListener('input', (e) => {
             e.stopPropagation();
-            const val        = parseFloat(e.target.value);
+            const val = parseFloat(e.target.value);
             pctLabel.textContent = `${Math.round(val * 100)}%`;
             setLayerOpacity(layer.id, val);
         });
 
-        center.appendChild(nameEl);
-        center.appendChild(strip);
-        center.appendChild(slider);
+        sliderRow.appendChild(slider);
+        sliderRow.appendChild(pctLabel);
 
-        // ── Opacity % label ──
-        const pctLabel       = document.createElement('span');
-        pctLabel.className   = 'layer-opacity-pct';
-        pctLabel.textContent = `${Math.round(layer.opacity * 100)}%`;
+        body.appendChild(cmapWrapper);
+        body.appendChild(sliderRow);
 
-        // ── Remove ──
-        const removeBtn       = document.createElement('button');
-        removeBtn.className   = 'layer-remove-btn';
-        removeBtn.textContent = '✕';
-        removeBtn.title       = 'Remove layer';
-        removeBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            removeLayer(layer.id);
-        });
-
-        row.appendChild(handle);
-        row.appendChild(eyeBtn);
-        row.appendChild(center);
-        row.appendChild(pctLabel);
-        row.appendChild(removeBtn);
+        row.appendChild(header);
+        row.appendChild(body);
         container.appendChild(row);
     });
 
