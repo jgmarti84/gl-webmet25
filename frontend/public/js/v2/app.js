@@ -172,8 +172,8 @@ function setLiveRefreshIntervalMs(ms) {
 async function snapshotOverlayLogo(ctx) {
     const img = document.querySelector('#logo-container img');
     if (!img || !img.complete || img.naturalWidth === 0) return;
-    // Respect the 50 px CSS height; derive width proportionally.
-    const displayH = 50;
+    // Respect the 65 px CSS height; derive width proportionally.
+    const displayH = 75;
     const displayW = Math.round(img.naturalWidth * (displayH / img.naturalHeight));
     ctx.save();
     ctx.globalAlpha = 1;
@@ -193,12 +193,12 @@ function snapshotOverlayVerticalLegend(ctx, canvas, colormapData) {
     if (!colormapData?.colors?.length) return;
 
     const cm        = colormapData;
-    const BAR_W     = 18;
-    const BAR_H     = 180;
-    const TICK_LEN  = 6;
-    const LABEL_SZ  = 11;
-    const TITLE_SZ  = 12;
-    const PAD       = 12;
+    const BAR_W     = 18; // gradient bar width
+    const BAR_H     = 180; // gradient bar height
+    const TICK_LEN  = 6; // tick mark length
+    const LABEL_SZ  = 11; // tick value font size
+    const TITLE_SZ  = 14; // product title font size
+    const PAD       = 12; // inner padding of the background box
     const marginL   = 16;
     // Reserve space for title above and unit below the bar
     const totalH    = TITLE_SZ + 6 + BAR_H + 18;
@@ -281,8 +281,8 @@ function snapshotOverlayInfoPanel(ctx, canvas, fieldLabel, timeText) {
     const lines = [fieldLabel, timeText].filter(s => s && s !== '—');
     if (!lines.length) return;
 
-    const FONT_SZ  = 13;
-    const LINE_H   = FONT_SZ + 5;
+    const FONT_SZ  = 15; // font size for info panel
+    const LINE_H   = FONT_SZ + 6;
     const PAD      = 10;
     const boxW     = 260;
     const boxH     = lines.length * LINE_H + PAD * 2;

@@ -1288,7 +1288,7 @@ async function captureMapSnapshot() {
 async function radarSnapshotOverlayLogo(ctx) {
     const img = document.querySelector('#logo-container img');
     if (!img || !img.complete || img.naturalWidth === 0) return;
-    const displayH = 50;
+    const displayH =75;
     const displayW = Math.round(img.naturalWidth * (displayH / img.naturalHeight));
     ctx.save();
     ctx.globalAlpha = 1;
@@ -1303,7 +1303,7 @@ async function radarSnapshotOverlayLogo(ctx) {
 function radarSnapshotOverlayHeader(ctx, canvas) {
     if (!state.radar) return;
     const text = `${state.radar.code}  —  ${state.radar.title}`;
-    const FONT_SZ = 14;
+    const FONT_SZ = 16;
     const PAD     = 10;
     ctx.save();
     ctx.font        = `bold ${FONT_SZ}px "Inter", sans-serif`;
@@ -1331,17 +1331,17 @@ function radarSnapshotOverlayLayerLegends(ctx, canvas, timeText) {
     const visibleLayers = state.layers.filter(l => l.visible && l.colormap?.colors?.length);
     if (!visibleLayers.length) return;
 
-    const LABEL_W      = 70;
-    const STRIP_W      = 160;
+    const LABEL_W      = 90;
+    const STRIP_W      = 170;
     const STRIP_H      = 14;
     const TICK_LINE_H  = 4;
     const TICK_LABEL_H = 9;
     const TICK_FONT_SZ = 8;
     const MAX_TICKS    = 5;
     const ROW_GAP      = 8;
-    const FONT_SZ      = 11;
-    const TIME_SZ      = 11;
-    const PAD          = 10;
+    const FONT_SZ      = 16;
+    const TIME_SZ      = 16;
+    const PAD          = 12;
     const SAMPLES      = 64;
 
     const rowH  = STRIP_H + TICK_LINE_H + TICK_LABEL_H + ROW_GAP;
@@ -1454,8 +1454,8 @@ function radarSnapshotOverlayInfoPanel(ctx, canvas, timeText) {
     if (hasLegends) return;
     if (!timeText || timeText === '—') return;
 
-    const FONT_SZ = 13;
-    const PAD     = 10;
+    const FONT_SZ = 16;
+    const PAD     = 12;
     ctx.save();
     ctx.font        = `${FONT_SZ}px "Inter", monospace`;
     ctx.textBaseline = 'top';
@@ -1499,7 +1499,7 @@ const app = {
             await waitForLeaflet();
             
             state.ui = new UIControls();
-            state.mapManager = new MapManager('map', {minZoom: 7.8});
+            state.mapManager = new MapManager('map', {minZoom: 7.2});
             state.mapManager.init();
             state.animator   = new AnimationController(state.mapManager);
             window.__radarMapManager = state.mapManager; // exposed for e2e/debug
