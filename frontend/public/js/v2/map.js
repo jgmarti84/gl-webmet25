@@ -74,13 +74,20 @@ export class MapManager {
     /**
      * @param {string} mapElementId - ID of the DOM element to render the map into.
      */
-    constructor(mapElementId = 'map') {
+    constructor(
+        mapElementId = 'map',
+        options = {}
+    ) {
         this._mapElementId  = mapElementId;
         this._map           = null;
         this._baseLayer     = null;
         this._currentBasemap = 'argenmap';
         this._currentOpacity = DEFAULT_OPACITY;
 
+        // Store zoom limits from options
+        this._minZoom = options.minZoom || null;
+        this._maxZoom = options.maxZoom || null;
+        
         // -----------------------------------------------------------------------
         // Frame image storage.
         //
@@ -130,7 +137,21 @@ export class MapManager {
      * @returns {L.Map}
      */
     init() {
-        this._map = L.map(this._mapElementId, { zoomControl: false }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+
+        // Build map options
+        const mapOptions = {
+            zoomControl: false,
+            wheelPxPerZoomLevel: 60  
+        };
+
+        // Add zoom limits if provided
+        if (this._minZoom !== null) {
+            mapOptions.minZoom = this._minZoom;
+        }
+        if (this._maxZoom !== null) {
+            mapOptions.maxZoom = this._maxZoom;
+        }
+        this._map = L.map(this._mapElementId, mapOptions).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
 
         // Radar coverage mask pane — kept for z-index ordering, the SVG
         // is NOT placed inside this pane (panes are transformed by Leaflet

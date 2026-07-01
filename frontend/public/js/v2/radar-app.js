@@ -1445,7 +1445,7 @@ const app = {
             await waitForLeaflet();
             
             state.ui = new UIControls();
-            state.mapManager = new MapManager('map');
+            state.mapManager = new MapManager('map', {minZoom: 8.1});
             state.mapManager.init();
             state.animator   = new AnimationController(state.mapManager);
             window.__radarMapManager = state.mapManager; // exposed for e2e/debug
