@@ -1170,8 +1170,9 @@ function initPanelControls() {
     const btnCollapse = document.getElementById('btn-collapse-controls');
     const animPanel   = document.getElementById('animation-controls');
     if (btnCollapse && animPanel) {
-        btnCollapse.addEventListener('click', (e) => {
+        btnCollapse.addEventListener('mousedown', (e) => {
             e.stopPropagation();
+            e.preventDefault();
             animPanel.classList.toggle('collapsed');
         });
     }

@@ -1486,6 +1486,8 @@ code {
     cursor: pointer;
     transition: color 0.2s, transform 0.2s;
     flex-shrink: 0;
+    user-select: auto;
+    pointer-events: all;
 }
 .collapse-controls-btn:hover { color: #fff; }
 
