@@ -1166,6 +1166,54 @@ function initPanelControls() {
         btnSnapshot.addEventListener('click', () => captureMapSnapshot());
     }
 
+    // ── Animation controls: collapse toggle ──
+    const btnCollapse = document.getElementById('btn-collapse-controls');
+    const animPanel   = document.getElementById('animation-controls');
+    if (btnCollapse && animPanel) {
+        btnCollapse.addEventListener('click', (e) => {
+            e.stopPropagation();
+            animPanel.classList.toggle('collapsed');
+        });
+    }
+
+    // ── Animation controls: draggable ──
+    const animHandle = animPanel?.querySelector('.animation-info-row');
+    if (animPanel && animHandle) {
+        let dragging = false;
+        let offsetX  = 0;
+        let offsetY  = 0;
+
+        animHandle.addEventListener('mousedown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+            const rect = animPanel.getBoundingClientRect();
+            animPanel.style.right  = 'auto';
+            animPanel.style.bottom = 'auto';
+            animPanel.style.left   = `${rect.left}px`;
+            animPanel.style.top    = `${rect.top}px`;
+            dragging = true;
+            offsetX  = e.clientX - rect.left;
+            offsetY  = e.clientY - rect.top;
+            animHandle.classList.add('dragging');
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!dragging) return;
+            const maxX = window.innerWidth  - animPanel.offsetWidth;
+            const maxY = window.innerHeight - animPanel.offsetHeight;
+            animPanel.style.left = `${Math.max(0, Math.min(e.clientX - offsetX, maxX))}px`;
+            animPanel.style.top  = `${Math.max(0, Math.min(e.clientY - offsetY, maxY))}px`;
+        });
+
+        const endDrag = () => {
+            if (!dragging) return;
+            dragging = false;
+            animHandle.classList.remove('dragging');
+        };
+        document.addEventListener('mouseup',    endDrag);
+        document.addEventListener('mouseleave', endDrag);
+    }
+
     // ── Section-add-field: collapsible dropdown with checkbox list ──
     const sectionAddField = document.getElementById('section-add-field');
     if (sectionAddField) {

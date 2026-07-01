@@ -1475,6 +1475,37 @@ code {
     text-align: center;
 }
 
+/* Animation controls: collapse toggle button */
+.collapse-controls-btn {
+    background: transparent;
+    border: none;
+    color: #aaa;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 0 0 6px;
+    cursor: pointer;
+    transition: color 0.2s, transform 0.2s;
+    flex-shrink: 0;
+}
+.collapse-controls-btn:hover { color: #fff; }
+
+/* Chevron flips when collapsed */
+#animation-controls.collapsed .collapse-controls-btn {
+    transform: rotate(180deg);
+}
+
+/* Hide slider + buttons + message when collapsed; keep info row */
+#animation-controls.collapsed .animation-slider-container,
+#animation-controls.collapsed .animation-buttons,
+#animation-controls.collapsed .message-area {
+    display: none;
+}
+
+/* Tighten padding when collapsed so the pill is compact */
+#animation-controls.collapsed {
+    padding-bottom: 10px;
+}
+
 /* Field loading indicator — appears in bottom-left during
    field switch preload so it does not hide behind open panels. */
 #field-loading-badge {
