@@ -1252,15 +1252,18 @@ async function captureMapSnapshot() {
             } catch (_) { /* best-effort */ }
         }
 
-        // Step 2: crop to centered square (trims empty horizontal margins on widescreen)
-        const side   = Math.min(full.width, full.height);
-        const cropX  = Math.round((full.width  - side) / 2);
-        const cropY  = Math.round((full.height - side) / 2);
+        // Step 2: crop to centered rect. SNAPSHOT_ASPECT = cropW / cropH.
+        // 1.0 = square, 1.2 = a bit wider, 1.5 = 3:2, etc.
+        const SNAPSHOT_ASPECT = 1.3;
+        const cropH  = Math.min(full.width, full.height);
+        const cropW  = Math.min(Math.round(cropH * SNAPSHOT_ASPECT), full.width);
+        const cropX  = Math.round((full.width  - cropW) / 2);
+        const cropY  = Math.round((full.height - cropH) / 2);
         const canvas = document.createElement('canvas');
-        canvas.width  = side;
-        canvas.height = side;
+        canvas.width  = cropW;
+        canvas.height = cropH;
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(full, cropX, cropY, side, side, 0, 0, side, side);
+        ctx.drawImage(full, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
 
         // Step 3: draw annotation overlays on the cropped canvas
         // Comment out any line to disable that overlay element.
