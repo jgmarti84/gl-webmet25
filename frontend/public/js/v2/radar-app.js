@@ -1210,11 +1210,13 @@ function initPanelControls() {
 
 async function captureMapSnapshot() {
     try {
-        const canvas  = document.createElement('canvas');
-        const mapEl   = document.getElementById('map');
-        canvas.width  = mapEl.offsetWidth;
-        canvas.height = mapEl.offsetHeight;
-        const ctx = canvas.getContext('2d');
+        const mapEl = document.getElementById('map');
+
+        // Step 1: draw geo content (basemap + radar overlays + SVG mask) on full canvas
+        const full    = document.createElement('canvas');
+        full.width    = mapEl.offsetWidth;
+        full.height   = mapEl.offsetHeight;
+        const fullCtx = full.getContext('2d');
 
         // Basemap tiles + radar overlay images
         const imgs = Array.from(
@@ -1224,11 +1226,11 @@ async function captureMapSnapshot() {
             if (!img.complete || img.naturalWidth === 0) continue;
             const rect    = img.getBoundingClientRect();
             const mapRect = mapEl.getBoundingClientRect();
-            ctx.globalAlpha = parseFloat(img.style.opacity || '1');
-            ctx.drawImage(img, rect.left - mapRect.left, rect.top - mapRect.top,
+            fullCtx.globalAlpha = parseFloat(img.style.opacity || '1');
+            fullCtx.drawImage(img, rect.left - mapRect.left, rect.top - mapRect.top,
                 rect.width, rect.height);
         }
-        ctx.globalAlpha = 1;
+        fullCtx.globalAlpha = 1;
 
         // Coverage SVG mask
         const coverageSvg = state.mapManager?._coverageSvgEl;
@@ -1240,7 +1242,7 @@ async function captureMapSnapshot() {
                 await new Promise((resolve) => {
                     const svgImg = new Image();
                     svgImg.onload = () => {
-                        ctx.drawImage(svgImg, 0, 0, canvas.width, canvas.height);
+                        fullCtx.drawImage(svgImg, 0, 0, full.width, full.height);
                         URL.revokeObjectURL(svgUrl);
                         resolve();
                     };
@@ -1250,14 +1252,23 @@ async function captureMapSnapshot() {
             } catch (_) { /* best-effort */ }
         }
 
-        // ── Modular overlays ─────────────────────────────────────────────────
+        // Step 2: crop to centered square (trims empty horizontal margins on widescreen)
+        const side   = Math.min(full.width, full.height);
+        const cropX  = Math.round((full.width  - side) / 2);
+        const cropY  = Math.round((full.height - side) / 2);
+        const canvas = document.createElement('canvas');
+        canvas.width  = side;
+        canvas.height = side;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(full, cropX, cropY, side, side, 0, 0, side, side);
+
+        // Step 3: draw annotation overlays on the cropped canvas
         // Comment out any line to disable that overlay element.
         const timeText = document.getElementById('time-display')?.textContent?.trim() || '';
         await radarSnapshotOverlayLogo(ctx);
         radarSnapshotOverlayHeader(ctx, canvas);
         radarSnapshotOverlayLayerLegends(ctx, canvas, timeText);
         radarSnapshotOverlayInfoPanel(ctx, canvas, timeText);
-        // ────────────────────────────────────────────────────────────────────
 
         const link = document.createElement('a');
         const code = state.radarCode || 'radar';
@@ -1317,16 +1328,20 @@ function radarSnapshotOverlayLayerLegends(ctx, canvas, timeText) {
     const visibleLayers = state.layers.filter(l => l.visible && l.colormap?.colors?.length);
     if (!visibleLayers.length) return;
 
-    const LABEL_W   = 70;
-    const STRIP_W   = 160;
-    const STRIP_H   = 14;
-    const ROW_GAP   = 6;
-    const FONT_SZ   = 11;
-    const TIME_SZ   = 11;
-    const PAD       = 10;
-    const SAMPLES   = 64;
+    const LABEL_W      = 70;
+    const STRIP_W      = 160;
+    const STRIP_H      = 14;
+    const TICK_LINE_H  = 4;
+    const TICK_LABEL_H = 9;
+    const TICK_FONT_SZ = 8;
+    const MAX_TICKS    = 5;
+    const ROW_GAP      = 8;
+    const FONT_SZ      = 11;
+    const TIME_SZ      = 11;
+    const PAD          = 10;
+    const SAMPLES      = 64;
 
-    const rowH  = STRIP_H + ROW_GAP;
+    const rowH  = STRIP_H + TICK_LINE_H + TICK_LABEL_H + ROW_GAP;
     const timeH = timeText && timeText !== '—' ? TIME_SZ + 6 : 0;
     const totalH = timeH + visibleLayers.length * rowH - ROW_GAP + PAD * 2;
     const totalW = PAD + LABEL_W + 6 + STRIP_W + PAD;
@@ -1353,7 +1368,10 @@ function radarSnapshotOverlayLayerLegends(ctx, canvas, timeText) {
     }
 
     visibleLayers.forEach(layer => {
-        const cm = layer.colormap;
+        const cm    = layer.colormap;
+        const vmin  = cm.vmin ?? 0;
+        const vmax  = cm.vmax ?? 100;
+        const range = vmax - vmin;
 
         // Field name label (truncated to fit LABEL_W)
         ctx.font        = `bold ${FONT_SZ}px "Inter", sans-serif`;
@@ -1382,6 +1400,39 @@ function radarSnapshotOverlayLayerLegends(ctx, canvas, timeText) {
             ctx.fillStyle = `rgba(0,0,0,${1 - layer.opacity})`;
             ctx.fillRect(stripX, curY, STRIP_W, STRIP_H);
         }
+
+        // Tick marks + labels (same logic as buildColormapHticks)
+        let tickValues = [];
+        if (cm.ticks?.length > 0) {
+            const raw = cm.ticks
+                .map(t => t.value)
+                .filter(v => v >= vmin && v <= vmax)
+                .sort((a, b) => a - b);
+            if (raw.length === 0 || raw[0] > vmin) raw.unshift(vmin);
+            if (raw[raw.length - 1] < vmax)        raw.push(vmax);
+            tickValues = raw.length <= MAX_TICKS
+                ? raw
+                : Array.from({ length: MAX_TICKS },
+                    (_, i) => raw[Math.round(i * (raw.length - 1) / (MAX_TICKS - 1))]);
+        } else {
+            tickValues = Array.from({ length: MAX_TICKS },
+                (_, i) => vmin + (i / (MAX_TICKS - 1)) * range);
+        }
+        const absRange = Math.abs(range);
+        const decimals = absRange >= 10 ? 0 : absRange >= 1 ? 1 : 2;
+
+        const tickY = curY + STRIP_H;
+        ctx.font        = `${TICK_FONT_SZ}px "Inter", monospace`;
+        ctx.textBaseline = 'top';
+        ctx.textAlign   = 'center';
+        tickValues.forEach(value => {
+            const leftPct = range !== 0 ? (value - vmin) / range : 0;
+            const tx      = stripX + leftPct * STRIP_W;
+            ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            ctx.fillRect(Math.round(tx), tickY, 1, TICK_LINE_H);
+            ctx.fillStyle = 'rgba(255,255,255,0.85)';
+            ctx.fillText(value.toFixed(decimals), tx, tickY + TICK_LINE_H + 1);
+        });
 
         curY += rowH;
     });
