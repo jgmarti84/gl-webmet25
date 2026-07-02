@@ -37,25 +37,31 @@ const BLANK_PNG =
 const BASEMAPS = {
     'argenmap': {
         name:        'IGN Argenmap',
-        url:         '/ign-tiles/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+        url:         'https://mapas.ohmc.ar/tiles/argenmap/EPSG3857/{z}/{x}/{y}.png',
         attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
         maxZoom:     18,
     },
     'argenmap_gris': {
         name:        'IGN Argenmap Gris',
-        url:         '/ign-tiles/mapabase_gris@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+        url:         'https://mapas.ohmc.ar/tiles/argenmap_gris/EPSG3857/{z}/{x}/{y}.png',
         attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
         maxZoom:     18,
     },
     'argenmap_topo': {
         name:        'IGN Argenmap Topo',
-        url:         '/ign-tiles/mapabase_topo@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+        url:         'https://mapas.ohmc.ar/tiles/argenmap_topo/EPSG3857/{z}/{x}/{y}.png',
         attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
         maxZoom:     18,
     },
     'argenmap_oscuro': {
         name:        'IGN Argenmap Oscuro',
-        url:         '/ign-tiles/argenmap_oscuro@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+        url:         'https://mapas.ohmc.ar/tiles/argenmap_oscuro/EPSG3857/{z}/{x}/{y}.png',
+        attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
+        maxZoom:     18,
+    },
+    'argenmap_hibrido': {
+        name:        'IGN Argenmap Híbrido',
+        url:         'https://mapas.ohmc.ar/tiles/argenmap_hibrido/EPSG3857/{z}/{x}/{y}.png',
         attribution: '© <a href="https://www.ign.gob.ar/" target="_blank">Instituto Geográfico Nacional</a>',
         maxZoom:     18,
     },
