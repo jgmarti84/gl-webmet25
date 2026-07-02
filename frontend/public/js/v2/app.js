@@ -715,18 +715,16 @@ const app = {
                     // After populateProductSelect the browser may have reset to the
                     // placeholder if our computed value wasn't a valid option; reading
                     // back guarantees we use what the dropdown really shows.
-                    const productSelect2 = document.getElementById('product-select');
-                    if (productSelect2) {
-                        if (productSelect2.value) {
-                            state.selectedProduct = productSelect2.value;
-                        } else if (productSelect2.options.length > 1) {
+                    const syncedProductSelect = document.getElementById('product-select');
+                    if (syncedProductSelect) {
+                        if (syncedProductSelect.value) {
+                            state.selectedProduct = syncedProductSelect.value;
+                        } else if (syncedProductSelect.options.length > 1) {
                             // Placeholder is index 0 — pick first real option.
-                            productSelect2.selectedIndex = 1;
-                            state.selectedProduct = productSelect2.value;
+                            syncedProductSelect.selectedIndex = 1;
+                            state.selectedProduct = syncedProductSelect.value;
                         }
                     }
-                    console.log('[mode-switch] radars:', state.selectedRadars, 'product:', state.selectedProduct, 'mode:', state.coverageModeId, 'animMode:', state.animationMode);
-
                     // Update colormap/badge/UI state for the new field.
                     state.selectedColormap = null;
                     state.currentVmin = null;
@@ -736,13 +734,16 @@ const app = {
                     await this.loadColormapOptions();
                     this._updateTopsCoresUIVisibility();
                     this._updateFilteredSwitchAvailability();
-                    // Force a fresh data load for the new mode.
+                    // Stop the current animation so loadLastNHours takes the full
+                    // reload path (loadTimeRangeCogs) instead of the continuity path.
+                    // Without this the mode switch silently reloads the same frames
+                    // and the user sees no visible change.
                     if (state.selectedRadars.length > 0 && state.selectedProduct) {
+                        state.animator.stop();
+                        state.ui.updatePlayButton(false);
                         await this.loadLastNHours(
                             state.activeTimeWindowHours ?? DEFAULT_TIME_WINDOW_HOURS
                         );
-                    } else {
-                        console.warn('[mode-switch] skipping load — radars:', state.selectedRadars.length, 'product:', state.selectedProduct);
                     }
                 } finally {
                     coverageSwitching = false;
