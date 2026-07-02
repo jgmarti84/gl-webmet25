@@ -735,10 +735,21 @@ const app = {
                     this._updateTopsCoresUIVisibility();
                     this._updateFilteredSwitchAvailability();
                     if (state.selectedRadars.length > 0 && state.selectedProduct) {
+                        const wasPlaying  = state.animator.getIsPlaying();
+                        const cogsBefore  = state.cogs;
+                        // Stop so loadLastNHours takes loadTimeRangeCogs (full visible reload).
+                        if (wasPlaying) {
+                            state.animator.stop();
+                            state.ui.updatePlayButton(false);
+                        }
                         await this.loadLastNHours(
-                            state.activeTimeWindowHours ?? DEFAULT_TIME_WINDOW_HOURS,
-                            { preferContinuity: true }
+                            state.activeTimeWindowHours ?? DEFAULT_TIME_WINDOW_HOURS
                         );
+                        // Auto-resume if playback was active and new data was loaded.
+                        if (wasPlaying && state.cogs !== cogsBefore && state.cogs && state.cogs.length > 0) {
+                            state.animator.play();
+                            state.ui.updatePlayButton(true);
+                        }
                     }
                 } finally {
                     coverageSwitching = false;
@@ -1606,7 +1617,7 @@ const app = {
     // Load last N hours
     // =========================================================================
 
-    async loadLastNHours(hours, { preferContinuity = false } = {}) {
+    async loadLastNHours(hours) {
         if (state.selectedRadars.length === 0 || !state.selectedProduct) {
             state.ui.setStatus('Primero seleccione radar(es) y campo', 'error');
             return;
@@ -1640,10 +1651,10 @@ const app = {
             this.onTimeRangeChange();
             state.liveHours = hours;
 
-            // If an animation is already running (or the caller prefers it), reload
-            // in the background so playback is not interrupted. Otherwise do a full
-            // load which also handles initial setup (zoom, enable controls, etc.).
-            if (state.animationMode === 'timerange' && (preferContinuity || state.animator.getIsPlaying())) {
+            // If an animation is already running, reload the new window in the
+            // background so playback is not interrupted. Otherwise do a full load
+            // which also handles initial setup (zoom, enable controls, etc.).
+            if (state.animationMode === 'timerange' && state.animator.getIsPlaying()) {
                 await this._loadFramesWithContinuity(
                     () => this._fetchTimeRangeFrames(),
                     { showBadge: true, badgeText: 'Cargando…' }
