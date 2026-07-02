@@ -63,12 +63,16 @@ function updateTimeWindowLabel(hours) {
 }
 
 function updateFieldBadge() {
-    const badge   = document.getElementById('badge-module-b');
+    const badge  = document.getElementById('badge-module-b');
+    const btn    = document.getElementById('btn-module-b');
     if (!badge) return;
     const visible = state.layers.filter(l => l.visible);
-    badge.textContent = visible.length
-        ? visible.map(l => l.productKey).join(', ')
-        : '—';
+    badge.textContent = visible.length ? String(visible.length) : '—';
+    if (btn) {
+        btn.title = visible.length
+            ? `Campos activos: ${visible.map(l => l.productKey).join(', ')}`
+            : 'Selección de campo';
+    }
 }
 
 function setLayerOpacity(layerId, opacity) {
