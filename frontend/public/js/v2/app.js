@@ -736,7 +736,8 @@ const app = {
                     this._updateFilteredSwitchAvailability();
                     if (state.selectedRadars.length > 0 && state.selectedProduct) {
                         await this.loadLastNHours(
-                            state.activeTimeWindowHours ?? DEFAULT_TIME_WINDOW_HOURS
+                            state.activeTimeWindowHours ?? DEFAULT_TIME_WINDOW_HOURS,
+                            { preferContinuity: true }
                         );
                     }
                 } finally {
@@ -1605,7 +1606,7 @@ const app = {
     // Load last N hours
     // =========================================================================
 
-    async loadLastNHours(hours) {
+    async loadLastNHours(hours, { preferContinuity = false } = {}) {
         if (state.selectedRadars.length === 0 || !state.selectedProduct) {
             state.ui.setStatus('Primero seleccione radar(es) y campo', 'error');
             return;
@@ -1639,10 +1640,10 @@ const app = {
             this.onTimeRangeChange();
             state.liveHours = hours;
 
-            // If an animation is already running, reload the new window in the
-            // background so playback is not interrupted. Otherwise do a full load
-            // which also handles initial setup (zoom, enable controls, etc.).
-            if (state.animationMode === 'timerange' && state.animator.getIsPlaying()) {
+            // If an animation is already running (or the caller prefers it), reload
+            // in the background so playback is not interrupted. Otherwise do a full
+            // load which also handles initial setup (zoom, enable controls, etc.).
+            if (state.animationMode === 'timerange' && (preferContinuity || state.animator.getIsPlaying())) {
                 await this._loadFramesWithContinuity(
                     () => this._fetchTimeRangeFrames(),
                     { showBadge: true, badgeText: 'Cargando…' }
