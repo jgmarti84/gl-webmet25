@@ -95,6 +95,7 @@ def _radar_response(radar: Radar) -> AdminRadarResponse:
         center_long=_coerce_float(radar.center_long),
         img_radio=radar.img_radio,
         is_active=radar.is_active,
+        detail_view_enabled=radar.detail_view_enabled,
         point1_lat=_coerce_float(radar.point1_lat),
         point1_long=_coerce_float(radar.point1_long),
         point2_lat=_coerce_float(radar.point2_lat),
