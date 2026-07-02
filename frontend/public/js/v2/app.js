@@ -28,50 +28,40 @@ import { AnimationController, formatTimestamp } from './animation.js';
 import { UIControls } from '../shared/controls.js';
 import { LegendRenderer } from '../shared/legend.js';
 import { TopsCoresLayer } from '../shared/tops-cores.js';
+import { 
+    waitForLeaflet, 
+    buildCogsByFrameMap, 
+    groupCogsByTimestamp, 
+    getCogBucketKey, 
+    getAvailableProductKeys,
+    selectDefaultProduct,
+    baseFieldKey,
+    fieldHasBothVariants,
+    fieldVariantKey,
+    getActiveCoverageMode,
+    debounce,
+    haversineKm,
+    getBrowserGeolocation,
+    getIPGeolocation,
+    _updateFieldBadge,
+    _updateRadarBadge,
+    updateLiveIndicator,
+    _hideFieldLoadingBadge,
+    isTopsCoresAvailableForField
+} from './radar-utils.js';
 
-// =============================================================================
-// COVERAGE MODES — single source of truth for volume↔mode mapping.
-// Each entry defines which volumes (and strategy) belong to that mode, and
-// whether filtered (non-'o') fields should be available to the user.
-// Add / edit entries here to extend modes in the future.
-// =============================================================================
-
-const COVERAGE_MODES = [
-    {
-        id:                      'cd',
-        label:                   'C+D',
-        volNrs:                  ['01', '02'],
-        strategy:                '0315',
-        filteredFieldsAvailable: true,
-        // Field selected when switching INTO this mode and the previous field
-        // is not available here (see the coverage-mode handler).
-        defaultProductKey:       'COLMAXo',
-    },
-    {
-        id:                      'vig',
-        label:                   'VIG',
-        volNrs:                  ['04'],
-        strategy:                '0315',
-        filteredFieldsAvailable: false,
-        defaultProductKey:       'DBZHo',
-    },
-];
-
-// =============================================================================
-// CONSTANTS (identical to app.js)
-// =============================================================================
-
-const MS_PER_HOUR = 3600 * 1000;
-const BUCKET_TOLERANCE_MINUTES = 5;
-const DEFAULT_LIVE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
-const DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
-const LIVE_REFRESH_MAX_COGS = 200;
-const GEOLOCATION_AUTO_SELECT_COUNT = 3;
-const GEOLOCATION_AUTO_LOAD_HOURS = 1.5;
-const GEOLOCATION_AUTO_PRODUCT = 'COLMAX';
-const DEFAULT_TIME_WINDOW_HOURS = 1.5;
-const DEFAULT_FIELD_OPACITY = 0.7;
-const DEFAULT_COVERAGE_OPACITY = 0.4;
+import { 
+    COVERAGE_MODES, 
+    DEFAULT_TIME_WINDOW_HOURS,
+    DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS,
+    DEFAULT_LIVE_REFRESH_INTERVAL_MS,
+    GEOLOCATION_AUTO_SELECT_COUNT,
+    GEOLOCATION_AUTO_PRODUCT,
+    GEOLOCATION_AUTO_LOAD_HOURS,
+    DEFAULT_FIELD_OPACITY,
+    MS_PER_HOUR,
+    LIVE_REFRESH_MAX_COGS
+} from './constants.js';
 
 // =============================================================================
 // APPLICATION STATE
@@ -109,96 +99,6 @@ const state = {
     // so re-selecting a radar resumes the same field + time window (see #1).
     resumePending: false,
 };
-
-// =============================================================================
-// HELPERS
-// =============================================================================
-
-function getCogBucketKey(timestamp) {
-    const bucketMs = BUCKET_TOLERANCE_MINUTES * 60 * 1000;
-    const t = new Date(timestamp).getTime();
-    return Math.round(t / bucketMs) * bucketMs;
-}
-
-function groupCogsByTimestamp(cogs, toleranceMinutes = BUCKET_TOLERANCE_MINUTES) {
-    const bucketMs = toleranceMinutes * 60 * 1000;
-    const buckets = new Map();
-    cogs.forEach(cog => {
-        const t = new Date(cog.observation_time).getTime();
-        const key = Math.round(t / bucketMs) * bucketMs;
-        if (!buckets.has(key)) {
-            buckets.set(key, { timestamp: cog.observation_time, cogsByRadar: {} });
-        }
-        const frame = buckets.get(key);
-        if (!frame.cogsByRadar[cog.radar_code]) {
-            frame.cogsByRadar[cog.radar_code] = cog;
-        }
-    });
-    return Array.from(buckets.entries())
-        .sort((a, b) => a[0] - b[0])
-        .map(([, frame]) => frame);
-}
-
-function getAvailableProductKeys(products, showUnfilteredProducts) {
-    return products
-        .map(product => product.product_key)
-        .filter(productKey => {
-            const isUnfiltered = /o$/.test(productKey);
-            return showUnfilteredProducts ? isUnfiltered : !isUnfiltered;
-        });
-}
-
-function selectDefaultProduct(availableProductKeys) {
-    const preferredKeys = ['COLMAX', 'DBZH', 'DBZHo'];
-    return preferredKeys.find(key => availableProductKeys.includes(key))
-        || availableProductKeys[0]
-        || null;
-}
-
-// Field-key helpers. Convention: a trailing 'o' marks the UNFILTERED variant
-// (e.g. COLMAXo); no suffix is the filtered/polarimetric variant (COLMAX).
-function baseFieldKey(productKey) {
-    return (productKey || '').replace(/o$/, '');
-}
-
-// Does the product list contain BOTH the filtered and unfiltered variant of the
-// field that `productKey` belongs to? (i.e. can the Filtered switch toggle it?)
-function fieldHasBothVariants(products, productKey) {
-    const base = baseFieldKey(productKey);
-    const keys = products.map(p => p.product_key);
-    return keys.includes(base) && keys.includes(`${base}o`);
-}
-
-// The key for the requested variant of a field, or null if it isn't available.
-function fieldVariantKey(products, productKey, unfiltered) {
-    const target = unfiltered ? `${baseFieldKey(productKey)}o` : baseFieldKey(productKey);
-    return products.some(p => p.product_key === target) ? target : null;
-}
-
-/**
- * Returns the COVERAGE_MODES entry that matches state.coverageModeId.
- * Falls back to the first entry if the stored id is somehow unknown.
- */
-function getActiveCoverageMode() {
-    return COVERAGE_MODES.find(m => m.id === state.coverageModeId) || COVERAGE_MODES[0];
-}
-
-/**
- * Convert a groupedFrames array (app.js state.cogs format) to the
- * Map<frameIndex, Map<radarCode, cogObject>> format expected by MapManager.loadFrames().
- *
- * @param {Array} groupedFrames  [{timestamp, cogsByRadar: {code: cog}}, …]
- * @returns {Map<number, Map<string, Object>>}
- */
-function buildCogsByFrameMap(groupedFrames) {
-    const cogsByFrame = new Map();
-    groupedFrames.forEach((frame, idx) => {
-        const radarMap = new Map();
-        Object.entries(frame.cogsByRadar).forEach(([code, cog]) => radarMap.set(code, cog));
-        cogsByFrame.set(idx, radarMap);
-    });
-    return cogsByFrame;
-}
 
 // =============================================================================
 // SETTINGS HELPERS (localStorage) — identical to app.js
@@ -259,53 +159,167 @@ function setLiveRefreshIntervalMs(ms) {
 }
 
 // =============================================================================
-// GEOLOCATION HELPERS (identical to app.js)
+// SNAPSHOT OVERLAY HELPERS
+// Each function draws one element onto an existing canvas context.
+// They are intentionally standalone so any can be commented out in
+// captureMapSnapshot() without touching the others.
 // =============================================================================
 
 /**
- * Returns a debounced version of *fn* that only fires after *ms* milliseconds
- * of inactivity. Useful for sliders whose `input` events fire at high frequency.
- *
- * @param {Function} fn
- * @param {number}   ms
- * @returns {Function}
+ * Draw the OHMC logo onto the canvas (top-left corner).
+ * The source asset is a @3x PNG, so we render it at its CSS display size.
  */
-function debounce(fn, ms) {
-    let timer = null;
-    return (...args) => {
-        clearTimeout(timer);
-        timer = setTimeout(() => fn(...args), ms);
-    };
+async function snapshotOverlayLogo(ctx) {
+    const img = document.querySelector('#logo-container img');
+    if (!img || !img.complete || img.naturalWidth === 0) return;
+    // Respect the 65 px CSS height; derive width proportionally.
+    const displayH = 75;
+    const displayW = Math.round(img.naturalWidth * (displayH / img.naturalHeight));
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.drawImage(img, 16, 16, displayW, displayH);
+    ctx.restore();
 }
 
-function haversineKm(lat1, lon1, lat2, lon2) {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 +
-              Math.cos(lat1 * Math.PI / 180) *
-              Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLon / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
+/**
+ * Draw a vertical colormap legend (bottom-left).
+ * Draws: product title → gradient bar with tick marks → unit label.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {HTMLCanvasElement}        canvas
+ * @param {object|null}              colormapData  - LegendRenderer.currentColormap
+ */
+function snapshotOverlayVerticalLegend(ctx, canvas, colormapData) {
+    if (!colormapData?.colors?.length) return;
 
-function getBrowserGeolocation() {
-    return new Promise((resolve, reject) => {
-        if (!navigator.geolocation) { reject(new Error('Geolocation not supported')); return; }
-        navigator.geolocation.getCurrentPosition(
-            pos => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-            err => reject(err),
-            { timeout: 8000, maximumAge: 60000 }
-        );
+    const cm        = colormapData;
+    const BAR_W     = 18; // gradient bar width
+    const BAR_H     = 180; // gradient bar height
+    const TICK_LEN  = 6; // tick mark length
+    const LABEL_SZ  = 11; // tick value font size
+    const TITLE_SZ  = 14; // product title font size
+    const PAD       = 12; // inner padding of the background box
+    const marginL   = 16;
+    // Reserve space for title above and unit below the bar
+    const totalH    = TITLE_SZ + 6 + BAR_H + 18;
+    const x0        = marginL;
+    const y0        = canvas.height - totalH - 20;
+
+    const vmin        = cm.vmin ?? 0;
+    const vmax        = cm.vmax ?? 100;
+    const range       = vmax - vmin;
+    const decimals    = range >= 10 ? 0 : range >= 1 ? 1 : 2;
+    const labelColW   = 42; // estimated max label width
+    const bgW         = PAD + BAR_W + TICK_LEN + 4 + labelColW + PAD;
+    const bgH         = totalH + PAD;
+
+    ctx.save();
+
+    // Semi-transparent background panel
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    _snapshotRoundRect(ctx, x0 - PAD, y0 - PAD, bgW, bgH, 6);
+    ctx.fill();
+
+    // Title
+    ctx.fillStyle   = '#ffffff';
+    ctx.font        = `bold ${TITLE_SZ}px "Inter", sans-serif`;
+    ctx.textAlign   = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(cm.product_title || cm.product_key || '', x0, y0);
+
+    const barY = y0 + TITLE_SZ + 6;
+
+    // Gradient bar (bottom → top = vmin → vmax)
+    const grad = ctx.createLinearGradient(0, barY + BAR_H, 0, barY);
+    const SAMPLES = 64;
+    for (let i = 0; i < SAMPLES; i++) {
+        const t   = i / (SAMPLES - 1);
+        const idx = Math.round(t * (cm.colors.length - 1));
+        grad.addColorStop(t, cm.colors[idx]);
+    }
+    ctx.fillStyle = grad;
+    ctx.fillRect(x0, barY, BAR_W, BAR_H);
+
+    // Tick marks + labels
+    const tickVals = (cm.ticks?.length)
+        ? cm.ticks.map(t => t.value).filter(v => v >= vmin && v <= vmax)
+        : Array.from({ length: 5 }, (_, i) => vmin + (i / 4) * range);
+
+    ctx.font        = `${LABEL_SZ}px "Inter", monospace`;
+    ctx.fillStyle   = '#ffffff';
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth   = 1;
+    ctx.textBaseline = 'middle';
+    tickVals.forEach(v => {
+        const frac = range > 0 ? (v - vmin) / range : 0;
+        const ty   = barY + BAR_H - frac * BAR_H;
+        ctx.beginPath();
+        ctx.moveTo(x0 + BAR_W, ty);
+        ctx.lineTo(x0 + BAR_W + TICK_LEN, ty);
+        ctx.stroke();
+        ctx.fillText(v.toFixed(decimals), x0 + BAR_W + TICK_LEN + 4, ty);
     });
+
+    // Unit label
+    ctx.font        = `${LABEL_SZ}px "Inter", sans-serif`;
+    ctx.textBaseline = 'top';
+    ctx.fillText(cm.unit?.trim() || '', x0, barY + BAR_H + 4);
+
+    ctx.restore();
 }
 
-async function getIPGeolocation() {
-    const resp = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(6000) });
-    if (!resp.ok) throw new Error(`IP geo failed: ${resp.status}`);
-    const data = await resp.json();
-    if (!data.latitude || !data.longitude) throw new Error('No coordinates in IP geo response');
-    return { lat: data.latitude, lon: data.longitude };
+/**
+ * Draw an info panel (bottom-right) showing the selected field and current
+ * frame datetime.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {HTMLCanvasElement}        canvas
+ * @param {string}                   fieldLabel
+ * @param {string}                   timeText
+ */
+function snapshotOverlayInfoPanel(ctx, canvas, fieldLabel, timeText) {
+    const lines = [fieldLabel, timeText].filter(s => s && s !== '—');
+    if (!lines.length) return;
+
+    const FONT_SZ  = 15; // font size for info panel
+    const LINE_H   = FONT_SZ + 6;
+    const PAD      = 10;
+    const boxW     = 260;
+    const boxH     = lines.length * LINE_H + PAD * 2;
+    const x        = canvas.width  - boxW - 16;
+    const y        = canvas.height - boxH - 16;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    _snapshotRoundRect(ctx, x, y, boxW, boxH, 6);
+    ctx.fill();
+
+    ctx.fillStyle   = '#ffffff';
+    ctx.textAlign   = 'left';
+    ctx.textBaseline = 'top';
+    lines.forEach((line, i) => {
+        const isFirst = i === 0;
+        ctx.font = isFirst
+            ? `bold ${FONT_SZ}px "Inter", sans-serif`
+            : `${FONT_SZ}px "Inter", sans-serif`;
+        ctx.fillText(line, x + PAD, y + PAD + i * LINE_H);
+    });
+    ctx.restore();
+}
+
+/** Helper: draw a filled rounded rectangle path (Canvas 2D). */
+function _snapshotRoundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
 }
 
 // =============================================================================
@@ -321,7 +335,8 @@ const app = {
         state.showUnfilteredProducts = getSettingShowFiltered();
 
         try {
-            await this.waitForLeaflet();
+            // await this.waitForLeaflet();
+            await waitForLeaflet();
 
             // v2: MapManager takes the element ID
             state.mapManager = new MapManager('map');
@@ -338,8 +353,8 @@ const app = {
             await this.loadInitialData();
             this.setupEventListeners();
             this.initSettingsPanel();
-            this._updateRadarBadge();
-            this._updateFieldBadge();
+            _updateRadarBadge(state.selectedRadars);
+            _updateFieldBadge(state.selectedProduct);
 
             // v2: wire animation DOM controls now that ui and animator exist
             state.animator.initControls(state.ui);
@@ -368,16 +383,6 @@ const app = {
         }
     },
 
-    async waitForLeaflet(maxWait = 5000) {
-        const startTime = Date.now();
-        while (typeof L === 'undefined') {
-            if (Date.now() - startTime > maxWait) {
-                throw new Error('Leaflet library failed to load. Please check your internet connection.');
-            }
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-    },
-
     async loadInitialData() {
         state.radars = await api.getRadars(!state.showInactiveRadars);
         state.ui.populateRadarCheckboxes(state.radars, state.showInactiveRadars);
@@ -389,7 +394,7 @@ const app = {
         if (storedMode && COVERAGE_MODES.find(m => m.id === storedMode)) {
             state.coverageModeId = storedMode;
         }
-        const mode = getActiveCoverageMode();
+        const mode = getActiveCoverageMode(state.coverageModeId);
 
         // In VIG mode filtered fields are not available — force showUnfilteredProducts.
         if (!mode.filteredFieldsAvailable) {
@@ -467,7 +472,7 @@ const app = {
         if (topsCoresToggle) {
             const stored = localStorage.getItem(SETTINGS_KEY_TOPS_CORES_VISIBLE);
             state.topsCoresVisible = stored === null
-                ? this.isTopsCoresAvailableForField(state.selectedProduct)
+                ? isTopsCoresAvailableForField(state.selectedProduct)
                 : stored === 'true';
             topsCoresToggle.checked = state.topsCoresVisible;
         }
@@ -565,7 +570,7 @@ const app = {
             const productSelect = document.getElementById('product-select');
             if (productSelect) productSelect.value = selectedProduct;
             state.selectedProduct = selectedProduct;
-            this._updateFieldBadge();
+            _updateFieldBadge(selectedProduct);
             await this.loadColormapOptions();
             this._updateTopsCoresUIVisibility();
             this._updateFilteredSwitchAvailability();
@@ -647,7 +652,7 @@ const app = {
         const coverageToggleBtn = document.getElementById('coverage-toggle');
         if (coverageToggleBtn) {
             // Sync button label to current state (restored from localStorage in loadInitialData).
-            coverageToggleBtn.textContent = getActiveCoverageMode().label;
+            coverageToggleBtn.textContent = getActiveCoverageMode(state.coverageModeId).label;
 
             // Disable the button while a switch is in flight so a quick second
             // click can't race the async product/frame reload of the first.
@@ -748,7 +753,7 @@ const app = {
                 // Toggle OFF → unfiltered variant ('o' suffix)  → showUnfilteredProducts = true
                 state.showUnfilteredProducts = !e.target.checked;
                 localStorage.setItem(SETTINGS_KEY_SHOW_FILTERED, String(state.showUnfilteredProducts));
-                const mode = getActiveCoverageMode();
+                const mode = getActiveCoverageMode(state.coverageModeId);
 
                 // Remap the current field to the requested variant (if it exists),
                 // keeping the field the same.
@@ -1071,7 +1076,7 @@ const app = {
         state.currentVmin = null;
         state.currentVmax = null;
         this.onTimeRangeChange();
-        this._updateFieldBadge();
+        _updateFieldBadge(state.selectedProduct);
         await this.loadColormapOptions();
         this._updateTopsCoresUIVisibility();
         this._updateFilteredSwitchAvailability();
@@ -1095,7 +1100,7 @@ const app = {
     _updateFilteredSwitchAvailability() {
         const toggle = document.getElementById('toggle-show-filtered');
         if (!toggle) return;
-        const mode = getActiveCoverageMode();
+        const mode = getActiveCoverageMode(state.coverageModeId);
         const hasBoth = !!state.selectedProduct
             && fieldHasBothVariants(state.products, state.selectedProduct);
         const enabled = mode.filteredFieldsAvailable && hasBoth;
@@ -1152,7 +1157,7 @@ const app = {
             // selected time window, and start playback again (#1).
             this._resumeAnimationForSelection();
         }
-        this._updateRadarBadge();
+        _updateRadarBadge(state.selectedRadars);
     },
 
     /**
@@ -1196,7 +1201,7 @@ const app = {
         state.ui.setStatus(`Agregando ${radarCode.toUpperCase()} a la animación…`, 'loading');
 
         try {
-            const mode = getActiveCoverageMode();
+            const mode = getActiveCoverageMode(state.coverageModeId);
             const newCogs = await api.getCogsForTimeRange(
                 [radarCode], state.selectedProduct, timeRange.start, timeRange.end, 100,
                 mode.volNrs, mode.strategy
@@ -1349,7 +1354,7 @@ const app = {
         state.ui.updatePlayButton(false);
 
         try {
-            const mode = getActiveCoverageMode();
+            const mode = getActiveCoverageMode(state.coverageModeId);
             const latestCogs = await api.getLatestCogsForRadars(
                 state.selectedRadars, state.selectedProduct, mode.volNrs, mode.strategy
             );
@@ -1461,7 +1466,7 @@ const app = {
             const cogs = await api.getCogsForTimeRange(
                 state.selectedRadars, state.selectedProduct,
                 timeRange.start, timeRange.end, 100,
-                getActiveCoverageMode().volNrs, getActiveCoverageMode().strategy
+                getActiveCoverageMode(state.coverageModeId).volNrs, getActiveCoverageMode(state.coverageModeId).strategy
             );
 
             if (cogs.length === 0) {
@@ -1474,7 +1479,7 @@ const app = {
                 return;
             }
 
-            const groupedFrames = groupCogsByTimestamp(cogs);
+            const groupedFrames = groupCogsByTimestamp(cogs, );
 
             let colormap = null;
             try {
@@ -1566,7 +1571,7 @@ const app = {
             state.ui.setStatus(`Error: ${error.message}`, 'error');
         }
         } finally {
-            this._hideFieldLoadingBadge();
+            _hideFieldLoadingBadge();
         }
     },
 
@@ -1583,7 +1588,7 @@ const app = {
         state.ui.setStatus('Buscando los datos más recientes…', 'loading');
 
         try {
-            const mode = getActiveCoverageMode();
+            const mode = getActiveCoverageMode(state.coverageModeId);
             const latestItems = await api.getLatestCogsForRadars(
                 state.selectedRadars, state.selectedProduct, mode.volNrs, mode.strategy
             );
@@ -1637,7 +1642,7 @@ const app = {
         state.liveRefreshInterval = setInterval(() => {
             this.refreshLiveWindow();
         }, intervalMs);
-        this.updateLiveIndicator();
+        updateLiveIndicator(state.liveHours);
     },
 
     stopLiveRefresh() {
@@ -1646,7 +1651,7 @@ const app = {
             state.liveRefreshInterval = null;
         }
         state.liveHours = null;
-        this.updateLiveIndicator();
+        updateLiveIndicator(state.liveHours);
     },
 
     // =========================================================================
@@ -1660,7 +1665,7 @@ const app = {
         try {
             const hours = state.liveHours;
 
-            const mode = getActiveCoverageMode();
+            const mode = getActiveCoverageMode(state.coverageModeId);
             const latestItems = await api.getLatestCogsForRadars(
                 state.selectedRadars, state.selectedProduct, mode.volNrs, mode.strategy
             );
@@ -2007,10 +2012,10 @@ const app = {
         }
     },
 
-    _hideFieldLoadingBadge() {
-        const badge = document.getElementById('field-loading-badge');
-        if (badge) badge.classList.remove('visible');
-    },
+    // _hideFieldLoadingBadge() {
+    //     const badge = document.getElementById('field-loading-badge');
+    //     if (badge) badge.classList.remove('visible');
+    // },
 
     /**
      * Update the SVG coverage mask for each active radar using the actual
@@ -2112,7 +2117,7 @@ const app = {
         const timeRange = state.ui.getTimeRangeValues();
         if (!timeRange.start || !timeRange.end || timeRange.start >= timeRange.end) return null;
 
-        const mode = getActiveCoverageMode();
+        const mode = getActiveCoverageMode(state.coverageModeId);
         const cogs = await api.getCogsForTimeRange(
             state.selectedRadars, state.selectedProduct,
             timeRange.start, timeRange.end, 100,
@@ -2188,53 +2193,53 @@ const app = {
             console.error('[continuity] Background load failed:', err);
             // Animation continues unchanged \u2014 no error propagated to animator.
         } finally {
-            if (showBadge) this._hideFieldLoadingBadge();
+            if (showBadge) _hideFieldLoadingBadge();
         }
     },
 
-    updateLiveIndicator() {
-        const el = document.getElementById('live-indicator');
-        if (!el) return;
-        if (state.liveHours !== null) {
-            el.textContent = '● EN VIVO';
-            el.className = 'live-indicator live-on';
-        } else {
-            el.textContent = '○ En vivo';
-            el.className = 'live-indicator live-off';
-        }
-        const cogRefreshBtn = document.getElementById('btn-cog-refresh-now');
-        if (cogRefreshBtn) cogRefreshBtn.disabled = state.liveHours === null;
-    },
+    // updateLiveIndicator() {
+    //     const el = document.getElementById('live-indicator');
+    //     if (!el) return;
+    //     if (state.liveHours !== null) {
+    //         el.textContent = '● EN VIVO';
+    //         el.className = 'live-indicator live-on';
+    //     } else {
+    //         el.textContent = '○ En vivo';
+    //         el.className = 'live-indicator live-off';
+    //     }
+    //     const cogRefreshBtn = document.getElementById('btn-cog-refresh-now');
+    //     if (cogRefreshBtn) cogRefreshBtn.disabled = state.liveHours === null;
+    // },
 
-    /** Update badge-module-a with the number of selected radars. */
-    _updateRadarBadge() {
-        const badge = document.getElementById('badge-module-a');
-        if (!badge) return;
-        const count = (state.selectedRadars || []).length;
-        badge.textContent = count > 0 ? String(count) : '';
-        badge.style.display = count > 0 ? 'inline-flex' : 'none';
-    },
+    // /** Update badge-module-a with the number of selected radars. */
+    // _updateRadarBadge() {
+    //     const badge = document.getElementById('badge-module-a');
+    //     if (!badge) return;
+    //     const count = (state.selectedRadars || []).length;
+    //     badge.textContent = count > 0 ? String(count) : '';
+    //     badge.style.display = count > 0 ? 'inline-flex' : 'none';
+    // },
 
-    /** Update badge-module-b with the currently selected product key. */
-    _updateFieldBadge() {
-        const badge = document.getElementById('badge-module-b');
-        if (!badge) return;
-        const key = state.selectedProduct || '';
-        badge.textContent = key ? key.toUpperCase() : '';
-        badge.style.display = key ? 'inline-flex' : 'none';
-    },
+    // /** Update badge-module-b with the currently selected product key. */
+    // _updateFieldBadge() {
+    //     const badge = document.getElementById('badge-module-b');
+    //     if (!badge) return;
+    //     const key = state.selectedProduct || '';
+    //     badge.textContent = key ? key.toUpperCase() : '';
+    //     badge.style.display = key ? 'inline-flex' : 'none';
+    // },
 
-    isTopsCoresAvailableForField(productKey = state.selectedProduct) {
-        const baseProductKey = (productKey || '').replace(/o$/, '');
-        return baseProductKey === 'COLMAX';
-    },
+    // isTopsCoresAvailableForField(productKey = state.selectedProduct) {
+    //     const baseProductKey = (productKey || '').replace(/o$/, '');
+    //     return baseProductKey === 'COLMAX';
+    // },
 
     _updateTopsCoresUIVisibility() {
         const topsCoresToggle = document.getElementById('toggle-tops-cores');
         const topsCoresSizeRow = document.getElementById('tops-cores-size-row');
         if (!topsCoresToggle) return;
 
-        const isAvailable = this.isTopsCoresAvailableForField();
+        const isAvailable = isTopsCoresAvailableForField(state.selectedProduct);
 
         // Accordion (#9): when Tops & Cores aren't available for the selected
         // field, gray the section header and make it non-expandable (collapse it)
@@ -2261,7 +2266,7 @@ const app = {
     },
 
     _updateTopsCoresLayer() {
-        if (!this.isTopsCoresAvailableForField()) {
+        if (!isTopsCoresAvailableForField(state.selectedProduct)) {
             if (state.topsCoresLayer) {
                 state.topsCoresLayer.setVisible(false);
                 state.topsCoresLayer.clear();
@@ -2395,6 +2400,18 @@ const app = {
                     });
                 } catch (_) { /* coverage overlay is best-effort */ }
             }
+
+            // ── Modular overlays ─────────────────────────────────────────────────
+            // Comment out any line to disable that overlay element.
+            const colormapData = state.legend?.currentColormap || null;
+            const fieldLabel   = colormapData?.product_title || colormapData?.product_key
+                               || state.selectedProduct || '';
+            const timeText     = document.getElementById('time-display')?.textContent?.trim() || '';
+
+            await snapshotOverlayLogo(ctx);
+            snapshotOverlayVerticalLegend(ctx, canvas, colormapData);
+            snapshotOverlayInfoPanel(ctx, canvas, fieldLabel, timeText);
+            // ────────────────────────────────────────────────────────────────────
 
             const link = document.createElement('a');
             link.download = `radar-snapshot-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;

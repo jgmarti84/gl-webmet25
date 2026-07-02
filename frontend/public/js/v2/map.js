@@ -74,13 +74,20 @@ export class MapManager {
     /**
      * @param {string} mapElementId - ID of the DOM element to render the map into.
      */
-    constructor(mapElementId = 'map') {
+    constructor(
+        mapElementId = 'map',
+        options = {}
+    ) {
         this._mapElementId  = mapElementId;
         this._map           = null;
         this._baseLayer     = null;
         this._currentBasemap = 'argenmap';
         this._currentOpacity = DEFAULT_OPACITY;
 
+        // Store zoom limits from options
+        this._minZoom = options.minZoom || null;
+        this._maxZoom = options.maxZoom || null;
+        
         // -----------------------------------------------------------------------
         // Frame image storage.
         //
@@ -117,6 +124,8 @@ export class MapManager {
         ) || 0.4;
         // Map of radarCode → { lat, lng, radius_m }
         this._activeRadarCoverages = new Map();
+        // Map of radarCode → { lat, lng, radii_m: number[] }  (one ring per unique radius)
+        this._activeRadarCoverageRings = new Map();
     }
 
     // =========================================================================
@@ -128,7 +137,21 @@ export class MapManager {
      * @returns {L.Map}
      */
     init() {
-        this._map = L.map(this._mapElementId, { zoomControl: false }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+
+        // Build map options
+        const mapOptions = {
+            zoomControl: false,
+            wheelPxPerZoomLevel: 60  
+        };
+
+        // Add zoom limits if provided
+        if (this._minZoom !== null) {
+            mapOptions.minZoom = this._minZoom;
+        }
+        if (this._maxZoom !== null) {
+            mapOptions.maxZoom = this._maxZoom;
+        }
+        this._map = L.map(this._mapElementId, mapOptions).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
 
         // Radar coverage mask pane — kept for z-index ordering, the SVG
         // is NOT placed inside this pane (panes are transformed by Leaflet
@@ -761,6 +784,12 @@ export class MapManager {
         overlay.setAttribute('mask', 'url(#radar-coverage-mask)');
         svg.appendChild(overlay);
 
+        // Ring lines group — drawn above the dark overlay so they are
+        // visible on both the bright (inside coverage) and dark regions.
+        const ringsGroup = document.createElementNS(svgNS, 'g');
+        ringsGroup.setAttribute('id', 'radar-coverage-rings');
+        svg.appendChild(ringsGroup);
+
         this._coverageSvgEl = svg;
 
         // Append directly to the map container (not a pane) so the SVG
@@ -817,13 +846,20 @@ export class MapManager {
         for (const [radarCode, coverage] of this._activeRadarCoverages) {
             let cx, cy, radiusPx;
 
-            // Search case-insensitively so 'RMA9__DBZH' matches radarCode 'RMA9'
+            // Compute the union of all bboxes for this radar so the mask covers
+            // the outermost extent across all active layers (not just the first one).
             let bbox = null;
             const prefix = radarCode.toUpperCase() + '__';
             for (const [key, b] of this._bboxes) {
                 if (key.toUpperCase().startsWith(prefix)) {
-                    bbox = b;
-                    break;
+                    if (!bbox) {
+                        bbox = { north: b.north, south: b.south, east: b.east, west: b.west };
+                    } else {
+                        bbox.north = Math.max(bbox.north, b.north);
+                        bbox.south = Math.min(bbox.south, b.south);
+                        bbox.east  = Math.max(bbox.east,  b.east);
+                        bbox.west  = Math.min(bbox.west,  b.west);
+                    }
                 }
             }
 
@@ -846,12 +882,12 @@ export class MapManager {
                 cy = (swPx.y + nePx.y) / 2;
                 const rx = (nePx.x - swPx.x) / 2;   // E-W half-width in px
                 const ry = (swPx.y - nePx.y) / 2;   // N-S half-height in px
-                console.log(
-                    `[coverage] ${radarCode} ellipse:`,
-                    `N=${bbox.north.toFixed(4)} S=${bbox.south.toFixed(4)}`,
-                    `W=${bbox.west.toFixed(4)} E=${bbox.east.toFixed(4)}`,
-                    `→ cx=${cx.toFixed(1)} cy=${cy.toFixed(1)} rx=${rx.toFixed(1)} ry=${ry.toFixed(1)}`
-                );
+                // console.log(
+                //     `[coverage] ${radarCode} ellipse:`,
+                //     `N=${bbox.north.toFixed(4)} S=${bbox.south.toFixed(4)}`,
+                //     `W=${bbox.west.toFixed(4)} E=${bbox.east.toFixed(4)}`,
+                //     `→ cx=${cx.toFixed(1)} cy=${cy.toFixed(1)} rx=${rx.toFixed(1)} ry=${ry.toFixed(1)}`
+                // );
                 const ellipse = document.createElementNS(svgNS, 'ellipse');
                 ellipse.setAttribute('cx', String(cx));
                 ellipse.setAttribute('cy', String(cy));
@@ -868,10 +904,10 @@ export class MapManager {
                 cx = pt.x;
                 cy = pt.y;
                 radiusPx = this._metersToPixels(coverage.lat, coverage.radius_m);
-                console.log(
-                    `[coverage] ${radarCode} circle fallback (no bbox yet):`,
-                    `lat=${coverage.lat} lng=${coverage.lng}`
-                );
+                // console.log(
+                //     `[coverage] ${radarCode} circle fallback (no bbox yet):`,
+                //     `lat=${coverage.lat} lng=${coverage.lng}`
+                // );
                 const circle = document.createElementNS(svgNS, 'circle');
                 circle.setAttribute('cx', String(cx));
                 circle.setAttribute('cy', String(cy));
@@ -887,6 +923,73 @@ export class MapManager {
         );
         if (overlayRect) {
             overlayRect.setAttribute('opacity', String(this._coverageOpacity));
+        }
+
+        // ── Coverage ring lines ───────────────────────────────────────────────
+        // One stroke-only ellipse per unique coverage radius.
+        // Uses the same bbox-derived geometry as the mask cutout so the ring
+        // sits exactly on the data edge.  Falls back to _metersToPixels only
+        // before frames are loaded (no bbox yet).
+        // The smallest ring (inside the bright area) gets a heavier stroke;
+        // larger rings get a lighter dashed stroke since they sit at/near the
+        // dark coverage edge.
+        const ringsGroup = this._coverageSvgEl.querySelector('#radar-coverage-rings');
+        if (ringsGroup) {
+            while (ringsGroup.firstChild) ringsGroup.removeChild(ringsGroup.firstChild);
+            for (const [radarCode, ringsData] of this._activeRadarCoverageRings) {
+                const { lat, lng, rings } = ringsData;
+                const sortedRings = [...rings].sort((a, b) => a.radius_m - b.radius_m);
+                const hasMultiple = sortedRings.length > 1;
+
+                sortedRings.forEach(({ radius_m, productKey }, i) => {
+                    const isSmallest = i === 0;
+                    const strokeOpacity = hasMultiple && !isSmallest ? '0.45' : '0.80';
+                    const strokeWidth   = hasMultiple &&  isSmallest ? '2'    : '1.5';
+                    const dasharray     = hasMultiple && !isSmallest ? '5 4'  : null;
+
+                    // Prefer the bbox-derived ellipse (exact match with mask cutout).
+                    const bboxKey = `${radarCode}__${productKey}`;
+                    const bbox = this._bboxes.get(bboxKey);
+
+                    if (bbox) {
+                        const swPx = this._map.latLngToContainerPoint(
+                            L.latLng(bbox.south, bbox.west)
+                        );
+                        const nePx = this._map.latLngToContainerPoint(
+                            L.latLng(bbox.north, bbox.east)
+                        );
+                        const cx = ((swPx.x + nePx.x) / 2).toFixed(1);
+                        const cy = ((swPx.y + nePx.y) / 2).toFixed(1);
+                        const rx = ((nePx.x - swPx.x) / 2).toFixed(1);
+                        const ry = ((swPx.y - nePx.y) / 2).toFixed(1);
+                        const el = document.createElementNS(svgNS, 'ellipse');
+                        el.setAttribute('cx', cx);
+                        el.setAttribute('cy', cy);
+                        el.setAttribute('rx', rx);
+                        el.setAttribute('ry', ry);
+                        el.setAttribute('fill', 'none');
+                        el.setAttribute('stroke', 'white');
+                        el.setAttribute('stroke-opacity', strokeOpacity);
+                        el.setAttribute('stroke-width',   strokeWidth);
+                        if (dasharray) el.setAttribute('stroke-dasharray', dasharray);
+                        ringsGroup.appendChild(el);
+                    } else {
+                        // Fallback before frames load: symmetric circle from meters.
+                        const pt = this._map.latLngToContainerPoint(L.latLng(lat, lng));
+                        const radiusPx = this._metersToPixels(lat, radius_m);
+                        const el = document.createElementNS(svgNS, 'circle');
+                        el.setAttribute('cx', pt.x.toFixed(1));
+                        el.setAttribute('cy', pt.y.toFixed(1));
+                        el.setAttribute('r',  radiusPx.toFixed(1));
+                        el.setAttribute('fill', 'none');
+                        el.setAttribute('stroke', 'white');
+                        el.setAttribute('stroke-opacity', strokeOpacity);
+                        el.setAttribute('stroke-width',   strokeWidth);
+                        if (dasharray) el.setAttribute('stroke-dasharray', dasharray);
+                        ringsGroup.appendChild(el);
+                    }
+                });
+            }
         }
     }
 
@@ -925,6 +1028,25 @@ export class MapManager {
      */
     removeRadarCoverage(radarCode) {
         this._activeRadarCoverages.delete(radarCode);
+        this._activeRadarCoverageRings.delete(radarCode);
+        this._updateCoverageMask();
+    }
+
+    /**
+     * Set the visible ring lines for a radar — one ring per unique coverage radius.
+     * Each entry pairs a radius with the productKey whose bbox defines the exact edge.
+     * Pass an empty array to remove all rings for this radar.
+     * @param {string} radarCode
+     * @param {number} lat   Radar center latitude (WGS84)
+     * @param {number} lng   Radar center longitude (WGS84)
+     * @param {Array<{radius_m: number, productKey: string}>} rings
+     */
+    setRadarCoverageRings(radarCode, lat, lng, rings) {
+        if (!rings || rings.length === 0) {
+            this._activeRadarCoverageRings.delete(radarCode);
+        } else {
+            this._activeRadarCoverageRings.set(radarCode, { lat, lng, rings: [...rings] });
+        }
         this._updateCoverageMask();
     }
 

@@ -11,7 +11,8 @@ The WebMet25 frontend is a modular JavaScript application built with vanilla ES6
 **File Organization:**
 ```
 frontend/public/
-├── index.html                 # Main HTML page skeleton
+├── index.html                 # Main multi-radar map page
+├── radar.html                 # One-radar detail page (radar.html?code=AR5)
 ├── admin.html                 # Admin panel SPA (served at /admin, Basic Auth)
 ├── cog-browser.html          # Alternative detailed COG browser view
 ├── css/
@@ -29,9 +30,12 @@ frontend/public/
     │   ├── cog-browser-api.js
     │   └── cog-browser.js
     └── v2/                   # Current production frontend
-        ├── app.js            # Main orchestrator & state management
-        ├── map.js            # MapManager with L.imageOverlay
-        └── animation.js      # AnimationController with requestAnimationFrame
+        ├── app.js            # Main orchestrator & state management (multi-radar map)
+        ├── radar-app.js      # One-radar page orchestrator & state management
+        ├── map.js            # MapManager with L.imageOverlay (shared)
+        ├── animation.js      # AnimationController with requestAnimationFrame (shared)
+        ├── radar-utils.js    # Helpers: waitForLeaflet, updateRadarHeader, groupCogsByTimestamp…
+        └── constants.js      # Shared constants: MS_PER_HOUR, DEFAULT_*, COVERAGE_MODES
 ```
 
 > **v2 is the current production standard.** The v1 directory is preserved for reference.
@@ -266,6 +270,102 @@ Mode is persisted to `localStorage` key `webmet25_coverage_mode`. COG queries pa
 
 ---
 
+### 9b. **radar-app.js** — One-Radar Page Orchestrator
+
+**File:** [`frontend/public/js/v2/radar-app.js`](../../frontend/public/js/v2/radar-app.js)
+
+**Responsibility:** Orchestrator for `radar.html` — the single-radar detail view. Manages a
+multi-layer field system, per-layer render settings, shared frame timeline, live refresh, and
+canvas-based snapshot export. Reuses `MapManager`, `AnimationController`, and `UIControls`
+from the shared v2 modules but runs an independent `state` object (no relation to `app.js`).
+
+**Entry point:** `radar.html?code=<RADAR_CODE>[&field=<PRODUCT_KEY>]`
+- `code` is required; missing → redirect to `index.html`.
+- `field` sets the initial layer; falls back to `DBZHo` → `COLMAXo` → first available.
+
+**State shape:**
+```javascript
+const state = {
+    radarCode, radar,
+    mapManager, animator, ui,
+    products: [],       // available CD-mode products for this radar
+    frames: [],         // shared timestamp buckets [{timestamp, cogsByRadar}]
+    layers: [],         // active layer objects (see layer shape below)
+    nextLayerId,
+    liveHours, liveRefreshTimer, animationMode,
+    pickerContext, pickerShowFiltered,
+};
+```
+
+**Layer object shape:**
+```javascript
+{
+    id, productKey, productTitle,
+    opacity,            // 0–1; default 1.0 for first layer, DEFAULT_FIELD_OPACITY otherwise
+    visible,
+    colormap,           // {vmin, vmax, colors, ticks, colormap, available_colormaps, …}
+    selectedColormap,   // overridden colormap name (null = product default)
+    vmin, vmax,         // filter bounds (null = no filter sent to API)
+    smoothingEnabled, smoothingSigma,   // Gaussian smooth params
+    coverageRadius,     // metres from COG tag (null = radar.img_radio * 1000)
+    zIndex,
+    settingsExpanded,   // Ajustes sub-panel collapse state
+}
+```
+
+**Key functions:**
+| Function | Purpose |
+|---|---|
+| `addLayer(productKey)` | Fetch colormap → create layer → load frames → re-render list |
+| `removeLayer(layerId)` | Tear down overlays + frame entries → refresh display |
+| `swapLayerField(layerId, newKey)` | Replace field in-place; resets vmin/vmax/colormap |
+| `getTileParamsForLayer(layer)` | Returns `{colormap, vmin, vmax, smooth, smoothSigma}` for URL building |
+| `reloadLayerWithNewParams(layer)` | Re-fetches all frames for one layer in parallel; does NOT call `renderLayerList()` |
+| `setLayerColormap(layerId, name)` | Fetch new colormap info → re-render strip → reload frames |
+| `loadLayerFramesForRange(layer, start, end)` | Merge frames into shared `_frameImages`; layers share timestamp buckets |
+| `showAllLayersAtFrame(index)` | Composite all visible layers at a frame index; called on every animation tick |
+| `refreshLiveWindow()` | Anchor to latest data, reset frame structure, reload all layers |
+| `renderLayerList()` | Rebuild the `#layer-list` DOM; called after structural changes |
+| `updateCoverageRadius()` | Recompute SVG mask cutout + coverage rings from active layer radii |
+
+**Panel-module-b — Field / Layer panel:**
+- Active layers rendered as draggable rows (⠿ handle activates `draggable` on the row);
+  each row has: eye toggle, field name (click → swap modal), remove (✕), colormap strip +
+  ticks, opacity slider, collapsible **Ajustes** sub-panel.
+- **Ajustes sub-panel** controls (per-layer):
+  - *Colormap* — `<select>` grouped by Default / Otros; auto-applies on change (no Apply button)
+  - *Rango* — vmin/vmax `<input type="number">` pre-populated with product defaults when `layer.vmin == null`; "Aplicar" triggers `reloadLayerWithNewParams`
+  - *Suavizado* — checkbox (on/off) + sigma slider (0.3–3.0, step 0.1); slider change is debounced 400 ms before reload
+- Collapsible "Añadir campo" section: checkbox list (unfiltered/filtered toggle via
+  `#toggle-field-picker-filtered`); check → `addLayer`, uncheck → `removeLayer`
+
+**Range filter invariant (important):**
+`vmin`/`vmax` passed to the frames endpoint are **alpha-masking bounds only** — pixels outside
+the range become transparent. Colormap normalization always uses the product defaults from
+`colormap_for_field()`. The UI pre-populates inputs with `layer.colormap.vmin/vmax` so that
+clicking "Aplicar" without narrowing the range is visually a no-op (matching the main page
+behavior). `reloadLayerWithNewParams` does not re-render the colormap strip, so ticks
+remain at product defaults after any filter apply.
+
+**Coverage rings:**
+`updateCoverageRadius()` collects unique `layer.coverageRadius` values; the SVG mask cutout
+uses the largest. `MapManager.setRadarCoverageRings()` draws one SVG ring per unique radius;
+the innermost ring (smallest radius inside the lit area) gets heavier styling.
+
+**Snapshot (`captureMapSnapshot`):**
+Canvas compositing pipeline:
+1. Basemap tiles + radar overlay images (respects per-overlay opacity)
+2. Coverage SVG mask (serialized to blob → drawn via `Image`)
+3. OHMC logo overlay (top-left, from `#logo-container img`)
+4. Radar header panel (top-center, `${code} — ${title}`)
+5. Per-layer colormap strips with current timestamp (bottom-left; one row per visible layer)
+6. Fallback time panel (bottom-right, only when no visible layers)
+
+**Dependencies:** `shared/api.js`, `v2/map.js`, `v2/animation.js`, `shared/controls.js`,
+`v2/radar-utils.js`, `v2/constants.js`
+
+---
+
 ### 9. **cog-browser.js** — [Alternative] COG Browser Application
 
 **File:** [`frontend/public/js/shared/cog-browser.js`](../../frontend/public/js/shared/cog-browser.js)
@@ -279,6 +379,31 @@ Mode is persisted to `localStorage` key `webmet25_coverage_mode`. COG queries pa
 ---
 
 ## HTML Pages
+
+### **radar.html** — One-Radar Detail Page
+
+**File:** [`frontend/public/radar.html`](../../frontend/public/radar.html)
+
+**Responsibility:** DOM skeleton for the single-radar detail view. Loaded as
+`/radar.html?code=<RADAR_CODE>`. Reuses the same `styles.css` and Leaflet version as
+`index.html` but has its own layout: a back button + radar header bar (top-center),
+icon bar (top-right), map container, floating panels (field/layer selection, time window,
+settings), and animation controls (bottom-center).
+
+**Key DOM elements:**
+- `#radar-header` — displays radar code + title; contains `#btn-back` (→ `index.html`)
+- `#panel-module-b` — field/layer selection panel; contains `#layer-list` (active layers,
+  built by `renderLayerList()`) and the collapsible `#section-add-field` with `#field-picker-list`
+- `#field-picker-modal` — swap-field modal (grid of all products); separate from add-field panel
+- `#panel-module-c` — time window panel (preset buttons + custom range with TimeWheels)
+- `#settings-panel` — basemap select, coverage opacity slider, keyboard shortcuts
+- `#animation-controls` — play/pause, nav buttons, speed slider, frame counter, time display,
+  live indicator, refresh button
+- `#field-loading-badge` — shown while a layer is loading
+
+**Loaded scripts:** Leaflet 1.9.4 (CDN), `js/v2/radar-app.js` (ES module)
+
+---
 
 ### **index.html** — Main Radar Visualization Page
 
@@ -395,19 +520,32 @@ Mode is persisted to `localStorage` key `webmet25_coverage_mode`. COG queries pa
 ## Module Dependency Graph
 
 ```
-v2/app.js (main orchestrator)
-├── shared/api.js (REST client)
-├── v2/map.js (Leaflet wrapper — L.imageOverlay + SVG coverage mask)
-│   └── Leaflet (CDN)
-├── v2/animation.js (frame player — requestAnimationFrame)
-│   └── v2/map.js
-├── shared/controls.js (UI handlers)
-│   └── shared/time-wheel.js (custom-range HH:MM picker)
-├── shared/legend.js (color scale renderer)
-│   └── shared/api.js
-├── shared/tops-cores.js (L.circleMarker layer)
-│   └── shared/api.js
-└── index.html (DOM skeleton)
+index.html (multi-radar map)
+└── v2/app.js (main orchestrator)
+    ├── shared/api.js (REST client)
+    ├── v2/map.js (Leaflet wrapper — L.imageOverlay + SVG coverage mask)
+    │   └── Leaflet (CDN)
+    ├── v2/animation.js (frame player — requestAnimationFrame)
+    │   └── v2/map.js
+    ├── shared/controls.js (UI handlers)
+    │   └── shared/time-wheel.js (custom-range HH:MM picker)
+    ├── shared/legend.js (color scale renderer)
+    │   └── shared/api.js
+    ├── shared/tops-cores.js (L.circleMarker layer)
+    │   └── shared/api.js
+    └── styles.css
+
+radar.html (one-radar detail page)
+└── v2/radar-app.js (one-radar orchestrator)
+    ├── shared/api.js (REST client — shared)
+    ├── v2/map.js (Leaflet wrapper — shared)
+    │   └── Leaflet (CDN)
+    ├── v2/animation.js (frame player — shared)
+    │   └── v2/map.js
+    ├── shared/controls.js (UI handlers — shared)
+    │   └── shared/time-wheel.js
+    ├── v2/radar-utils.js (waitForLeaflet, updateRadarHeader, groupCogsByTimestamp, …)
+    ├── v2/constants.js (MS_PER_HOUR, DEFAULT_*, COVERAGE_MODES)
     └── styles.css
 
 cog-browser.html (alternative view)
@@ -422,7 +560,7 @@ admin.html (admin SPA, /admin, Basic Auth)
 
 ---
 
-## Data Flow Through Components (v2)
+## Data Flow Through Components (v2 — main map)
 
 ```
 1. User opens http://localhost
@@ -461,6 +599,57 @@ admin.html (admin SPA, /admin, Basic Auth)
    ↓
 7. Live refresh (every 5 min)
    └── refreshLiveWindow() → incremental diff → animator.setFrames()
+```
+
+## Data Flow Through Components (one-radar page)
+
+```
+1. User opens /radar.html?code=AR5[&field=DBZHo]
+   ↓
+2. radar-app.js:init() called
+   ├── api.getRadars() + api.getProducts(CD_MODE) → state.radar, state.products
+   ├── MapManager.init() → Leaflet map centered on radar, SVG coverage pane
+   ├── updateRadarHeader(radar) → fills #radar-header-code / #radar-header-title
+   ├── fitMapToRadar(radar, mapManager) → sets map bounds to radar coverage
+   └── addLayer(initialProductKey)  ← DBZHo / field param / first available
+       ├── api.getColormapInfo(productKey) → layer.colormap
+       ├── creates layer object with vmin=null, vmax=null, smoothingEnabled=false
+       ├── loadLayerFrames(layer, storedHours)
+       │   ├── api.getLatestCogsForRadars() → anchor end time
+       │   ├── loadLayerFramesForRange(layer, start, end)
+       │   │   ├── api.getCogsForTimeRange() → COG list
+       │   │   ├── groupCogsByTimestamp() → state.frames
+       │   │   ├── For each frame: _buildFrameUrl(cogId, productKey, params)
+       │   │   │   → GET /frames/{id}/image.png?colormap=…&vmin=…&vmax=…&smooth=…
+       │   │   ├── _loadImage(url) → {img, bbox, objectUrl}
+       │   │   └── stored in state.mapManager._frameImages[frameIdx].set(key, entry)
+       │   └── animator.updateFrames(state.frames, …) → start playback
+       └── startLiveRefresh(storedHours)
+   ↓
+3. Animation loop (requestAnimationFrame)
+   ├── animator._showCurrentFrame() overridden → showAllLayersAtFrame(index)
+   │   ├── hide all overlays
+   │   └── for each visible layer: overlay.setUrl(entry.img.src) + setOpacity(opacity)
+   └── updateCoverageRadius() called on layer add/remove
+       ├── collect unique coverageRadius values from state.layers
+       ├── addRadarCoverage(…, maxRadius)  ← mask cutout = union
+       └── setRadarCoverageRings(…, uniqueRings)  ← one ring per unique radius
+   ↓
+4. User adds a field (checkbox or modal)
+   └── addLayer(productKey) → new layer merged into existing state.frames
+   ↓
+5. User changes per-layer setting (colormap / range / smoothing)
+   ├── Colormap change: setLayerColormap() → fetch new info → re-render strip → reloadLayerWithNewParams()
+   ├── Range filter (Apply): layer.vmin/vmax = parsed inputs → reloadLayerWithNewParams()
+   │   ↑ inputs pre-populated with colormap.vmin/vmax (product defaults) when vmin == null
+   │   ↑ reloadLayerWithNewParams() does NOT call renderLayerList() — strip ticks unchanged
+   └── Smoothing: toggle/sigma → reloadLayerWithNewParams() (sigma debounced 400 ms)
+   ↓
+6. Live refresh (every LIVE_REFRESH_INTERVAL_MS)
+   └── refreshLiveWindow()
+       ├── getLatestCogsForRadars(first layer) → new anchor end time
+       ├── reset state.frames + _clearAllOverlays()
+       └── loadLayerFramesForRange(each layer, newStart, newEnd)
 ```
 
 ---
@@ -503,5 +692,5 @@ On page load `init()` bootstraps the state, fetches data, and starts the animati
 
 ---
 
-**Document Version:** 2.1.0  
-**Last Updated:** June 4, 2026
+**Document Version:** 2.2.0  
+**Last Updated:** June 25, 2026

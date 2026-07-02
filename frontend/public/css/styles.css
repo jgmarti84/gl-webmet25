@@ -38,7 +38,7 @@ body {
 }
 
 #logo-container img {
-    height: 50px;
+    height: 80px;
     width: auto;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
 }
@@ -59,8 +59,8 @@ body {
 
 .icon-btn {
     position: relative;
-    width: 44px;
-    height: 44px;
+    width: 55px;
+    height: 55px;
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.18);
     background: rgba(26, 26, 46, 0.95);
@@ -78,7 +78,7 @@ body {
 }
 
 .icon-btn .icon-glyph {
-    font-size: 18px;
+    font-size: 22px;
     line-height: 1;
 }
 
@@ -99,8 +99,8 @@ body {
     position: absolute;
     top: 2px;
     right: 2px;
-    min-width: 16px;
-    height: 16px;
+    min-width: 19px;
+    height: 19px;
     padding: 0 4px;
     background: #4fc3f7;
     color: #1a1a2e;
@@ -1475,6 +1475,39 @@ code {
     text-align: center;
 }
 
+/* Animation controls: collapse toggle button */
+.collapse-controls-btn {
+    background: transparent;
+    border: none;
+    color: #aaa;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 0 0 6px;
+    cursor: pointer;
+    transition: color 0.2s, transform 0.2s;
+    flex-shrink: 0;
+    user-select: auto;
+    pointer-events: all;
+}
+.collapse-controls-btn:hover { color: #fff; }
+
+/* Chevron flips when collapsed */
+#animation-controls.collapsed .collapse-controls-btn {
+    transform: rotate(180deg);
+}
+
+/* Hide slider + buttons + message when collapsed; keep info row */
+#animation-controls.collapsed .animation-slider-container,
+#animation-controls.collapsed .animation-buttons,
+#animation-controls.collapsed .message-area {
+    display: none;
+}
+
+/* Tighten padding when collapsed so the pill is compact */
+#animation-controls.collapsed {
+    padding-bottom: 10px;
+}
+
 /* Field loading indicator — appears in bottom-left during
    field switch preload so it does not hide behind open panels. */
 #field-loading-badge {
@@ -1631,7 +1664,7 @@ code {
 @media (max-width: 768px) {
     #icon-bar { top: 5px; right: 5px; }
 
-    .icon-btn { width: 38px; height: 38px; font-size: 16px; }
+    .icon-btn { width: 43px; height: 43px; font-size: 18px; }
 
     .floating-panel {
         right: 53px;
@@ -1693,4 +1726,457 @@ code {
     color: #888;
     margin-top: 4px;
     line-height: 1.3;
+}
+
+/* Drill-down button: navigates to single-radar page */
+.radar-drill-btn {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 2px;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: color 0.2s, background 0.2s;
+    /* Keeps it from stretching the row height */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+}
+
+.radar-drill-btn:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+/* ── One-radar page: radar identity header (top-center) ── */
+#radar-header {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(26, 26, 46, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 6px 14px;
+    pointer-events: auto;
+    white-space: nowrap;
+}
+
+#radar-header-code {
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.05em;
+}
+
+#radar-header-title {
+    font-size: 12px;
+    color: #aaa;
+}
+
+.radar-back-btn {
+    background: none;
+    border: none;
+    color: #aaa;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 6px 2px 0;
+    border-right: 1px solid rgba(255, 255, 255, 0.15);
+    margin-right: 2px;
+    transition: color 0.2s;
+    white-space: nowrap;
+}
+
+.radar-back-btn:hover {
+    color: #fff;
+}
+
+/* ============================================================
+   ONE-RADAR PAGE — LAYER LIST (field panel)
+   ============================================================ */
+
+.add-field-btn {
+    width: 100%;
+    padding: 7px;
+    background: rgba(79, 195, 247, 0.08);
+    border: 1px dashed rgba(79, 195, 247, 0.35);
+    border-radius: 5px;
+    color: #4fc3f7;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+    margin-top: 6px;
+}
+
+.add-field-btn:hover {
+    background: rgba(79, 195, 247, 0.15);
+    border-color: rgba(79, 195, 247, 0.6);
+}
+
+/* ============================================================
+   FIELD PICKER MODAL
+   ============================================================ */
+
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-box {
+    background: rgba(26, 26, 46, 0.98);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.7);
+    width: 320px;
+    max-height: 70vh;
+    overflow-y: auto;
+    backdrop-filter: blur(12px);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    font-size: 13px;
+    font-weight: 600;
+    color: #4fc3f7;
+    position: sticky;
+    top: 0;
+    background: rgba(26, 26, 46, 0.98);
+    border-radius: 10px 10px 0 0;
+}
+
+.field-picker-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 14px;
+}
+
+.field-picker-btn {
+    padding: 8px 10px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    color: #eee;
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.field-picker-btn:hover:not(:disabled) {
+    background: rgba(79, 195, 247, 0.12);
+    border-color: rgba(79, 195, 247, 0.5);
+    color: #fff;
+}
+
+.field-picker-btn:disabled {
+    color: #444;
+    border-color: rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.02);
+    cursor: not-allowed;
+}
+
+/* ── Layer row (2-section card) ── */
+.layer-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 6px;
+    border-radius: 5px;
+    margin-bottom: 4px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    transition: background 0.15s;
+    user-select: none;
+}
+
+.layer-row:hover { background: rgba(255,255,255,0.06); }
+
+.layer-row.drag-over {
+    border-color: #4fc3f7;
+    background: rgba(79, 195, 247, 0.08);
+}
+
+/* Header: drag handle | eye | field name | remove */
+.layer-row-header {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+}
+
+/* Body: colormap wrapper + slider row */
+.layer-row-body {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+}
+
+.layer-drag-handle {
+    cursor: grab;
+    color: #555;
+    font-size: 13px;
+    line-height: 1;
+    text-align: center;
+    user-select: none;
+    padding: 2px;
+    flex-shrink: 0;
+}
+.layer-drag-handle:active { cursor: grabbing; }
+
+.layer-eye-btn {
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    transition: color 0.15s;
+    flex-shrink: 0;
+}
+.layer-eye-btn:hover        { color: #fff; }
+.layer-eye-btn.hidden-layer { color: #444; }
+
+.layer-field-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: #eee;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: color 0.15s;
+    flex: 1;
+    min-width: 0;
+}
+.layer-field-name:hover { color: #4fc3f7; }
+
+.layer-remove-btn {
+    background: none;
+    border: none;
+    color: #555;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    transition: color 0.15s;
+    flex-shrink: 0;
+}
+.layer-remove-btn:hover { color: #ef5350; }
+
+/* Colormap strip wrapper: strip on top, hticks below */
+.layer-cmap-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-width: 0;
+}
+
+.layer-colormap-strip {
+    height: 14px;
+    border-radius: 3px;
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.1);
+    transition: border-color 0.15s;
+    flex-shrink: 0;
+}
+.layer-colormap-strip:hover { border-color: #4fc3f7; }
+
+/* Horizontal tick row below the colormap strip */
+.layer-colormap-hticks {
+    position: relative;
+    height: 18px;
+    width: 100%;
+    overflow: visible;
+}
+
+.layer-htick {
+    position: absolute;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transform: translateX(-50%);
+}
+
+.layer-htick-line {
+    width: 1px;
+    height: 4px;
+    background: rgba(255,255,255,0.35);
+    flex-shrink: 0;
+}
+
+.layer-htick-label {
+    font-size: 9px;
+    color: #bbb;
+    font-family: 'Courier New', monospace;
+    white-space: nowrap;
+    line-height: 1.2;
+    margin-top: 1px;
+}
+
+/* Slider row: slider takes remaining space, opacity% pinned to right */
+.layer-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.layer-opacity-slider {
+    flex: 1;
+    height: 2px;
+    cursor: pointer;
+    accent-color: #4fc3f7;
+    min-width: 0;
+}
+.layer-opacity-slider::-webkit-slider-thumb {
+    width: 10px;
+    height: 10px;
+}
+.layer-opacity-slider::-moz-range-thumb {
+    width: 10px;
+    height: 10px;
+    border: none;
+    background: #4fc3f7;
+    border-radius: 50%;
+}
+
+.layer-opacity-pct {
+    font-size: 10px;
+    color: #888;
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 28px;
+    text-align: right;
+}
+
+/* ─── Layer settings section ─────────────────────────────────────────────── */
+
+.layer-settings-toggle {
+    background: none;
+    border: none;
+    color: #555;
+    font-size: 10px;
+    cursor: pointer;
+    padding: 2px 0;
+    text-align: left;
+    width: 100%;
+    transition: color 0.15s;
+    user-select: none;
+    letter-spacing: 0.02em;
+}
+.layer-settings-toggle:hover { color: #999; }
+
+.layer-settings-body {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255,255,255,0.07);
+}
+
+.layer-setting-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+}
+
+.layer-setting-label {
+    font-size: 10px;
+    color: #777;
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 52px;
+}
+
+.layer-setting-select {
+    flex: 1;
+    font-size: 10px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 3px;
+    color: #ccc;
+    padding: 2px 4px;
+    min-width: 0;
+    cursor: pointer;
+}
+.layer-setting-select:focus { outline: none; border-color: #4fc3f7; }
+
+.layer-setting-range-input {
+    width: 46px;
+    font-size: 10px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 3px;
+    color: #ccc;
+    padding: 2px 4px;
+    text-align: center;
+    flex-shrink: 0;
+}
+.layer-setting-range-input:focus { outline: none; border-color: #4fc3f7; }
+.layer-setting-range-input::placeholder { color: #444; }
+
+.layer-setting-apply-btn {
+    background: rgba(79,195,247,0.12);
+    border: 1px solid rgba(79,195,247,0.25);
+    border-radius: 3px;
+    color: #4fc3f7;
+    font-size: 10px;
+    cursor: pointer;
+    padding: 2px 7px;
+    flex-shrink: 0;
+    transition: background 0.15s;
+}
+.layer-setting-apply-btn:hover { background: rgba(79,195,247,0.22); }
+
+.layer-setting-smooth-toggle {
+    flex-shrink: 0;
+    cursor: pointer;
+    accent-color: #4fc3f7;
+    width: 13px;
+    height: 13px;
+}
+
+.layer-setting-sigma-slider {
+    flex: 1;
+    height: 2px;
+    cursor: pointer;
+    accent-color: #4fc3f7;
+    min-width: 0;
+}
+.layer-setting-sigma-slider:disabled { opacity: 0.3; cursor: default; }
+
+.layer-setting-sigma-val {
+    font-size: 10px;
+    color: #777;
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 24px;
+    text-align: right;
+    font-family: 'Courier New', monospace;
 }

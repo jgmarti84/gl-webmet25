@@ -358,9 +358,22 @@ export class UIControls {
             label.htmlFor = `radar-${radar.code}`;
             label.textContent = `${radar.code} - ${radar.title}`;
             
+            const drillBtn = document.createElement('button');
+            drillBtn.className = 'radar-drill-btn';
+            drillBtn.title = `Abrir vista de Radar: ${radar.code}`;
+            drillBtn.setAttribute('aria-label', `Open ${radar.code} detail page`);
+            drillBtn.textContent = '›';
+            drillBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // don't trigger checkbox
+                const currentField = document.getElementById('product-select')?.value || '';
+                const fieldParam = currentField ? `&field=${encodeURIComponent(currentField)}` : '';
+                window.location.href = `radar.html?code=${encodeURIComponent(radar.code)}${fieldParam}`;
+            });
+
             item.appendChild(checkbox);
             item.appendChild(dot);
             item.appendChild(label);
+            item.appendChild(drillBtn);
             container.appendChild(item);
         });
     }
