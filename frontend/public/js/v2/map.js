@@ -199,6 +199,7 @@ export class MapManager {
             maxZoom:     basemap.maxZoom,
             zIndex:      1,
             crossOrigin: 'anonymous',
+            tms:         true,
         }).addTo(this._map);
         this._currentBasemap = basemapKey;
         localStorage.setItem('webmet25_selected_basemap', basemapKey);
