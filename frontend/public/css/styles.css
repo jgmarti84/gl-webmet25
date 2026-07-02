@@ -910,6 +910,15 @@ code {
 /* ============================================================
    COLORMAP & RANGE CONTROLS  (Module B)
    ============================================================ */
+.range-section-label {
+    display: block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #aaa;
+    margin-bottom: 6px;
+}
+
 .range-control {
     display: flex;
     flex-direction: column;

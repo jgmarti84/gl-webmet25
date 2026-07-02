@@ -174,7 +174,7 @@
                 </div>
             </div>
 
-            <!-- Colormap -->
+            <!-- Colormap + Range Filter -->
             <div class="field-section" id="section-colormap">
                 <button type="button" class="field-section-header" aria-expanded="false" aria-controls="section-colormap-body">
                     <span class="field-section-title">Mapa de colores</span>
@@ -185,20 +185,11 @@
                         <!-- options populated via optgroups in JS -->
                         <select id="colormap-select"></select>
                     </div>
-                </div>
-            </div>
-
-            <!-- Range Filter (vmin/vmax act as DATA FILTERS: pixels outside the
-                 range render transparent; the colormap always spans the full
-                 product range — see tile_service.py). The Apply button applies
-                 the range filter only; every other control auto-applies. -->
-            <div class="field-section" id="section-range">
-                <button type="button" class="field-section-header" aria-expanded="false" aria-controls="section-range-body">
-                    <span class="field-section-title">Filtro de rango</span>
-                    <span class="field-section-chevron" aria-hidden="true"></span>
-                </button>
-                <div class="field-section-body" id="section-range-body">
+                    <!-- Range Filter (vmin/vmax act as DATA FILTERS: pixels outside the
+                         range render transparent; the colormap always spans the full
+                         product range — see tile_service.py). -->
                     <div class="control-group" id="range-group" style="display:none;">
+                        <span class="range-section-label">Rango de Variable</span>
                         <div class="range-control">
                             <div class="range-row">
                                 <span class="range-label">Mín</span>

@@ -711,10 +711,22 @@ const app = {
                     const productSelect = document.getElementById('product-select');
                     if (productSelect && state.selectedProduct) productSelect.value = state.selectedProduct;
 
-                    // Apply the field change consistently (colormap, range, Tops&Cores,
-                    // filtered-switch availability, frame reload) in ONE pass — this is
-                    // what makes the mode switch take effect on a single click.
-                    await this._onProductChanged();
+                    // Update colormap/badge/UI state for the new field selection.
+                    state.selectedColormap = null;
+                    state.currentVmin = null;
+                    state.currentVmax = null;
+                    this.onTimeRangeChange();
+                    _updateFieldBadge(state.selectedProduct);
+                    await this.loadColormapOptions();
+                    this._updateTopsCoresUIVisibility();
+                    this._updateFilteredSwitchAvailability();
+                    // Force a fresh data load — always finds the latest frames for the
+                    // new mode regardless of the current time-range window.
+                    if (state.selectedRadars.length > 0 && state.selectedProduct) {
+                        await this.loadLastNHours(
+                            state.activeTimeWindowHours ?? DEFAULT_TIME_WINDOW_HOURS
+                        );
+                    }
                 } finally {
                     coverageSwitching = false;
                     coverageToggleBtn.disabled = false;
@@ -871,8 +883,10 @@ const app = {
         const selectAllBtn = document.getElementById('btn-select-all-radars');
         if (selectAllBtn) {
             selectAllBtn.addEventListener('click', () => {
-                const checkboxes = document.querySelectorAll('#radar-checkboxes input[type="checkbox"]');
-                checkboxes.forEach(cb => { cb.checked = true; });
+                document.querySelectorAll('#radar-checkboxes input[type="checkbox"]').forEach(cb => {
+                    const item = cb.closest('.radar-checkbox-item');
+                    if (item && !item.classList.contains('radar-inactive')) cb.checked = true;
+                });
                 this.onRadarCheckboxChange();
             });
         }
