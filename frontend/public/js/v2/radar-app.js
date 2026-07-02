@@ -1587,7 +1587,18 @@ const app = {
             state.products = products;
 
             if (!state.radar || !state.radar.detail_view_enabled) {
-                window.location.replace('index.html');
+                const overlay = document.getElementById('radar-unavailable');
+                const counter = document.getElementById('redirect-countdown');
+                overlay.style.display = 'flex';
+                let secs = 5;
+                const tick = setInterval(() => {
+                    secs -= 1;
+                    counter.textContent = secs;
+                    if (secs <= 0) {
+                        clearInterval(tick);
+                        window.location.replace('index.html');
+                    }
+                }, 1000);
                 return;
             }
 
