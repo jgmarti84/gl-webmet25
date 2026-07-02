@@ -711,7 +711,23 @@ const app = {
                     const productSelect = document.getElementById('product-select');
                     if (productSelect && state.selectedProduct) productSelect.value = state.selectedProduct;
 
-                    // Update colormap/badge/UI state for the new field selection.
+                    // Sync state.selectedProduct from the actual dropdown value.
+                    // After populateProductSelect the browser may have reset to the
+                    // placeholder if our computed value wasn't a valid option; reading
+                    // back guarantees we use what the dropdown really shows.
+                    const productSelect2 = document.getElementById('product-select');
+                    if (productSelect2) {
+                        if (productSelect2.value) {
+                            state.selectedProduct = productSelect2.value;
+                        } else if (productSelect2.options.length > 1) {
+                            // Placeholder is index 0 — pick first real option.
+                            productSelect2.selectedIndex = 1;
+                            state.selectedProduct = productSelect2.value;
+                        }
+                    }
+                    console.log('[mode-switch] radars:', state.selectedRadars, 'product:', state.selectedProduct, 'mode:', state.coverageModeId, 'animMode:', state.animationMode);
+
+                    // Update colormap/badge/UI state for the new field.
                     state.selectedColormap = null;
                     state.currentVmin = null;
                     state.currentVmax = null;
@@ -720,12 +736,13 @@ const app = {
                     await this.loadColormapOptions();
                     this._updateTopsCoresUIVisibility();
                     this._updateFilteredSwitchAvailability();
-                    // Force a fresh data load — always finds the latest frames for the
-                    // new mode regardless of the current time-range window.
+                    // Force a fresh data load for the new mode.
                     if (state.selectedRadars.length > 0 && state.selectedProduct) {
                         await this.loadLastNHours(
                             state.activeTimeWindowHours ?? DEFAULT_TIME_WINDOW_HOURS
                         );
+                    } else {
+                        console.warn('[mode-switch] skipping load — radars:', state.selectedRadars.length, 'product:', state.selectedProduct);
                     }
                 } finally {
                     coverageSwitching = false;
