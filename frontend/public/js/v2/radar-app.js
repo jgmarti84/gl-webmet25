@@ -1586,6 +1586,22 @@ const app = {
             state.radar    = radars.find(r => r.code === RADAR_CODE) || null;
             state.products = products;
 
+            if (!state.radar || !state.radar.detail_view_enabled) {
+                const overlay = document.getElementById('radar-unavailable');
+                const counter = document.getElementById('redirect-countdown');
+                overlay.style.display = 'flex';
+                let secs = 5;
+                const tick = setInterval(() => {
+                    secs -= 1;
+                    counter.textContent = secs;
+                    if (secs <= 0) {
+                        clearInterval(tick);
+                        window.location.replace('index.html');
+                    }
+                }, 1000);
+                return;
+            }
+
             state.mapManager.addRadarCoverage(
                 state.radar.code,
                 state.radar.center_lat,
