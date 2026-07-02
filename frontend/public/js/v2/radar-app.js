@@ -1586,6 +1586,11 @@ const app = {
             state.radar    = radars.find(r => r.code === RADAR_CODE) || null;
             state.products = products;
 
+            if (!state.radar || !state.radar.detail_view_enabled) {
+                window.location.replace('index.html');
+                return;
+            }
+
             state.mapManager.addRadarCoverage(
                 state.radar.code,
                 state.radar.center_lat,

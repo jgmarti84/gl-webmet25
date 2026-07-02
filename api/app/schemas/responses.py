@@ -25,6 +25,7 @@ class RadarResponse(BaseModel):
     center_long: float
     img_radio: int
     is_active: bool
+    detail_view_enabled: bool = False
     extent: Optional[Dict[str, float]] = None  # Computed bounding box
     
     class Config:

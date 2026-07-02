@@ -521,6 +521,7 @@ async function renderRadars() {
                     <th><button data-sort="center_long">Long centro</button></th>
                     <th><button data-sort="img_radio">Radio img</button></th>
                     <th><button data-sort="is_active">Activo</button></th>
+                    <th><button data-sort="detail_view_enabled">Vista detalle</button></th>
                     <th><button data-sort="created_at">Creado</button></th>
                     <th>Acciones</th>
                 </tr>
@@ -534,6 +535,7 @@ async function renderRadars() {
                         <td>${safeText(radar.center_long)}</td>
                         <td>${safeText(radar.img_radio)}</td>
                         <td class="toggle-cell"><input type="checkbox" data-toggle-radar="${radar.code}" ${radar.is_active ? 'checked' : ''}></td>
+                        <td class="toggle-cell"><input type="checkbox" data-toggle-detail-view="${radar.code}" ${radar.detail_view_enabled ? 'checked' : ''}></td>
                         <td>${fmtDate(radar.created_at)}</td>
                         <td class="table-actions">
                             <button class="btn-secondary" data-edit-radar="${radar.code}">${ICON_EDIT}</button>
@@ -554,6 +556,14 @@ async function renderRadars() {
         element.onchange = async (event) => {
             const code = event.target.dataset.toggleRadar;
             await adminApi.patchRadar(code, { is_active: event.target.checked });
+            showMessage(`Radar ${code} actualizado`, 'success');
+        };
+    });
+
+    elements.sectionContent.querySelectorAll('[data-toggle-detail-view]').forEach((element) => {
+        element.onchange = async (event) => {
+            const code = event.target.dataset.toggleDetailView;
+            await adminApi.patchRadar(code, { detail_view_enabled: event.target.checked });
             showMessage(`Radar ${code} actualizado`, 'success');
         };
     });
@@ -589,6 +599,7 @@ function openRadarForm(radar = null) {
             <label>Lat punto 2 <input name="point2_lat" type="number" step="any" value="${safeText(radar?.point2_lat ?? 0)}"></label>
             <label>Long punto 2 <input name="point2_long" type="number" step="any" value="${safeText(radar?.point2_long ?? 0)}"></label>
             <label>Activo <select name="is_active"><option value="true" ${radar?.is_active ? 'selected' : ''}>Sí</option><option value="false" ${radar && !radar.is_active ? 'selected' : ''}>No</option></select></label>
+            <label>Vista detalle habilitada <select name="detail_view_enabled"><option value="true" ${radar?.detail_view_enabled ? 'selected' : ''}>Sí</option><option value="false" ${radar && !radar.detail_view_enabled ? 'selected' : ''}>No</option></select></label>
             <div class="form-actions"><button class="btn" type="submit">${isEdit ? 'Guardar' : 'Crear'}</button></div>
         `,
         async (formData) => {
@@ -601,6 +612,7 @@ function openRadarForm(radar = null) {
             payload.point2_lat = Number(payload.point2_lat);
             payload.point2_long = Number(payload.point2_long);
             payload.is_active = payload.is_active === 'true';
+            payload.detail_view_enabled = payload.detail_view_enabled === 'true';
             if (isEdit) {
                 await adminApi.updateRadar(radar.code, payload);
                 showMessage(`Radar ${radar.code} actualizado`, 'success');

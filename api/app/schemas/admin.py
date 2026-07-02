@@ -31,6 +31,7 @@ class AdminRadarBase(BaseModel):
     center_long: float = Field(description="Radar center longitude")
     img_radio: int = Field(description="Radar coverage radius")
     is_active: bool = Field(description="Whether radar is active")
+    detail_view_enabled: bool = Field(default=False, description="Whether the one-radar detail view is accessible")
     point1_lat: float = Field(default=0, description="Boundary point 1 latitude")
     point1_long: float = Field(default=0, description="Boundary point 1 longitude")
     point2_lat: float = Field(default=0, description="Boundary point 2 latitude")
@@ -65,6 +66,9 @@ class AdminRadarPatch(BaseModel):
     img_radio: Optional[int] = Field(default=None, description="Radar coverage radius")
     is_active: Optional[bool] = Field(
         default=None, description="Whether radar is active"
+    )
+    detail_view_enabled: Optional[bool] = Field(
+        default=None, description="Whether the one-radar detail view is accessible"
     )
     point1_lat: Optional[float] = Field(
         default=None, description="Boundary point 1 latitude"

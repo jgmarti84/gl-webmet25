@@ -44,6 +44,7 @@ class Radar(Base):
     center_long = Column(Numeric(12, 8), nullable=False)
     img_radio = Column(Integer, nullable=False)
     is_active = Column(Boolean, default=True)
+    detail_view_enabled = Column(Boolean, default=False, nullable=False, server_default='false')
     point1_lat = Column(Numeric(14, 10), default=Decimal('0'))
     point1_long = Column(Numeric(14, 10), default=Decimal('0'))
     point2_lat = Column(Numeric(14, 10), default=Decimal('0'))

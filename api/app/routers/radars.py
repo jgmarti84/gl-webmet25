@@ -39,6 +39,7 @@ def list_radars(
             center_long=float(radar.center_long),
             img_radio=radar.img_radio,
             is_active=radar.is_active,
+            detail_view_enabled=radar.detail_view_enabled,
             extent={
                 "lat_max": lat_max,
                 "lat_min": lat_min,
@@ -74,6 +75,7 @@ def get_radar(
         center_long=float(radar.center_long),
         img_radio=radar.img_radio,
         is_active=radar.is_active,
+        detail_view_enabled=radar.detail_view_enabled,
         extent={
             "lat_max": lat_max,
             "lat_min": lat_min,
