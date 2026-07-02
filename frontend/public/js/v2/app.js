@@ -734,13 +734,7 @@ const app = {
                     await this.loadColormapOptions();
                     this._updateTopsCoresUIVisibility();
                     this._updateFilteredSwitchAvailability();
-                    // Stop the current animation so loadLastNHours takes the full
-                    // reload path (loadTimeRangeCogs) instead of the continuity path.
-                    // Without this the mode switch silently reloads the same frames
-                    // and the user sees no visible change.
                     if (state.selectedRadars.length > 0 && state.selectedProduct) {
-                        state.animator.stop();
-                        state.ui.updatePlayButton(false);
                         await this.loadLastNHours(
                             state.activeTimeWindowHours ?? DEFAULT_TIME_WINDOW_HOURS
                         );
