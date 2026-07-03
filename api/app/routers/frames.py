@@ -28,14 +28,13 @@ from typing import Dict, Optional, Tuple, cast
 import numpy as np
 import rasterio
 from cachetools import LRUCache
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from PIL import Image
 from rasterio.crs import CRS
 from rasterio.warp import transform_bounds
-from sqlalchemy.orm import Session
 
-from radar_db import get_db
+from radar_db.database import db_manager
 from ..services.tile_service import (
     _get_dataset,
     _get_tile_ttl,
@@ -401,7 +400,6 @@ async def get_frame_image(
         le=3.0,
         description="Gaussian standard deviation in pixels (0.1–3.0). Only used when smooth=true.",
     ),
-    db: Session = Depends(get_db),
 ) -> Response:
     """
     Return the entire COG as a single georeferenced RGBA PNG.
@@ -416,8 +414,9 @@ async def get_frame_image(
     - **vmin**: Optional data-filter lower bound (pixels below → transparent)
     - **vmax**: Optional data-filter upper bound (pixels above → transparent)
     """
-    # DB lookup (via TTL metadata cache shared with tile endpoint)
-    cog: Optional[CogSnapshot] = _get_cog_by_id(cog_id, db)
+    # DB lookup scoped to this block — connection returned to pool before rendering.
+    with db_manager.get_session() as db:
+        cog: Optional[CogSnapshot] = _get_cog_by_id(cog_id, db)
     if cog is None:
         raise HTTPException(status_code=404, detail=f"COG with ID {cog_id} not found")
 

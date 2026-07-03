@@ -11,7 +11,8 @@ from cachetools import TTLCache
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session, joinedload
 
-from radar_db import get_db, RadarCOG
+from radar_db import RadarCOG
+from radar_db.database import db_manager
 from ..services import get_tile_service, TileService, _tile_render_executor
 from ..services.tile_service import read_cog_metadata, get_l1_cache_stats
 from ..services.redis_client import get_redis
@@ -202,12 +203,11 @@ async def get_tile(
             "(product defaults), not this filter bound."
         ),
     ),
-    db: Session = Depends(get_db),
     tile_service: TileService = Depends(get_tile_service)
 ):
     """
     Get a map tile for a specific COG file.
-    
+
     - **cog_id**: COG file ID
     - **z**: Zoom level
     - **x**: Tile X coordinate
@@ -216,8 +216,9 @@ async def get_tile(
     - **vmin**: Optional data-filter lower bound (pixels below are transparent)
     - **vmax**: Optional data-filter upper bound (pixels above are transparent)
     """
-    # Priority 3: use metadata cache for DB lookup
-    cog = _get_cog_by_id(cog_id, db)
+    # DB connection scoped to this block — released before the expensive render.
+    with db_manager.get_session() as db:
+        cog = _get_cog_by_id(cog_id, db)
 
     if not cog:
         raise HTTPException(status_code=404, detail=f"COG with ID {cog_id} not found")
@@ -311,17 +312,16 @@ async def get_tile_by_params(
     colormap: Optional[str] = Query(None, description="Override colormap"),
     vmin: Optional[float] = Query(None, description="Override minimum value"),
     vmax: Optional[float] = Query(None, description="Override maximum value"),
-    db: Session = Depends(get_db),
     tile_service: TileService = Depends(get_tile_service)
 ):
     """
     Get a map tile by radar, product, and timestamp.
-    
+
     - **radar_code**: Radar code (e.g., "RMA3")
     - **product_key**: Product key (e.g., "DBZH")
     - **timestamp**: ISO timestamp or "latest"
     - **z**: Zoom level
-    - **x**: Tile X coordinate  
+    - **x**: Tile X coordinate
     - **y**: Tile Y coordinate
     - **colormap**: Optional colormap name override
     - **vmin**: Optional minimum value override
@@ -329,30 +329,36 @@ async def get_tile_by_params(
     """
     from datetime import datetime
     from sqlalchemy import desc
-    
-    query = db.query(RadarCOG)\
-        .options(joinedload(RadarCOG.product))\
-        .filter(
-            RadarCOG.radar_code == radar_code,
-            RadarCOG.polarimetric_var == product_key
-        )
-    
-    if timestamp.lower() == "latest":
-        cog = query.order_by(desc(RadarCOG.observation_time)).first()
-    else:
-        try:
-            ts = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-            cog = query.filter(RadarCOG.observation_time == ts).first()
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid timestamp format")
-    
-    if not cog:
-        raise HTTPException(
-            status_code=404, 
-            detail=f"No COG found for {radar_code}/{product_key}/{timestamp}"
-        )
 
-    cog_data_type = cog.cog_data_type
+    # DB connection scoped to this block — released before the expensive render.
+    with db_manager.get_session() as db:
+        query = db.query(RadarCOG)\
+            .options(joinedload(RadarCOG.product))\
+            .filter(
+                RadarCOG.radar_code == radar_code,
+                RadarCOG.polarimetric_var == product_key
+            )
+
+        if timestamp.lower() == "latest":
+            cog_orm = query.order_by(desc(RadarCOG.observation_time)).first()
+        else:
+            try:
+                ts = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                cog_orm = query.filter(RadarCOG.observation_time == ts).first()
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid timestamp format")
+
+        if not cog_orm:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No COG found for {radar_code}/{product_key}/{timestamp}"
+            )
+
+        # Extract scalars before session closes — ORM object becomes detached.
+        file_path    = cog_orm.file_path
+        cog_data_type = cog_orm.cog_data_type
+        obs_time     = cog_orm.observation_time
+        cog_id_val   = cog_orm.id
 
     # Resolve effective rendering parameters.
     # Colormap scaling is always from product defaults (cmap_vmin/cmap_vmax).
@@ -365,12 +371,12 @@ async def get_tile_by_params(
     filter_vmax = vmax   # None means no filter on this side
 
     colormap_dict = tile_service.build_colormap_for_product(product_key, override_cmap=effective_cmap)
-    
+
     tile_data = await asyncio.get_running_loop().run_in_executor(
         _tile_render_executor,
         functools.partial(
             tile_service.generate_tile,
-            file_path=cog.file_path,
+            file_path=file_path,
             z=z,
             x=x,
             y=y,
@@ -381,15 +387,15 @@ async def get_tile_by_params(
             filter_vmin=filter_vmin,
             filter_vmax=filter_vmax,
             cog_data_type=cog_data_type,
-            observation_time=cog.observation_time,
+            observation_time=obs_time,
         ),
     )
-    
+
     if tile_data is None:
         raise HTTPException(status_code=404, detail="Tile not found")
 
     headers = _build_tile_headers(
-        cog.observation_time, cog.id, z, x, y,
+        obs_time, cog_id_val, z, x, y,
         effective_cmap, cmap_vmin, cmap_vmax, filter_vmin, filter_vmax,
     )
     return Response(
@@ -402,7 +408,6 @@ async def get_tile_by_params(
 @router.get("/{cog_id}/metadata")
 async def get_cog_rendering_metadata(
     cog_id: int,
-    db: Session = Depends(get_db),
     tile_service: TileService = Depends(get_tile_service)
 ):
     """
@@ -412,8 +417,8 @@ async def get_cog_rendering_metadata(
     vmin, vmax, and the list of available colormaps for the product.
     This is used by the frontend to populate colormap/range controls.
     """
-    # Priority 3: use metadata cache for DB lookup
-    cog = _get_cog_by_id(cog_id, db)
+    with db_manager.get_session() as db:
+        cog = _get_cog_by_id(cog_id, db)
 
     if not cog:
         raise HTTPException(status_code=404, detail=f"COG with ID {cog_id} not found")
