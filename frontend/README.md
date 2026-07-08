@@ -1,274 +1,159 @@
-# Frontend - Radar Visualization Tool
+# WebMet25 Frontend
 
-Enhanced frontend for WebMet25 radar data visualization with modular architecture and advanced controls.
+The v2 frontend is a modular vanilla ES6 application served by Nginx. It renders an animated multi-radar map using `L.imageOverlay` (one full-image PNG per radar per frame, not tile layers), with a separate one-radar detail page, an admin CRUD panel, and an alternative COG browser.
 
-## Features
+---
 
-### 🎬 Animation Controls
-- **Play/Pause**: Toggle animation playback
-- **Speed Control**: Cycle through 0.5x, 1x, and 2x speeds
-- **Frame Slider**: Manual navigation through time series
-- **Auto-Loop**: Continuous playback through available frames
-- **Frame Counter**: Shows current position (e.g., "5 / 20")
+## Pages
 
-### 🎨 Color Legend
-- **Dynamic Rendering**: Fetches colormap from API for each product
-- **Vertical Color Bar**: Shows value ranges with colors
-- **Value Labels**: Displays numeric values for each color step
-- **Scrollable**: Handles long legends gracefully
-- **Unit Display**: Shows measurement units when available
+| File | URL | Description |
+|------|-----|-------------|
+| `public/index.html` | `/` | Multi-radar animated map (v2 production) |
+| `public/radar.html` | `/radar.html?code=XXX` | One-radar multi-layer detail page |
+| `public/admin.html` | `/admin` | Admin CRUD SPA (nginx Basic Auth) |
+| `public/cog-browser.html` | `/cog-browser.html` | Alternative COG file browser |
 
-### 🔧 Map Controls
-- **Radar Selection**: Choose from available radars
-- **Product Selection**: Select radar product type (COLMAX, etc.)
-- **Opacity Slider**: Adjust radar layer transparency (0-100%)
-- **Time Display**: Shows observation time in local timezone
-- **Navigation Buttons**: Previous/Next/Latest frame navigation
+---
 
-### 🎯 UI/UX
-- **Dark Theme**: Professional look with #1a1a2e background
-- **Responsive Design**: Works on desktop, tablet, and mobile
-- **Loading States**: Visual feedback during data fetching
-- **Error Handling**: Clear error messages with graceful fallbacks
+## Module Map
+
+```
+frontend/public/js/
+├── admin.js              # Admin SPA orchestrator (1994 lines)
+├── admin-api.js          # Admin REST client (/api/v1/admin/*)
+├── shared/               # Shared by all pages
+│   ├── api.js            # REST API client — /radars /products /cogs /frames /colormap /tops-cores
+│   ├── controls.js       # UIControls — radar list, time wheel, badges, status messages
+│   ├── legend.js         # LegendRenderer — gradient bar + ticks from colormap data
+│   ├── tops-cores.js     # TopsCoresLayer — L.circleMarker for cores (blue) and tops (red)
+│   ├── time-wheel.js     # TimeWheel — iOS-style HH:MM scroll picker
+│   ├── cog-browser-api.js # REST client for the COG browser
+│   └── cog-browser.js    # COG browser application
+└── v2/                   # Production frontend (v1/ is legacy — do not extend)
+    ├── app.js            # Multi-radar map orchestrator (~2526 lines)
+    ├── radar-app.js      # One-radar page orchestrator (~1662 lines)
+    ├── map.js            # MapManager — L.imageOverlay + SVG coverage mask (~1076 lines)
+    ├── animation.js      # AnimationController — requestAnimationFrame (~429 lines)
+    ├── radar-utils.js    # Shared helpers: groupCogsByTimestamp, geolocation, badge updates
+    └── constants.js      # COVERAGE_MODES, MS_PER_HOUR, default values
+```
+
+---
 
 ## Architecture
 
-### Modular Structure
+### v2 Key Properties
 
-```
-frontend/public/
-├── index.html              # Main HTML page
-├── css/
-│   └── styles.css         # All styles (444 lines)
-└── js/
-    ├── api.js             # API client (70 lines)
-    ├── map.js             # Map management (97 lines)
-    ├── animation.js       # Animation controller (170 lines)
-    ├── controls.js        # UI controls (148 lines)
-    ├── legend.js          # Legend renderer (98 lines)
-    └── app.js             # Main orchestrator (275 lines)
-```
+- **No build tool, no framework.** Pure ES6 modules served directly.
+- **`L.imageOverlay`** (not `L.tileLayer`) — one full PNG image per radar per frame vs. ~180 tiles.
+- **`/frames/{id}/image.png`** endpoint (not `/tiles/{id}/{z}/{x}/{y}.png`) — full-image georeferenced PNG.
+- **`requestAnimationFrame`** animation loop — no `setInterval`.
+- **Animation continuity invariant:** all data loads go through `_loadFramesWithContinuity()`. Never call `animator.stop()` or clear layers before new frames are staged.
+- **Coverage mask:** SVG rendered in `coverageMaskPane` (z-index 300) — dims outside radar coverage.
+- **TopsCoresLayer:** `L.circleMarker` layer in `topsCoresPane` (z-index 450) — fire-and-forget, never blocks frame advance.
+- **All UI text in Spanish (es-AR).** Never translate `console.*` debug logs.
 
-### Module Responsibilities
-
-#### `api.js` - API Client
-- Handles all backend communication
-- Endpoints: radars, products, COGs, colormap, tiles
-- Centralized error handling
-- Configuration for API base URL
-
-#### `map.js` - Map Manager
-- Initializes Leaflet map
-- Manages radar tile layers
-- Controls layer opacity
-- Handles map bounds and zoom
-
-#### `animation.js` - Animation Controller
-- Play/pause functionality
-- Speed control (0.5x - 2x)
-- Frame navigation
-- Event-driven frame changes
-- Loop control
-
-#### `controls.js` - UI Controls
-- Status messages
-- Time display formatting
-- Select population
-- Button enable/disable
-- Display updates
-
-#### `legend.js` - Legend Renderer
-- Renders colormap data
-- Color box display
-- Value labels
-- Scrollable container
-- Show/hide functionality
-
-#### `app.js` - Main Application
-- Initializes all modules
-- Manages application state
-- Coordinates module interactions
-- Handles user events
-- Error recovery
-
-## API Integration
-
-### Endpoints Used
+### Coverage Modes (`v2/constants.js`)
 
 ```javascript
-// Get available radars
-GET /api/v1/radars
-Response: { radars: [...] }
-
-// Get available products
-GET /api/v1/products
-Response: { products: [...] }
-
-// Get COG images
-GET /api/v1/cogs?radar_code=AR5&product_key=COLMAX&page_size=30
-Response: { cogs: [...], count, total, page, page_size }
-
-// Get product colormap
-GET /api/v1/products/{product_key}/colormap
-Response: { product_key, entries: [...], min_value, max_value, unit }
-
-// Get tile images
-GET /api/v1/tiles/{cog_id}/{z}/{x}/{y}.png
-Returns: PNG tile image
+COVERAGE_MODES = [
+    { id: 'cd',  label: 'C+D', volNrs: ['01','02'], strategy:'0315', filteredFieldsAvailable: true,  defaultProduct: 'COLMAXo' },
+    { id: 'vig', label: 'VIG', volNrs: ['04'],       strategy:'0315', filteredFieldsAvailable: false, defaultProduct: 'DBZHo'  },
+]
 ```
 
-### Data Flow
+Mode persisted to `webmet25_coverage_mode` localStorage. Switching modes triggers a full `_loadFramesWithContinuity()` reload.
 
-1. **Initialization**
-   - Load radars from API
-   - Load products from API
-   - Initialize map with dark basemap
-   - Setup event listeners
+### Basemaps
 
-2. **Selection Change**
-   - User selects radar and product
-   - Fetch COGs for selection (parallel)
-   - Fetch colormap for product (parallel)
-   - Initialize animation with frames
-   - Render legend
-   - Display first frame
+Five IGN Argenmap basemaps defined in `map.js`: `argenmap`, `argenmap_gris`, `argenmap_topo`, `argenmap_oscuro`, `argenmap_hibrido`. Default: `argenmap`. Nginx proxies and caches IGN (7-day TTL) and OSM (30-day TTL) tile servers locally.
 
-3. **Animation**
-   - Timer triggers frame changes
-   - Update map layer with new COG
-   - Update time display
-   - Update frame counter
-   - Loop when reaching end
+Always call `MapManager.setBasemap(key)` to switch — never manipulate `_baseLayer` directly.
 
-4. **User Interactions**
-   - Previous/Next: Manual frame navigation
-   - Play/Pause: Toggle animation
-   - Speed: Cycle through speeds
-   - Slider: Jump to specific frame
-   - Opacity: Adjust layer transparency
+### Radar Display Order
 
-## Development
+`sortRadarsForDisplay` in `controls.js`:
+1. Active radars before inactive
+2. Within each group: RMA before AR
+3. Within each subgroup: numeric ascending, with RMA00 (number 0) sorted **last**
+   (e.g. `RMA1…RMA17, RMA00, AR5…`)
 
-### Prerequisites
+---
 
-- Modern browser with ES6 module support
-- Leaflet 1.9.4 (loaded from CDN)
-- Backend API running on port 8000
+## One-Radar Detail Page (`radar.html` + `radar-app.js`)
 
-### Local Development
+URL: `/radar.html?code=AR5[&field=DBZHo]`
+
+- Always C+D mode (no VIG toggle)
+- Multi-layer field compositor: each added field is a layer with independent colormap, range filter, opacity, and smoothing
+- `showAllLayersAtFrame(index)` composites all visible layers on every animation tick
+- `updateCoverageRadius()` draws SVG mask cutout + rings from active layer `coverageRadius` values
+- Snapshot exports basemap + radar overlays + OHMC logo + per-layer colormap strips + timestamp
+- Only accessible when `Radar.detail_view_enabled = true` (set per-radar in admin panel)
+
+---
+
+## Admin Panel (`admin.html` + `admin.js`)
+
+URL: `/admin` (nginx HTTP Basic Auth — credentials set via `ADMIN_USERNAME`/`ADMIN_PASSWORD` env vars)
+
+Sections (hash-routed via `history.replaceState`):
+`dashboard`, `radars`, `products`, `references`, `cogs`, `tops-cores`, `estrategias`, `volumenes`, `colormaps`, `colormap-options`
+
+Key behaviors:
+- Django-admin-style filter bars: global search + per-column facets (text/select/boolean), live count, sortable columns
+- Colormap creator/editor: live canvas gradient preview with draggable stops; edit = delete-then-recreate pattern
+- "← Volver al mapa" restores main map via browser bfcache when navigated from there (`sessionStorage.webmet25_admin_from_main`)
+
+---
+
+## localStorage Keys (v2)
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `webmet25_show_inactive_radars` | false | Show inactive radars |
+| `webmet25_show_filtered_fields` | false | Show filtered (non-`o`) fields |
+| `webmet25_live_refresh_interval_ms` | 300000 | Live refresh interval (ms) |
+| `webmet25_radar_refresh_interval_min` | 10 | Radar status refresh (min) |
+| `webmet25_coverage_visible` | false | Coverage mask toggle |
+| `webmet25_coverage_opacity` | 0.4 | Coverage mask opacity |
+| `webmet25_coverage_mode` | 'cd' | Active coverage mode |
+| `webmet25_tops_cores_visible` | false | Tops & Cores layer |
+| `webmet25_tops_cores_size` | 8 | Circle marker radius (px) |
+| `webmet25_smooth_enabled` | false | Gaussian smoothing toggle |
+| `webmet25_smooth_sigma` | 0.8 | Gaussian sigma |
+| `webmet25_selected_basemap` | 'argenmap' | Active basemap key |
+
+---
+
+## Nginx Configuration Highlights
+
+- `/admin` and `/admin/*` — Basic Auth + serve `admin.html`
+- `/api/v1/admin/*` — Basic Auth + proxy to `api:8000`
+- `/api/*` — proxy to `api:8000` (with `proxy_buffering off` for SSE support)
+- `/osm-tiles/*` — proxy + 30-day cache to `tile.openstreetmap.org`
+- `/ign-tiles/*` — proxy + 7-day cache to `wms.ign.gob.ar`
+- `/health` — inline 200 OK
+
+---
+
+## Development & Verification
 
 ```bash
-# Serve with Python HTTP server
-cd frontend/public
-python3 -m http.server 8080
+# Rebuild only the frontend image (after JS/HTML/CSS changes)
+docker compose build frontend
+docker compose up -d frontend
 
-# Or use Node.js http-server
-npx http-server -p 8080
+# Run a screenshot to verify visually
+docker exec radar_tests python /app/.claude/skills/run-webmet25/screenshot.py
 
-# Access at http://localhost:8080
+# Run e2e browser tests
+docker exec radar_tests pytest tests/e2e/ -v
 ```
 
-### Production Deployment
+The `run-webmet25` Claude skill handles the full bring-up, screenshot, and smoke-test sequence.
 
-The frontend is served via Nginx with:
-- Static file serving
-- API proxy to backend
-- CORS headers
-- Gzip compression
+---
 
-See `frontend/nginx.conf` for configuration.
-
-## Browser Support
-
-- Chrome/Edge 88+
-- Firefox 78+
-- Safari 14+
-- Mobile browsers with ES6 support
-
-## Customization
-
-### Changing Colors
-
-Edit `css/styles.css`:
-```css
-/* Primary color */
-#4fc3f7 -> your color
-
-/* Background */
-#1a1a2e -> your background
-
-/* Accent colors */
-#66bb6a (success), #ef5350 (error), #ffa726 (loading)
-```
-
-### Adding New Controls
-
-1. Add HTML element in `index.html`
-2. Add styles in `css/styles.css`
-3. Create handler in `controls.js`
-4. Wire up event in `app.js`
-
-### Modifying Animation
-
-Edit `animation.js`:
-```javascript
-// Change default speed
-this.speed = 1.5; // 1.5x
-
-// Change interval
-const intervalMs = 800; // 800ms per frame
-
-// Change speed options
-const speeds = [0.5, 1.0, 1.5, 2.0, 3.0];
-```
-
-## Troubleshooting
-
-### Map Not Loading
-- Check browser console for errors
-- Verify Leaflet CDN is accessible
-- Check API connectivity
-
-### No Data Showing
-- Verify API is running (http://localhost:8000/api/v1/radars)
-- Check if COG data exists in database
-- Look for errors in browser console
-
-### Animation Not Working
-- Check if multiple frames are available
-- Verify COG images are accessible
-- Look for JavaScript errors
-
-### Opacity Not Changing
-- Ensure radar layer is loaded
-- Check if map is initialized
-- Verify slider value is updating
-
-## Performance Tips
-
-1. **Preloading**: Consider preloading next frame for smoother animation
-2. **Caching**: Browser caches tile images automatically
-3. **Limits**: Default COG fetch limit is 30 frames (adjustable)
-4. **Network**: Animation works best with stable connection
-
-## Future Enhancements
-
-Potential additions inspired by reference implementation:
-- [ ] Base map selector (multiple basemap options)
-- [ ] Multiple radar overlays
-- [ ] Drawing tools for analysis
-- [ ] Export functionality
-- [ ] Time range picker
-- [ ] Favorite locations
-- [ ] Measurement tools
-- [ ] Statistics overlay
-
-## Credits
-
-Inspired by:
-- [webmet.ohmc.ar](https://webmet.ohmc.ar/)
-- [IgnaCat/radar-visualization-tool](https://github.com/IgnaCat/radar-visualization-tool)
-
-Built with:
-- [Leaflet](https://leafletjs.com/)
-- [CartoDB Basemaps](https://carto.com/basemaps/)
+**Version:** 2.0.0  
+**Last Updated:** July 8, 2026

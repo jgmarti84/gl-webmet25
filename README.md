@@ -1,42 +1,50 @@
 # WebMet25 — Radar Visualization & Data Indexing System
 
-WebMet25 is a **data consumer** application in the radar/meteorology system. It ingests Cloud-Optimized GeoTIFF (COG) files produced by [radarlib](https://gitlab.example.com/radarlib), indexes them into a PostgreSQL/PostGIS database, and serves them via a REST API with an interactive Leaflet-based web frontend for real-time radar visualization.
+WebMet25 is the **data consumer** in the radarmet system. It ingests Cloud-Optimized GeoTIFF (COG) files produced by [radarlib](https://gitlab.example.com/radarlib), indexes them into a PostgreSQL/PostGIS database, and serves them via a REST API with an interactive Leaflet-based web frontend for real-time radar visualization.
 
 ## System Context
 
 ```
 radarlib (producer)
     │
-    ├── outputs GeoTIFF COGs to ROOT_RADAR_PRODUCTS_PATH
+    ├── outputs GeoTIFF COGs     → ROOT_RADAR_PRODUCTS_PATH
+    ├── outputs Tops & Cores GeoJSON → TOPS_AND_CORES_DIR
     │
     ▼
 webmet25 (consumer)
     │
-    ├── Indexer watches ROOT_RADAR_PRODUCTS_PATH
+    ├── Indexer watches ROOT_RADAR_PRODUCTS_PATH (every 30 s)
+    ├── TopsAndCoresWatcher watches TOPS_AND_CORES_DIR (same interval)
     │   ├── parses filenames
     │   ├── extracts metadata
     │   └── stores in PostgreSQL/PostGIS
     │
-    ├── FastAPI serves metadata + tiles
+    ├── FastAPI serves metadata + full-image frames
     │
-    └── Leaflet frontend renders radar map
+    └── Leaflet v2 frontend renders animated radar map
 ```
 
 ---
 
 ## Features
 
-- **Real-Time Indexing:** Automatic file-system watcher that scans for new COG files every 30 seconds
+- **Real-Time Indexing:** File-system watcher scans for new COG files every 30 seconds; marks deleted files as MISSING
+- **Tops & Cores:** Convective cores and storm tops from radarlib GeoJSON are indexed and displayed as map markers
+- **Coverage Mode Toggle:** Switch between C+D mode (volumes 01/02) and Vigilancia mode (volume 04)
 - **Spatial Database:** PostGIS integration for geographic queries and bounding-box calculations
-- **REST API:** Comprehensive endpoints for querying radars, products, COGs, and rendering tiles
-- **Interactive Map:** Leaflet-based visualization with multiple radar overlay support
-- **Animation Controls:** Play/pause, speed control (0.5x–2x), and manual frame navigation
-- **Time-Window Selection:** Load data for specific time ranges with automatic grouping by timestamp
-- **Live Mode:** 5-minute polling to continuously refresh animation with newest available data
-- **Colormap Management:** Dynamic colormap selection with value-range filtering
-- **Geolocation Support:** Auto-detect user location and pre-select nearest radars
-- **Opacity Control:** Per-radar layer transparency adjustment
-- **Legend Rendering:** Dynamic color scale visualization from database Reference entries
+- **REST API:** Full endpoint suite for radars, products, COGs, frames, colormaps, tops & cores, and admin CRUD
+- **Interactive Map (v2):** Leaflet with `L.imageOverlay` — one image per radar per frame instead of ~180 tiles
+- **One-Radar Detail Page:** `radar.html?code=XXX` — multi-layer field compositor with per-layer colormap and range filter
+- **Frame Animation:** `requestAnimationFrame`-based playback; animation never interrupts during data loads
+- **Coverage Mode:** SVG mask pane that dims areas outside radar coverage; per-radar coverage rings
+- **Time-Window Selection:** Preset (1.5 h / 3 h / 4.5 h / 6 h) or custom date + iOS-style time wheel
+- **Live Mode:** Configurable auto-refresh (default 5 minutes) anchored to the latest available data
+- **Colormap Management:** DB-backed colormap system; visual creator/editor in the admin panel
+- **Gaussian Smoothing:** Server-side float-data blur before colormap (configurable sigma)
+- **Geolocation:** Browser geolocation → auto-select 3 nearest active radars
+- **Admin Panel:** Full-featured CRUD SPA at `/admin` (nginx Basic Auth) for every database table
+- **Snapshot:** Canvas compositing of basemap + radar overlays + legend + metadata → PNG download
+- **Tile & Frame Cache:** L1 LRU in-process + L2 Redis cache for rendered frames
 
 ---
 
@@ -44,41 +52,42 @@ webmet25 (consumer)
 
 ### Backend
 - **Language:** Python 3.11
-- **Web Framework:** [FastAPI](https://fastapi.tiangolo.com/) 0.109.0+
-- **App Server:** [Uvicorn](https://www.uvicorn.org/)
-- **Database ORM:** [SQLAlchemy](https://www.sqlalchemy.org/) 2.0.0+
-- **Database Driver:** [psycopg2-binary](https://www.psycopg.org/) 2.9.9+ (PostgreSQL)
-- **Geospatial ORM:** [GeoAlchemy2](https://geoalchemy-2.readthedocs.io/) 0.14.0+ (PostGIS support)
-- **Migrations:** [Alembic](https://alembic.sqlalchemy.org/) 1.13.0+
-- **Configuration:** [Pydantic](https://docs.pydantic.dev/) 2.0.0+, [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) 2.0.0+
+- **Web Framework:** FastAPI 0.109.0+
+- **App Server:** Uvicorn
+- **Database ORM:** SQLAlchemy 2.0.0+
+- **Database Driver:** psycopg2-binary 2.9.9+
+- **Geospatial ORM:** GeoAlchemy2 0.14.0+
+- **Migrations:** Alembic 1.13.0+
+- **Configuration:** Pydantic 2.0.0+, pydantic-settings 2.0.0+
+- **Cache:** cachetools 5.0.0+ (LRU), redis 5.0.0+
 
 ### Geospatial & Raster Processing
-- **Rasterio:** 1.3.0+ (Cloud-Optimized GeoTIFF reading and metadata extraction)
-- **rio-tiler:** 6.0.0+ (Web Mercator tile generation from COGs)
-- **Shapely:** 2.0.0+ (Geometry operations and bounding-box calculations)
-- **GDAL:** System package with `gdal-bin` and `libgdal-dev`
+- **Rasterio:** 1.3.0+ (Cloud-Optimized GeoTIFF reading)
+- **rio-tiler:** 6.0.0+ (Web Mercator tile generation)
+- **Shapely:** 2.0.0+ (Geometry operations)
+- **GDAL:** System package
+- **SciPy:** 1.9.0+ (Gaussian smoothing)
 
 ### Image Processing
-- **Pillow:** 10.0.0+ (PNG encoding)
-- **NumPy:** 1.24.0+ (Array operations on tile data)
-- **Matplotlib:** 3.7.0+ (Colormap utilities)
+- **Pillow:** 10.0.0+
+- **NumPy:** 1.24.0+
+- **Matplotlib:** 3.7.0+ (colormap utilities)
 
 ### Frontend
 - **Leaflet:** 1.9.4 (via CDN)
-- **CartoDB Basemaps:** Via Leaflet providers plugin
+- **Basemaps:** IGN Argenmap (argenmap, argenmap_gris, argenmap_topo, argenmap_oscuro, argenmap_hibrido)
 - **JavaScript:** ES6 modules (no build tool)
-- **CSS:** Vanilla CSS3 (dark theme, responsive layout)
-- **HTML5:** Semantic markup
+- **CSS:** Vanilla CSS3 (dark theme main app, modern-light admin)
 
 ### DevOps & Containerization
 - **Docker:** Multi-stage builds per service
 - **Docker Compose:** 3.8+ for orchestration
-- **Nginx:** Reverse proxy and static file serving
+- **Nginx:** Reverse proxy, static serving, admin Basic Auth, OSM/IGN tile caching
+- **Redis:** 7.2 (LRU cache, no persistence)
 - **VSCode Dev Containers:** For local development
 
 ### Database
 - **PostgreSQL:** 15+ with PostGIS 3.5
-- **PostGIS:** Spatial database extension
 - **Alembic:** Schema versioning and migrations
 
 ---
@@ -93,79 +102,119 @@ webmet25/
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── app/
-│       ├── main.py               # FastAPI app initialization & routers
-│       ├── config.py             # APISettings configuration
+│       ├── main.py               # FastAPI app setup, middleware, routers
+│       ├── config.py             # APISettings (env vars, GDAL tuning, Redis config)
 │       ├── schemas/
-│       │   └── responses.py      # Pydantic response models
-│       ├── routers/              # API endpoint handlers
+│       │   ├── responses.py      # Pydantic response models (public API)
+│       │   └── admin.py          # Pydantic models for admin CRUD
+│       ├── routers/
 │       │   ├── radars.py         # GET /radars, /radars/{code}
-│       │   ├── products.py       # GET /products
-│       │   ├── cogs.py           # GET /cogs with filtering
-│       │   ├── tiles.py          # GET /tiles/{cog_id}/{z}/{x}/{y}.png
-│       │   └── colormap.py       # GET /products/{key}/colormap
-│       ├── services/             # Business logic
-│       │   └── tile_service.py   # TileService for COG rendering
-│       └── utils/                # Utility functions
-│           └── colormaps.py      # Colormap configuration
+│       │   ├── products.py       # GET /products, /products/{key}
+│       │   ├── cogs.py           # GET /cogs, /cogs/latest, /cogs/timeline, /cogs/{id}
+│       │   ├── tiles.py          # GET /tiles/{id}/{z}/{x}/{y}.png + metadata + cache stats
+│       │   ├── frames.py         # GET /frames/{id}/image.png (v2 primary)
+│       │   ├── colormap.py       # GET /colormap/names|options|defaults|colors|info + invalidate
+│       │   ├── tops_cores.py     # GET /tops-cores, /tops-cores/{id}/features
+│       │   └── admin.py          # /api/v1/admin/* CRUD for all tables
+│       ├── services/
+│       │   ├── tile_service.py   # TileService — COG tile rendering with thread pool
+│       │   ├── colormap_service.py # ColormapService — DB-first colormap with 5-min TTL cache
+│       │   ├── redis_client.py   # Redis connection management
+│       │   └── smoothing.py      # Gaussian float-data blur (scipy)
+│       └── utils/
+│           └── colormaps.py      # Hardcoded fallback colormap builders
 │
 ├── database/                      # Shared database package
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── README.md                 # Database management guide
-│   ├── alembic.ini               # Alembic migration config
+│   ├── README.md                 # DB management guide
+│   ├── alembic.ini
 │   ├── migrations/               # Alembic migration files
-│   │   ├── env.py
 │   │   └── versions/
-│   ├── radar_db/                 # Python package (shared by API & Indexer)
+│   ├── radar_db/
 │   │   ├── __init__.py
 │   │   ├── config.py             # DatabaseSettings
-│   │   ├── database.py           # DatabaseManager, connection pooling
-│   │   ├── models.py             # SQLAlchemy models
-│   │   ├── seeds.py              # DataSeeder for initial data
-│   │   └── manage.py             # CLI for init, seed, migrate, reset
+│   │   ├── database.py           # DatabaseManager, get_db(), init_db()
+│   │   ├── models.py             # All SQLAlchemy models
+│   │   ├── seeds.py              # DataSeeder (seed_all / sync_all)
+│   │   └── manage.py             # CLI: init, seed, sync, check, info, reset, migrate, shell
 │   └── seed_data/
-│       ├── initial_data.json     # Seed data (radars, products, references)
-│       └── initial_data_00.json  # Alternative seed format
+│       └── initial_data.json     # 21 radars, 20 products, references, colormaps
 │
 ├── frontend/                      # Static web frontend (Nginx)
 │   ├── Dockerfile
-│   ├── nginx.conf                # Reverse proxy configuration
-│   ├── README.md                 # Frontend-specific documentation
+│   ├── docker-entrypoint.sh      # Generates admin.htpasswd at startup
+│   ├── nginx.conf                # Reverse proxy, Basic Auth, OSM/IGN tile cache
+│   ├── README.md
 │   └── public/
-│       ├── index.html            # Main radar visualization page
-│       ├── cog-browser.html      # Alternative COG browser view
+│       ├── index.html            # Multi-radar map SPA shell
+│       ├── radar.html            # One-radar detail page (radar.html?code=AR5)
+│       ├── admin.html            # Admin panel SPA shell
+│       ├── cog-browser.html      # Alternative COG file browser
 │       ├── css/
-│       │   └── styles.css        # Dark theme, responsive styles (444 lines)
+│       │   ├── styles.css        # Main app dark theme
+│       │   └── admin.css         # Admin modern-light theme
 │       └── js/
-│           ├── app.js            # Main app orchestrator (logic, state)
-│           ├── api.js            # REST API client
-│           ├── map.js            # Leaflet map manager
-│           ├── animation.js      # Frame animation controller
-│           ├── controls.js       # UI control handlers
-│           ├── legend.js         # Legend renderer
-│           ├── cog-browser-api.js # Alternative API client
-│           └── cog-browser.js    # Alternative app variant
+│           ├── admin.js          # Admin SPA orchestrator
+│           ├── admin-api.js      # Admin REST client (/api/v1/admin/*)
+│           ├── shared/           # Shared by v1 and v2
+│           │   ├── api.js        # REST API client
+│           │   ├── controls.js   # UI handlers (radar list, time wheel, badges)
+│           │   ├── legend.js     # Colormap legend renderer
+│           │   ├── tops-cores.js # TopsCoresLayer (L.circleMarker)
+│           │   └── time-wheel.js # iOS-style HH:MM scroll picker
+│           └── v2/               # Current production frontend
+│               ├── app.js        # Multi-radar map orchestrator (2500+ lines)
+│               ├── radar-app.js  # One-radar page orchestrator (1660+ lines)
+│               ├── map.js        # MapManager (L.imageOverlay + SVG coverage mask)
+│               ├── animation.js  # AnimationController (requestAnimationFrame)
+│               ├── radar-utils.js # Shared helpers for radar-app.js
+│               └── constants.js  # COVERAGE_MODES, defaults, timing constants
 │
 ├── indexer/                       # COG file indexing service
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── indexer/
-│       ├── __init__.py
-│       ├── main.py               # Entry point: run_indexer(), run_single_scan()
+│       ├── main.py               # Entry: starts COGWatcher + TopsAndCoresWatcher
 │       ├── config.py             # IndexerSettings (env vars)
-│       ├── watcher.py            # COGWatcher — file system scanning
-│       ├── registrar.py          # COGRegistrar — file parsing & DB registration
-│       ├── parser.py             # COGFilenameParser — filename parsing
+│       ├── watcher.py            # COGWatcher + TopsAndCoresWatcher
+│       ├── registrar.py          # COGRegistrar + TopsAndCoresRegistrar
+│       ├── parser.py             # COGFilenameParser + TopsAndCoresFilenameParser
+│       ├── deleter.py            # ProductDeleter (disk + DB cleanup)
 │       └── manage.py             # CLI: check, populate-cog-metadata
 │
-├── docker-compose.yml            # Production orchestration
-├── docker-compose.devcontainer.yml # Dev container overrides
-├── .env.example                  # Environment variable template
-├── .gitignore
-├── LICENSE
-├── README.md                     # This file
-└── docs/
-    └── DISCOVERY_REPORT.md      # Comprehensive technical analysis
+├── tests/                         # Automated test suite
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── conftest.py
+│   ├── api/                      # API contract tests (httpx)
+│   │   ├── test_health.py
+│   │   ├── test_radars.py
+│   │   ├── test_products.py
+│   │   ├── test_cogs.py
+│   │   ├── test_tiles.py
+│   │   └── test_colormap.py
+│   ├── indexer/                  # Indexer unit tests
+│   │   ├── test_filename_parser.py
+│   │   └── test_registrar.py
+│   └── e2e/                      # Browser tests (Playwright/Chromium)
+│       ├── conftest.py
+│       ├── test_admin_panel.py
+│       ├── test_radar_ordering.py
+│       └── test_time_wheel.py
+│
+├── scripts/
+│   ├── MANAGE_COMMANDS.md        # Docker disk cleanup reference
+│   └── delete_products.sh        # Wrapper for ProductDeleter
+├── docs/                          # Technical documentation
+│   ├── DATA_FLOW.md
+│   ├── COMPONENTS.md
+│   ├── DISCOVERY_REPORT.md
+│   ├── E2E_TESTING.md
+│   └── OPERATIONS.md
+├── docker-compose.yml            # Production stack (6 services)
+├── docker-compose.devcontainer.yml # Dev container overrides (test services)
+└── .env.example                  # Environment variable template
 ```
 
 ### High-Level Architecture
@@ -173,77 +222,62 @@ webmet25/
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │ RADARLIB (External Producer)                                    │
-│ Outputs COG files with embedded GeoTIFF metadata tags           │
+│ Outputs COG .tif files + TOPS_CORES .geojson files             │
 └─────────────────────────────────────────────────────────────────┘
                               ↓
-                    /product_output/
-              (shared volume or NAS mount)
+              /product_output/    /tops_and_cores/
+              (shared volumes — read-only for webmet25)
                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│ INDEXER SERVICE (Container: radar_indexer)                      │
+│ INDEXER SERVICE (radar_indexer)                                 │
 │                                                                   │
-│ • Watches /product_output for *.tif files                       │
-│ • Every 30 seconds: scan, parse filenames, extract metadata     │
-│ • Register in database or mark MISSING                          │
-│ • Uses COGWatcher → COGFilenameParser → COGRegistrar            │
-└─────────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────────┐
-│ DATABASE (Container: radar_db, PostgreSQL + PostGIS)            │
-│                                                                   │
-│ • RadarCOG table: stores file metadata, bbox, rendering params  │
-│ • Radar, RadarProduct, Reference tables: lookups                │
-│ • Indexed by: radar_code, product_id, observation_time, status  │
+│ • COGWatcher: scans /product_output for *.tif (every 30 s)     │
+│ • TopsAndCoresWatcher: scans /tops_and_cores for *.geojson     │
+│ • Parses filenames, extracts rasterio metadata                  │
+│ • INSERT/UPDATE RadarCOG and TopsAndCores records in DB        │
+│ • update_radar_activity() after every scan                     │
 └─────────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│ API (Container: radar_api, FastAPI + Uvicorn)                   │
+│ DATABASE (radar_db — PostgreSQL 15 + PostGIS 3.5)              │
 │                                                                   │
-│ Endpoints:                                                        │
-│  • GET /radars — List all radar stations                         │
-│  • GET /products — List available radar products                │
-│  • GET /cogs — Query COG metadata with filtering                │
-│  • GET /tiles/{id}/{z}/{x}/{y}.png — Render map tile            │
-│  • GET /products/{key}/colormap — Get color scale               │
-│                                                                   │
-│ Services:                                                         │
-│  • TileService: opens COG, renders tile, applies colormap       │
-│  • ColormapService: builds legend from Reference entries        │
+│ Tables: Radar, RadarProduct, RadarCOG, TopsAndCores            │
+│         Reference, Estrategia, Volumen                          │
+│         colormap_stops, product_colormap_options               │
 └─────────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│ FRONTEND (Container: radar_frontend, Nginx + Leaflet)           │
+│ API (radar_api — FastAPI + Uvicorn, port 8000)                 │
 │                                                                   │
-│ • Interactive Leaflet map with radar overlays                    │
-│ • Radar & product selection with multi-select support           │
-│ • Time-window picker (preset or custom range)                   │
-│ • Animation controls: play/pause, speed, frame navigation       │
-│ • Live mode: 5-min polling for newest data                      │
-│ • Geolocation auto-init                                         │
-│ • Opacity slider, legend display, map snapshot                  │
+│  GET /radars[/{code}]      GET /products[/{key}]               │
+│  GET /cogs[/latest|/timeline|/{id}]                            │
+│  GET /frames/{id}/image.png  ← v2 primary (full-image COG)    │
+│  GET /tiles/{id}/{z}/{x}/{y}.png  ← v1 / compatibility        │
+│  GET /colormap/names|options|defaults|colors|info             │
+│  GET /tops-cores  GET /tops-cores/{id}/features               │
+│  /api/v1/admin/*  ← full CRUD (nginx Basic Auth)              │
 │                                                                   │
-│ Architecture:                                                     │
-│  • app.js — State management & orchestration                    │
-│  • api.js — REST client                                         │
-│  • map.js — Leaflet wrapper                                     │
-│  • animation.js — Frame playback controller                     │
-│  • controls.js — UI event handlers                              │
-│  • legend.js — Colormap legend renderer                         │
+│  Cache: L1 LRU (750 entries) + L2 Redis (frame: prefix)       │
 └─────────────────────────────────────────────────────────────────┘
                               ↓
-                    (Browser)
-                    User visualization
+┌─────────────────────────────────────────────────────────────────┐
+│ REDIS (redis:7.2-alpine — L2 cache, LRU eviction)             │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ FRONTEND (frontend-v2 — Nginx port 80)                         │
+│                                                                   │
+│ • Multi-radar map (index.html + v2/app.js)                     │
+│ • One-radar detail page (radar.html + v2/radar-app.js)         │
+│ • Admin SPA (admin.html + admin.js — Basic Auth)               │
+│ • L.imageOverlay — 1 PNG per radar per frame                   │
+│ • requestAnimationFrame animation loop                         │
+│ • SVG coverage mask + per-radar rings                          │
+│ • Coverage modes: C+D (vol 01/02) ↔ Vigilancia (vol 04)       │
+│ • TopsCoresLayer: L.circleMarker for cores (blue) / tops (red) │
+│ • Nginx proxies+caches OSM and IGN Argenmap tile servers       │
+└─────────────────────────────────────────────────────────────────┘
 ```
-
-### Folder Responsibilities
-
-| Folder | Purpose | Key Responsibility |
-|--------|---------|-------------------|
-| `api/` | FastAPI backend | REST endpoints for data queries and tile rendering |
-| `database/` | Shared DB layer | SQLAlchemy models, migrations, connection pooling |
-| `frontend/` | Web UI | Interactive map visualization, state management |
-| `indexer/` | File watcher | Scan filesystem, parse filenames, index COGs |
-| `docs/` | Documentation | Technical analysis and architecture details |
 
 ---
 
@@ -252,58 +286,59 @@ webmet25/
 ### Prerequisites
 
 - **Docker** and **Docker Compose** 3.8+
-- **Git**
-- **COG files** available at `/path/to/product_output` (shared volume)
+- **COG files** at the path configured in `WATCH_PATH` (default `/product_output`)
 
 ### Clone & Setup
 
 ```bash
-# Clone the repository
 git clone <repository-url> webmet25
 cd webmet25
-
-# Copy environment template
 cp .env.example .env
-
-# Edit .env as needed (DB credentials, paths, etc.)
-nano .env
+# Edit .env: DB credentials, paths, ADMIN_USERNAME/ADMIN_PASSWORD
 ```
 
 ### Run with Docker Compose
 
 ```bash
-# Start all services (database, indexer, API, frontend)
-docker-compose up -d
+# Start all services
+docker compose up -d
 
 # Check service status
-docker-compose ps
+docker compose ps
 
 # View logs
-docker-compose logs -f api
-docker-compose logs -f indexer
+docker compose logs -f api
+docker compose logs -f indexer
 ```
 
 ### Access the Application
 
-- **Frontend:** `http://localhost` (Nginx reverse proxy)
-- **API Docs:** `http://localhost:8000/docs` (FastAPI Swagger UI)
-- **API Health:** `http://localhost:8000/health`
+- **Frontend map:** `http://localhost`
+- **Admin panel:** `http://localhost/admin` (HTTP Basic Auth — credentials from `.env`)
+- **API docs (Swagger):** `http://localhost:8000/docs`
+- **API health:** `http://localhost/api/v1/health`
 
 ### Database Management
 
 ```bash
-# Initialize database (runs automatically on first docker-compose up)
-docker exec radar_db_init python -m radar_db.manage init
+# Initialize tables + seed initial data (runs automatically via db-init service)
+docker compose exec db-init python -m radar_db.manage init
+docker compose exec db-init python -m radar_db.manage seed
 
-# Seed initial data (radar stations, products, color references)
-docker exec radar_db_init python -m radar_db.manage seed
+# Sync seed data (full upsert — updates existing records, adds missing ones)
+docker compose exec db-init python -m radar_db.manage sync
 
-# Run database migrations
-docker exec radar_db_init python -m radar_db.manage migrate
+# Run pending migrations
+docker compose exec db-init python -m radar_db.manage migrate upgrade
 
 # Check database connection
-docker exec radar_indexer python -m indexer.manage check
+docker compose exec db-init python -m radar_db.manage check
+
+# Full reset + reseed (destructive — development only)
+docker compose exec db-init python -m radar_db.manage reset --force --seed
 ```
+
+See [`database/README.md`](database/README.md) for the full reference.
 
 ---
 
@@ -312,139 +347,116 @@ docker exec radar_indexer python -m indexer.manage check
 ### Base URL
 
 ```
-http://localhost:8000/api/v1
+http://localhost/api/v1
 ```
+(Proxied through nginx on port 80. Direct API port: 8000.)
 
-### Key Endpoints
+### Public Endpoints
 
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/health` | GET | Health check (DB status) |
-| `/radars` | GET | List all radar stations |
-| `/radars/{code}` | GET | Get specific radar details |
-| `/products` | GET | List available radar products |
-| `/cogs` | GET | Query COG metadata with filters |
-| `/tiles/{cog_id}/{z}/{x}/{y}.png` | GET | Render map tile |
-| `/products/{product_key}/colormap` | GET | Get color scale entries |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Health check (DB + timestamp) |
+| GET | `/radars` | List radar stations (`?active_only=true`) |
+| GET | `/radars/{code}` | Get one radar |
+| GET | `/products` | List products (`?vol_nr=01&strategy=0315`) |
+| GET | `/products/{key}` | Get one product |
+| GET | `/cogs` | Query COG metadata (`?radar_code&product_key&strategy&vol_nr&start_time&end_time&page&page_size`) |
+| GET | `/cogs/latest` | Most recent COG for radar + product |
+| GET | `/cogs/timeline` | Available timestamps for animation |
+| GET | `/cogs/{id}` | Get one COG by ID |
+| GET | `/frames/{cog_id}/image.png` | Full COG as georeferenced RGBA PNG — **v2 primary** (`?colormap&vmin&vmax&filter_vmin&filter_vmax&smooth&smooth_sigma`) |
+| GET | `/tiles/{cog_id}/{z}/{x}/{y}.png` | Web Mercator tile — v1 / compatibility |
+| GET | `/tiles/{cog_id}/metadata` | Tile rendering metadata |
+| GET | `/colormap/names` | All colormap names |
+| GET | `/colormap/options` | Per-product colormap options |
+| GET | `/colormap/defaults` | Per-product default colormap |
+| GET | `/colormap/colors/{name}` | Hex color list for a colormap |
+| GET | `/colormap/info/{product_key}` | Full colormap info for a product |
+| POST | `/colormap/cache/invalidate` | Flush colormap in-process cache |
+| GET | `/tops-cores` | Query TopsAndCores metadata (`?radar_codes[]&time_from&time_to`) |
+| GET | `/tops-cores/{id}/features` | Raw GeoJSON FeatureCollection from disk |
 
-For detailed API documentation, visit `http://localhost:8000/docs` after starting the API container.
+### Admin Endpoints (`/api/v1/admin/*`, nginx Basic Auth)
+
+CRUD for: `radars`, `products`, `references`, `cogs`, `tops-cores`, `estrategias`, `volumenes`, `colormap-stops`, `colormap-from-hex`, `colormap-options`.
+
+See [`docs/DATA_FLOW.md`](docs/DATA_FLOW.md) §4.9 for the full admin endpoint table.
 
 ---
 
 ## Frontend Features
 
-### Radar Selection
-- Multi-select checkboxes for simultaneous visualization
-- Toggle to show/hide inactive radar stations
-- **Load Latest** button to fetch newest available data
+### Multi-Radar Map (`/`)
+- Multi-select radar list (sorted: active first, RMA before AR, numeric ascending with RMA00 last)
+- `›` button on each radar to open the one-radar detail page
+- **Coverage mode toggle:** C+D (volumes 01/02, full product suite) ↔ Vigilancia (volume 04, unfiltered only)
+- Product selector with filtered/unfiltered toggle (inverted: checked = filtered = no `o` suffix)
+- Time window: presets (1.5 h / 3 h / 4.5 h / 6 h) + custom date + iOS-style time wheel
+- Live mode with configurable auto-refresh interval
+- **Animation:** `requestAnimationFrame` playback, speed 0.5×–2×, manual frame navigation
+- **Coverage mask:** SVG pane that dims outside radar coverage; opacity slider
+- **Tops & Cores layer:** convective cores (blue) and storm tops (red) as circle markers (COLMAX products only)
+- **Gaussian smoothing:** server-side blur with configurable sigma
+- **Basemap selector:** IGN Argenmap variants (default: Argenmap standard)
+- Per-radar opacity slider
+- **Snapshot:** canvas compositing of map + legend + timestamp → PNG download
+- Settings panel with admin panel link
 
-### Product/Field Selection
-- Dropdown to choose radar product (e.g., COLMAX, DBZH)
-- Toggle for **Filtered** vs. **Unfiltered** fields (processed vs. raw data)
-- Colormap selector with custom value-range filtering
+### One-Radar Detail Page (`/radar.html?code=XXX`)
+- Multi-layer field system: add multiple fields, each with independent colormap, range filter, opacity, and smoothing
+- Drag-to-reorder layers; eye toggle per layer; colormap strip with ticks
+- Per-layer collapsible settings panel (Ajustes)
+- Always operates in C+D mode (no VIG toggle)
+- Coverage rings for each active layer's coverage radius
 
-### Time-Window Control
-- Preset buttons: Last 1.5h, 3h, 4.5h, 6h
-- Custom date/time range picker
-- **Live mode** with 5-minute auto-refresh
-
-### Animation Controls
-- **Play/Pause** button
-- **Previous/Next** frame navigation
-- **Speed** control (0.5x, 1x, 1.5x, 2x)
-- Frame counter and timeline slider
-- **Latest** button to jump to most recent frame
-
-### Map Interaction
-- Basemap selector (Dark, Light, OpenStreetMap, Satellite, Terrain)
-- Opacity slider for radar layers
-- **Snapshot** button to download current map view
-- Pan, zoom, and layer toggle controls (Leaflet native)
-
-### Geolocation
-- Auto-detect user location (browser + IP fallback)
-- Automatically select 3 nearest active radars
-- Load last 3 hours of data on initialization
-
-### Legend
-- Dynamic color scale visualization
-- Value-to-color mapping from database Reference entries
-- Show/hide toggle
+### Admin Panel (`/admin`, Basic Auth)
+- Django-admin-style filtering and sorting for every table
+- Visual colormap creator/editor with draggable gradient stops and live preview
+- Hash-routed SPA; "← Volver al mapa" restores the main map via browser bfcache
 
 ---
 
 ## Database Schema Overview
 
-### Core Tables
+| Table | Key Fields |
+|-------|-----------|
+| `radars` | `code` (PK), `title`, `center_lat/long`, `img_radio`, `is_active`, `detail_view_enabled` |
+| `radar_products` | `product_key` (UNIQUE), `product_title`, `min_value`, `max_value`, `unit`, `default_cmap` |
+| `radar_cogs` | `radar_code` (FK), `product_id` (FK), `estrategia_code` (FK), `observation_time`, `polarimetric_var`, `vol_nr`, `radar_coverage_m`, `file_path` (UNIQUE), `bbox` (PostGIS), `status` |
+| `tops_and_cores` | `radar_code` (FK), `observation_time`, `file_path` (UNIQUE), `core_count`, `top_count`, `feature_count`, `strategy`, `vol_nr`, `status` |
+| `references` | `product_id` (FK), `value`, `color`, `color_font` (color scale entries) |
+| `estrategias` | `code`, `description`; M:M → `volumenes` |
+| `volumenes` | `id`, `value` (integer volume number) |
+| `colormap_stops` | `cmap_name`, `channel` (r/g/b), `position`, `val_left`, `val_right`, `sort_order`, `is_system` |
+| `product_colormap_options` | `product_key` (FK), `cmap_name` (M:M pairing) |
 
-**Radar** — Radar station metadata
-- `code` (PK): station identifier (e.g., "RMA1")
-- `title`, `description`: display name
-- `center_lat`, `center_long`: station location
-- `img_radio`: coverage radius (km)
-- `is_active`: visibility flag
-- `point1_lat/long`, `point2_lat/long`: bounding box corners
+`RadarCOG.status` enum: `AVAILABLE`, `MISSING`, `ERROR`, `PENDING`, `PROCESSING`, `ARCHIVED`
 
-**RadarProduct** — Product type definitions
-- `product_key` (UNIQUE): identifier (e.g., "COLMAX", "DBZH")
-- `product_title`, `product_description`: display info
-- `min_value`, `max_value`: data range
-- `unit`: measurement unit (e.g., "dBZ")
-
-**RadarCOG** — Indexed COG file references
-- `id` (PK): database ID
-- `radar_code` (FK): which radar
-- `product_id` (FK): which product
-- `observation_time`: data acquisition timestamp
-- `file_path` (UNIQUE): relative path on disk
-- `file_size_bytes`, `file_checksum`: file metadata
-- `cog_cmap`, `cog_vmin`, `cog_vmax`: rendering parameters from GeoTIFF tags
-- `bbox` (PostGIS POLYGON): geographic extent
-- `status`: AVAILABLE, MISSING, or ERROR
-- Spatial & raster metadata: CRS, resolution, width, height, dtype
-
-**Reference** — Color scale entries for legends
-- `id` (PK), `product_id` (FK)
-- `value`: numeric value (e.g., 10.0 dBZ)
-- `color`: hex color code (e.g., "#a40000")
-- `color_font`: label text color
-
-**Estrategia, Volumen** — Scanning strategy configuration (optional)
-
-For full schema details, see [`database/README.md`](database/README.md).
+For full schema details, see [`docs/DATA_FLOW.md`](docs/DATA_FLOW.md) §3.
 
 ---
 
 ## Development
 
-### Local Setup with Dev Containers
-
-```bash
-# Open in VSCode with dev container support
-code .
-
-# In VSCode Command Palette: "Dev Containers: Reopen in Container"
-# Select "webmet" configuration
-```
-
 ### Running Tests
 
 ```bash
-# Execute into the tests container (if exists)
-docker exec -it radar_tests pytest tests/
+# All tests (API + indexer + e2e)
+docker exec radar_tests pytest
 
-# Run specific test file
-docker exec -it radar_tests pytest tests/api/test_radars.py -v
+# API contract tests only
+docker exec radar_tests pytest tests/api/ -v
+
+# E2E browser tests (Playwright)
+docker exec radar_tests pytest tests/e2e/ -v
+
+# Single test file
+docker exec radar_tests pytest tests/api/test_radars.py -v
 ```
 
+See [`docs/E2E_TESTING.md`](docs/E2E_TESTING.md) for the full e2e setup guide.
+
 ### Code Style & Quality
-
-- **Formatter:** [black](https://github.com/psf/black) (Python)
-- **Linter:** [flake8](https://flake8.pycqa.org/) (Python)
-- **Type Checking:** [mypy](https://www.mypy-lang.org/) (Python)
-- **Frontend:** No formatter/linter (vanilla JS/CSS)
-
-Run before committing:
 
 ```bash
 black api/ database/ indexer/
@@ -452,115 +464,31 @@ flake8 api/ database/ indexer/
 mypy api/ database/ indexer/
 ```
 
----
+### radarlib Output Contract
 
-## Linking to radarlib
+WebMet25 depends entirely on radarlib's output format.
 
-WebMet25 depends on the **radarlib** output contract. The expected file format and metadata are defined in radarlib's documentation:
+**Current production filename:** `{RADAR}_{strategy}_{vol_nr}_{YYYYMMDDTHHMMSSZ}_{FIELD}[o].tif`
+Example: `RMA1_0315_01_20260401T205000Z_DBZHo.tif`
 
-- **Primary Format:** Cloud-Optimized GeoTIFF (.tif)
-- **PNG:** Deprecated (backward compatibility only)
-- **File Naming:** `<RADAR_NAME>_<TIMESTAMP>_<FIELD>[o]_<ELEVATION>.<ext>`
-- **GeoTIFF Tags:** `radarlib_cmap`, `radarlib_vmin`, `radarlib_vmax`, `field_name`, `timestamp`
-- **Output Path:** `ROOT_RADAR_PRODUCTS_PATH/{radar_code}/{product_key}/{filename}.tif`
+**Legacy filename (backward compat):** `{RADAR}_{YYYYMMDDTHHMMSSZ}_{FIELD}[o]_{elev}.tif`
 
-See [`docs/DISCOVERY_REPORT.md`](docs/DISCOVERY_REPORT.md) for full architectural details.
+**Folder structure:** `ROOT_RADAR_PRODUCTS_PATH/{RADAR_NAME}/YYYY/MM/DD/`
 
----
+**GeoTIFF tags required:** `radarlib_cmap`, `radarlib_vmin`, `radarlib_vmax`, `field_name`
 
-## Troubleshooting
-
-### Database Connection Issues
-
-```bash
-# Check database health
-docker-compose ps radar_db
-
-# View database logs
-docker-compose logs radar_db
-
-# Restart database
-docker-compose restart radar_db
-```
-
-### Indexer Not Finding Files
-
-```bash
-# Check indexer logs
-docker-compose logs indexer
-
-# Verify watch path exists and is accessible
-docker exec radar_indexer ls -la /product_output
-
-# Run single scan manually
-docker exec radar_indexer python -m indexer.main --single --debug
-```
-
-### Tiles Not Rendering
-
-```bash
-# Check API logs
-docker-compose logs api
-
-# Verify COG file exists and is readable
-docker exec radar_api ls -la /product_output/{radar_code}/{product_key}/
-
-# Test tile endpoint directly
-curl http://localhost:8000/api/v1/tiles/1/10/500/400.png -o test.png
-```
-
-### Frontend Not Loading
-
-```bash
-# Check Nginx logs
-docker-compose logs frontend
-
-# Verify API is accessible from frontend container
-docker exec radar_frontend curl http://api:8000/health
-
-# Check browser console for JavaScript errors (F12)
-```
+See [`.github/copilot-instructions.md`](.github/copilot-instructions.md) for the full contract.
 
 ---
 
-## Performance Tips
+## Known Gaps & Technical Debt
 
-- **Tile Caching:** Tiles are rendered on-demand. For high-traffic deployments, consider adding HTTP cache headers or a Redis layer.
-- **Database Indexing:** RadarCOG table is indexed on `radar_code`, `product_id`, `observation_time`, and `status`.
-- **Animation Preloading:** Leaflet tiles are pre-fetched in background before animation starts.
-- **Geolocation:** Browser Geolocation API is tried first; falls back to IP-based geolocation if denied.
-
----
-
-## Known Gaps & Limitations
-
-See [`docs/DISCOVERY_REPORT.md`](docs/DISCOVERY_REPORT.md) **Section 8: Gaps & Risks** for detailed information on:
-
-- No authentication/authorization
-- Incomplete error handling in tile rendering
-- Missing tile caching (HTTP + Redis)
-- No automated tests
-- Secrets exposed in plaintext
-- Limited multi-elevation support
-- No rate limiting
-
----
-
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
----
-
-## Support & Contributions
-
-For questions, bug reports, or feature requests, please open an issue in the GitLab repository.
-
-Before contributing:
-1. Read [`docs/DISCOVERY_REPORT.md`](docs/DISCOVERY_REPORT.md) for architecture details
-2. Follow code style guidelines (black, flake8, mypy)
-3. Add tests for new functionality
-4. Update documentation
+- ⚠️ Admin panel uses temporary **nginx HTTP Basic Auth** — must be replaced with JWT before production
+- ❌ No transactions in the indexer — partial failures can leave DB in inconsistent state
+- ❌ Database credentials in plaintext in `docker-compose.yml`
+- ❌ No rate limiting on the public API
+- ❌ No automatic archival/cleanup of old COG records
+- ❌ Pydantic V2 class-based config deprecated in `indexer/config.py` and `radar_db/config.py` — must migrate to `ConfigDict` before Pydantic V3
 
 ---
 
@@ -568,9 +496,9 @@ Before contributing:
 
 **WebMet25** is developed and maintained by **Grupo Radar Córdoba (GRC)** — Universidad Nacional de Córdoba, Argentina.
 
-Consumes output from **radarlib**, the data producer library for meteorological radar processing and visualization.
+Consumes output from **radarlib**, the data producer library for meteorological radar processing.
 
 ---
 
-**Last Updated:** April 20, 2026  
-**Version:** 1.0.0
+**Version:** 2.0.0  
+**Last Updated:** July 8, 2026

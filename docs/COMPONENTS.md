@@ -84,14 +84,14 @@ const state = {
 };
 ```
 
-**Coverage Modes (`COVERAGE_MODES` constant):**
+**Coverage Modes (`COVERAGE_MODES` — defined in `v2/constants.js`):**
 ```javascript
 const COVERAGE_MODES = [
-    { id: 'cd',  label: 'C+D', volNrs: ['01', '02'], strategy: '0315', filteredFieldsAvailable: true },
-    { id: 'vig', label: 'VIG', volNrs: ['04'],        strategy: '0315', filteredFieldsAvailable: false },
+    { id: ‘cd’,  label: ‘C+D’, volNrs: [‘01’, ‘02’], strategy: ‘0315’, filteredFieldsAvailable: true,  defaultProduct: ‘COLMAXo’ },
+    { id: ‘vig’, label: ‘VIG’, volNrs: [‘04’],        strategy: ‘0315’, filteredFieldsAvailable: false, defaultProduct: ‘DBZHo’   },
 ];
 ```
-Mode is persisted to `localStorage` key `webmet25_coverage_mode`. COG queries pass the active mode’s `volNrs` as `?vol_nr=` params.
+Mode is persisted to `localStorage` key `webmet25_coverage_mode`. COG queries pass the active mode’s `volNrs` as `?vol_nr=` params. Radar status refresh interval is persisted to `webmet25_radar_refresh_interval_min` (default 10).
 
 **Dependencies:** `shared/api.js`, `v2/map.js`, `v2/animation.js`, `shared/controls.js`, `shared/legend.js`, `shared/tops-cores.js`
 
@@ -144,6 +144,8 @@ Mode is persisted to `localStorage` key `webmet25_coverage_mode`. COG queries pa
 **Exposed via:** `/frames/{cog_id}/image.png?smooth=true&smooth_sigma=0.8`
 
 **Responsibility:** Applies a Gaussian blur (`scipy.ndimage.gaussian_filter`) to the raw float data array *before* colormap application, producing visually smoother radar images. Executed server-side on the render thread.
+
+**localStorage keys:** `webmet25_smooth_enabled` (boolean, default `false`) · `webmet25_smooth_sigma` (number, default `0.8`)
 
 **Parameters:**
 | Param | Type | Default | Description |
@@ -385,7 +387,8 @@ Canvas compositing pipeline:
 **File:** [`frontend/public/radar.html`](../../frontend/public/radar.html)
 
 **Responsibility:** DOM skeleton for the single-radar detail view. Loaded as
-`/radar.html?code=<RADAR_CODE>`. Reuses the same `styles.css` and Leaflet version as
+`/radar.html?code=<RADAR_CODE>`. Only accessible when `Radar.detail_view_enabled = true`
+(set per-radar in the admin panel). Reuses the same `styles.css` and Leaflet version as
 `index.html` but has its own layout: a back button + radar header bar (top-center),
 icon bar (top-right), map container, floating panels (field/layer selection, time window,
 settings), and animation controls (bottom-center).
@@ -692,5 +695,5 @@ On page load `init()` bootstraps the state, fetches data, and starts the animati
 
 ---
 
-**Document Version:** 2.2.0  
-**Last Updated:** June 25, 2026
+**Document Version:** 2.3.0  
+**Last Updated:** July 8, 2026

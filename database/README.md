@@ -82,9 +82,9 @@ docker exec -it <container_name> python -m radar_db.manage init
 
 ---
 
-### 2. **seed** - Load Seed Data
+### 2. **seed** - Load Seed Data (Insert-Only)
 
-Loads initial/seed data from JSON file into the database.
+Loads initial/seed data from JSON file into the database. Skips records that already exist.
 
 **Inside container:**
 ```bash
@@ -101,12 +101,25 @@ docker exec -it <container_name> python -m radar_db.manage seed
 python -m radar_db.manage seed -f /path/to/custom_seed.json
 ```
 
-**When to use:** Populate database with initial data (radars, products, references, etc.).
+**When to use:** First-time database population. Only inserts; does not update existing records.
 
-**Note:** The seeder intelligently handles updates:
-- If a record already exists, it skips it (unless values are missing)
-- If new columns are added and existing records have NULL values, it updates them
-- Useful for incremental seeding after schema changes
+---
+
+### 2b. **sync** - Full Upsert Seed Data
+
+Like `seed`, but performs a full upsert — updates existing records with new values from the seed file as well as inserting missing ones. Use this after adding new fields to the seed data that already-existing records should receive.
+
+**Inside container:**
+```bash
+python -m radar_db.manage sync
+```
+
+**From outside (Docker):**
+```bash
+docker exec -it <container_name> python -m radar_db.manage sync
+```
+
+**When to use:** After schema migrations that add new columns with seed-data values, or when updating seed data values in existing records (e.g. adding `default_cmap` to products, or updating `detail_view_enabled` on radars).
 
 ---
 
@@ -259,7 +272,8 @@ docker exec -it <container_name> python -m radar_db.manage shell
 
 **Available objects in shell:**
 - `session` - SQLAlchemy database session
-- `Radar`, `RadarProduct`, `Reference`, `RadarCOG`, `Volumen`, `Estrategia` - Model classes
+- `Radar`, `RadarProduct`, `Reference`, `RadarCOG`, `TopsAndCores`, `Volumen`, `Estrategia`, `ColormapStop`, `ProductColormapOption` - Model classes
+- `COGStatus` - Status enum
 - `settings` - Configuration object
 - `db_manager` - Database manager
 
@@ -539,12 +553,15 @@ These should be set in your Docker environment or `.env` file.
 
 The main models available are:
 
-- **Radar** - Radar station configurations
-- **RadarProduct** - Product type definitions (e.g., reflectivity, velocity)
-- **Reference** - Color/value mapping for visualization
-- **RadarCOG** - Cloud Optimized GeoTIFF file entries
-- **Volumen** - Volume definitions
-- **Estrategia** - Strategy definitions
+- **Radar** - Radar station configurations. Key fields: `code` (PK), `title`, `center_lat/long`, `img_radio`, `is_active`, `detail_view_enabled` (enables one-radar detail page)
+- **RadarProduct** - Product type definitions. Key fields: `product_key` (UNIQUE), `product_title`, `min_value`, `max_value`, `unit`, `default_cmap`
+- **RadarCOG** - Indexed Cloud-Optimized GeoTIFF files. Key fields: `polarimetric_var` (exact field name incl. `o` suffix), `vol_nr`, `estrategia_code`, `radar_coverage_m`, `bbox` (PostGIS), `status`
+- **TopsAndCores** - Indexed GeoJSON tops & cores files. Key fields: `radar_code`, `observation_time`, `core_count`, `top_count`, `strategy`, `vol_nr`, `status`
+- **Reference** - Color/value mapping for visualization legends
+- **Volumen** - Volume number definitions
+- **Estrategia** - Scanning strategy definitions
+- **ColormapStop** - Per-channel (r/g/b) stops for DB-backed colormaps. `is_system=True` stops cannot be deleted
+- **ProductColormapOption** - Many-to-many between products and colormap names
 
 ---
 
@@ -584,4 +601,8 @@ For issues or questions:
 
 ---
 
-**Last Updated:** January 30, 2026
+| Load seed data (full upsert) | `python -m radar_db.manage sync` |
+
+---
+
+**Last Updated:** July 8, 2026

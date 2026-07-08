@@ -156,5 +156,5 @@ PYTHONPATH=tests PWDEBUG=1 pytest tests/e2e/test_admin_panel.py # Playwright Ins
 
 ---
 
-**Document Version:** 1.0.0  
-**Last Updated:** June 4, 2026
+**Document Version:** 1.1.0  
+**Last Updated:** July 8, 2026

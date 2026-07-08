@@ -192,8 +192,13 @@ tests/ # Automated tests
 | GET | `/radars/{radar_code}` | Get radar details |
 | GET | `/products` | List radar products |
 | GET | `/cogs` | Query COG metadata. Supports `strategy` and `vol_nr` (repeatable) query params for coverage-mode filtering |
+| GET | `/cogs/latest` | Most recent COG for radar + product |
+| GET | `/cogs/timeline` | Available timestamps for animation (`?radar_code&product_key&hours`) |
+| GET | `/cogs/{id}` | Get one COG by database ID |
 | GET | `/tiles/{cog_id}/{z}/{x}/{y}.png` | Render Web Mercator tile (v1) |
+| GET | `/tiles/by-params/{radar}/{product}/{timestamp}/{z}/{x}/{y}.png` | Render tile by params |
 | GET | `/tiles/{cog_id}/metadata` | Get tile metadata |
+| GET | `/tiles/cache/stats` | L1 LRU + L2 Redis cache statistics |
 | GET | `/products/{product_key}/colormap` | Get product colormap (Reference table) |
 | GET | `/colormap/names` | List all DB-defined colormap names |
 | GET | `/colormap/options` | Per-product colormap option lists (DB-backed, `ProductColormapOption`) |
@@ -590,12 +595,12 @@ Updates record status to MISSING in DB if file not found at serve time.
 - ✅ RESOLVED: Convective Cores & Storm Tops implemented — radarlib generates GeoJSON,
   indexer registers, API serves, v2 frontend displays as `L.circleMarker` layer via `TopsCoresLayer`.
 - ✅ RESOLVED: Coverage Mode Toggle (C+D/VIG) implemented — `COVERAGE_MODES` constant in
-  `v2/app.js` defines mode↔volume mapping. Mode persisted to `webmet25_coverage_mode` in localStorage.
+  `v2/constants.js` defines mode↔volume mapping. Mode persisted to `webmet25_coverage_mode` in localStorage.
 - ✅ RESOLVED: Vigilant mode (vol 04) properly disambiguated from C+D (vol 01+02) via `vol_nr`
   column in `radar_cogs` table and `?vol_nr=` filter on `/cogs` endpoint.
 - ✅ RESOLVED: Radar activity auto-updated by indexer (`update_radar_activity()`) based on recent COG availability.
+- ✅ RESOLVED: Automated tests implemented — API contract tests (`tests/api/`), indexer unit tests (`tests/indexer/`), Playwright e2e tests (`tests/e2e/`).
 - ❌ No pagination on products and references endpoints.
-- ❌ No automated tests.
 - ❌ No monitoring or log aggregation.
 
 ---
