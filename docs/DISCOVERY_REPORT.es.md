@@ -478,49 +478,5 @@ Consultar [`docs/OPERATIONS.md`](OPERATIONS.md) para más información.
 
 El proxy local de tiles permite que los tiles de los mapas base se cacheen en el servidor desde la primera petición, reduciendo la dependencia externa y la latencia.
 
----
-
-## 8. Brechas y Deuda Técnica
-
-### 8.1 Crítico
-
-| # | Problema | Estado |
-|---|-------|--------|
-| C1 | La autenticación del admin usa **HTTP Basic Auth de nginx** temporalmente — debe reemplazarse con JWT antes de pasar a producción | ❌ Pendiente |
-| C2 | Sin transacciones en el indexador — los fallos parciales pueden dejar la BD en un estado inconsistente | ❌ Pendiente |
-| C3 | Credenciales de base de datos en texto plano en `docker-compose.yml` | ❌ Pendiente |
-
-### 8.2 Alta Prioridad
-
-| # | Problema | Estado |
-|---|-------|--------|
-| H1 | Sin limitación de tasa en la API pública — vulnerable a denegación de servicio | ❌ Pendiente |
-| H2 | Manejo de errores incompleto en el renderizador de tiles (algunos casos extremos pueden dar 500) | ❌ Pendiente |
-| H3 | Caché LRU L1 + Redis L2 para frames y tiles | ✅ Resuelto |
-| H4 | Suavizado gaussiano en el endpoint de frames | ✅ Resuelto |
-
-### 8.3 Prioridad Media
-
-| # | Problema | Estado |
-|---|-------|--------|
-| M1 | Sin paginación en los endpoints de productos y referencias | ❌ Pendiente |
-| M2 | Sin monitoreo ni agregación de logs | ❌ Pendiente |
-| M3 | Sin archivado/limpieza automática de registros COG antiguos | ❌ Pendiente |
-| M4 | Tests de contrato de API + tests unitarios del indexador + tests e2e Playwright | ✅ Resuelto |
-| M5 | Toggle de modo de cobertura (C+D / VIG) mediante `COVERAGE_MODES` | ✅ Resuelto |
-| M6 | Capa convectiva Tops & Cores (indexador + API + frontend) | ✅ Resuelto |
-| M7 | Actividad de radar actualizada automáticamente por el indexador (`update_radar_activity()`) | ✅ Resuelto |
-
-### 8.4 Baja Prioridad / Deuda Técnica
-
-| # | Problema | Estado |
-|---|-------|--------|
-| L1 | `class Config:` basado en clases de Pydantic V2 obsoleto en `indexer/config.py` y `radar_db/config.py` — debe migrarse a `ConfigDict` antes de Pydantic V3 | ❌ Pendiente |
-| L2 | El endpoint `GET /products/{key}/colormap` está obsoleto — usar `GET /colormap/info/{key}` | ❌ Documentado, no eliminado |
-| L3 | Frontend v1 (`js/v1/`) conservado como referencia legacy — puede eliminarse cuando haya plena confianza en v2 | ❌ Pendiente |
-| L4 | Sin actualizaciones en tiempo real por WebSocket — se usa polling cada 5 min | ❌ Pendiente (por diseño, por ahora) |
-
----
-
 **Versión del documento:** 2.0.0  
 **Fecha:** 8 de julio de 2026

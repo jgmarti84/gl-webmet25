@@ -16,7 +16,6 @@ frontend/public/
 ├── index.html                 # Main multi-radar map page
 ├── radar.html                 # One-radar detail page (radar.html?code=AR5)
 ├── admin.html                 # Admin panel SPA (served at /admin, Basic Auth)
-├── cog-browser.html          # Alternative detailed COG browser view
 ├── css/
 │   ├── styles.css            # Main app UI styling (dark theme)
 │   └── admin.css             # Admin panel styling (modern-light theme)
@@ -29,8 +28,6 @@ frontend/public/
     │   ├── legend.js         # Legend renderer
     │   ├── tops-cores.js     # TopsCoresLayer (L.circleMarker)
     │   ├── time-wheel.js     # iOS-style HH:MM scroll picker (custom time range)
-    │   ├── cog-browser-api.js
-    │   └── cog-browser.js
     └── v2/                   # Current production frontend
         ├── app.js            # Main orchestrator & state management (multi-radar map)
         ├── radar-app.js      # One-radar page orchestrator & state management
@@ -106,13 +103,18 @@ El modo se persiste en la clave `webmet25_coverage_mode` de `localStorage`. Las 
 **Responsabilidad:** Encapsula toda la comunicación HTTP con la API del backend. Provee funciones para obtener radares, productos, metadatos de COG, datos de colormap y maneja respuestas de error. Es la única fuente de verdad para la URL base de la API.
 
 **Funciones principales:**
-- `getRadars()` → `GET /api/v1/radars`
-- `getProducts()` → `GET /api/v1/products`
-- `getCogs(radarCode, productKey, startTime, endTime, strategy?, volNrs?)` → `GET /api/v1/cogs?...` — soporta `strategy` y `vol_nr` (repetible) para el filtrado por modo de cobertura
-- `getColormapInfo(productKey)` → `GET /api/v1/products/{key}/colormap`
-- `getFrameUrl(cogId, params)` → construye la URL `/frames/{id}/image.png` con parámetros de consulta
-- `getTopsAndCores(radarCodes, timeFrom, timeTo)` → `GET /api/v1/tops-cores`
-- `getTopsAndCoresFeatures(id)` → `GET /api/v1/tops-cores/{id}/features`
+
+```text
+getRadars() -> GET /api/v1/radars
+getProducts() -> GET /api/v1/products
+getCogs(radarCode, productKey, startTime, endTime, strategy?, volNrs?)
+   -> GET /api/v1/cogs?...
+   (soporta strategy y vol_nr repetible para el modo de cobertura)
+getColormapInfo(productKey) -> GET /api/v1/products/{key}/colormap
+getFrameUrl(cogId, params) -> construye /frames/{id}/image.png con query params
+getTopsAndCores(radarCodes, timeFrom, timeTo) -> GET /api/v1/tops-cores
+getTopsAndCoresFeatures(id) -> GET /api/v1/tops-cores/{id}/features
+```
 
 **Dependencias:** Ninguna (cliente HTTP independiente)
 
@@ -127,14 +129,17 @@ El modo se persiste en la clave `webmet25_coverage_mode` de `localStorage`. Las 
 **Responsabilidad:** Envuelve el mapa Leaflet con renderizado de radar basado en `L.imageOverlay`. Gestiona la carga de fotogramas desde `/frames/{id}/image.png`, su visualización como overlays geo-referenciados, el cambio de basemap, la máscara de cobertura (SVG) y el control de opacidad.
 
 **Métodos principales:**
-- `init(containerId)` — Crea el mapa con la vista inicial
-- `setBasemap(key)` — Cambia entre OSM, IGN y otros basemaps
-- `loadFrames(cogsByFrame)` — Pre-carga todas las imágenes de fotogramas y las almacena como `L.imageOverlay`
-- `showFrame(index)` — Muestra el fotograma en el índice indicado (oculta los demás)
-- `setOpacity(radarCode, opacity)` — Ajusta la opacidad del overlay del radar
-- `addRadarCoverage(code, lat, lng, radius_m)` — Agrega un círculo SVG a la máscara de cobertura
-- `removeRadarCoverage(code)` — Elimina el círculo de cobertura
-- `updateParams(newParams)` — Actualiza los parámetros de colormap/rango y recarga los fotogramas (intercambio atómico en segundo plano)
+
+```text
+init(containerId) — Crea el mapa con la vista inicial
+setBasemap(key) — Cambia entre OSM, IGN y otros basemaps
+loadFrames(cogsByFrame) — Pre-carga imágenes y las guarda como L.imageOverlay
+showFrame(index) — Muestra el fotograma en el índice indicado
+setOpacity(radarCode, opacity) — Ajusta la opacidad del overlay del radar
+addRadarCoverage(code, lat, lng, radius_m) — Agrega un círculo SVG a la máscara
+removeRadarCoverage(code) — Elimina el círculo de cobertura
+updateParams(newParams) — Recarga en segundo plano con intercambio atómico
+```
 
 **Estado interno:** Mapa `_frameImages` interno, `_overlays` por radar, SVG `_coverageMask`
 
@@ -150,8 +155,9 @@ El modo se persiste en la clave `webmet25_coverage_mode` de `localStorage`. Las 
 **Claves de localStorage:** `webmet25_smooth_enabled` (booleano, por defecto `false`) · `webmet25_smooth_sigma` (número, por defecto `0.8`)
 
 **Parámetros:**
+
 | Parámetro | Tipo | Por defecto | Descripción |
-|-------|------|---------|-------------|
+|-----------|------|-------------|-------------|
 | `smooth` | bool | false | Activa/desactiva el suavizado gaussiano |
 | `smooth_sigma` | float | 0.8 | Desviación estándar del kernel gaussiano (píxeles). Mayor valor = mayor desenfoque |
 
@@ -171,11 +177,14 @@ El modo se persiste en la clave `webmet25_coverage_mode` de `localStorage`. Las 
 **Responsabilidad:** Gestiona la reproducción de secuencias de fotogramas del radar mediante `requestAnimationFrame`. Maneja play/pause, control de velocidad (0.5x–2x), navegación manual e intercambios atómicos del buffer de fotogramas para garantizar la continuidad.
 
 **Métodos principales:**
-- `setFrames(frames)` — Intercambia el buffer de fotogramas de forma atómica (la animación continúa)
-- `play()` / `pause()` — Inicia/detiene la reproducción
-- `nextFrame()` / `previousFrame()` — Navegación manual
-- `setSpeed(speed)` — Establece el multiplicador de velocidad (0.5–2.0)
-- `getCurrentFrameIndex()` — Obtiene la posición actual
+
+```text
+setFrames(frames) — Intercambia el buffer de fotogramas de forma atómica
+play() / pause() — Inicia/detiene la reproducción
+nextFrame() / previousFrame() — Navegación manual
+setSpeed(speed) — Establece el multiplicador de velocidad (0.5–2.0)
+getCurrentFrameIndex() — Obtiene la posición actual
+```
 
 **Estado interno:** `currentFrameIndex`, `isPlaying`, `speed`, `frames[]`, `_rafHandle`
 
@@ -190,14 +199,17 @@ El modo se persiste en la clave `webmet25_coverage_mode` de `localStorage`. Las 
 **Responsabilidad:** Gestiona todos los paneles de control de la UI, botones y visualizaciones de estado. Completa/actualiza selectores (checkboxes de radar, desplegable de producto, botones de ventana de tiempo), actualiza las notificaciones de estado y habilita/deshabilita botones según el estado de la aplicación.
 
 **Métodos principales:**
-- `populateRadarCheckboxes(radars)` — Construye el panel de selección múltiple de radares (orden mediante `sortRadarsForDisplay`)
-- `sortRadarsForDisplay(radars)` — Orden: activos antes que inactivos; grupo RMA antes que grupo AR; numérico ascendente dentro del grupo con `RMA00` (número 0) ordenado **al final** (`RMA1…RMA17, RMA00, AR5…`)
-- `populateProductSelect(products)` — Construye el desplegable de productos
-- `setTimeRangeValues(start, end)` / `getTimeRangeValues()` — Lee/escribe las entradas `datetime-local` canónicas `#start-date`/`#end-date` (también sincroniza la entrada de fecha + TimeWheel)
-- `initTimeWheels()` / `refreshTimeWheels()` — Construye los TimeWheels de rango personalizado; los re-centra después de que el panel se vuelve visible
-- `updateStatus(message, duration)` — Muestra un toast de estado (se oculta automáticamente después de la duración)
-- `updateFrameCounter(current, total)` — Muestra "5 / 30"
-- `togglePanel(panelId)` — Abre/cierra paneles flotantes (radar, producto, tiempo, configuración)
+
+```text
+populateRadarCheckboxes(radars) — Construye el panel de selección de radares
+sortRadarsForDisplay(radars) — Ordena activos→inactivos, RMA→AR, numérico ascendente
+populateProductSelect(products) — Construye el desplegable de productos
+setTimeRangeValues(start, end) / getTimeRangeValues() — Sincroniza fecha/hora canónica
+initTimeWheels() / refreshTimeWheels() — Inicializa/re-centra los TimeWheels
+updateStatus(message, duration) — Muestra un toast de estado temporal
+updateFrameCounter(current, total) — Muestra el contador de fotogramas
+togglePanel(panelId) — Abre/cierra paneles flotantes
+```
 
 **Dependencias:** `shared/time-wheel.js`; en caso contrario, solo manipulación del DOM
 
@@ -227,10 +239,13 @@ El modo se persiste en la clave `webmet25_coverage_mode` de `localStorage`. Las 
 **Responsabilidad:** Obtiene datos de colormap de la API y renderiza una leyenda interactiva que muestra la correspondencia color-valor. Muestra cuadros de color con etiquetas de valor y descripciones; soporta toggle de mostrar/ocultar.
 
 **Métodos principales:**
-- `render(productKey)` → Función asíncrona que obtiene el colormap mediante `api.js`, luego construye la leyenda HTML en el DOM
-- `show()` / `hide()` — Alterna la visibilidad de la leyenda
-- `clear()` — Elimina todas las entradas de la leyenda
-- `render(colormap, { filterVmin, filterVmax })` — Pasar el rango de filtro por separado; nunca mutar `colormap.vmin`/`vmax` antes de llamar
+
+```text
+render(productKey) — Obtiene colormap vía api.js y construye la leyenda en el DOM
+show() / hide() — Alterna la visibilidad de la leyenda
+clear() — Elimina todas las entradas de la leyenda
+render(colormap, { filterVmin, filterVmax }) — Renderiza con rango de filtro separado
+```
 
 **Dependencias:** `api.js` (llama a `getColormapInfo`)
 
@@ -247,10 +262,13 @@ El modo se persiste en la clave `webmet25_coverage_mode` de `localStorage`. Las 
 **Responsabilidad:** Gestiona un `L.layerGroup()` de instancias `L.circleMarker` superpuestas en el mapa que muestran núcleos convectivos y cimas de tormenta detectados por radarlib.
 
 **Métodos principales:**
-- `addTo(map)` — Agrega el grupo de capas al mapa Leaflet
-- `updateFrame(frame)` — Obtiene cimas y núcleos para la ventana de tiempo ±2.5 min del fotograma actual y renderiza los marcadores
-- `show()` / `hide()` — Alterna la visibilidad de la capa
-- `setPointSize(radius)` — Actualiza el radio de todos los marcadores (4–20px)
+
+```text
+addTo(map) — Agrega el grupo de capas al mapa Leaflet
+updateFrame(frame) — Obtiene y renderiza topes/núcleos en una ventana de ±2.5 min
+show() / hide() — Alterna la visibilidad de la capa
+setPointSize(radius) — Actualiza el radio de los marcadores (4–20px)
+```
 
 **Estilo de marcadores:**
 - Núcleos: `fillColor: '#3b82f6'` (azul), borde negro
@@ -259,18 +277,6 @@ El modo se persiste en la clave `webmet25_coverage_mode` de `localStorage`. Las 
 **Persistencia de estado:** `webmet25_tops_cores_visible`, `webmet25_tops_cores_size` en `localStorage`.
 
 **Integración:** Restringido a los productos COLMAX y COLMAXo; el toggle aparece en el panel de configuración de campo.
-
----
-
-### 8. **cog-browser-api.js** — [Alternativo] Cliente API especializado
-
-**Archivo:** [`frontend/public/js/shared/cog-browser-api.js`](../../frontend/public/js/shared/cog-browser-api.js)
-
-**Responsabilidad:** Variante de `api.js` utilizada por la vista alternativa del navegador de COG (`cog-browser.html`). Provee las mismas funciones principales de la API pero puede incluir capacidades adicionales de consulta/filtrado para la inspección detallada de COG.
-
-**Diferencias respecto de `api.js`:** Puede soportar parámetros de consulta adicionales, detalles de paginación o filtros de metadatos específicos del caso de uso del navegador de COG.
-
-**Nota:** Es un módulo secundario; la aplicación principal usa `api.js`
 
 ---
 
@@ -315,6 +321,7 @@ const state = {
 ```
 
 **Funciones principales:**
+
 | Función | Propósito |
 |---|---|
 | `addLayer(productKey)` | Obtiene colormap → crea capa → carga fotogramas → re-renderiza la lista |
@@ -415,18 +422,6 @@ Pipeline de composición en canvas:
 - Leaflet 1.9.4 (CDN)
 - Proveedores de basemap CartoDB (CDN)
 - Módulos locales mediante importaciones ES6 en `app.js`
-
----
-
-### **cog-browser.html** — Página alternativa de navegación de COG
-
-**Archivo:** [`frontend/public/cog-browser.html`](../../frontend/public/cog-browser.html)
-
-**Responsabilidad:** Provee una vista tabular detallada para inspeccionar archivos COG directamente (metadatos, timestamps, tamaños de archivo, estado). Separada de la visualización principal del mapa animado.
-
-**Elementos DOM principales:** Columnas de tabla para ID de COG, código de radar, producto, timestamp, tamaño de archivo, estado, etc.
-
-**Scripts cargados:** `cog-browser-api.js`, `cog-browser.js`
 
 ---
 
@@ -538,10 +533,6 @@ radar.html (one-radar detail page)
     ├── v2/radar-utils.js (waitForLeaflet, updateRadarHeader, groupCogsByTimestamp, …)
     ├── v2/constants.js (MS_PER_HOUR, DEFAULT_*, COVERAGE_MODES)
     └── styles.css
-
-cog-browser.html (alternative view)
-├── shared/cog-browser-api.js
-└── shared/cog-browser.js
 
 admin.html (admin SPA, /admin, Basic Auth)
 ├── js/admin.js (CRUD, filters/sort, colormap creator/editor)
@@ -671,15 +662,6 @@ Al cargar la página, `init()` inicializa el estado, obtiene los datos y comienz
 5. **Continuidad de animación:** Todos los cambios de datos pasan por `_loadFramesWithContinuity()` — la animación nunca se detiene durante la carga
 6. **Async/Await:** Patrones asíncronos modernos en todo el código
 7. **Diseño responsivo:** CSS mobile-first, tema oscuro
-
----
-
-## Limitaciones conocidas y trabajo futuro
-
-- ❌ Sin soporte offline ni caché de service worker
-- ❌ Sin actualizaciones en tiempo real por WebSocket (sondea cada 5 minutos en su lugar)
-- ❌ Acoplamiento de módulos mediante el objeto global `state` (podría refactorizarse al patrón event emitter)
-- ✅ RESUELTO: Pre-carga de fotogramas (v2 pre-carga todos los fotogramas antes de animar)
 
 ---
 

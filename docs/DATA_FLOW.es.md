@@ -357,6 +357,7 @@ Retorna el raster COG completo como un único PNG RGBA georeferenciado. Lo utili
 **Endpoint:** `GET /frames/{cog_id}/image.png`
 
 **Parámetros de consulta:**
+
 | Parámetro | Tipo | Valor por defecto | Descripción |
 |-----------|------|-------------------|-------------|
 | `colormap` | str | desde tag del COG | Nombre del colormap |
@@ -390,12 +391,12 @@ Respaldado por `ColormapService` — un singleton thread-safe con caché de TTL 
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
-| GET | `/colormap/names` | Lista todos los nombres de colormap definidos en la BD |
-| GET | `/colormap/options` | Mapa de `product_key → [cmap_names]` |
-| GET | `/colormap/defaults` | Mapa de `product_key → default_cmap_name` |
-| GET | `/colormap/colors/{cmap_name}` | Lista de colores hex (parámetro: `steps=256`, rango 2–1024) |
-| GET | `/colormap/info/{product_key}` | Información completa: `colormap`, `vmin`, `vmax`, `colors[]`, `ticks[]`, `available_colormaps[]`; override opcional con `?colormap=` |
-| POST | `/colormap/cache/invalidate` | Invalida la caché en proceso después de ediciones en la BD |
+| GET | /colormap/names | Lista todos los nombres de colormap definidos en la BD |
+| GET | /colormap/options | Mapa de product_key → [cmap_names] |
+| GET | /colormap/defaults | Mapa de product_key → default_cmap_name |
+| GET | /colormap/colors/{cmap_name} | Lista de colores hex (parámetro: steps=256, rango 2–1024) |
+| GET | /colormap/info/{product_key} | Información completa: colormap, vmin, vmax, colors[], ticks[], available_colormaps[]; override opcional con ?colormap= |
+| POST | /colormap/cache/invalidate | Invalida la caché en proceso después de ediciones en la BD |
 
 ### 4.9 API de Admin y Panel
 
