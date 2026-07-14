@@ -4,12 +4,29 @@
 # Script para generar documentación PDF de radarlib
 #
 # Uso:
-#   ./generate_pdf.sh              # genera ambas versiones (EN + ES) - MÁSTER
-#   ./generate_pdf.sh EN           # genera solo versión en inglés - MÁSTER
-#   ./generate_pdf.sh ES           # genera solo versión en español - MÁSTER
-#   ./generate_pdf.sh en           # genera versión en inglés (legacy - README.md)
-#   ./generate_pdf.sh es           # genera versión en español (legacy - secciones separadas)
-#   ./generate_pdf.sh es-single    # genera versión en español (legacy - README.es.md)
+# Individual docs (English)
+# ./generate_pdf.sh wm-readme
+# ./generate_pdf.sh wm-dataflow
+# ./generate_pdf.sh wm-discovery
+# ./generate_pdf.sh wm-operations
+# ./generate_pdf.sh wm-e2e
+# ./generate_pdf.sh wm-components
+# ./generate_pdf.sh wm-frontend
+# ./generate_pdf.sh wm-database
+
+# # Individual docs (Spanish)
+# ./generate_pdf.sh wm-readme-es
+# ./generate_pdf.sh wm-dataflow-es
+# ./generate_pdf.sh wm-discovery-es
+# ./generate_pdf.sh wm-operations-es
+# ./generate_pdf.sh wm-e2e-es
+# ./generate_pdf.sh wm-components-es
+# ./generate_pdf.sh wm-frontend-es
+# ./generate_pdf.sh wm-database-es
+
+# # All at once
+# ./generate_pdf.sh wm-all        # all EN docs
+# ./generate_pdf.sh wm-all-es     # all ES docs
 #
 # Requisitos:
 #   - pandoc (apt install pandoc)
@@ -267,6 +284,8 @@ generate_doc() {
             -V urlcolor=blue
             --pdf-engine=xelatex
             --highlight-style=tango
+            --lua-filter="$SCRIPT_DIR/filters/breakable_table_code.lua"
+            -H "$SCRIPT_DIR/latex/code_block_wrap.tex"
             --metadata title="$title"
             --metadata author="Grupo Radar Córdoba (GRC)"
             --metadata date="$VERSION"
@@ -293,6 +312,7 @@ generate_doc() {
             --toc-depth=3 \
             --standalone \
             --highlight-style=tango \
+            --lua-filter="$SCRIPT_DIR/filters/breakable_table_code.lua" \
             --metadata title="$title" \
             --metadata author="Grupo Radar Córdoba (GRC)" \
             --metadata date="$VERSION" \
