@@ -1537,6 +1537,10 @@ code {
 #field-loading-badge.visible {
     display: block;
 }
+#field-loading-badge.empty {
+    color: #ffa726;
+    border-color: rgba(255, 167, 38, 0.3);
+}
 
 /* ============================================================
    COG BROWSER STYLES  (separate page, not main viewer)

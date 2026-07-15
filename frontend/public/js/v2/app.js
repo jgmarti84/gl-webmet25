@@ -1508,12 +1508,15 @@ const app = {
             );
 
             if (cogs.length === 0) {
-                const radarList   = state.selectedRadars.join(', ').toUpperCase();
-                const productName = state.products.find(p => p.product_key === state.selectedProduct)?.product_title || state.selectedProduct;
-                state.ui.setStatus(
-                    `⚠️ Sin datos para ${radarList} con el campo "${productName}" en el rango de tiempo seleccionado.`,
-                    'error'
-                );
+                // finally runs first (hides the loading badge), then this re-shows it as empty state
+                setTimeout(() => {
+                    const badge = document.getElementById('field-loading-badge');
+                    if (badge) {
+                        badge.textContent = 'Sin datos para el rango seleccionado.';
+                        badge.classList.add('empty', 'visible');
+                        setTimeout(() => badge.classList.remove('visible', 'empty'), 4000);
+                    }
+                }, 0);
                 return;
             }
 
