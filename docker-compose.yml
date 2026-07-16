@@ -86,7 +86,7 @@ services:
       FILE_PATTERN: "*.tif"
       COMPUTE_STATS: "true"
       COMPUTE_CHECKSUM: "false"
-      RADAR_CODES: "RMA1, RMA2, RMA3, RMA4, RMA5, RMA6, RMA7, RMA8, RMA9, RMA10, RMA11, RMA12, RMA13, RMA14, RMA15, RMA16, RMA17, RMA18"   # Optional: limit to specific radars
+      RADAR_CODES: "RMA1, RMA2, RMA3, RMA4, RMA5, RMA6, RMA7, RMA8, RMA9, RMA10, RMA11, RMA12, RMA13, RMA14, RMA15, RMA16, RMA17, RMA18, RMA20, AR8"   # Optional: limit to specific radars
       TOPS_AND_CORES_DIR: /tops_and_cores
     volumes:
       - ../product_output:/product_output

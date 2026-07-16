@@ -352,6 +352,22 @@
     }
 },
 {
+    "model": "api_radares.radar",
+    "pk": "RMA20",
+    "fields": {
+        "title": "Las Lajitas",
+        "description": "SALTA",
+        "center_lat": "-24.74611100",
+        "center_long": "-64.25111100",
+        "img_radio": 240,
+        "is_active": true,
+        "point1_lat": "0.0000000000",
+        "point1_long": "0.0000000000",
+        "point2_lat": "0.0000000000",
+        "point2_long": "0.0000000000"
+    }
+},
+{
     "model": "radar_api.radarproduct",
     "pk": 1,
     "fields": {
