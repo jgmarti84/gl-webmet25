@@ -1541,6 +1541,10 @@ code {
     color: #ffa726;
     border-color: rgba(255, 167, 38, 0.3);
 }
+#field-loading-badge.found {
+    color: #66bb6a;
+    border-color: rgba(102, 187, 106, 0.3);
+}
 
 /* ============================================================
    COG BROWSER STYLES  (separate page, not main viewer)

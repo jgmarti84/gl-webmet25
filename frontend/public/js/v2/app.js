@@ -1075,7 +1075,17 @@ const app = {
         const cogRefreshNowBtn = document.getElementById('btn-cog-refresh-now');
         if (cogRefreshNowBtn) {
             cogRefreshNowBtn.addEventListener('click', () => {
-                if (state.liveHours !== null) this.refreshLiveWindow();
+                if (state.liveHours !== null) {
+                    this.refreshLiveWindow(true);
+                } else {
+                    const badge = document.getElementById('field-loading-badge');
+                    if (badge) {
+                        badge.textContent = 'Solo disponible en modo en vivo.';
+                        badge.classList.add('empty', 'visible');
+                        badge.classList.remove('found');
+                        setTimeout(() => badge.classList.remove('visible', 'empty'), 3000);
+                    }
+                }
             });
         }
 
@@ -1089,7 +1099,7 @@ const app = {
         const settingsCogRefreshBtn = document.getElementById('btn-settings-cog-refresh-now');
         if (settingsCogRefreshBtn) {
             settingsCogRefreshBtn.addEventListener('click', () => {
-                if (state.liveHours !== null) this.refreshLiveWindow();
+                if (state.liveHours !== null) this.refreshLiveWindow(true);
                 else state.ui.setStatus('El modo en vivo no está activo', 'error');
             });
         }
@@ -1699,9 +1709,25 @@ const app = {
     // Live refresh (full-window diff)
     // =========================================================================
 
-    async refreshLiveWindow() {
-        if (!state.liveHours || !state.selectedRadars.length || !state.selectedProduct) return;
-        if (state.animationMode !== 'timerange' || !state.cogs || state.cogs.length === 0) return;
+    async refreshLiveWindow(showBadge = false) {
+        if (!state.liveHours || !state.selectedRadars.length || !state.selectedProduct) {
+            if (showBadge) _hideFieldLoadingBadge();
+            return;
+        }
+        if (state.animationMode !== 'timerange' || !state.cogs || state.cogs.length === 0) {
+            if (showBadge) {
+                const badge = document.getElementById('field-loading-badge');
+                if (badge) {
+                    badge.textContent = 'Sin animación activa.';
+                    badge.classList.add('empty', 'visible');
+                    badge.classList.remove('found');
+                    setTimeout(() => badge.classList.remove('visible', 'empty'), 3000);
+                }
+            }
+            return;
+        }
+
+        if (showBadge) this._showFieldLoadingBadge('Buscando COGs más recientes ahora…');
 
         try {
             const hours = state.liveHours;
@@ -1710,7 +1736,10 @@ const app = {
             const latestItems = await api.getLatestCogsForRadars(
                 state.selectedRadars, state.selectedProduct, mode.volNrs, mode.strategy
             );
-            if (!latestItems.length) return;
+            if (!latestItems.length) {
+                if (showBadge) _hideFieldLoadingBadge();
+                return;
+            }
 
             const newEndTime = latestItems.reduce((max, { cog }) => {
                 const t = new Date(cog.observation_time);
@@ -1835,7 +1864,10 @@ const app = {
             state.liveHours = hours;
 
             const newLength = state.cogs.length;
-            if (newLength === 0) return;
+            if (newLength === 0) {
+                if (showBadge) _hideFieldLoadingBadge();
+                return;
+            }
 
             const newCurrentIndex = Math.min(
                 indexAfterExpiry + insertionAdjustment,
@@ -1852,8 +1884,26 @@ const app = {
                 `Live refresh: +${cogsToAdd.length} new/recovered COGs, ` +
                 `-${expiredIndices.length} expired frames, ${newLength} total frames`
             );
+
+            if (showBadge) {
+                const badge = document.getElementById('field-loading-badge');
+                if (badge) {
+                    if (cogsToAdd.length > 0) {
+                        const s = cogsToAdd.length === 1 ? '' : 's';
+                        badge.textContent = `+${cogsToAdd.length} COG${s} nuevo${s}.`;
+                        badge.classList.add('found', 'visible');
+                        badge.classList.remove('empty');
+                    } else {
+                        badge.textContent = 'Sin COGs nuevos.';
+                        badge.classList.add('empty', 'visible');
+                        badge.classList.remove('found');
+                    }
+                    setTimeout(() => badge.classList.remove('visible', 'empty', 'found'), 4000);
+                }
+            }
         } catch (err) {
             console.warn('Live refresh error (will retry next cycle):', err);
+            if (showBadge) _hideFieldLoadingBadge();
         }
     },
 
