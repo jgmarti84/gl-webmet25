@@ -10,7 +10,7 @@ export const COVERAGE_MODES = [
         id:                      'cd',
         label:                   'C+D',
         volNrs:                  ['01', '02'],
-        strategy:                '0315',
+        strategy:                ['0315', '1000'],
         filteredFieldsAvailable: true,
         // Field selected when switching INTO this mode and the previous field
         // is not available here (see the coverage-mode handler).

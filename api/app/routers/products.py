@@ -16,9 +16,9 @@ def list_products(
         default=None,
         description="Filter to products that have COGs in these volume number(s). Repeatable: ?vol_nr=01&vol_nr=02",
     ),
-    strategy: Optional[str] = Query(
+    strategy: Optional[List[str]] = Query(
         default=None,
-        description="When vol_nr is set, also filter by strategy code, e.g. '0315'",
+        description="When vol_nr is set, also filter by strategy code(s), e.g. '0315'. Repeatable: ?strategy=0315&strategy=1000",
     ),
     db: Session = Depends(get_db)
 ):
@@ -42,7 +42,7 @@ def list_products(
             RadarCOG.polarimetric_var != "",
         )
         if strategy:
-            subq = subq.filter(RadarCOG.estrategia_code == strategy)
+            subq = subq.filter(RadarCOG.estrategia_code.in_(strategy))
         available_keys = {row[0] for row in subq.distinct().all()}
         query = query.filter(RadarProduct.product_key.in_(available_keys))
 

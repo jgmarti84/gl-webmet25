@@ -68,7 +68,7 @@ def list_cogs(
     product_key: Optional[str] = None,
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
-    strategy: Optional[str] = Query(default=None, description="Filter by volume strategy, e.g. '0315'"),
+    strategy: Optional[List[str]] = Query(default=None, description="Filter by volume strategy code(s), e.g. '0315'. Repeatable: ?strategy=0315&strategy=1000"),
     vol_nr: Optional[List[str]] = Query(default=None, description="Filter by volume number(s), e.g. '01'. Repeatable: ?vol_nr=01&vol_nr=02"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
@@ -108,7 +108,7 @@ def list_cogs(
         query = query.filter(RadarCOG.observation_time <= end_time)
 
     if strategy:
-        query = query.filter(RadarCOG.estrategia_code == strategy)
+        query = query.filter(RadarCOG.estrategia_code.in_(strategy))
 
     if vol_nr:
         query = query.filter(RadarCOG.vol_nr.in_(vol_nr))
@@ -137,7 +137,7 @@ def get_latest_cog(
     radar_code: str,
     product_key: str,
     vol_nr: Optional[List[str]] = Query(default=None, description="Filter by volume number(s). Repeatable: ?vol_nr=01&vol_nr=02"),
-    strategy: Optional[str] = Query(default=None, description="Filter by strategy code, e.g. '0315'"),
+    strategy: Optional[List[str]] = Query(default=None, description="Filter by strategy code(s), e.g. '0315'. Repeatable: ?strategy=0315&strategy=1000"),
     db: Session = Depends(get_db)
 ):
     """
@@ -153,7 +153,7 @@ def get_latest_cog(
     if vol_nr:
         q = q.filter(RadarCOG.vol_nr.in_(vol_nr))
     if strategy:
-        q = q.filter(RadarCOG.estrategia_code == strategy)
+        q = q.filter(RadarCOG.estrategia_code.in_(strategy))
     cog = q.order_by(desc(RadarCOG.observation_time)).first()
     
     if not cog:
