@@ -1893,7 +1893,7 @@ const app = {
         const label = document.getElementById('time-window-label');
         if (!label) return;
         if (state.liveHours !== null) {
-            label.textContent = `Last ${state.liveHours} hrs`;
+            label.textContent = `Últimas ${state.liveHours} hrs`;
         } else if (state.animationMode === 'timerange') {
             const range = state.ui.getTimeRangeValues();
             if (range.start && range.end) {
@@ -1906,7 +1906,7 @@ const app = {
                 };
                 label.textContent = `${fmt(range.start)} → ${fmt(range.end)}`;
             } else {
-                label.textContent = 'Custom range';
+                label.textContent = 'Rango personalizado';
             }
         } else {
             label.textContent = '—';

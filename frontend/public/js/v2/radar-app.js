@@ -59,7 +59,7 @@ function updateTimeBadge(hours) {
 
 function updateTimeWindowLabel(hours) {
     const label = document.getElementById('time-window-label');
-    if (label) label.textContent = hours ? `Last ${hours} hrs` : '—';
+    if (label) label.textContent = hours ? `Últimas ${hours} hrs` : '—';
 }
 
 function updateFieldBadge() {
