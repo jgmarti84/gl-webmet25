@@ -9,7 +9,7 @@ export const COVERAGE_MODES = [
     {
         id:                      'cd',
         label:                   'C+D',
-        volNrs:                  ['01', '02'],
+        volNrs:                  ['01', '02', '03'],
         strategy:                ['0315', '1000'],
         filteredFieldsAvailable: true,
         // Field selected when switching INTO this mode and the previous field
