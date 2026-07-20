@@ -106,8 +106,6 @@ const state = {
 
 const SETTINGS_KEY_SHOW_INACTIVE      = 'webmet25_show_inactive_radars';
 const SETTINGS_KEY_SHOW_FILTERED      = 'webmet25_show_filtered_fields';
-const SETTINGS_KEY_REFRESH_INTERVAL   = 'webmet25_radar_refresh_interval_min';
-const SETTINGS_KEY_LIVE_REFRESH_INTERVAL = 'webmet25_live_refresh_interval_ms';
 const SETTINGS_KEY_COVERAGE_VISIBLE   = 'webmet25_coverage_visible';
 const SETTINGS_KEY_COVERAGE_OPACITY   = 'webmet25_coverage_opacity';
 const SETTINGS_KEY_COVERAGE_MODE      = 'webmet25_coverage_mode';
@@ -135,27 +133,11 @@ function getSettingShowFiltered() {
 }
 
 function getSettingRefreshIntervalMs() {
-    const stored = localStorage.getItem(SETTINGS_KEY_REFRESH_INTERVAL);
-    if (stored === null) return DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS;
-    const minutes = parseFloat(stored);
-    if (isNaN(minutes) || minutes <= 0) return DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS;
-    return Math.min(minutes, 60) * 60 * 1000;
-}
-
-function setSettingRefreshIntervalMin(minutes) {
-    localStorage.setItem(SETTINGS_KEY_REFRESH_INTERVAL, String(minutes));
+    return DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS;
 }
 
 function getLiveRefreshIntervalMs() {
-    const stored = localStorage.getItem(SETTINGS_KEY_LIVE_REFRESH_INTERVAL);
-    if (stored === null) return DEFAULT_LIVE_REFRESH_INTERVAL_MS;
-    const ms = parseInt(stored, 10);
-    if (isNaN(ms) || ms <= 0) return DEFAULT_LIVE_REFRESH_INTERVAL_MS;
-    return Math.min(Math.max(ms, 60 * 1000), 30 * 60 * 1000);
-}
-
-function setLiveRefreshIntervalMs(ms) {
-    localStorage.setItem(SETTINGS_KEY_LIVE_REFRESH_INTERVAL, String(ms));
+    return DEFAULT_LIVE_REFRESH_INTERVAL_MS;
 }
 
 // =============================================================================
@@ -445,19 +427,13 @@ const app = {
     },
 
     initSettingsPanel() {
-        const intervalInput = document.getElementById('settings-refresh-interval');
-        if (intervalInput) {
-            const stored = localStorage.getItem(SETTINGS_KEY_REFRESH_INTERVAL);
-            intervalInput.value = stored !== null
-                ? stored
-                : String(DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS / 60000);
+        const intervalDisplay = document.getElementById('settings-refresh-interval-display');
+        if (intervalDisplay) {
+            intervalDisplay.textContent = `${DEFAULT_RADAR_STATUS_REFRESH_INTERVAL_MS / 60000} min`;
         }
-        const liveIntervalInput = document.getElementById('settings-live-refresh-interval');
-        if (liveIntervalInput) {
-            const stored = localStorage.getItem(SETTINGS_KEY_LIVE_REFRESH_INTERVAL);
-            liveIntervalInput.value = stored !== null
-                ? String(parseInt(stored, 10) / 60000)
-                : String(DEFAULT_LIVE_REFRESH_INTERVAL_MS / 60000);
+        const liveIntervalDisplay = document.getElementById('settings-live-refresh-interval-display');
+        if (liveIntervalDisplay) {
+            liveIntervalDisplay.textContent = `${DEFAULT_LIVE_REFRESH_INTERVAL_MS / 60000} min`;
         }
         // Sync coverage opacity slider with stored value
         const coverageOpacitySliderInit = document.getElementById('coverage-opacity');
@@ -614,35 +590,6 @@ const app = {
         if (basemapSelect) {
             basemapSelect.addEventListener('change', (e) => {
                 state.mapManager.setBasemap(e.target.value);
-            });
-        }
-
-        const refreshIntervalInput = document.getElementById('settings-refresh-interval');
-        const refreshIntervalSave  = document.getElementById('settings-refresh-save');
-        if (refreshIntervalInput && refreshIntervalSave) {
-            refreshIntervalSave.addEventListener('click', () => {
-                const minutes = Math.min(parseFloat(refreshIntervalInput.value), 60);
-                if (!isNaN(minutes) && minutes > 0) {
-                    setSettingRefreshIntervalMin(minutes);
-                    this.startRadarStatusRefresh();
-                    state.ui.setStatus(`Intervalo de actualización de radares: ${minutes} min`, 'success');
-                }
-            });
-        }
-
-        const liveRefreshInput = document.getElementById('settings-live-refresh-interval');
-        const liveRefreshSave  = document.getElementById('settings-live-refresh-save');
-        if (liveRefreshInput && liveRefreshSave) {
-            liveRefreshSave.addEventListener('click', () => {
-                const minutes = parseFloat(liveRefreshInput.value);
-                if (!isNaN(minutes) && minutes >= 1 && minutes <= 30) {
-                    const ms = Math.round(minutes * 60 * 1000);
-                    setLiveRefreshIntervalMs(ms);
-                    if (state.liveHours !== null) this.startLiveRefresh(state.liveHours);
-                    state.ui.setStatus(`Intervalo de actualización en vivo: ${minutes} min`, 'success');
-                } else {
-                    state.ui.setStatus('Actualización en vivo: ingrese un valor entre 1 y 30 min', 'error');
-                }
             });
         }
 

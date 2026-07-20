@@ -321,20 +321,16 @@
                 <span title="Con qué frecuencia se vuelve a verificar qué radares están en línea. Solo actualiza el indicador de estado; no recarga las imágenes.">Estado de los radares</span>
                 <button id="btn-radar-refresh-now" class="icon-refresh-btn" title="Verificar estado de los radares ahora">↻</button>
             </div>
-            <div class="settings-row-sub">
-                <input type="number" id="settings-refresh-interval" min="1" max="60" step="1" value="10">
-                <span class="settings-unit">min</span>
-                <button id="settings-refresh-save" class="small-btn">Guardar</button>
+            <div class="settings-row settings-info">
+                <span id="settings-refresh-interval-display"></span>
             </div>
             <!-- Live window update — 2-row layout; ↻ is the COG refresh-now button -->
             <div class="settings-section-header">
                 <span title="Con qué frecuencia se buscan nuevas imágenes de radar cuando hay una ventana de tiempo activa (p. ej. Últimas 3h). Valores más bajos dan datos más actualizados pero más carga del servidor.">Actualización en vivo</span>
                 <button id="btn-settings-cog-refresh-now" class="icon-refresh-btn" title="Buscar COGs más recientes ahora">↻</button>
             </div>
-            <div class="settings-row-sub">
-                <input type="number" id="settings-live-refresh-interval" min="1" max="30" step="1" value="5">
-                <span class="settings-unit">min</span>
-                <button id="settings-live-refresh-save" class="small-btn">Guardar</button>
+            <div class="settings-row settings-info">
+                <span id="settings-live-refresh-interval-display"></span>
             </div>
             <div class="settings-row settings-info">
                 <span>El umbral de actividad del radar se establece en el indexador mediante <code>RADAR_ACTIVE_THRESHOLD_HOURS</code>.</span>
