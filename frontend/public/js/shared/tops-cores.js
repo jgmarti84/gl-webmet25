@@ -238,7 +238,7 @@ export class TopsCoresLayer {
             });
             const dbz = core.properties?.intensity_dbz != null ? `${core.properties.intensity_dbz} dBZ` : '—';
             const alt = nearestAltitude != null ? `${nearestAltitude} m` : '—';
-            marker.bindTooltip(`Core — ${dbz} — ${alt}`, { sticky: true });
+            marker.bindTooltip(`Core — ${dbz}<br>Top — ${alt}`, { sticky: true });
             marker.addTo(this._layerGroup);
         });
     }
