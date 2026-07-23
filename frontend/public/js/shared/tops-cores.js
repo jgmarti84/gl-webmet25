@@ -27,14 +27,6 @@ const CORE_STYLE = {
     fillOpacity: 0.9,
 };
 
-// CircleMarker style for tops
-const TOP_STYLE = {
-    fillColor: '#ef4444',  // red
-    color: '#000',
-    weight: 1,
-    fillOpacity: 0.9,
-};
-
 /**
  * Manages the Tops & Cores Leaflet overlay.
  */
@@ -181,9 +173,7 @@ export class TopsCoresLayer {
 
                 featureResults.forEach(geojson => {
                     if (!geojson || !Array.isArray(geojson.features)) return;
-                    geojson.features.forEach(feature => {
-                        this._renderFeature(feature);
-                    });
+                    this._renderFeatureCollection(geojson.features);
                 });
 
                 this._lastRenderedTimestamp = renderTimestamp;
@@ -218,38 +208,38 @@ export class TopsCoresLayer {
     // -------------------------------------------------------------------------
 
     /**
-     * Render a single GeoJSON feature as a CircleMarker.
-     * @param {Object} feature  GeoJSON Feature (Point)
+     * Render all features in a FeatureCollection, showing only core markers.
+     * Each core tooltip includes the altitude from its spatially nearest top.
+     * @param {Object[]} features  Array of GeoJSON Feature objects
      */
-    _renderFeature(feature) {
-        if (!feature || feature.geometry?.type !== 'Point') return;
+    _renderFeatureCollection(features) {
+        const cores = features.filter(f => f?.geometry?.type === 'Point' && f?.properties?.type === 'core');
+        const tops  = features.filter(f => f?.geometry?.type === 'Point' && f?.properties?.type === 'top');
 
-        const coords = feature.geometry.coordinates; // [lon, lat]
-        if (!coords || coords.length < 2) return;
+        cores.forEach(core => {
+            const [coreLon, coreLat] = core.geometry.coordinates;
 
-        const props = feature.properties || {};
-        const type  = props.type;
+            // Find the nearest top by squared Euclidean distance in geographic coords
+            let nearestAltitude = null;
+            let minDist = Infinity;
+            tops.forEach(top => {
+                const [topLon, topLat] = top.geometry.coordinates;
+                const dist = (topLon - coreLon) ** 2 + (topLat - coreLat) ** 2;
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearestAltitude = top.properties?.altitude_m ?? null;
+                }
+            });
 
-        if (type === 'core') {
-            const marker = L.circleMarker([coords[1], coords[0]], {
+            const marker = L.circleMarker([coreLat, coreLon], {
                 ...CORE_STYLE,
                 radius: this._radius,
                 pane: this._pane,
             });
-            const dbz = props.intensity_dbz != null ? `${props.intensity_dbz} dBZ` : '—';
-            marker.bindTooltip(`Core — ${dbz}`, { sticky: true });
+            const dbz = core.properties?.intensity_dbz != null ? `${core.properties.intensity_dbz} dBZ` : '—';
+            const alt = nearestAltitude != null ? `${nearestAltitude} m` : '—';
+            marker.bindTooltip(`Core — ${dbz} — ${alt}`, { sticky: true });
             marker.addTo(this._layerGroup);
-
-        } else if (type === 'top') {
-            const marker = L.circleMarker([coords[1], coords[0]], {
-                ...TOP_STYLE,
-                radius: this._radius,
-                pane: this._pane,
-            });
-            const alt = props.altitude_m != null ? `${props.altitude_m} m` : '—';
-            marker.bindTooltip(`Top — ${alt}`, { sticky: true });
-            marker.addTo(this._layerGroup);
-        }
-        // Unknown feature types are silently ignored
+        });
     }
 }
