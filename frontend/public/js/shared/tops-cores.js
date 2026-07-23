@@ -2,7 +2,7 @@
  * tops-cores.js — Leaflet layer for convective cores and storm tops.
  *
  * Fetches TopsAndCores records and their GeoJSON features from the API,
- * then renders them as CircleMarkers on the Leaflet map.
+ * then renders them as Markers on the Leaflet map using a custom SVG icon.
  *
  * Usage:
  *   import { TopsCoresLayer } from '../shared/tops-cores.js';
@@ -16,16 +16,11 @@ const API_BASE = '/api/v1';
 // Default time window on each side of the frame timestamp (ms)
 const TIME_WINDOW_MS = 2.5 * 60 * 1000;
 
-// Default CircleMarker radius in pixels
-const DEFAULT_RADIUS = 8;
+// SVG icon for core markers
+const ICON_URL = '/img/alert-icon.svg';
 
-// CircleMarker style for cores
-const CORE_STYLE = {
-    fillColor: '#3b82f6',  // blue
-    color: '#000',
-    weight: 1,
-    fillOpacity: 0.9,
-};
+// Default icon size in pixels (slider default 4 × scale factor 4)
+const DEFAULT_ICON_SIZE = 16;
 
 /**
  * Manages the Tops & Cores Leaflet overlay.
@@ -37,7 +32,6 @@ export class TopsCoresLayer {
     constructor(map) {
         this._map = map;
         this._visible = false;
-        this._radius = DEFAULT_RADIUS;
         this._pane = 'topsCoresPane';
 
         // Dedicated pane above overlayPane (200) so markers always sit on top
@@ -47,8 +41,11 @@ export class TopsCoresLayer {
             map.getPane(this._pane).style.zIndex = 450;
         }
 
-        // L.LayerGroup that holds all CircleMarkers for the current frame
+        // L.LayerGroup that holds all markers for the current frame
         this._layerGroup = L.layerGroup().addTo(map);
+
+        // Current icon size in pixels (updated by setPointSize)
+        this._iconSize = DEFAULT_ICON_SIZE;
 
         // Track the timestamp of the last completed updateFrame so that slow
         // responses from older frames do not overwrite a newer render.
@@ -78,14 +75,16 @@ export class TopsCoresLayer {
     }
 
     /**
-     * Update the radius of all existing markers and store for new ones.
-     * @param {number} radiusPx
+     * Update the icon size of all existing markers and store for new ones.
+     * The raw slider value (2–10) is scaled ×4 to produce a usable pixel size.
+     * @param {number} radiusPx  Value from the size slider (2–10)
      */
     setPointSize(radiusPx) {
-        this._radius = radiusPx;
+        this._iconSize = Math.round(radiusPx * 4);
+        const icon = this._coreIcon(this._iconSize);
         this._layerGroup.eachLayer(layer => {
-            if (layer.setRadius) {
-                layer.setRadius(radiusPx);
+            if (layer.setIcon) {
+                layer.setIcon(icon);
             }
         });
     }
@@ -187,7 +186,7 @@ export class TopsCoresLayer {
     }
 
     /**
-     * Remove all CircleMarkers from the layer group.
+     * Remove all markers from the layer group.
      */
     clear() {
         this._layerGroup.clearLayers();
@@ -206,6 +205,19 @@ export class TopsCoresLayer {
     // -------------------------------------------------------------------------
     // Internal
     // -------------------------------------------------------------------------
+
+    /**
+     * Build a Leaflet icon for core markers at the given pixel size.
+     * @param {number} sizePx
+     * @returns {L.Icon}
+     */
+    _coreIcon(sizePx) {
+        return L.icon({
+            iconUrl: ICON_URL,
+            iconSize: [sizePx, sizePx],
+            iconAnchor: [sizePx / 2, sizePx / 2],
+        });
+    }
 
     /**
      * Render all features in a FeatureCollection, showing only core markers.
@@ -231,9 +243,8 @@ export class TopsCoresLayer {
                 }
             });
 
-            const marker = L.circleMarker([coreLat, coreLon], {
-                ...CORE_STYLE,
-                radius: this._radius,
+            const marker = L.marker([coreLat, coreLon], {
+                icon: this._coreIcon(this._iconSize),
                 pane: this._pane,
             });
             const dbz = core.properties?.intensity_dbz != null ? `${core.properties.intensity_dbz} dBZ` : '—';
