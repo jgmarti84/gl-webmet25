@@ -76,6 +76,10 @@ def parse_args() -> argparse.Namespace:
                          metavar="T",
                          help="Distancia RGB [0-√3] para detectar discontinuidades "
                               "(default: 0.30 ; 0 = todos suaves)")
+    grp_api.add_argument("--username", default=None, metavar="USER",
+                         help="Usuario para HTTP Basic Auth (requerido via nginx/:80 o Caddy)")
+    grp_api.add_argument("--password", default=None, metavar="PASS",
+                         help="Contraseña para HTTP Basic Auth")
     grp_api.add_argument("--overwrite", action="store_true",
                          help="Eliminar el mapa existente con ese nombre antes de importar")
     grp_api.add_argument("--dry-run", action="store_true",
@@ -251,8 +255,10 @@ def main() -> None:
     # --- Verificar / eliminar existente ------------------------------------
     api = args.api.rstrip("/")
     session = requests.Session()
+    if args.username:
+        session.auth = (args.username, args.password)
 
-    print(f"\nAPI base: {api}")
+    print(f"\nAPI base: {api}  (auth: {'Basic' if args.username else 'ninguna'})")
     existing = session.get(f"{api}/api/v1/admin/colormap-stops/{args.name}", timeout=10)
     if existing.status_code == 200:
         if not args.overwrite:
