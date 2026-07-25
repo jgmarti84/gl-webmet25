@@ -1873,7 +1873,6 @@ const app = {
 
             // Fire-and-forget tops & cores update
             if (state.topsCoresLayer && state.topsCoresVisible) {
-                console.log('[Frame] GeoTIFF →', index, frame.timestamp);
                 state.topsCoresLayer.updateFrame(frame);
             }
             return;

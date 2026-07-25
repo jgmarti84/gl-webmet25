@@ -47,8 +47,11 @@ export class TopsCoresLayer {
         // Current icon size in pixels (updated by setPointSize)
         this._iconSize = DEFAULT_ICON_SIZE;
 
-        // Track the timestamp of the last completed updateFrame so that slow
-        // responses from older frames do not overwrite a newer render.
+        // Timestamp of the most recent updateFrame() call — used to discard
+        // responses that arrived after a newer request was already issued.
+        this._lastRequestedTimestamp = null;
+
+        // Timestamp of the last successfully rendered frame
         this._lastRenderedTimestamp = null;
 
         // Abort controller for in-flight requests
@@ -116,6 +119,12 @@ export class TopsCoresLayer {
         const { signal } = this._abortController;
         const renderTimestamp = ts;
 
+        // Track the latest requested timestamp so stale responses can self-discard
+        this._lastRequestedTimestamp = ts;
+
+        // Clear immediately — never show stale markers while the new frame loads
+        this.clear();
+
         // Time window
         const center = new Date(ts).getTime();
         const timeFrom = new Date(center - TIME_WINDOW_MS).toISOString();
@@ -128,7 +137,6 @@ export class TopsCoresLayer {
 
         // Kick off async work — never awaited by the caller
         (async () => {
-            console.log('[T+C] fetch-start for', ts);
             try {
                 // Step 1: fetch metadata records
                 const metaResp = await fetch(metaUrl, { signal });
@@ -161,25 +169,16 @@ export class TopsCoresLayer {
                     )
                 );
 
-                // If a newer frame has already started rendering, drop this response
-                console.log('[T+C] render-check for', renderTimestamp,
-                    '| signal.aborted:', signal.aborted,
-                    '| lastRendered:', this._lastRenderedTimestamp);
+                // Drop stale responses: a newer updateFrame() call has since arrived
                 if (signal.aborted) return;
-                if (renderTimestamp !== ts && this._lastRenderedTimestamp !== null &&
-                    new Date(renderTimestamp) < new Date(this._lastRenderedTimestamp)) {
-                    return;
-                }
+                if (this._lastRequestedTimestamp !== renderTimestamp) return;
 
-                // Step 3: clear old markers and render new ones
-                this.clear();
-
+                // Step 3: render new markers (clear() was already called at request start)
                 featureResults.forEach(geojson => {
                     if (!geojson || !Array.isArray(geojson.features)) return;
                     this._renderFeatureCollection(geojson.features);
                 });
 
-                console.log('[T+C] RENDERED for', renderTimestamp);
                 this._lastRenderedTimestamp = renderTimestamp;
 
             } catch (err) {
