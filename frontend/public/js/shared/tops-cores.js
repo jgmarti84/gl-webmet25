@@ -128,6 +128,7 @@ export class TopsCoresLayer {
 
         // Kick off async work — never awaited by the caller
         (async () => {
+            console.log('[T+C] fetch-start for', ts);
             try {
                 // Step 1: fetch metadata records
                 const metaResp = await fetch(metaUrl, { signal });
@@ -161,6 +162,9 @@ export class TopsCoresLayer {
                 );
 
                 // If a newer frame has already started rendering, drop this response
+                console.log('[T+C] render-check for', renderTimestamp,
+                    '| signal.aborted:', signal.aborted,
+                    '| lastRendered:', this._lastRenderedTimestamp);
                 if (signal.aborted) return;
                 if (renderTimestamp !== ts && this._lastRenderedTimestamp !== null &&
                     new Date(renderTimestamp) < new Date(this._lastRenderedTimestamp)) {
@@ -175,6 +179,7 @@ export class TopsCoresLayer {
                     this._renderFeatureCollection(geojson.features);
                 });
 
+                console.log('[T+C] RENDERED for', renderTimestamp);
                 this._lastRenderedTimestamp = renderTimestamp;
 
             } catch (err) {
