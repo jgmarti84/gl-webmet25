@@ -1526,6 +1526,9 @@ const app = {
 
             // v2: updateFrames takes (frames, productKey, currentIndex)
             state.animator.updateFrames(groupedFrames, state.selectedProduct, 0);
+            if (state.topsCoresLayer && isTopsCoresAvailableForField(state.selectedProduct)) {
+                state.topsCoresLayer.loadForFrames(groupedFrames);
+            }
             state.animator.goToFrame(0);
 
             if (colormap) {
@@ -1822,6 +1825,9 @@ const app = {
             );
 
             state.animator.updateFrames(state.cogs, state.selectedProduct, newCurrentIndex);
+            if (state.topsCoresLayer && isTopsCoresAvailableForField(state.selectedProduct)) {
+                state.topsCoresLayer.loadForFrames(state.cogs);
+            }
 
             state.ui.updateFrameCounter(newCurrentIndex, newLength);
             state.ui.updateAnimationSlider(newCurrentIndex, newLength);
@@ -1871,9 +1877,9 @@ const app = {
             state.ui.updateFrameCounter(index, state.animator.getFrameCount());
             state.ui.updateAnimationSlider(index, state.animator.getFrameCount());
 
-            // Fire-and-forget tops & cores update
+            // Synchronous frame display — data was pre-loaded by loadForFrames()
             if (state.topsCoresLayer && state.topsCoresVisible) {
-                state.topsCoresLayer.updateFrame(frame);
+                state.topsCoresLayer.showFrame(index);
             }
             return;
         }
@@ -2211,6 +2217,9 @@ const app = {
                 groupedFrames, state.selectedProduct,
                 Math.min(prevIndex, groupedFrames.length - 1)
             );
+            if (state.topsCoresLayer && isTopsCoresAvailableForField(state.selectedProduct)) {
+                state.topsCoresLayer.loadForFrames(groupedFrames);
+            }
 
             // Update coverage mask to reflect potential coverage change (e.g. field switch)
             const _allCogsContinuity = groupedFrames.flatMap(f => Object.values(f.cogsByRadar));
@@ -2318,11 +2327,9 @@ const app = {
                 state.topsCoresLayer.setPointSize(state.topsCoresPointSize);
             }
             state.topsCoresLayer.setVisible(true);
-            // Immediately update with current frame if available
-            const currentFrame = state.animator ? state.animator.getCurrentFrameObj() : null;
-            if (currentFrame) {
-                state.topsCoresLayer.updateFrame(currentFrame);
-            }
+            // Show the current frame from pre-loaded data
+            const currentIndex = state.animator ? state.animator.getCurrentIndex() : 0;
+            state.topsCoresLayer.showFrame(currentIndex);
         } else {
             if (state.topsCoresLayer) {
                 state.topsCoresLayer.setVisible(false);
