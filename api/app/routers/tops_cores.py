@@ -9,7 +9,7 @@ from the TopsAndCores GeoJSON files produced by radarlib.
 import hashlib
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List, Optional
 
@@ -160,8 +160,21 @@ def get_tops_and_cores_features(
     # ETag is SHA-256 of the raw file bytes (first 32 hex characters = 128 bits)
     etag = f'"{hashlib.sha256(raw_bytes).hexdigest()[:32]}"'
 
+    # Use a short cache for recent observations (file may still be overwritten by
+    # rounded-copy updates); use a long immutable cache only for old data.
+    obs_utc = (
+        record.observation_time.replace(tzinfo=timezone.utc)
+        if record.observation_time.tzinfo is None
+        else record.observation_time
+    )
+    age = datetime.now(timezone.utc) - obs_utc
+    if age > timedelta(minutes=30):
+        cache_control = "public, max-age=86400, immutable"
+    else:
+        cache_control = "public, max-age=60, must-revalidate"
+
     cache_headers = {
-        "Cache-Control": "public, max-age=86400, immutable",
+        "Cache-Control": cache_control,
         "ETag": etag,
     }
 

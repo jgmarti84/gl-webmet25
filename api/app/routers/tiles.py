@@ -58,8 +58,10 @@ COG_METADATA_CACHE_MAX_SIZE: int = 500
 # Seconds before a cached metadata entry is evicted (5 minutes).
 COG_METADATA_CACHE_TTL: int = 300
 # Observation age (in minutes) above which a tile is considered immutable.
-# Tiles older than this threshold receive a 24-hour browser/proxy cache.
-RECENT_OBSERVATION_THRESHOLD_MINUTES: int = 10
+# Must be longer than the rounded-copy overwrite window (~12 min) so that
+# recently-created COGs stay in must-revalidate mode past the point where
+# the pipeline may overwrite them with updated data.
+RECENT_OBSERVATION_THRESHOLD_MINUTES: int = 20
 
 # ---------------------------------------------------------------------------
 # Priority 3 — COG metadata cache
@@ -131,6 +133,7 @@ def _build_tile_headers(
     cmap_vmax: float,
     filter_vmin: Optional[float],
     filter_vmax: Optional[float],
+    file_mtime: Optional[float] = None,
 ) -> dict:
     """
     Build HTTP caching headers for a tile response.
@@ -144,13 +147,19 @@ def _build_tile_headers(
     product defaults) and the optional data-filter range (filter_vmin/
     filter_vmax, from query params) so that different filter values produce
     distinct cache entries.
+
+    ``file_mtime`` is the filesystem mtime of the COG file.  Including it
+    ensures the ETag changes when the pipeline overwrites the file, so the
+    browser will not use a stale 304 response and will fetch the fresh tile.
     """
     fv_min = _fmt_float(filter_vmin) if filter_vmin is not None else "none"
     fv_max = _fmt_float(filter_vmax) if filter_vmax is not None else "none"
+    mtime_str = f"{file_mtime:.3f}" if file_mtime is not None else "none"
     etag_raw = (
         f"{cog_id}-{z}-{x}-{y}-{cmap}"
         f"-{_fmt_float(cmap_vmin)}-{_fmt_float(cmap_vmax)}"
         f"-{fv_min}-{fv_max}"
+        f"-{mtime_str}"
     )
     etag = f'"{hashlib.sha256(etag_raw.encode()).hexdigest()[:32]}"'
 
@@ -246,10 +255,19 @@ async def get_tile(
     filter_vmin = vmin   # None means no filter on this side
     filter_vmax = vmax   # None means no filter on this side
 
+    # Get file mtime for cache-busting ETag — ensures the browser revalidates
+    # after the pipeline overwrites a COG (rounded-copy mechanism).
+    full_path = tile_service.get_full_path(cog.file_path)
+    try:
+        file_mtime = full_path.stat().st_mtime
+    except OSError:
+        file_mtime = None
+
     # Priority 1: build caching headers and check ETag for conditional GET
     headers = _build_tile_headers(
         cog.observation_time, cog_id, z, x, y,
         effective_cmap, cmap_vmin, cmap_vmax, filter_vmin, filter_vmax,
+        file_mtime=file_mtime,
     )
     if_none_match = request.headers.get("if-none-match")
     if if_none_match and if_none_match == headers["ETag"]:
@@ -394,9 +412,16 @@ async def get_tile_by_params(
     if tile_data is None:
         raise HTTPException(status_code=404, detail="Tile not found")
 
+    full_path_bp = tile_service.get_full_path(file_path)
+    try:
+        file_mtime_bp = full_path_bp.stat().st_mtime
+    except OSError:
+        file_mtime_bp = None
+
     headers = _build_tile_headers(
         obs_time, cog_id_val, z, x, y,
         effective_cmap, cmap_vmin, cmap_vmax, filter_vmin, filter_vmax,
+        file_mtime=file_mtime_bp,
     )
     return Response(
         content=tile_data,
