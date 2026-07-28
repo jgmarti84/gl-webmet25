@@ -30,9 +30,10 @@ import { LegendRenderer } from '../shared/legend.js';
 import { TopsCoresLayer } from '../shared/tops-cores.js';
 import { 
     waitForLeaflet, 
-    buildCogsByFrameMap, 
-    groupCogsByTimestamp, 
-    getCogBucketKey, 
+    buildCogsByFrameMap,
+    groupCogsByTimestamp,
+    buildGridFrames,
+    getCogBucketKey,
     getAvailableProductKeys,
     selectDefaultProduct,
     baseFieldKey,
@@ -1250,7 +1251,11 @@ const app = {
                 }
                 const insertIdx = lo;
 
-                const newFrame = { timestamp: cog.observation_time, cogsByRadar: { [radarCode]: cog } };
+                const newFrame = {
+                    displayTimestamp: new Date(getCogBucketKey(cog.observation_time)).toISOString(),
+                    timestamp:        cog.observation_time,
+                    cogsByRadar:      { [radarCode]: cog },
+                };
                 state.cogs.splice(insertIdx, 0, newFrame);
 
                 // v2: addFrame() will splice _frameImages at insertIdx
@@ -1267,6 +1272,9 @@ const app = {
 
             const newCurrentIndex = Math.min(currentIndex + indexAdjustment, state.cogs.length - 1);
             state.animator.updateFrames(state.cogs, state.selectedProduct, newCurrentIndex);
+            if (state.topsCoresLayer && isTopsCoresAvailableForField(state.selectedProduct)) {
+                state.topsCoresLayer.loadForFrames(state.cogs);
+            }
             // Show the new current frame immediately
             state.animator.goToFrame(newCurrentIndex);
 
@@ -1477,7 +1485,7 @@ const app = {
                 return;
             }
 
-            const groupedFrames = groupCogsByTimestamp(cogs, );
+            const groupedFrames = buildGridFrames(cogs);
 
             let colormap = null;
             try {
@@ -1764,6 +1772,7 @@ const app = {
                                 )
                             );
                         });
+                        state.cogs[frameIdx].timestamp = Object.values(cogsByRadar)[0].observation_time;
                     } else {
                         let lo = 0, hi = state.cogs.length;
                         while (lo < hi) {
@@ -1773,7 +1782,11 @@ const app = {
                         }
                         const insertIdx = lo;
                         const representativeCog = Object.values(cogsByRadar)[0];
-                        const newFrame  = { timestamp: representativeCog.observation_time, cogsByRadar };
+                        const newFrame = {
+                            displayTimestamp: new Date(getCogBucketKey(representativeCog.observation_time)).toISOString(),
+                            timestamp:        representativeCog.observation_time,
+                            cogsByRadar,
+                        };
                         state.cogs.splice(insertIdx, 0, newFrame);
 
                         // v2: insert each radar for this new frame
@@ -2169,7 +2182,7 @@ const app = {
         );
         if (!cogs || cogs.length === 0) return null;
 
-        const groupedFrames = groupCogsByTimestamp(cogs);
+        const groupedFrames = buildGridFrames(cogs);
         const cogsByFrame   = buildCogsByFrameMap(groupedFrames);
         return { groupedFrames, cogsByFrame };
     },

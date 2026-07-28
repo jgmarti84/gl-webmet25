@@ -6,7 +6,7 @@ import {
 // HELPERS
 // =============================================================================
 
-export function getCogBucketKey(timestamp, toleranceMinutes = 5) {
+export function getCogBucketKey(timestamp, toleranceMinutes = 10) {
     const bucketMs = toleranceMinutes * 60 * 1000;
     const t = new Date(timestamp).getTime();
     return Math.round(t / bucketMs) * bucketMs;
@@ -44,6 +44,56 @@ export function groupCogsByTimestamp(cogs, toleranceMinutes = 5) {
 //     return Array.from(buckets.values())
 //         .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 // }
+/**
+ * Build animation frames on a fixed grid (default 10 min), assigning each slot
+ * the nearest available COG per radar within ±(stepMinutes/2).
+ *
+ * frame.displayTimestamp — the grid boundary ISO string, used for the time display.
+ * frame.timestamp        — actual obs_dt of the first assigned COG, used for
+ *                          TOPS_CORES matching (exact obs time, not the display slot).
+ *
+ * @param {Array}  cogs         Flat COG list from the API
+ * @param {number} stepMinutes  Display grid interval (default 10)
+ * @returns {Array}             [{displayTimestamp, timestamp, cogsByRadar}, …]
+ */
+export function buildGridFrames(cogs, stepMinutes = 10) {
+    if (!cogs || cogs.length === 0) return [];
+
+    const stepMs     = stepMinutes * 60 * 1000;
+    const halfStepMs = stepMs / 2;
+
+    const times    = cogs.map(c => new Date(c.observation_time).getTime());
+    const minT     = Math.min(...times);
+    const maxT     = Math.max(...times);
+    const gridStart = Math.floor(minT / stepMs) * stepMs;
+    const gridEnd   = Math.ceil(maxT / stepMs) * stepMs;
+
+    const frames = [];
+    for (let slotMs = gridStart; slotMs <= gridEnd; slotMs += stepMs) {
+        const byRadar = {};
+        cogs.forEach(cog => {
+            const dist = Math.abs(new Date(cog.observation_time).getTime() - slotMs);
+            if (dist > halfStepMs) return;
+            if (!byRadar[cog.radar_code] || dist < byRadar[cog.radar_code].dist) {
+                byRadar[cog.radar_code] = { cog, dist };
+            }
+        });
+
+        const cogsByRadar = {};
+        Object.values(byRadar).forEach(({ cog }) => { cogsByRadar[cog.radar_code] = cog; });
+
+        if (Object.keys(cogsByRadar).length === 0) continue;
+
+        const firstCog = Object.values(cogsByRadar)[0];
+        frames.push({
+            displayTimestamp: new Date(slotMs).toISOString(),
+            timestamp:        firstCog.observation_time,
+            cogsByRadar,
+        });
+    }
+    return frames;
+}
+
 export function getAvailableProductKeys(products, showUnfilteredProducts) {
     return products
         .map(product => product.product_key)

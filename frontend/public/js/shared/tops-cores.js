@@ -44,8 +44,18 @@ export class TopsCoresLayer {
             map.getPane(this._pane).style.zIndex = 450;
         }
 
+        // Blob polygon pane — sits below the marker pane but above radar images.
+        this._blobPane = 'topsCoresBlobPane';
+        if (!map.getPane(this._blobPane)) {
+            map.createPane(this._blobPane);
+            map.getPane(this._blobPane).style.zIndex = 440;
+        }
+
         // L.LayerGroup that holds all markers for the current frame
         this._layerGroup = L.layerGroup().addTo(map);
+
+        // L.LayerGroup that holds blob polygons for the current frame (below markers)
+        this._blobLayerGroup = L.layerGroup().addTo(map);
 
         // Current icon size in pixels (updated by setPointSize)
         this._iconSize = DEFAULT_ICON_SIZE;
@@ -53,6 +63,10 @@ export class TopsCoresLayer {
         // Pre-loaded marker data indexed by frame index.
         // Each element is an array of { lat, lon, dbz, alt } plain objects.
         this._frameData = [];
+
+        // Pre-loaded blob polygon rings indexed by frame index.
+        // Each element is an array of convex-hull coordinate rings ([[lon,lat],…]).
+        this._frameBlobData = [];
 
         // Last frameIndex passed to showFrame() — used to re-paint when
         // loadForFrames() completes while the animation is paused.
@@ -76,8 +90,12 @@ export class TopsCoresLayer {
             if (!this._map.hasLayer(this._layerGroup)) {
                 this._layerGroup.addTo(this._map);
             }
+            if (!this._map.hasLayer(this._blobLayerGroup)) {
+                this._blobLayerGroup.addTo(this._map);
+            }
         } else {
             this._layerGroup.remove();
+            this._blobLayerGroup.remove();
         }
     }
 
@@ -110,7 +128,8 @@ export class TopsCoresLayer {
      */
     async loadForFrames(frames) {
         if (!frames || frames.length === 0) {
-            this._frameData = [];
+            this._frameData     = [];
+            this._frameBlobData = [];
             return;
         }
 
@@ -132,7 +151,8 @@ export class TopsCoresLayer {
         const radarCodes = [...radarCodesSet];
 
         if (radarCodes.length === 0) {
-            this._frameData = frames.map(() => []);
+            this._frameData     = frames.map(() => []);
+            this._frameBlobData = frames.map(() => []);
             return;
         }
 
@@ -147,7 +167,8 @@ export class TopsCoresLayer {
             const metaResp = await fetch(`${API_BASE}/tops-cores?${params}`, { signal });
             if (!metaResp.ok) {
                 console.warn(`[TopsCoresLayer] loadForFrames metadata failed: ${metaResp.status}`);
-                this._frameData = frames.map(() => []);
+                this._frameData     = frames.map(() => []);
+                this._frameBlobData = frames.map(() => []);
                 return;
             }
             const records = await metaResp.json();
@@ -155,7 +176,8 @@ export class TopsCoresLayer {
             if (signal.aborted) return;
 
             if (!records || records.length === 0) {
-                this._frameData = frames.map(() => []);
+                this._frameData     = frames.map(() => []);
+                this._frameBlobData = frames.map(() => []);
                 if (this._visible && this._lastShownFrameIndex !== null) {
                     this.showFrame(this._lastShownFrameIndex);
                 }
@@ -178,24 +200,31 @@ export class TopsCoresLayer {
 
             if (signal.aborted) return;
 
-            // Step 3: extract plain marker-data objects from each record's features
+            // Step 3: extract marker-data objects and blob rings from each record's features
             const recordMarkerData = featureResults.map(geojson => {
-                if (!geojson || !Array.isArray(geojson.features)) return [];
+                if (!geojson || !Array.isArray(geojson.features)) return { markers: [], blobs: [] };
                 return this._extractMarkerData(geojson.features);
             });
 
             // Step 4: distribute records to frames by ±TIME_WINDOW_MS
-            this._frameData = frames.map(frame => {
+            const newFrameData     = [];
+            const newFrameBlobData = [];
+            frames.forEach(frame => {
                 const frameMs = new Date(frame.timestamp || frame.observation_time).getTime();
-                const data = [];
+                const markers = [];
+                const blobs   = [];
                 records.forEach((rec, i) => {
                     const recMs = new Date(rec.observation_time).getTime();
                     if (Math.abs(recMs - frameMs) <= TIME_WINDOW_MS) {
-                        data.push(...recordMarkerData[i]);
+                        markers.push(...recordMarkerData[i].markers);
+                        blobs.push(...recordMarkerData[i].blobs);
                     }
                 });
-                return data;
+                newFrameData.push(markers);
+                newFrameBlobData.push(blobs);
             });
+            this._frameData     = newFrameData;
+            this._frameBlobData = newFrameBlobData;
 
             // Re-paint the paused frame now that data is ready
             if (this._visible && this._lastShownFrameIndex !== null) {
@@ -205,7 +234,8 @@ export class TopsCoresLayer {
         } catch (err) {
             if (err.name === 'AbortError') return;
             console.warn('[TopsCoresLayer] loadForFrames error:', err);
-            this._frameData = frames.map(() => []);
+            this._frameData     = frames.map(() => []);
+            this._frameBlobData = frames.map(() => []);
         }
     }
 
@@ -217,7 +247,26 @@ export class TopsCoresLayer {
     showFrame(frameIndex) {
         this._lastShownFrameIndex = frameIndex;
         this._layerGroup.clearLayers();
+        this._blobLayerGroup.clearLayers();
         if (!this._visible) return;
+
+        // Draw blob polygons beneath the core/top markers
+        const blobs = this._frameBlobData[frameIndex];
+        if (blobs && blobs.length > 0) {
+            blobs.forEach(ring => {
+                L.polygon(
+                    ring.map(([lon, lat]) => [lat, lon]),
+                    {
+                        pane:        this._blobPane,
+                        color:       '#ff6600',
+                        weight:      1.5,
+                        opacity:     0.8,
+                        fillColor:   '#ff9900',
+                        fillOpacity: 0.25,
+                    }
+                ).addTo(this._blobLayerGroup);
+            });
+        }
 
         const data = this._frameData[frameIndex];
         if (!data || data.length === 0) return;
@@ -233,20 +282,22 @@ export class TopsCoresLayer {
     }
 
     /**
-     * Remove all markers from the layer group.
+     * Remove all markers and blobs from the layer groups.
      */
     clear() {
         this._layerGroup.clearLayers();
+        this._blobLayerGroup.clearLayers();
     }
 
     /**
-     * Remove the layer group from the map entirely.
+     * Remove both layer groups from the map entirely.
      */
     destroy() {
         if (this._loadAbortController) {
             this._loadAbortController.abort();
         }
         this._layerGroup.remove();
+        this._blobLayerGroup.remove();
     }
 
     // -------------------------------------------------------------------------
@@ -267,16 +318,17 @@ export class TopsCoresLayer {
     }
 
     /**
-     * Extract plain marker-data objects from a GeoJSON feature array.
+     * Extract marker-data objects and blob polygon rings from a GeoJSON feature array.
      * Each core gets the altitude of its spatially nearest top.
      * @param {Object[]} features  GeoJSON Feature objects
-     * @returns {{ lat: number, lon: number, dbz: number|null, alt: number|null }[]}
+     * @returns {{ markers: {lat,lon,dbz,alt}[], blobs: number[][][]}}
      */
     _extractMarkerData(features) {
-        const cores = features.filter(f => f?.geometry?.type === 'Point' && f?.properties?.type === 'core');
-        const tops  = features.filter(f => f?.geometry?.type === 'Point' && f?.properties?.type === 'top');
+        const cores = features.filter(f => f?.geometry?.type === 'Point'   && f?.properties?.type === 'core');
+        const tops  = features.filter(f => f?.geometry?.type === 'Point'   && f?.properties?.type === 'top');
+        const blobs = features.filter(f => f?.geometry?.type === 'Polygon' && f?.properties?.type === 'blob');
 
-        return cores.map(core => {
+        const markers = cores.map(core => {
             const [lon, lat] = core.geometry.coordinates;
 
             // Find the nearest top by squared Euclidean distance in geographic coords
@@ -293,5 +345,10 @@ export class TopsCoresLayer {
 
             return { lat, lon, dbz: core.properties?.intensity_dbz ?? null, alt };
         });
+
+        // Each blob feature carries its outer ring as coordinates[0]
+        const blobRings = blobs.map(b => b.geometry.coordinates[0]);
+
+        return { markers, blobs: blobRings };
     }
 }
