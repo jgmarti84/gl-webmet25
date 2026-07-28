@@ -383,6 +383,13 @@ Retorna el raster COG completo como un único PNG RGBA georeferenciado. Lo utili
 
 Respuesta **`TopsAndCoresRecord`**: `id`, `radar_code`, `observation_time`, `file_name`, `feature_count`, `core_count`, `top_count`, `status`, `strategy`, `vol_nr`.
 
+**Tipos de features en la FeatureCollection GeoJSON:**
+- `Point` + `"type": "core"` — centroide del núcleo convectivo (ubicado en el píxel de mayor dBZ); lleva `intensity_dbz`
+- `Point` + `"type": "top"` — tope de tormenta del núcleo asociado; lleva `altitude_m`, `dbz`, `parent_core_dbz`
+- `Polygon` + `"type": "blob"` — huella convexa del blob de píxeles COLMAX del núcleo; lleva `mean_dbz`, `max_dbz`, `pixel_count`
+
+Se produce un polígono `blob` por núcleo aceptado (`N_blobs == N_cores`). El campo `feature_count` en el registro de metadatos cuenta los tres tipos combinados.
+
 ### 4.8 Endpoints de Colormap
 
 **Archivo:** [`api/app/routers/colormap.py`](../api/app/routers/colormap.py)
@@ -448,7 +455,7 @@ frontend/public/
     │   ├── api.js          # REST API client (all public endpoints)
     │   ├── controls.js     # UIControls class (radar list, time wheels, badges)
     │   ├── legend.js       # LegendRenderer class
-    │   ├── tops-cores.js   # TopsCoresLayer (L.circleMarker)
+    │   ├── tops-cores.js   # TopsCoresLayer (polígonos blob + marcadores SVG)
     │   └── time-wheel.js   # iOS-style HH:MM scroll picker
     └── v2/                 # Current production frontend
         ├── app.js          # Multi-radar map orchestrator (2500+ lines)
@@ -597,12 +604,26 @@ Todas las cargas de datos pasan por `_loadFramesWithContinuity(loadFn, opts)`:
 
 ### 5.8 Capa de Tops y Cores (`shared/tops-cores.js`)
 
-**`TopsCoresLayer`** administra `L.layerGroup()` en `topsCoresPane` (z-index 450):
+**`TopsCoresLayer`** administra dos paneles Leaflet:
+- `topsCoresPane` (z-index 450) — `L.marker` con ícono SVG (`/img/icono_HT.svg`) para las ubicaciones de los núcleos
+- `topsCoresBlobPane` (z-index 440) — rellenos de huella `L.polygon` blob por debajo de los marcadores
 
-- `updateFrame(frame)` — fire-and-forget: cancela la solicitud anterior en vuelo, obtiene `/tops-cores?time_from=...&time_to=...&radar_codes=...` (ventana de ±2.5 min), luego `GET /tops-cores/{id}/features` en paralelo, renderiza `L.circleMarker`
-- Las respuestas desactualizadas más antiguas que el último timestamp renderizado se descartan
-- Cores: `fillColor: '#3b82f6'` (azul); Tops: `fillColor: '#ef4444'` (rojo); ambos: borde negro
-- Restringida a los productos COLMAX y COLMAXo
+**Arquitectura de pre-carga** — los datos se cargan por adelantado para todos los frames al inicio, no se obtienen por avance de frame:
+- `loadForFrames(frames)` — fire-and-forget al inicio; emite una consulta de metadatos sobre todo el rango temporal de animación, luego obtiene todos los registros GeoJSON de forma concurrente via `Promise.all`; distribuye los resultados en arreglos de búsqueda por frame (`_frameData` para marcadores, `_frameBlobData` para anillos de polígono) indexados por posición de frame. Cancela cualquier carga anterior en vuelo via `AbortController`.
+- `showFrame(frameIndex)` — llamado sincrónicamente desde el bucle de animación; limpia ambos grupos de capas y repinta desde los arreglos pre-cargados. Sin I/O de red en el camino caliente.
+- Cuando `loadForFrames()` completa mientras la animación está pausada, repinta automáticamente el último frame mostrado via `_lastShownFrameIndex`.
+
+**Representación visual:**
+- **Polígonos blob:** `L.polygon` con `color: '#ff6600'`, `fillColor: '#ff9900'`, `fillOpacity: 0.25` — relleno naranja semi-transparente; renderizados en `topsCoresBlobPane` desde los features Polygon de tipo `blob`
+- **Marcadores de núcleo:** `L.marker` con ícono `icono_HT.svg` (por defecto 16 px, anclaje centrado); renderizados en `topsCoresPane` desde los features Point de tipo `core`
+- **Tooltip:** cada marcador de núcleo muestra `"Core — {dbz} dBZ<br>Top — {alt} m"`, donde la altitud del tope se empareja con el Point de tipo `top` más cercano por distancia euclidiana; no se renderiza marcador separado para los topes
+
+**Enrutamiento de tipos de features** dentro de `_extractMarkerData()`:
+- `Point / type=core` → construye objeto de datos de marcador `{lat, lon, dbz, alt}`
+- `Point / type=top` → solo fuente de altitud para el emparejamiento con el núcleo más cercano
+- `Polygon / type=blob` → anillo exterior `coordinates[0]` almacenado en `_frameBlobData`
+
+Restringida a los productos COLMAX y COLMAXo.
 
 ### 5.9 Renderizador de leyenda (`shared/legend.js`)
 
@@ -806,12 +827,12 @@ Nginx también almacena en caché local los tiles de OSM e IGN Argenmap (TTL de 
 │ ├── radar-app.js: one-radar multi-layer compositor              │
 │ ├── map.js: L.imageOverlay + atomic frame swap + SVG mask       │
 │ ├── animation.js: requestAnimationFrame loop                    │
-│ ├── tops-cores.js: L.circleMarker fire-and-forget layer         │
+│ ├── tops-cores.js: polígonos blob pre-cargados + marcadores SVG │
 │ └── User: animated radar map with coverage mask + legend        │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-**Versión del Documento:** 3.0.0  
-**Última Actualización:** 8 de julio de 2026
+**Versión del Documento:** 3.1.0  
+**Última Actualización:** 28 de julio de 2026

@@ -380,6 +380,13 @@ Returns the entire COG raster as a single georeferenced RGBA PNG. Used by the v2
 
 **`TopsAndCoresRecord`** response: `id`, `radar_code`, `observation_time`, `file_name`, `feature_count`, `core_count`, `top_count`, `status`, `strategy`, `vol_nr`.
 
+**Feature types in the GeoJSON FeatureCollection:**
+- `Point` + `"type": "core"` — convective core centroid (placed at the peak-dBZ pixel); carries `intensity_dbz`
+- `Point` + `"type": "top"` — storm top for the associated core; carries `altitude_m`, `dbz`, `parent_core_dbz`
+- `Polygon` + `"type": "blob"` — convex-hull footprint of the core's COLMAX pixel blob; carries `mean_dbz`, `max_dbz`, `pixel_count`
+
+One `blob` polygon is produced per accepted core (`N_blobs == N_cores`). `feature_count` in the metadata record counts all three types combined.
+
 ### 4.8 Colormap Endpoints
 
 **File:** [`api/app/routers/colormap.py`](../api/app/routers/colormap.py)
@@ -445,7 +452,7 @@ frontend/public/
     │   ├── api.js          # REST API client (all public endpoints)
     │   ├── controls.js     # UIControls class (radar list, time wheels, badges)
     │   ├── legend.js       # LegendRenderer class
-    │   ├── tops-cores.js   # TopsCoresLayer (L.circleMarker)
+    │   ├── tops-cores.js   # TopsCoresLayer (blob polygons + SVG markers)
     │   └── time-wheel.js   # iOS-style HH:MM scroll picker
     └── v2/                 # Current production frontend
         ├── app.js          # Multi-radar map orchestrator (2500+ lines)
@@ -594,12 +601,26 @@ All data loads go through `_loadFramesWithContinuity(loadFn, opts)`:
 
 ### 5.8 Tops & Cores Layer (`shared/tops-cores.js`)
 
-**`TopsCoresLayer`** manages `L.layerGroup()` in `topsCoresPane` (z-index 450):
+**`TopsCoresLayer`** manages two Leaflet panes:
+- `topsCoresPane` (z-index 450) — `L.marker` with SVG icon (`/img/icono_HT.svg`) for core locations
+- `topsCoresBlobPane` (z-index 440) — `L.polygon` blob footprint fills below the markers
 
-- `updateFrame(frame)` — fire-and-forget: aborts previous in-flight, fetches `/tops-cores?time_from=...&time_to=...&radar_codes=...` (±2.5 min window), then parallel `GET /tops-cores/{id}/features`, renders `L.circleMarker`
-- Stale responses older than the latest rendered timestamp are dropped
-- Cores: `fillColor: '#3b82f6'` (blue); Tops: `fillColor: '#ef4444'` (red); both: black border
-- Gated to COLMAX and COLMAXo products
+**Pre-load architecture** — data is front-loaded for all frames at startup, not fetched per frame advance:
+- `loadForFrames(frames)` — fire-and-forget at startup; issues one metadata query over the full animation time range, then fetches all GeoJSON records concurrently via `Promise.all`; distributes results into per-frame lookup arrays (`_frameData` for markers, `_frameBlobData` for polygon rings) indexed by frame position. Cancels any previous in-flight load via `AbortController`.
+- `showFrame(frameIndex)` — called synchronously from the animation loop; clears both layer groups and repaints from the pre-loaded arrays. No network I/O on the hot path.
+- When `loadForFrames()` completes while the animation is paused, it re-paints the last shown frame automatically via `_lastShownFrameIndex`.
+
+**Visual representation:**
+- **Blob polygons:** `L.polygon` with `color: '#ff6600'`, `fillColor: '#ff9900'`, `fillOpacity: 0.25` — semi-transparent orange fill; rendered in `topsCoresBlobPane` from `blob` Polygon features
+- **Core markers:** `L.marker` with `icono_HT.svg` icon (default 16 px, centred anchor); rendered in `topsCoresPane` from `core` Point features
+- **Tooltip:** each core marker shows `"Core — {dbz} dBZ<br>Top — {alt} m"`, where top altitude is matched to the spatially nearest `top` Point by Euclidean distance; no separate marker is rendered for tops
+
+**Feature type routing** inside `_extractMarkerData()`:
+- `Point / type=core` → builds marker data object `{lat, lon, dbz, alt}`
+- `Point / type=top` → altitude source for nearest-core matching only
+- `Polygon / type=blob` → outer ring `coordinates[0]` stored in `_frameBlobData`
+
+Gated to COLMAX and COLMAXo products.
 
 ### 5.9 Legend Renderer (`shared/legend.js`)
 
@@ -803,12 +824,12 @@ Nginx also caches OSM and IGN Argenmap tiles locally (30-day and 7-day TTL respe
 │ ├── radar-app.js: one-radar multi-layer compositor              │
 │ ├── map.js: L.imageOverlay + atomic frame swap + SVG mask       │
 │ ├── animation.js: requestAnimationFrame loop                    │
-│ ├── tops-cores.js: L.circleMarker fire-and-forget layer         │
+│ ├── tops-cores.js: pre-loaded blob polygons + SVG core markers  │
 │ └── User: animated radar map with coverage mask + legend        │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-**Document Version:** 3.0.0  
-**Last Updated:** July 8, 2026
+**Document Version:** 3.1.0  
+**Last Updated:** July 28, 2026

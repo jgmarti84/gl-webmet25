@@ -29,7 +29,7 @@ webmet25 (consumer)
 ## Features
 
 - **Real-Time Indexing:** File-system watcher scans for new COG files every 30 seconds; marks deleted files as MISSING
-- **Tops & Cores:** Convective cores and storm tops from radarlib GeoJSON are indexed and displayed as map markers
+- **Tops & Cores:** Convective cores and storm tops from radarlib GeoJSON are indexed and displayed as semi-transparent orange blob polygon fills with SVG core markers (COLMAX products only)
 - **Coverage Mode Toggle:** Switch between C+D mode (volumes 01/02) and Vigilancia mode (volume 04)
 - **Spatial Database:** PostGIS integration for geographic queries and bounding-box calculations
 - **REST API:** Full endpoint suite for radars, products, COGs, frames, colormaps, tops & cores, and admin CRUD
@@ -161,7 +161,7 @@ webmet25/
 │           │   ├── api.js        # REST API client
 │           │   ├── controls.js   # UI handlers (radar list, time wheel, badges)
 │           │   ├── legend.js     # Colormap legend renderer
-│           │   ├── tops-cores.js # TopsCoresLayer (L.circleMarker)
+│           │   ├── tops-cores.js # TopsCoresLayer (blob polygons + SVG markers)
 │           │   └── time-wheel.js # iOS-style HH:MM scroll picker
 │           └── v2/               # Current production frontend
 │               ├── app.js        # Multi-radar map orchestrator (2500+ lines)
@@ -274,7 +274,7 @@ webmet25/
 │ • requestAnimationFrame animation loop                         │
 │ • SVG coverage mask + per-radar rings                          │
 │ • Coverage modes: C+D (vol 01/02) ↔ Vigilancia (vol 04)       │
-│ • TopsCoresLayer: L.circleMarker for cores (blue) / tops (red) │
+│ • TopsCoresLayer: blob polygon fills + SVG core markers        │
 │ • Nginx proxies+caches OSM and IGN Argenmap tile servers       │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -395,7 +395,7 @@ See [`docs/DATA_FLOW.md`](docs/DATA_FLOW.md) §4.9 for the full admin endpoint t
 - Live mode with configurable auto-refresh interval
 - **Animation:** `requestAnimationFrame` playback, speed 0.5×–2×, manual frame navigation
 - **Coverage mask:** SVG pane that dims outside radar coverage; opacity slider
-- **Tops & Cores layer:** convective cores (blue) and storm tops (red) as circle markers (COLMAX products only)
+- **Tops & Cores layer:** convective blob polygon fills (semi-transparent orange) with SVG core markers; top altitude shown in marker tooltip (COLMAX products only)
 - **Gaussian smoothing:** server-side blur with configurable sigma
 - **Basemap selector:** IGN Argenmap variants (default: Argenmap standard)
 - Per-radar opacity slider

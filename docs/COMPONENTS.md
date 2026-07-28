@@ -25,7 +25,7 @@ frontend/public/
     │   ├── api.js            # REST API client
     │   ├── controls.js       # UI control handlers (+ radar ordering, time-wheel wiring)
     │   ├── legend.js         # Legend renderer
-    │   ├── tops-cores.js     # TopsCoresLayer (L.circleMarker)
+    │   ├── tops-cores.js     # TopsCoresLayer (blob polygons + SVG markers)
     │   ├── time-wheel.js     # iOS-style HH:MM scroll picker (custom time range)
     │   ├── cog-browser-api.js
     │   └── cog-browser.js
@@ -242,17 +242,38 @@ Mode is persisted to `localStorage` key `webmet25_coverage_mode`. COG queries pa
 
 **File:** [`frontend/public/js/shared/tops-cores.js`](../../frontend/public/js/shared/tops-cores.js)
 
-**Responsibility:** Manages a `L.layerGroup()` of `L.circleMarker` instances overlaid on the map showing convective cores and storm tops detected by radarlib.
+**Responsibility:** Manages two Leaflet panes — one for convective blob polygon fills and one for core SVG markers — showing convective cores, storm tops, and blob footprints detected by radarlib. Data is pre-fetched at load time for all animation frames and displayed synchronously on each frame advance.
+
+**Architecture: Pre-load + Synchronous Display**
+
+All data is front-loaded at startup rather than fetched per frame:
+- `loadForFrames(frames)` — issues one metadata query covering the full time range, fetches all GeoJSON records concurrently via `Promise.all`, then distributes results into per-frame lookup tables (`_frameData`, `_frameBlobData`).
+- `showFrame(frameIndex)` — synchronous (no async); clears and repaints both layer groups from the pre-loaded arrays. Called directly from the animation loop.
+
+**Two Panes:**
+
+| Pane | z-index | Content |
+|---|---|---|
+| `topsCoresBlobPane` | 440 | `L.polygon` blob footprint fills (below markers) |
+| `topsCoresPane` | 450 | `L.marker` core SVG icons |
 
 **Key Methods:**
-- `addTo(map)` — Add layer group to Leaflet map
-- `updateFrame(frame)` — Fetch tops & cores for the current frame's ±2.5 min time window and render markers
-- `show()` / `hide()` — Toggle layer visibility
-- `setPointSize(radius)` — Update all marker radii (4–20px)
+- `loadForFrames(frames)` — Pre-fetch all data for a full set of animation frames (fire-and-forget; aborts any previous in-flight call)
+- `showFrame(frameIndex)` — Synchronous; clears both layer groups and repaints from pre-loaded data
+- `setVisible(visible)` — Toggle both panes on/off; manages both `_layerGroup` and `_blobLayerGroup`
+- `setPointSize(radius)` — Update all SVG marker icon sizes (raw slider value × 4 = pixel size in px)
+- `clear()` — Remove all layers from both groups
+- `destroy()` — Remove both groups from the map and abort any in-flight load
 
-**Marker Style:**
-- Cores: `fillColor: '#3b82f6'` (blue), black border
-- Tops: `fillColor: '#ef4444'` (red), black border
+**Visual Style:**
+- **Blob polygons** (`L.polygon`): `color: '#ff6600'`, `weight: 1.5`, `opacity: 0.8`, `fillColor: '#ff9900'`, `fillOpacity: 0.25` — semi-transparent orange fill with orange border
+- **Core markers** (`L.marker`): SVG icon at `/img/icono_HT.svg`, default 16 px (slider default 4 × scale factor 4), centred anchor
+- **Tooltip:** `"Core — {dbz} dBZ<br>Top — {alt} m"` shown on hover; top altitude is matched to the nearest top Point by squared Euclidean distance in geographic coordinates
+
+**GeoJSON feature types handled:**
+- `Point` + `type: "core"` → SVG marker placed at `[lat, lon]`; `intensity_dbz` used in tooltip
+- `Point` + `type: "top"` → altitude source only; matched to nearest core; no separate marker rendered
+- `Polygon` + `type: "blob"` → outer ring `coordinates[0]` rendered as orange fill in `topsCoresBlobPane`
 
 **State persistence:** `webmet25_tops_cores_visible`, `webmet25_tops_cores_size` in `localStorage`.
 
@@ -534,7 +555,7 @@ index.html (multi-radar map)
     │   └── shared/time-wheel.js (custom-range HH:MM picker)
     ├── shared/legend.js (color scale renderer)
     │   └── shared/api.js
-    ├── shared/tops-cores.js (L.circleMarker layer)
+    ├── shared/tops-cores.js (blob polygon fills + SVG core markers)
     │   └── shared/api.js
     └── styles.css
 
@@ -590,7 +611,7 @@ admin.html (admin SPA, /admin, Basic Auth)
    │   ├── animator advances frameIndex
    │   ├── MapManager.showFrame(index)  ← sets L.imageOverlay URL
    │   ├── controls.updateFrameCounter()
-   │   └── topsCoresLayer.updateFrame(frame)  ← fire-and-forget
+   │   └── topsCoresLayer.showFrame(index)  ← synchronous (data pre-loaded)
    └── Continues uninterrupted during field/colormap changes
    ↓
 5. User changes field, colormap, or range filter

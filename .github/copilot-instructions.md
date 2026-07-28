@@ -304,9 +304,12 @@ A standalone admin SPA for CRUD over the database, served at `/admin` and backed
 
 **Tops & Cores Layer (v2 only):**
 - **Module:** `frontend/public/js/shared/tops-cores.js`
-- **Class:** `TopsCoresLayer` — manages `L.layerGroup()` of `L.circleMarker` instances
-- Cores: `fillColor: '#3b82f6'` (blue). Tops: `fillColor: '#ef4444'` (red). Both: black border, `weight: 1`
-- `updateFrame(frame)` fetches `/tops-cores` for ±2.5 min window, then fetches GeoJSON per record via `Promise.all`
+- **Class:** `TopsCoresLayer` — two Leaflet panes: `topsCoresBlobPane` (z-index 440, blob polygons) + `topsCoresPane` (z-index 450, SVG core markers)
+- **Pre-load architecture:** `loadForFrames(frames)` pre-fetches all data at startup (fire-and-forget); `showFrame(frameIndex)` is the synchronous hot path called from the animation loop
+- **Blob polygons** (`L.polygon`): `color: '#ff6600'`, `fillColor: '#ff9900'`, `fillOpacity: 0.25`
+- **Core markers** (`L.marker`): SVG icon `/img/icono_HT.svg`; tooltip shows `intensity_dbz` + nearest top `altitude_m`
+- `top` Point features are used only for altitude matching to nearest core; no separate marker is rendered for tops
+- `blob` Polygon features (`coordinates[0]` outer ring) are the convex-hull footprint of each core's COLMAX pixel blob
 - Fire-and-forget from animation loop — never blocks frame advance
 - Toggled via settings panel checkbox; point size controlled via 4–20px slider
 - State persisted in `localStorage`: `webmet25_tops_cores_visible`, `webmet25_tops_cores_size`
@@ -324,7 +327,7 @@ frontend/public/
     │   ├── api.js       # REST API client
     │   ├── controls.js  # UI control handlers
     │   ├── legend.js    # Legend renderer
-    │   ├── tops-cores.js # TopsCoresLayer (L.circleMarker)
+    │   ├── tops-cores.js # TopsCoresLayer (blob polygons + SVG markers)
     │   └── cog-browser*.js # COG browser alternative view
     └── v2/              # v2-specific (current production)
         ├── app.js       # Main orchestrator — multi-radar map (2300+ lines)
@@ -480,29 +483,39 @@ radarlib (genpro25-rma*)
 → TopsAndCoresWatcher (indexer) scans and registers to DB
 → GET /api/v1/tops-cores — metadata query
 → GET /api/v1/tops-cores/{id}/features — GeoJSON served from disk
-→ TopsCoresLayer (v2 frontend) renders L.circleMarker per feature
+→ TopsCoresLayer (v2 frontend) renders blob polygon fills + SVG core markers
 
 
 ### GeoJSON Schema (produced by radarlib, consumed by webmet25)
+
+Three feature types per FeatureCollection:
+
 ```json
-{
-  "type": "FeatureCollection",
-  "features": [{
-    "type": "Feature",
-    "geometry": { "type": "Point", "coordinates": [lon, lat] },
-    "properties": {
-      "type": "core",
-      "intensity_dbz": 52,
-      "radar_code": "RMA6",
-      "observation_time": "2026-05-05T16:38:54Z"
-    }
-  }]
-}
+// Core — Point at peak-dBZ pixel of the blob
+{ "type": "Feature",
+  "geometry": { "type": "Point", "coordinates": [lon, lat] },
+  "properties": { "type": "core", "intensity_dbz": 52,
+                  "radar_code": "RMA6", "observation_time": "2026-05-05T16:38:54Z" } }
+
+// Top — Point at highest valid echo above the core cylinder
+{ "type": "Feature",
+  "geometry": { "type": "Point", "coordinates": [lon, lat] },
+  "properties": { "type": "top", "altitude_m": 11200, "dbz": 25.5,
+                  "parent_core_dbz": 52, "radar_code": "RMA6",
+                  "observation_time": "2026-05-05T16:38:54Z" } }
+
+// Blob — convex-hull Polygon footprint of the core's COLMAX pixel blob
+{ "type": "Feature",
+  "geometry": { "type": "Polygon",
+                "coordinates": [[[lon1,lat1],[lon2,lat2],...,[lon1,lat1]]] },
+  "properties": { "type": "blob", "mean_dbz": 47.3, "max_dbz": 63.0,
+                  "pixel_count": 1107, "radar_code": "RMA6",
+                  "observation_time": "2026-05-05T16:38:54Z" } }
 ```
 
-- type is "core" or "top"
-- Cores carry intensity_dbz (int); tops carry altitude_m (int)
-- Coordinates: [lon, lat] — GeoJSON standard order
+- One `blob` polygon per accepted core (`N_blobs == N_cores`)
+- Core centroid = peak-dBZ pixel (not weighted mean) — always inside the most intense storm region
+- Coordinates: `[lon, lat]` — GeoJSON standard order
 
 ### Filename Pattern
 {radar_code}_{strategy}_{vol_nr}_{timestamp}_TOPS_CORES.geojson
@@ -548,7 +561,7 @@ Updates record status to MISSING in DB if file not found at serve time.
 | `webmet25_coverage_opacity` | number | 0.4 | Coverage circles opacity |
 | `webmet25_coverage_mode` | string | 'cd' | Active coverage mode id (`'cd'` or `'vig'`). Determines which volumes are queried for products and COGs |
 | `webmet25_tops_cores_visible` | boolean | false | Tops & Cores layer toggle |
-| `webmet25_tops_cores_size` | number | 8 | Circle marker radius in px |
+| `webmet25_tops_cores_size` | number | 4 | SVG core marker size slider value (multiplied × 4 = pixel size; default slider=4 → 16 px icon) |
 
 ---
 
@@ -592,8 +605,7 @@ Updates record status to MISSING in DB if file not found at serve time.
 
 ### Medium Priority
 - ✅ RESOLVED: api.js uses relative /api/v1 path unconditionally.
-- ✅ RESOLVED: Convective Cores & Storm Tops implemented — radarlib generates GeoJSON,
-  indexer registers, API serves, v2 frontend displays as `L.circleMarker` layer via `TopsCoresLayer`.
+- ✅ RESOLVED: Convective Cores & Storm Tops implemented — radarlib generates GeoJSON with core Points, top Points, and blob Polygon footprints; indexer registers; API serves; v2 frontend displays blob polygon fills + SVG core markers via `TopsCoresLayer`.
 - ✅ RESOLVED: Coverage Mode Toggle (C+D/VIG) implemented — `COVERAGE_MODES` constant in
   `v2/constants.js` defines mode↔volume mapping. Mode persisted to `webmet25_coverage_mode` in localStorage.
 - ✅ RESOLVED: Vigilant mode (vol 04) properly disambiguated from C+D (vol 01+02) via `vol_nr`

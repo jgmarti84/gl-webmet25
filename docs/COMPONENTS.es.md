@@ -26,7 +26,7 @@ frontend/public/
     │   ├── api.js            # REST API client
     │   ├── controls.js       # UI control handlers (+ radar ordering, time-wheel wiring)
     │   ├── legend.js         # Legend renderer
-    │   ├── tops-cores.js     # TopsCoresLayer (L.circleMarker)
+    │   ├── tops-cores.js     # TopsCoresLayer (polígonos blob + marcadores SVG)
     │   ├── time-wheel.js     # iOS-style HH:MM scroll picker (custom time range)
     └── v2/                   # Current production frontend
         ├── app.js            # Main orchestrator & state management (multi-radar map)
@@ -255,24 +255,42 @@ render(colormap, { filterVmin, filterVmax }) — Renderiza con rango de filtro s
 
 ---
 
-### 7. **tops-cores.js** — Capa de cimas y núcleos (Tops & Cores)
+### 7. **tops-cores.js** — Capa de Tops y Núcleos
 
 **Archivo:** [`frontend/public/js/shared/tops-cores.js`](../../frontend/public/js/shared/tops-cores.js)
 
-**Responsabilidad:** Gestiona un `L.layerGroup()` de instancias `L.circleMarker` superpuestas en el mapa que muestran núcleos convectivos y cimas de tormenta detectados por radarlib.
+**Responsabilidad:** Gestiona dos paneles Leaflet — uno para los rellenos de polígono blob de núcleos convectivos y otro para los marcadores SVG de núcleos — que muestran núcleos convectivos, topes de tormenta y huellas blob detectados por radarlib. Los datos se pre-cargan al inicio para todos los frames de animación y se muestran de forma sincrónica en cada avance de frame.
 
-**Métodos principales:**
+**Arquitectura: Pre-carga + Visualización Sincrónica**
 
-```text
-addTo(map) — Agrega el grupo de capas al mapa Leaflet
-updateFrame(frame) — Obtiene y renderiza topes/núcleos en una ventana de ±2.5 min
-show() / hide() — Alterna la visibilidad de la capa
-setPointSize(radius) — Actualiza el radio de los marcadores (4–20px)
-```
+Todos los datos se cargan al inicio en lugar de obtenerse por frame:
+- `loadForFrames(frames)` — emite una consulta de metadatos que cubre todo el rango temporal, obtiene todos los registros GeoJSON de forma concurrente via `Promise.all`, luego distribuye los resultados en tablas de búsqueda por frame (`_frameData`, `_frameBlobData`).
+- `showFrame(frameIndex)` — sincrónico (sin async); limpia y repinta ambos grupos de capas desde los arreglos pre-cargados. Llamado directamente desde el bucle de animación.
 
-**Estilo de marcadores:**
-- Núcleos: `fillColor: '#3b82f6'` (azul), borde negro
-- Cimas: `fillColor: '#ef4444'` (rojo), borde negro
+**Dos Paneles:**
+
+| Panel | z-index | Contenido |
+|---|---|---|
+| `topsCoresBlobPane` | 440 | Rellenos de huella `L.polygon` blob (debajo de los marcadores) |
+| `topsCoresPane` | 450 | Íconos SVG de núcleos `L.marker` |
+
+**Métodos Clave:**
+- `loadForFrames(frames)` — Pre-carga todos los datos para un conjunto completo de frames de animación (fire-and-forget; cancela cualquier llamada anterior en vuelo)
+- `showFrame(frameIndex)` — Sincrónico; limpia ambos grupos de capas y repinta desde los datos pre-cargados
+- `setVisible(visible)` — Activa/desactiva ambos paneles; gestiona `_layerGroup` y `_blobLayerGroup`
+- `setPointSize(radius)` — Actualiza todos los tamaños de íconos SVG de marcadores (valor crudo del slider × 4 = tamaño en px)
+- `clear()` — Elimina todas las capas de ambos grupos
+- `destroy()` — Elimina ambos grupos del mapa y cancela cualquier carga en vuelo
+
+**Estilo Visual:**
+- **Polígonos blob** (`L.polygon`): `color: '#ff6600'`, `weight: 1.5`, `opacity: 0.8`, `fillColor: '#ff9900'`, `fillOpacity: 0.25` — relleno naranja semi-transparente con borde naranja
+- **Marcadores de núcleo** (`L.marker`): ícono SVG en `/img/icono_HT.svg`, por defecto 16 px (slider por defecto 4 × factor de escala 4), anclaje centrado
+- **Tooltip:** `"Core — {dbz} dBZ<br>Top — {alt} m"` mostrado al pasar el cursor; la altitud del tope se empareja con el Point de tope más cercano por distancia euclidiana cuadrada en coordenadas geográficas
+
+**Tipos de features GeoJSON manejados:**
+- `Point` + `type: "core"` → marcador SVG ubicado en `[lat, lon]`; `intensity_dbz` usado en tooltip
+- `Point` + `type: "top"` → solo fuente de altitud; emparejado con el núcleo más cercano; no se renderiza marcador separado
+- `Polygon` + `type: "blob"` → anillo exterior `coordinates[0]` renderizado como relleno naranja en `topsCoresBlobPane`
 
 **Persistencia de estado:** `webmet25_tops_cores_visible`, `webmet25_tops_cores_size` en `localStorage`.
 
@@ -517,7 +535,7 @@ index.html (multi-radar map)
     │   └── shared/time-wheel.js (custom-range HH:MM picker)
     ├── shared/legend.js (color scale renderer)
     │   └── shared/api.js
-    ├── shared/tops-cores.js (L.circleMarker layer)
+    ├── shared/tops-cores.js (polígonos blob + marcadores SVG)
     │   └── shared/api.js
     └── styles.css
 
@@ -569,7 +587,7 @@ admin.html (admin SPA, /admin, Basic Auth)
    │   ├── animator advances frameIndex
    │   ├── MapManager.showFrame(index)  ← sets L.imageOverlay URL
    │   ├── controls.updateFrameCounter()
-   │   └── topsCoresLayer.updateFrame(frame)  ← fire-and-forget
+   │   └── topsCoresLayer.showFrame(index)  ← sincrónico (datos pre-cargados)
    └── Continues uninterrupted during field/colormap changes
    ↓
 5. User changes field, colormap, or range filter

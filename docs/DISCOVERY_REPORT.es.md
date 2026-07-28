@@ -411,7 +411,7 @@ Consultar [`docs/OPERATIONS.md`](OPERATIONS.md) para más información.
 | Objetos DOM | ~180 TileLayers por sesión | 1 overlay por radar+producto |
 | Peticiones HTTP | ~1800 por sesión | ~180 por sesión |
 | Máscara de cobertura | Ninguna | Panel SVG (z-index 300) |
-| Tops & Cores | Ninguno | Capa `L.circleMarker` (z-index 450) |
+| Tops & Cores | Ninguno | Rellenos de polígono blob (z-index 440) + marcadores SVG de núcleos (z-index 450); pre-cargados al inicio |
 | Página un radar | Ninguna | `radar.html` + `radar-app.js` |
 | Panel de administración | Ninguno | SPA separada en `/admin` |
 
