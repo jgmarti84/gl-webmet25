@@ -55,8 +55,8 @@ class CogSnapshot:
 # ---------------------------------------------------------------------------
 # Maximum number of RadarCOG metadata entries to keep in memory.
 COG_METADATA_CACHE_MAX_SIZE: int = 500
-# Seconds before a cached metadata entry is evicted (5 minutes).
-COG_METADATA_CACHE_TTL: int = 300
+# Seconds before a cached metadata entry is evicted (45 seconds).
+COG_METADATA_CACHE_TTL: int = 45
 # Observation age (in minutes) above which a tile is considered immutable.
 # Must be longer than the rounded-copy overwrite window (~12 min) so that
 # recently-created COGs stay in must-revalidate mode past the point where
