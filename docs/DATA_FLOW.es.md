@@ -346,7 +346,7 @@ El filtrado por `product_key` utiliza coincidencia exacta sobre `polarimetric_va
 - `GET /tiles/{cog_id}/metadata` — retorna `cog_data_type`, `cmap`, `vmin`, `vmax`, `product_key`, `available_colormaps`
 - `GET /tiles/cache/stats` — estadísticas de caché L1 LRU + L2 Redis (monitoreo)
 
-Caché: `TTLCache(maxsize=500, ttl=300 s)` para metadatos de COG. Cache-Control: COGs recientes → `max-age=60`; COGs de más de 10 min → `max-age=86400, immutable`.
+Caché: `TTLCache(maxsize=500, ttl=45 s)` para metadatos de COG. Cache-Control: COGs recientes → `max-age=60`; COGs de más de 10 min → `max-age=86400, immutable`.
 
 ### 4.6 Endpoint de Frames (v2 — Imagen COG completa)
 
@@ -462,7 +462,7 @@ frontend/public/
         ├── radar-app.js    # One-radar page orchestrator (1660+ lines)
         ├── map.js          # MapManager with L.imageOverlay + SVG coverage mask
         ├── animation.js    # AnimationController with requestAnimationFrame
-        ├── radar-utils.js  # Shared helpers (groupCogsByTimestamp, geolocation, etc.)
+        ├── radar-utils.js  # Shared helpers (buildGridFrames, geolocation, etc.)
         └── constants.js    # COVERAGE_MODES, MS_PER_HOUR, defaults
 ```
 
@@ -535,13 +535,13 @@ El modo se persiste en la clave `webmet25_coverage_mode` de `localStorage`. Las 
 2. `loadInitialData()` — `GET /radars` + `GET /products`; restaura `coverageModeId` desde localStorage
 3. `controls.populateRadarCheckboxes(radars, showInactive)` — construye la lista de radares con botones de detalle `›`
 4. Geolocalización — geolocalización del navegador → los 3 radares más cercanos se seleccionan automáticamente → `loadLastNHours(1.5)` con `COLMAX`
-5. Se inicia el temporizador de actualización en vivo (por defecto 5 min)
+5. Se inicia el temporizador de actualización en vivo (por defecto 1 min)
 
 ### 5.4 Carga de COGs y continuidad de animación
 
 Todas las cargas de datos pasan por `_loadFramesWithContinuity(loadFn, opts)`:
 
-1. `_fetchTimeRangeFrames()` — obtención pura de datos: `api.getCogsForTimeRange()` por cada radar seleccionado, `groupCogsByTimestamp()` en grupos
+1. `_fetchTimeRangeFrames()` — obtención pura de datos: `api.getCogsForTimeRange()` por cada radar seleccionado, `buildGridFrames()` en grupos por límite de 10 min (ceiling)
 2. La animación continúa ejecutándose desde el buffer actual (nunca se detiene)
 3. `mapManager.updateParams(cogsByFrame, productKey, params, onProgress)` — precarga todas las imágenes de fotogramas en segundo plano llamando a `GET /frames/{id}/image.png` por cada COG
 4. `animator.updateFrames(frames, productKey)` — intercambio atómico; el loop rAF toma los nuevos fotogramas en el siguiente tick
@@ -595,10 +595,13 @@ Todas las cargas de datos pasan por `_loadFramesWithContinuity(loadFn, opts)`:
     coverageRadius,    // Metres from COG tag (null = radar.img_radio * 1000)
     zIndex,
     settingsExpanded,
+    cogsByFrame,       // Map<frameIndex, cog> — COG propio por slot de frame para cada capa
 }
 ```
 
 **`showAllLayersAtFrame(frameIndex)`** — se invoca en cada tick de animación en lugar del `showFrame` de un solo producto. Compone todas las capas visibles en orden z con opacidad por capa.
+
+**`loadLayerFramesForRange`** asigna COGs a frames usando `buildGridFrames()` (ceiling-slot: cada COG se mapea al siguiente límite de 10 min igual o posterior a su `observation_time`). Cada capa mantiene su propio `cogsByFrame: Map<frameIndex, cog>`, de modo que capas de vol01 (p. ej. DBZH) y vol02 (p. ej. VRAD) del mismo radar usan cada una su propio `cog.id` al solicitar tiles, evitando el COG del volumen incorrecto.
 
 **Invariante del filtro de rango:** los valores `vmin`/`vmax` enviados a `/frames` son solo límites de máscara alfa (los píxeles fuera del rango → transparentes). La normalización del colormap siempre usa los valores por defecto del producto desde `colormap_for_field()` — nunca se modifican por el filtro. Los inputs de la UI se preinicializan con `colormap.vmin/vmax`, por lo que hacer clic en "Aplicar" sin acotar el rango no tiene efecto visual.
 
@@ -834,5 +837,5 @@ Nginx también almacena en caché local los tiles de OSM e IGN Argenmap (TTL de 
 
 ---
 
-**Versión del Documento:** 3.1.0  
-**Última Actualización:** 28 de julio de 2026
+**Versión del Documento:** 3.2.0  
+**Última Actualización:** 29 de julio de 2026

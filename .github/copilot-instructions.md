@@ -295,7 +295,7 @@ A standalone admin SPA for CRUD over the database, served at `/admin` and backed
 - Leaflet map with radar/product selectors
 - Multiple radar selection with opacity control
 - Frame animation with speed control (0.5x–2x)
-- Periodic polling for new COGs (5 minute interval)
+- Periodic polling for new COGs (1 minute interval)
 - **Modules:** `v2/app.js`, `v2/map.js`, `v2/animation.js`, `shared/api.js`, `shared/controls.js`, `shared/legend.js`, `shared/tops-cores.js`, `shared/time-wheel.js`
 - **One-radar page:** `radar.html` + `v2/radar-app.js` — see dedicated section below.
 - **Radar selection order** (`controls.js` → `sortRadarsForDisplay`): active before inactive; within each, RMA group before AR group; numeric ascending with `RMA00` (number 0) sorted last (e.g. `RMA1…RMA17, RMA00, AR5…`).
@@ -556,7 +556,7 @@ Updates record status to MISSING in DB if file not found at serve time.
 |---|---|---|---|
 | `webmet25_show_inactive_radars` | boolean | false | Show inactive radars toggle |
 | `webmet25_show_filtered_fields` | boolean | false | Show filtered fields toggle |
-| `webmet25_live_refresh_interval_ms` | number | 300000 | Live refresh interval (ms) |
+| `webmet25_live_refresh_interval_ms` | number | 60000 | Live refresh interval (ms) |
 | `webmet25_coverage_visible` | boolean | false | Coverage circles toggle |
 | `webmet25_coverage_opacity` | number | 0.4 | Coverage circles opacity |
 | `webmet25_coverage_mode` | string | 'cd' | Active coverage mode id (`'cd'` or `'vig'`). Determines which volumes are queried for products and COGs |

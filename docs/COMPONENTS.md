@@ -34,7 +34,7 @@ frontend/public/
         ├── radar-app.js      # One-radar page orchestrator & state management
         ├── map.js            # MapManager with L.imageOverlay (shared)
         ├── animation.js      # AnimationController with requestAnimationFrame (shared)
-        ├── radar-utils.js    # Helpers: waitForLeaflet, updateRadarHeader, groupCogsByTimestamp…
+        ├── radar-utils.js    # Helpers: waitForLeaflet, updateRadarHeader, buildGridFrames…
         └── constants.js      # Shared constants: MS_PER_HOUR, DEFAULT_*, COVERAGE_MODES
 ```
 
@@ -333,6 +333,7 @@ const state = {
     coverageRadius,     // metres from COG tag (null = radar.img_radio * 1000)
     zIndex,
     settingsExpanded,   // Ajustes sub-panel collapse state
+    cogsByFrame,        // Map<frameIndex, cog> — this layer's own COG per frame slot
 }
 ```
 
@@ -345,7 +346,7 @@ const state = {
 | `getTileParamsForLayer(layer)` | Returns `{colormap, vmin, vmax, smooth, smoothSigma}` for URL building |
 | `reloadLayerWithNewParams(layer)` | Re-fetches all frames for one layer in parallel; does NOT call `renderLayerList()` |
 | `setLayerColormap(layerId, name)` | Fetch new colormap info → re-render strip → reload frames |
-| `loadLayerFramesForRange(layer, start, end)` | Merge frames into shared `_frameImages`; layers share timestamp buckets |
+| `loadLayerFramesForRange(layer, start, end)` | Builds `layer.cogsByFrame` (ceiling-slot assignment); loads images into shared `_frameImages` using each layer's own COG per slot — allows vol01 and vol02 layers to coexist correctly |
 | `showAllLayersAtFrame(index)` | Composite all visible layers at a frame index; called on every animation tick |
 | `refreshLiveWindow()` | Anchor to latest data, reset frame structure, reload all layers |
 | `renderLayerList()` | Rebuild the `#layer-list` DOM; called after structural changes |
@@ -568,7 +569,7 @@ radar.html (one-radar detail page)
     │   └── v2/map.js
     ├── shared/controls.js (UI handlers — shared)
     │   └── shared/time-wheel.js
-    ├── v2/radar-utils.js (waitForLeaflet, updateRadarHeader, groupCogsByTimestamp, …)
+    ├── v2/radar-utils.js (waitForLeaflet, updateRadarHeader, buildGridFrames, …)
     ├── v2/constants.js (MS_PER_HOUR, DEFAULT_*, COVERAGE_MODES)
     └── styles.css
 
@@ -601,7 +602,7 @@ admin.html (admin SPA, /admin, Basic Auth)
 3. User selects radar(s) and product
    ├── _loadFramesWithContinuity() called (never stops animation)
    │   ├── api.getCogs(radars, product, strategy, volNrs, timeRange)
-   │   ├── group COGs by timestamp bucket (±5 min)
+   │   ├── buildGridFrames() → 10-min ceiling-slot buckets
    │   ├── pre-fetch frame images: GET /frames/{id}/image.png
    │   └── animator.setFrames(stagingFrames)  ← atomic swap
    └── legend.render(selectedProduct)
@@ -621,7 +622,7 @@ admin.html (admin SPA, /admin, Basic Auth)
    ├── Updates active mode → different volNrs
    └── _loadFramesWithContinuity() with new volNrs
    ↓
-7. Live refresh (every 5 min)
+7. Live refresh (every 1 min)
    └── refreshLiveWindow() → incremental diff → animator.setFrames()
 ```
 
@@ -642,7 +643,7 @@ admin.html (admin SPA, /admin, Basic Auth)
        │   ├── api.getLatestCogsForRadars() → anchor end time
        │   ├── loadLayerFramesForRange(layer, start, end)
        │   │   ├── api.getCogsForTimeRange() → COG list
-       │   │   ├── groupCogsByTimestamp() → state.frames
+       │   │   ├── buildGridFrames() → state.frames (10-min ceiling slots)
        │   │   ├── For each frame: _buildFrameUrl(cogId, productKey, params)
        │   │   │   → GET /frames/{id}/image.png?colormap=…&vmin=…&vmax=…&smooth=…
        │   │   ├── _loadImage(url) → {img, bbox, objectUrl}
@@ -710,11 +711,11 @@ On page load `init()` bootstraps the state, fetches data, and starts the animati
 ## Known Limitations & Future Work
 
 - ❌ No offline support or service worker caching
-- ❌ No WebSocket real-time updates (polls every 5 minutes instead)
+- ❌ No WebSocket real-time updates (polls every 1 minute instead)
 - ❌ Module coupling via global `state` object (could refactor to event emitter pattern)
 - ✅ RESOLVED: Frame pre-loading (v2 pre-fetches all frames before animating)
 
 ---
 
-**Document Version:** 2.3.0  
-**Last Updated:** July 8, 2026
+**Document Version:** 2.4.0  
+**Last Updated:** July 29, 2026

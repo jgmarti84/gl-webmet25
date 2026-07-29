@@ -45,8 +45,11 @@ export function groupCogsByTimestamp(cogs, toleranceMinutes = 5) {
 //         .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 // }
 /**
- * Build animation frames on a fixed grid (default 10 min), assigning each slot
- * the nearest available COG per radar within ±(stepMinutes/2).
+ * Build animation frames on a fixed grid (default 10 min), assigning each COG
+ * to the next grid boundary at or after its observation time (ceiling assignment).
+ *
+ * When multiple COGs from the same radar map to the same slot, the one with the
+ * latest observation time wins (freshest data closest to the slot boundary).
  *
  * frame.displayTimestamp — the grid boundary ISO string, used for the time display.
  * frame.timestamp        — actual obs_dt of the first assigned COG, used for
@@ -59,39 +62,35 @@ export function groupCogsByTimestamp(cogs, toleranceMinutes = 5) {
 export function buildGridFrames(cogs, stepMinutes = 10) {
     if (!cogs || cogs.length === 0) return [];
 
-    const stepMs     = stepMinutes * 60 * 1000;
-    const halfStepMs = stepMs / 2;
+    const stepMs = stepMinutes * 60 * 1000;
 
-    const times    = cogs.map(c => new Date(c.observation_time).getTime());
-    const minT     = Math.min(...times);
-    const maxT     = Math.max(...times);
-    const gridStart = Math.floor(minT / stepMs) * stepMs;
-    const gridEnd   = Math.ceil(maxT / stepMs) * stepMs;
+    // slot (ms) → radar_code → { cog, t }  — latest obs_time wins per radar per slot
+    const bySlot = {};
+    cogs.forEach(cog => {
+        const t    = new Date(cog.observation_time).getTime();
+        const slot = Math.ceil(t / stepMs) * stepMs;
+        if (!bySlot[slot]) bySlot[slot] = {};
+        const prev = bySlot[slot][cog.radar_code];
+        if (!prev || t > prev.t) {
+            bySlot[slot][cog.radar_code] = { cog, t };
+        }
+    });
 
-    const frames = [];
-    for (let slotMs = gridStart; slotMs <= gridEnd; slotMs += stepMs) {
-        const byRadar = {};
-        cogs.forEach(cog => {
-            const dist = Math.abs(new Date(cog.observation_time).getTime() - slotMs);
-            if (dist > halfStepMs) return;
-            if (!byRadar[cog.radar_code] || dist < byRadar[cog.radar_code].dist) {
-                byRadar[cog.radar_code] = { cog, dist };
-            }
+    return Object.keys(bySlot)
+        .map(Number)
+        .sort((a, b) => a - b)
+        .map(slotMs => {
+            const cogsByRadar = {};
+            Object.values(bySlot[slotMs]).forEach(({ cog }) => {
+                cogsByRadar[cog.radar_code] = cog;
+            });
+            const firstCog = Object.values(cogsByRadar)[0];
+            return {
+                displayTimestamp: new Date(slotMs).toISOString(),
+                timestamp:        firstCog.observation_time,
+                cogsByRadar,
+            };
         });
-
-        const cogsByRadar = {};
-        Object.values(byRadar).forEach(({ cog }) => { cogsByRadar[cog.radar_code] = cog; });
-
-        if (Object.keys(cogsByRadar).length === 0) continue;
-
-        const firstCog = Object.values(cogsByRadar)[0];
-        frames.push({
-            displayTimestamp: new Date(slotMs).toISOString(),
-            timestamp:        firstCog.observation_time,
-            cogsByRadar,
-        });
-    }
-    return frames;
 }
 
 export function getAvailableProductKeys(products, showUnfilteredProducts) {

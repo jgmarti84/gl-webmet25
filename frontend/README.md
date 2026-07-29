@@ -34,7 +34,7 @@ frontend/public/js/
     ├── radar-app.js      # One-radar page orchestrator (~1662 lines)
     ├── map.js            # MapManager — L.imageOverlay + SVG coverage mask (~1076 lines)
     ├── animation.js      # AnimationController — requestAnimationFrame (~429 lines)
-    ├── radar-utils.js    # Shared helpers: groupCogsByTimestamp, geolocation, badge updates
+    ├── radar-utils.js    # Shared helpers: buildGridFrames, geolocation, badge updates
     └── constants.js      # COVERAGE_MODES, MS_PER_HOUR, default values
 ```
 
@@ -113,7 +113,7 @@ Key behaviors:
 |-----|---------|-------------|
 | `webmet25_show_inactive_radars` | false | Show inactive radars |
 | `webmet25_show_filtered_fields` | false | Show filtered (non-`o`) fields |
-| `webmet25_live_refresh_interval_ms` | 300000 | Live refresh interval (ms) |
+| `webmet25_live_refresh_interval_ms` | 60000 | Live refresh interval (ms) |
 | `webmet25_radar_refresh_interval_min` | 10 | Radar status refresh (min) |
 | `webmet25_coverage_visible` | false | Coverage mask toggle |
 | `webmet25_coverage_opacity` | 0.4 | Coverage mask opacity |

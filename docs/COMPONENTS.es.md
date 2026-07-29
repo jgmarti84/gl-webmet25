@@ -33,7 +33,7 @@ frontend/public/
         ├── radar-app.js      # One-radar page orchestrator & state management
         ├── map.js            # MapManager with L.imageOverlay (shared)
         ├── animation.js      # AnimationController with requestAnimationFrame (shared)
-        ├── radar-utils.js    # Helpers: waitForLeaflet, updateRadarHeader, groupCogsByTimestamp…
+        ├── radar-utils.js    # Helpers: waitForLeaflet, updateRadarHeader, buildGridFrames…
         └── constants.js      # Shared constants: MS_PER_HOUR, DEFAULT_*, COVERAGE_MODES
 ```
 
@@ -335,6 +335,7 @@ const state = {
     coverageRadius,     // metres from COG tag (null = radar.img_radio * 1000)
     zIndex,
     settingsExpanded,   // Ajustes sub-panel collapse state
+    cogsByFrame,        // Map<frameIndex, cog> — COG propio de esta capa por slot de frame
 }
 ```
 
@@ -348,7 +349,7 @@ const state = {
 | `getTileParamsForLayer(layer)` | Retorna `{colormap, vmin, vmax, smooth, smoothSigma}` para la construcción de URLs |
 | `reloadLayerWithNewParams(layer)` | Re-obtiene todos los fotogramas de una capa en paralelo; NO llama a `renderLayerList()` |
 | `setLayerColormap(layerId, name)` | Obtiene nueva información de colormap → re-renderiza el strip → recarga fotogramas |
-| `loadLayerFramesForRange(layer, start, end)` | Fusiona fotogramas en `_frameImages` compartido; las capas comparten grupos de timestamp |
+| `loadLayerFramesForRange(layer, start, end)` | Construye `layer.cogsByFrame` (asignación ceiling-slot); carga imágenes en `_frameImages` compartido usando el COG propio de cada capa por slot — permite coexistencia correcta de vol01 y vol02 |
 | `showAllLayersAtFrame(index)` | Compone todas las capas visibles en un índice de fotograma; se llama en cada tick de animación |
 | `refreshLiveWindow()` | Ancla a los datos más recientes, resetea la estructura de fotogramas, recarga todas las capas |
 | `renderLayerList()` | Reconstruye el DOM `#layer-list`; se llama después de cambios estructurales |
@@ -548,7 +549,7 @@ radar.html (one-radar detail page)
     │   └── v2/map.js
     ├── shared/controls.js (UI handlers — shared)
     │   └── shared/time-wheel.js
-    ├── v2/radar-utils.js (waitForLeaflet, updateRadarHeader, groupCogsByTimestamp, …)
+    ├── v2/radar-utils.js (waitForLeaflet, updateRadarHeader, buildGridFrames, …)
     ├── v2/constants.js (MS_PER_HOUR, DEFAULT_*, COVERAGE_MODES)
     └── styles.css
 
@@ -577,7 +578,7 @@ admin.html (admin SPA, /admin, Basic Auth)
 3. User selects radar(s) and product
    ├── _loadFramesWithContinuity() called (never stops animation)
    │   ├── api.getCogs(radars, product, strategy, volNrs, timeRange)
-   │   ├── group COGs by timestamp bucket (±5 min)
+   │   ├── buildGridFrames() → grupos por límite de 10 min (ceiling)
    │   ├── pre-fetch frame images: GET /frames/{id}/image.png
    │   └── animator.setFrames(stagingFrames)  ← atomic swap
    └── legend.render(selectedProduct)
@@ -597,7 +598,7 @@ admin.html (admin SPA, /admin, Basic Auth)
    ├── Updates active mode → different volNrs
    └── _loadFramesWithContinuity() with new volNrs
    ↓
-7. Live refresh (every 5 min)
+7. Live refresh (every 1 min)
    └── refreshLiveWindow() → incremental diff → animator.setFrames()
 ```
 
@@ -618,7 +619,7 @@ admin.html (admin SPA, /admin, Basic Auth)
        │   ├── api.getLatestCogsForRadars() → anchor end time
        │   ├── loadLayerFramesForRange(layer, start, end)
        │   │   ├── api.getCogsForTimeRange() → COG list
-       │   │   ├── groupCogsByTimestamp() → state.frames
+       │   │   ├── buildGridFrames() → state.frames (slots de 10 min, ceiling)
        │   │   ├── For each frame: _buildFrameUrl(cogId, productKey, params)
        │   │   │   → GET /frames/{id}/image.png?colormap=…&vmin=…&vmax=…&smooth=…
        │   │   ├── _loadImage(url) → {img, bbox, objectUrl}
@@ -683,5 +684,5 @@ Al cargar la página, `init()` inicializa el estado, obtiene los datos y comienz
 
 ---
 
-**Versión del Documento:** 2.3.0  
-**Última Actualización:** 8 de julio de 2026
+**Versión del Documento:** 2.4.0  
+**Última Actualización:** 29 de julio de 2026

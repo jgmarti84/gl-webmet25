@@ -344,7 +344,7 @@ Middleware: `X-Process-Time` response header. Global exception handler returns s
 - `GET /tiles/{cog_id}/metadata` — returns `cog_data_type`, `cmap`, `vmin`, `vmax`, `product_key`, `available_colormaps`
 - `GET /tiles/cache/stats` — L1 LRU + L2 Redis cache statistics (monitoring)
 
-Cache: `TTLCache(maxsize=500, ttl=300 s)` for COG metadata. Cache-Control: recent COGs → `max-age=60`; COGs older than 10 min → `max-age=86400, immutable`.
+Cache: `TTLCache(maxsize=500, ttl=45 s)` for COG metadata. Cache-Control: recent COGs → `max-age=60`; COGs older than 10 min → `max-age=86400, immutable`.
 
 ### 4.6 Frames Endpoint (v2 — Full COG Image)
 
@@ -459,7 +459,7 @@ frontend/public/
         ├── radar-app.js    # One-radar page orchestrator (1660+ lines)
         ├── map.js          # MapManager with L.imageOverlay + SVG coverage mask
         ├── animation.js    # AnimationController with requestAnimationFrame
-        ├── radar-utils.js  # Shared helpers (groupCogsByTimestamp, geolocation, etc.)
+        ├── radar-utils.js  # Shared helpers (buildGridFrames, geolocation, etc.)
         └── constants.js    # COVERAGE_MODES, MS_PER_HOUR, defaults
 ```
 
@@ -532,13 +532,13 @@ Mode is persisted to `localStorage` key `webmet25_coverage_mode`. COG queries pa
 2. `loadInitialData()` — `GET /radars` + `GET /products`; restores `coverageModeId` from localStorage
 3. `controls.populateRadarCheckboxes(radars, showInactive)` — builds radar list with `›` drill-down buttons
 4. Geolocation — browser geolocation → nearest 3 radars auto-selected → `loadLastNHours(1.5)` with `COLMAX`
-5. Live refresh timer starts (default 5 min)
+5. Live refresh timer starts (default 1 min)
 
 ### 5.4 COG Loading & Animation Continuity
 
 All data loads go through `_loadFramesWithContinuity(loadFn, opts)`:
 
-1. `_fetchTimeRangeFrames()` — pure data fetch: `api.getCogsForTimeRange()` per selected radar, `groupCogsByTimestamp()` into buckets
+1. `_fetchTimeRangeFrames()` — pure data fetch: `api.getCogsForTimeRange()` per selected radar, `buildGridFrames()` into 10-min ceiling-slot buckets
 2. Animation continues running from the current buffer (never stops)
 3. `mapManager.updateParams(cogsByFrame, productKey, params, onProgress)` — pre-fetches all frame images in the background by calling `GET /frames/{id}/image.png` for each COG
 4. `animator.updateFrames(frames, productKey)` — atomic swap; rAF loop picks up new frames on next tick
@@ -592,10 +592,13 @@ All data loads go through `_loadFramesWithContinuity(loadFn, opts)`:
     coverageRadius,    // Metres from COG tag (null = radar.img_radio * 1000)
     zIndex,
     settingsExpanded,
+    cogsByFrame,       // Map<frameIndex, cog> — each layer's own COG per frame slot
 }
 ```
 
 **`showAllLayersAtFrame(frameIndex)`** — called on every animation tick instead of the single-product `showFrame`. Composites all visible layers in z-order with per-layer opacity.
+
+**`loadLayerFramesForRange`** assigns COGs to frames using `buildGridFrames()` (ceiling-slot: each COG maps to the next 10-min boundary at or after its `observation_time`). Every layer independently owns a `cogsByFrame: Map<frameIndex, cog>` — so vol01 (e.g. DBZH) and vol02 (e.g. VRAD) layers for the same radar each track their own COG per frame slot. Tile requests use each layer's own `cog.id`, preventing the wrong-volume COG from being used for a different product.
 
 **Range filter invariant:** `vmin`/`vmax` sent to `/frames` are alpha-masking bounds only (pixels outside range → transparent). Colormap normalization always uses product defaults from `colormap_for_field()` — never changed by the filter. UI inputs are pre-populated with `colormap.vmin/vmax` so clicking "Aplicar" without narrowing has no visual effect.
 
@@ -831,5 +834,5 @@ Nginx also caches OSM and IGN Argenmap tiles locally (30-day and 7-day TTL respe
 
 ---
 
-**Document Version:** 3.1.0  
-**Last Updated:** July 28, 2026
+**Document Version:** 3.2.0  
+**Last Updated:** July 29, 2026
