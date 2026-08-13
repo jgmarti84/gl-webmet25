@@ -46,7 +46,7 @@ export function groupCogsByTimestamp(cogs, toleranceMinutes = 5) {
 // }
 /**
  * Build animation frames on a fixed grid (default 10 min), assigning each COG
- * to the next grid boundary at or after its observation time (ceiling assignment).
+ * to the nearest grid boundary (round assignment — same as getCogBucketKey).
  *
  * When multiple COGs from the same radar map to the same slot, the one with the
  * latest observation time wins (freshest data closest to the slot boundary).
@@ -54,6 +54,9 @@ export function groupCogsByTimestamp(cogs, toleranceMinutes = 5) {
  * frame.displayTimestamp — the grid boundary ISO string, used for the time display.
  * frame.timestamp        — actual obs_dt of the first assigned COG, used for
  *                          TOPS_CORES matching (exact obs time, not the display slot).
+ *
+ * IMPORTANT: must use Math.round here, matching getCogBucketKey, so that the live
+ * refresh merges into the correct existing frame instead of creating a duplicate.
  *
  * @param {Array}  cogs         Flat COG list from the API
  * @param {number} stepMinutes  Display grid interval (default 10)
@@ -68,7 +71,7 @@ export function buildGridFrames(cogs, stepMinutes = 10) {
     const bySlot = {};
     cogs.forEach(cog => {
         const t    = new Date(cog.observation_time).getTime();
-        const slot = Math.ceil(t / stepMs) * stepMs;
+        const slot = Math.round(t / stepMs) * stepMs;
         if (!bySlot[slot]) bySlot[slot] = {};
         const prev = bySlot[slot][cog.radar_code];
         if (!prev || t > prev.t) {

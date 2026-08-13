@@ -384,7 +384,7 @@ const app = {
             state.showUnfilteredProducts = true;
         }
 
-        state.products = await api.getProducts(mode.volNrs, mode.strategy);
+        state.products = await api.getProducts(mode.include);
         state.ui.populateProductSelect(state.products, state.showUnfilteredProducts, mode.filteredFieldsAvailable);
         state.ui.updateFilterToggle(state.showUnfilteredProducts);
         state.ui.setFilterToggleEnabled(mode.filteredFieldsAvailable);
@@ -624,7 +624,7 @@ const app = {
                     }
 
                     // Re-fetch the product list for the new volumes.
-                    state.products = await api.getProducts(nextMode.volNrs, nextMode.strategy);
+                    state.products = await api.getProducts(nextMode.include);
 
                     // Field persistence (#10): keep the current field if the new
                     // mode has it (preferring the same filtered/unfiltered variant);
@@ -1200,7 +1200,7 @@ const app = {
             const mode = getActiveCoverageMode(state.coverageModeId);
             const newCogs = await api.getCogsForTimeRange(
                 [radarCode], state.selectedProduct, timeRange.start, timeRange.end, 100,
-                mode.volNrs, mode.strategy
+                mode.include
             );
 
             if (newCogs.length === 0) {
@@ -1359,7 +1359,7 @@ const app = {
         try {
             const mode = getActiveCoverageMode(state.coverageModeId);
             const latestCogs = await api.getLatestCogsForRadars(
-                state.selectedRadars, state.selectedProduct, mode.volNrs, mode.strategy
+                state.selectedRadars, state.selectedProduct, mode.include
             );
             const radarCodesWithData    = latestCogs.map(item => item.radarCode);
             const radarCodesWithoutData = state.selectedRadars.filter(c => !radarCodesWithData.includes(c));
@@ -1469,7 +1469,7 @@ const app = {
             const cogs = await api.getCogsForTimeRange(
                 state.selectedRadars, state.selectedProduct,
                 timeRange.start, timeRange.end, 100,
-                getActiveCoverageMode(state.coverageModeId).volNrs, getActiveCoverageMode(state.coverageModeId).strategy
+                getActiveCoverageMode(state.coverageModeId).include
             );
 
             if (cogs.length === 0) {
@@ -1599,7 +1599,7 @@ const app = {
         try {
             const mode = getActiveCoverageMode(state.coverageModeId);
             const latestItems = await api.getLatestCogsForRadars(
-                state.selectedRadars, state.selectedProduct, mode.volNrs, mode.strategy
+                state.selectedRadars, state.selectedProduct, mode.include
             );
 
             if (latestItems.length === 0) {
@@ -1692,7 +1692,7 @@ const app = {
 
             const mode = getActiveCoverageMode(state.coverageModeId);
             const latestItems = await api.getLatestCogsForRadars(
-                state.selectedRadars, state.selectedProduct, mode.volNrs, mode.strategy
+                state.selectedRadars, state.selectedProduct, mode.include
             );
             if (!latestItems.length) {
                 if (showBadge) _hideFieldLoadingBadge();
@@ -1708,7 +1708,7 @@ const app = {
             const allCogs = await api.getCogsForTimeRange(
                 state.selectedRadars, state.selectedProduct,
                 newStartTime, newEndTime, LIVE_REFRESH_MAX_COGS,
-                mode.volNrs, mode.strategy
+                mode.include
             );
 
             const cachedCogIds = new Set();
@@ -2178,7 +2178,7 @@ const app = {
         const cogs = await api.getCogsForTimeRange(
             state.selectedRadars, state.selectedProduct,
             timeRange.start, timeRange.end, 100,
-            mode.volNrs, mode.strategy
+            mode.include
         );
         if (!cogs || cogs.length === 0) return null;
 

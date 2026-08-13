@@ -573,7 +573,7 @@ async function loadLayerFrames(layer, hours) {
     }
 
     const latestItems = await api.getLatestCogsForRadars(
-        [state.radarCode], layer.productKey, CD_MODE.volNrs, CD_MODE.strategy
+        [state.radarCode], layer.productKey, CD_MODE.include
     );
     if (!latestItems.length) {
         state.ui.setStatus(`⚠️ Sin datos para ${layer.productKey}`, 'error');
@@ -598,7 +598,7 @@ async function loadLayerFramesForRange(layer, startTime, endTime) {
     try {
         const cogs = await api.getCogsForTimeRange(
             [state.radarCode], layer.productKey,
-            startTime, endTime, 100, CD_MODE.volNrs, CD_MODE.strategy
+            startTime, endTime, 100, CD_MODE.include
         );
 
         if (!cogs.length) {
@@ -955,7 +955,7 @@ async function refreshLiveWindow() {
         // anchoring to the latest available data for the selected field set)
         const anchorLayer  = state.layers[0];
         const latestItems  = await api.getLatestCogsForRadars(
-            [state.radarCode], anchorLayer.productKey, CD_MODE.volNrs, CD_MODE.strategy
+            [state.radarCode], anchorLayer.productKey, CD_MODE.include
         );
         if (!latestItems.length) return;
 
@@ -1585,7 +1585,7 @@ const app = {
             const [radars, products] = await Promise.all([
                 api.getRadars(false),
                 // Always fetch cd-mode (Conventional + Doppler) products only
-                api.getProducts(CD_MODE.volNrs, CD_MODE.strategy),
+                api.getProducts(CD_MODE.include),
             ]);
 
             state.radar    = radars.find(r => r.code === RADAR_CODE) || null;
