@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Creator: CorelDRAW X8 -->
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="41.6094mm" height="49.9652mm" version="1.1" style="shape-rendering:geometricPrecision; text-rendering:geometricPrecision; image-rendering:optimizeQuality; fill-rule:evenodd; clip-rule:evenodd"
+viewBox="0 0 2479 2976"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+ <defs>
+  <style type="text/css">
+   <![CDATA[
+    .str0 {stroke:white;stroke-width:119.139;stroke-linejoin:round}
+    .fil1 {fill:#FEFEFE}
+    .fil0 {fill:#848688}
+    .fil2 {fill:#0091FF}
+   ]]>
+  </style>
+ </defs>
+ <g id="Capa_x0020_1">
+  <metadata id="CorelCorpID_0Corel-Layer"/>
+  <g id="_2307101906688">
+   <path class="fil0" d="M445 2176l1532 0c204,0 369,165 369,369l0 0c0,204 -165,369 -369,369l-1532 0c-204,0 -369,-165 -369,-369l0 0c0,-204 165,-369 369,-369z"/>
+   <circle class="fil0" cx="454" cy="2308" r="454"/>
+   <circle class="fil0" cx="2006" cy="2289" r="473"/>
+   <circle class="fil0" cx="851" cy="1741" r="549"/>
+   <circle class="fil0" cx="1684" cy="1779" r="511"/>
+   <circle class="fil0" cx="1249" cy="1211" r="643"/>
+   <circle class="fil0" cx="1079" cy="662" r="473"/>
+   <circle class="fil0" cx="1476" cy="378" r="378"/>
+  </g>
+  <polygon class="fil1" points="2053,1835 1533,2281 1744,2281 1570,2702 2029,2207 1818,2207 2053,1835 "/>
+  <polygon class="fil2 str0" points="1236,675 1604,1239 1381,1239 1381,2917 1091,2917 1091,1239 868,1239 " paint-order="stroke fill"/>
+  <polygon class="fil1" points="962,1835 442,2281 653,2281 479,2702 938,2207 727,2207 962,1835 "/>
+ </g>
+</svg>
