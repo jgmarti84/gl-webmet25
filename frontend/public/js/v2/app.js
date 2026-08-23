@@ -1484,7 +1484,7 @@ const app = {
                 return;
             }
 
-            const groupedFrames = buildGridFrames(cogs);
+            const groupedFrames = buildGridFrames(cogs, 10, timeRange.start, timeRange.end);
 
             let colormap = null;
             try {
@@ -2178,7 +2178,7 @@ const app = {
         );
         if (!cogs || cogs.length === 0) return null;
 
-        const groupedFrames = buildGridFrames(cogs);
+        const groupedFrames = buildGridFrames(cogs, 10, timeRange.start, timeRange.end);
         const cogsByFrame   = buildCogsByFrameMap(groupedFrames);
         return { groupedFrames, cogsByFrame };
     },

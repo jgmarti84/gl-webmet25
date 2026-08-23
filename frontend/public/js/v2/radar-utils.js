@@ -30,38 +30,51 @@ export function groupCogsByTimestamp(cogs, toleranceMinutes = 5) {
         .sort((a, b) => a[0] - b[0])
         .map(([, frame]) => frame);
 }
-export function buildGridFrames(cogs, stepMinutes = 10) {
-    if (!cogs || cogs.length === 0) return [];
-
+export function buildGridFrames(cogs, stepMinutes = 10, windowStart = null, windowEnd = null) {
     const stepMs = stepMinutes * 60 * 1000;
 
     // slot (ms) → radar_code → { cog, t }  — latest obs_time wins per radar per slot
     const bySlot = {};
-    cogs.forEach(cog => {
-        const t    = new Date(cog.observation_time).getTime();
-        const slot = Math.round(t / stepMs) * stepMs;
-        if (!bySlot[slot]) bySlot[slot] = {};
-        const prev = bySlot[slot][cog.radar_code];
-        if (!prev || t > prev.t) {
-            bySlot[slot][cog.radar_code] = { cog, t };
-        }
-    });
+    if (cogs && cogs.length > 0) {
+        cogs.forEach(cog => {
+            const t    = new Date(cog.observation_time).getTime();
+            const slot = Math.round(t / stepMs) * stepMs;
+            if (!bySlot[slot]) bySlot[slot] = {};
+            const prev = bySlot[slot][cog.radar_code];
+            if (!prev || t > prev.t) {
+                bySlot[slot][cog.radar_code] = { cog, t };
+            }
+        });
+    }
 
-    return Object.keys(bySlot)
-        .map(Number)
-        .sort((a, b) => a - b)
-        .map(slotMs => {
-            const cogsByRadar = {};
+    // Build the slot list: window-anchored (all slots in range) when boundaries
+    // are provided; data-driven (only slots with COGs) as fallback.
+    let slots;
+    if (windowStart !== null && windowEnd !== null) {
+        const startMs = Math.floor(new Date(windowStart).getTime() / stepMs) * stepMs;
+        const endMs   = Math.ceil(new Date(windowEnd).getTime()   / stepMs) * stepMs;
+        slots = [];
+        for (let s = startMs; s <= endMs; s += stepMs) slots.push(s);
+    } else {
+        if (!cogs || cogs.length === 0) return [];
+        slots = Object.keys(bySlot).map(Number).sort((a, b) => a - b);
+    }
+
+    return slots.map(slotMs => {
+        const cogsByRadar = {};
+        if (bySlot[slotMs]) {
             Object.values(bySlot[slotMs]).forEach(({ cog }) => {
                 cogsByRadar[cog.radar_code] = cog;
             });
-            const firstCog = Object.values(cogsByRadar)[0];
-            return {
-                displayTimestamp: new Date(slotMs).toISOString(),
-                timestamp:        firstCog.observation_time,
-                cogsByRadar,
-            };
-        });
+        }
+        const firstCog = Object.values(cogsByRadar)[0] || null;
+        return {
+            displayTimestamp: new Date(slotMs).toISOString(),
+            // For empty slots use the slot boundary so the time display stays meaningful
+            timestamp:        firstCog ? firstCog.observation_time : new Date(slotMs).toISOString(),
+            cogsByRadar,
+        };
+    });
 }
 
 // function groupCogsByTimestamp(cogs) {
