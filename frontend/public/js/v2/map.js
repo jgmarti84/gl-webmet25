@@ -436,17 +436,22 @@ export class MapManager {
      * This is the animation hot path — no fetches, no DOM creation.
      *
      * @param {number}   frameIndex
-     * @param {string[]} radarCodes   Currently active radar codes
-     * @param {string}   productKey   Current active product key
+     * @param {string[]} radarCodes      Currently active radar codes (may include hold codes)
+     * @param {string}   productKey      Current active product key
+     * @param {string[]} holdRadarCodes  Radar codes that should display from frameIndex-1
+     *                                  (one-gap hold-last-frame). Optional, defaults to [].
      */
-    showFrame(frameIndex, radarCodes, productKey) {
+    showFrame(frameIndex, radarCodes, productKey, holdRadarCodes = []) {
         // Hide all overlays
         this._overlays.forEach(overlay => overlay.setOpacity(0));
 
-        const frameMap = this._frameImages[frameIndex];
-        if (!frameMap) return;
+        const heldSet = holdRadarCodes.length > 0 ? new Set(holdRadarCodes) : null;
 
         radarCodes.forEach(radarCode => {
+            const fi      = (heldSet && heldSet.has(radarCode)) ? frameIndex - 1 : frameIndex;
+            if (fi < 0) return;
+            const frameMap = this._frameImages[fi];
+            if (!frameMap) return;
             const key     = `${radarCode}__${productKey}`;
             const entry   = frameMap.get(key);
             const overlay = this._overlays.get(key);
