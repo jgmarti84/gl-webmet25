@@ -3,6 +3,7 @@ import hashlib
 import io
 import json
 import logging
+import os
 import threading
 import time
 from collections import OrderedDict
@@ -99,17 +100,30 @@ def _get_dataset(file_path: str) -> rasterio.DatasetReader:
     must NOT close the returned dataset.  Do NOT use the returned object as
     a context manager — doing so would close the dataset and invalidate the
     cached entry.
+
+    When the underlying file is overwritten (mtime changes — as happens with
+    the pipeline's rounded-copy mechanism), the stale handle is closed and the
+    file is reopened so that GDAL reads fresh data.
     """
     if not hasattr(_thread_local, "dataset_cache"):
         _thread_local.dataset_cache = OrderedDict()
+    if not hasattr(_thread_local, "dataset_mtime"):
+        _thread_local.dataset_mtime = {}
 
     cache: OrderedDict = _thread_local.dataset_cache
+    mtime_dict: dict = _thread_local.dataset_mtime
     thread_name = threading.current_thread().name
     cache_limit: int = settings.dataset_cache_size_per_thread
 
+    try:
+        current_mtime = os.path.getmtime(file_path)
+    except OSError:
+        current_mtime = None
+
     if file_path in cache:
         ds = cache[file_path]
-        if not ds.closed:
+        cached_mtime = mtime_dict.get(file_path)
+        if not ds.closed and (current_mtime is None or cached_mtime == current_mtime):
             # Valid hit — promote to most-recently-used position
             cache.move_to_end(file_path)
             logger.debug(
@@ -118,8 +132,13 @@ def _get_dataset(file_path: str) -> rasterio.DatasetReader:
                 thread_name,
             )
             return ds
-        # Stale entry (file was replaced on disk while handle was cached)
+        # Stale entry: either closed or the file was overwritten on disk
+        try:
+            ds.close()
+        except Exception:
+            pass
         del cache[file_path]
+        mtime_dict.pop(file_path, None)
         logger.debug(
             "DATASET stale file_path=%s thread=%s — reopening",
             file_path,
@@ -132,6 +151,7 @@ def _get_dataset(file_path: str) -> rasterio.DatasetReader:
     # Evict the least-recently-used entry if the cache is at capacity
     if len(cache) >= cache_limit:
         evicted_path, evicted_ds = cache.popitem(last=False)
+        mtime_dict.pop(evicted_path, None)
         try:
             evicted_ds.close()
         except Exception as e:
@@ -147,6 +167,8 @@ def _get_dataset(file_path: str) -> rasterio.DatasetReader:
         )
 
     cache[file_path] = dataset
+    if current_mtime is not None:
+        mtime_dict[file_path] = current_mtime
     logger.debug(
         "DATASET open file_path=%s thread=%s cache_size=%d/%d",
         file_path,
@@ -167,6 +189,7 @@ def _tile_cache_key(
     cmap_vmax: Optional[float],
     filter_vmin: Optional[float],
     filter_vmax: Optional[float],
+    file_mtime: Optional[float] = None,
 ) -> tuple:
     """Build a hashable cache key for a rendered tile.
 
@@ -174,6 +197,10 @@ def _tile_cache_key(
     product defaults) and the optional data-filter range (filter_vmin/filter_vmax,
     supplied by the client).  Both affect the pixel output and must therefore be
     part of the cache key.
+
+    ``file_mtime`` is the filesystem modification time of the COG.  Including it
+    ensures that when the pipeline overwrites a file (rounded-copy mechanism), the
+    old cached tile is bypassed and a fresh render is triggered automatically.
     """
     rnd = CACHE_KEY_FLOAT_PRECISION
     return hashkey(
@@ -186,6 +213,7 @@ def _tile_cache_key(
         round(cmap_vmax, rnd) if cmap_vmax is not None else None,
         round(filter_vmin, rnd) if filter_vmin is not None else None,
         round(filter_vmax, rnd) if filter_vmax is not None else None,
+        round(file_mtime, 3) if file_mtime is not None else None,
     )
 
 
@@ -436,6 +464,14 @@ class TileService:
             logger.warning(f"COG file not found: {full_path}")
             return None
 
+        # Stat once: mtime is included in the cache key so that stale L1/L2
+        # entries are bypassed automatically when the pipeline overwrites a COG
+        # (rounded-copy mechanism).  A fresh render is triggered for the new key.
+        try:
+            file_mtime = full_path.stat().st_mtime
+        except OSError:
+            file_mtime = None
+
         # Resolve effective rendering parameters before checking cache so the
         # key reflects what will actually be rendered.
         if cog_data_type is None:
@@ -449,6 +485,7 @@ class TileService:
             file_path, z, x, y, effective_cmap,
             effective_cmap_vmin, effective_cmap_vmax,
             filter_vmin, filter_vmax,
+            file_mtime,
         )
 
         # --- L1 cache check ---
