@@ -104,12 +104,14 @@ export class AnimationController {
         this._currentFrame    = 0;
         this._playing         = false;
         this._speedMultiplier = 1.0;
+        this._lockedToLatest  = false;   // true = hold at last frame; false = wrap to 0
 
         // rAF state
         this._lastFrameTime   = 0;       // DOMHighResTimeStamp
 
-        // Callback invoked after each frame advance so app-v2.js can update UI
+        // Callbacks
         this._onFrameChange   = null;    // (frameIndex, frameObj) => void
+        this._onLockChange    = null;    // (lockedToLatest: bool) => void
 
         // DOM elements — populated by initControls()
         this._ui          = null;
@@ -222,6 +224,7 @@ export class AnimationController {
         if (this._frames.length === 0) return;
         const clamped = Math.max(0, Math.min(index, this._frames.length - 1));
         this._currentFrame = clamped;
+        this.setLockedToLatest(false);
         this._showCurrentFrame();
         this._updateSlider();
         this._updateFrameCounter();
@@ -230,6 +233,7 @@ export class AnimationController {
 
     next() {
         if (this._frames.length === 0) return;
+        this.setLockedToLatest(false);
         this._currentFrame = this._currentFrame < this._frames.length - 1
             ? this._currentFrame + 1
             : 0;
@@ -241,6 +245,7 @@ export class AnimationController {
 
     previous() {
         if (this._frames.length === 0) return;
+        this.setLockedToLatest(false);
         this._currentFrame = this._currentFrame > 0
             ? this._currentFrame - 1
             : this._frames.length - 1;
@@ -252,6 +257,7 @@ export class AnimationController {
 
     goToLatest() {
         if (this._frames.length === 0) return;
+        this.setLockedToLatest(true);
         this._currentFrame = this._frames.length - 1;
         this._showCurrentFrame();
         this._updateSlider();
@@ -261,6 +267,7 @@ export class AnimationController {
 
     goToFirst() {
         if (this._frames.length === 0) return;
+        this.setLockedToLatest(false);
         this._currentFrame = 0;
         this._showCurrentFrame();
         this._updateSlider();
@@ -333,6 +340,11 @@ export class AnimationController {
     getFrameCount()     { return this._frames.length; }
     getCurrentIndex()   { return this._currentFrame; }
     getIsPlaying()      { return this._playing; }
+    isLockedToLatest()  { return this._lockedToLatest; }
+    setLockedToLatest(val) {
+        this._lockedToLatest = val;
+        if (this._onLockChange) this._onLockChange(val);
+    }
     getCurrentFrameObj() {
         return this._frames[this._currentFrame] || null;
     }
@@ -342,6 +354,7 @@ export class AnimationController {
     // =========================================================================
 
     setOnFrameChange(cb) { this._onFrameChange = cb; }
+    setOnLockChange(cb)  { this._onLockChange  = cb; }
 
     // =========================================================================
     // Internal
@@ -366,9 +379,12 @@ export class AnimationController {
 
     _tick() {
         if (this._frames.length === 0) { this.pause(); return; }
-        this._currentFrame = this._currentFrame < this._frames.length - 1
-            ? this._currentFrame + 1
-            : 0;
+        if (this._currentFrame < this._frames.length - 1) {
+            this._currentFrame++;
+        } else if (!this._lockedToLatest) {
+            this._currentFrame = 0;
+        }
+        // else: locked to latest — hold at last frame until new data arrives
         this._showCurrentFrame();
         this._updateSlider();
         this._updateFrameCounter();
