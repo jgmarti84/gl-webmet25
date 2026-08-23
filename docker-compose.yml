@@ -161,7 +161,7 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME:-observatorio} # TODO: set a secure admin username in your .env file
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-mate-nubes-radar-2026} # TODO: set a strong admin password in your .env file
     ports:
-      - "80:80"
+      - "${FRONTEND_PORT:-80}:80"
     depends_on:
       - api
     restart: unless-stopped
