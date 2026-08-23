@@ -421,7 +421,7 @@ export class AnimationController {
         if (!this._timeDisplay) return;
         const frame = this._frames[this._currentFrame];
         if (!frame) return;
-        const ts = frame.timestamp || frame.observation_time;
+        const ts = frame.displayTimestamp || frame.timestamp || frame.observation_time;
         if (!ts) return;
         this._timeDisplay.textContent = formatTimestamp(ts);
     }
