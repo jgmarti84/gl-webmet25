@@ -6,7 +6,7 @@ import {
 // HELPERS
 // =============================================================================
 
-export function getCogBucketKey(timestamp, toleranceMinutes = 5) {
+export function getCogBucketKey(timestamp, toleranceMinutes = 10) {
     const bucketMs = toleranceMinutes * 60 * 1000;
     const t = new Date(timestamp).getTime();
     return Math.round(t / bucketMs) * bucketMs;
@@ -30,6 +30,40 @@ export function groupCogsByTimestamp(cogs, toleranceMinutes = 5) {
         .sort((a, b) => a[0] - b[0])
         .map(([, frame]) => frame);
 }
+export function buildGridFrames(cogs, stepMinutes = 10) {
+    if (!cogs || cogs.length === 0) return [];
+
+    const stepMs = stepMinutes * 60 * 1000;
+
+    // slot (ms) → radar_code → { cog, t }  — latest obs_time wins per radar per slot
+    const bySlot = {};
+    cogs.forEach(cog => {
+        const t    = new Date(cog.observation_time).getTime();
+        const slot = Math.round(t / stepMs) * stepMs;
+        if (!bySlot[slot]) bySlot[slot] = {};
+        const prev = bySlot[slot][cog.radar_code];
+        if (!prev || t > prev.t) {
+            bySlot[slot][cog.radar_code] = { cog, t };
+        }
+    });
+
+    return Object.keys(bySlot)
+        .map(Number)
+        .sort((a, b) => a - b)
+        .map(slotMs => {
+            const cogsByRadar = {};
+            Object.values(bySlot[slotMs]).forEach(({ cog }) => {
+                cogsByRadar[cog.radar_code] = cog;
+            });
+            const firstCog = Object.values(cogsByRadar)[0];
+            return {
+                displayTimestamp: new Date(slotMs).toISOString(),
+                timestamp:        firstCog.observation_time,
+                cogsByRadar,
+            };
+        });
+}
+
 // function groupCogsByTimestamp(cogs) {
 //     const buckets = new Map();
 //     cogs.forEach(cog => {
