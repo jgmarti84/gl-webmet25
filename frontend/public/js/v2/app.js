@@ -28,11 +28,11 @@ import { AnimationController, formatTimestamp } from './animation.js';
 import { UIControls } from '../shared/controls.js';
 import { LegendRenderer } from '../shared/legend.js';
 import { TopsCoresLayer } from '../shared/tops-cores.js';
-import { 
-    waitForLeaflet, 
-    buildCogsByFrameMap, 
-    groupCogsByTimestamp, 
-    getCogBucketKey, 
+import {
+    waitForLeaflet,
+    buildCogsByFrameMap,
+    buildGridFrames,
+    getCogBucketKey,
     getAvailableProductKeys,
     selectDefaultProduct,
     baseFieldKey,
@@ -383,7 +383,7 @@ const app = {
             state.showUnfilteredProducts = true;
         }
 
-        state.products = await api.getProducts(mode.volNrs, mode.strategy);
+        state.products = await api.getProducts(mode.include);
         state.ui.populateProductSelect(state.products, state.showUnfilteredProducts, mode.filteredFieldsAvailable);
         state.ui.updateFilterToggle(state.showUnfilteredProducts);
         state.ui.setFilterToggleEnabled(mode.filteredFieldsAvailable);
@@ -623,7 +623,7 @@ const app = {
                     }
 
                     // Re-fetch the product list for the new volumes.
-                    state.products = await api.getProducts(nextMode.volNrs, nextMode.strategy);
+                    state.products = await api.getProducts(nextMode.include);
 
                     // Field persistence (#10): keep the current field if the new
                     // mode has it (preferring the same filtered/unfiltered variant);
@@ -1199,7 +1199,7 @@ const app = {
             const mode = getActiveCoverageMode(state.coverageModeId);
             const newCogs = await api.getCogsForTimeRange(
                 [radarCode], state.selectedProduct, timeRange.start, timeRange.end, 100,
-                mode.volNrs, mode.strategy
+                mode.include
             );
 
             if (newCogs.length === 0) {
@@ -1250,7 +1250,11 @@ const app = {
                 }
                 const insertIdx = lo;
 
-                const newFrame = { timestamp: cog.observation_time, cogsByRadar: { [radarCode]: cog } };
+                const newFrame = {
+                    displayTimestamp: new Date(getCogBucketKey(cog.observation_time)).toISOString(),
+                    timestamp:        cog.observation_time,
+                    cogsByRadar:      { [radarCode]: cog },
+                };
                 state.cogs.splice(insertIdx, 0, newFrame);
 
                 // v2: addFrame() will splice _frameImages at insertIdx
@@ -1351,7 +1355,7 @@ const app = {
         try {
             const mode = getActiveCoverageMode(state.coverageModeId);
             const latestCogs = await api.getLatestCogsForRadars(
-                state.selectedRadars, state.selectedProduct, mode.volNrs, mode.strategy
+                state.selectedRadars, state.selectedProduct, mode.include
             );
             const radarCodesWithData    = latestCogs.map(item => item.radarCode);
             const radarCodesWithoutData = state.selectedRadars.filter(c => !radarCodesWithData.includes(c));
@@ -1461,7 +1465,7 @@ const app = {
             const cogs = await api.getCogsForTimeRange(
                 state.selectedRadars, state.selectedProduct,
                 timeRange.start, timeRange.end, 100,
-                getActiveCoverageMode(state.coverageModeId).volNrs, getActiveCoverageMode(state.coverageModeId).strategy
+                getActiveCoverageMode(state.coverageModeId).include
             );
 
             if (cogs.length === 0) {
@@ -1477,7 +1481,7 @@ const app = {
                 return;
             }
 
-            const groupedFrames = groupCogsByTimestamp(cogs, );
+            const groupedFrames = buildGridFrames(cogs);
 
             let colormap = null;
             try {
@@ -1588,7 +1592,7 @@ const app = {
         try {
             const mode = getActiveCoverageMode(state.coverageModeId);
             const latestItems = await api.getLatestCogsForRadars(
-                state.selectedRadars, state.selectedProduct, mode.volNrs, mode.strategy
+                state.selectedRadars, state.selectedProduct, mode.include
             );
 
             if (latestItems.length === 0) {
@@ -1681,7 +1685,7 @@ const app = {
 
             const mode = getActiveCoverageMode(state.coverageModeId);
             const latestItems = await api.getLatestCogsForRadars(
-                state.selectedRadars, state.selectedProduct, mode.volNrs, mode.strategy
+                state.selectedRadars, state.selectedProduct, mode.include
             );
             if (!latestItems.length) {
                 if (showBadge) _hideFieldLoadingBadge();
@@ -1697,7 +1701,7 @@ const app = {
             const allCogs = await api.getCogsForTimeRange(
                 state.selectedRadars, state.selectedProduct,
                 newStartTime, newEndTime, LIVE_REFRESH_MAX_COGS,
-                mode.volNrs, mode.strategy
+                mode.include
             );
 
             const cachedCogIds = new Set();
@@ -1761,6 +1765,7 @@ const app = {
                                 )
                             );
                         });
+                        state.cogs[frameIdx].timestamp = Object.values(cogsByRadar)[0].observation_time;
                     } else {
                         let lo = 0, hi = state.cogs.length;
                         while (lo < hi) {
@@ -1770,7 +1775,11 @@ const app = {
                         }
                         const insertIdx = lo;
                         const representativeCog = Object.values(cogsByRadar)[0];
-                        const newFrame  = { timestamp: representativeCog.observation_time, cogsByRadar };
+                        const newFrame = {
+                            displayTimestamp: new Date(getCogBucketKey(representativeCog.observation_time)).toISOString(),
+                            timestamp:        representativeCog.observation_time,
+                            cogsByRadar,
+                        };
                         state.cogs.splice(insertIdx, 0, newFrame);
 
                         // v2: insert each radar for this new frame
@@ -1816,10 +1825,7 @@ const app = {
                 return;
             }
 
-            const newCurrentIndex = Math.min(
-                indexAfterExpiry + insertionAdjustment,
-                newLength - 1
-            );
+            const newCurrentIndex = Math.min(indexAfterExpiry + insertionAdjustment, newLength - 1);
 
             state.animator.updateFrames(state.cogs, state.selectedProduct, newCurrentIndex);
 
@@ -2159,11 +2165,11 @@ const app = {
         const cogs = await api.getCogsForTimeRange(
             state.selectedRadars, state.selectedProduct,
             timeRange.start, timeRange.end, 100,
-            mode.volNrs, mode.strategy
+            mode.include
         );
         if (!cogs || cogs.length === 0) return null;
 
-        const groupedFrames = groupCogsByTimestamp(cogs);
+        const groupedFrames = buildGridFrames(cogs);
         const cogsByFrame   = buildCogsByFrameMap(groupedFrames);
         return { groupedFrames, cogsByFrame };
     },

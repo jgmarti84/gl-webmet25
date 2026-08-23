@@ -22,10 +22,10 @@ import { LegendRenderer } from '../shared/legend.js';
 const MS_PER_HOUR = 3600 * 1000;
 const BUCKET_TOLERANCE_MINUTES = 5; // COG grouping bucket size – must match groupCogsByTimestamp default
 
-// Fix 1: Live COG refresh interval — authoritative default (5 min).
+// Fix 1: Live COG refresh interval — authoritative default (1 min).
 // The actual setInterval() call in startLiveRefresh() always uses getLiveRefreshIntervalMs(),
 // which reads from localStorage (webmet25_live_refresh_interval_ms) and falls back to this.
-const DEFAULT_LIVE_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const DEFAULT_LIVE_REFRESH_INTERVAL_MS = 1 * 60 * 1000; // 1 minute
 
 // Radar status refresh: how often to re-fetch the radar list to update is_active dots.
 // Can be overridden by the settings panel (stored in localStorage).

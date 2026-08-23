@@ -2,11 +2,11 @@ import { api }                 from '../shared/api.js';
 import { MapManager }          from './map.js';
 import { AnimationController } from './animation.js';
 import { UIControls }          from '../shared/controls.js';
-import { 
-    waitForLeaflet, 
+import {
+    waitForLeaflet,
     updateRadarHeader,
     fitMapToRadar,
-    groupCogsByTimestamp,
+    buildGridFrames,
     buildCogsByFrameMap
 }      from './radar-utils.js';
 
@@ -19,7 +19,8 @@ import {
 } from './constants.js';
 
 const LIVE_REFRESH_INTERVAL_MS = DEFAULT_LIVE_REFRESH_INTERVAL_MS;
-const CD_MODE = COVERAGE_MODES.find(m => m.id === 'cd');
+const CD_MODE      = COVERAGE_MODES.find(m => m.id === 'cd');
+const GRID_STEP_MS = 10 * 60 * 1000;
 
 const SETTINGS_KEY_BASEMAP          = 'webmet25_selected_basemap';
 const SETTINGS_KEY_COVERAGE_OPACITY = 'webmet25_coverage_opacity';
@@ -572,7 +573,7 @@ async function loadLayerFrames(layer, hours) {
     }
 
     const latestItems = await api.getLatestCogsForRadars(
-        [state.radarCode], layer.productKey, CD_MODE.volNrs, CD_MODE.strategy
+        [state.radarCode], layer.productKey, CD_MODE.include
     );
     if (!latestItems.length) {
         state.ui.setStatus(`⚠️ Sin datos para ${layer.productKey}`, 'error');
@@ -597,7 +598,7 @@ async function loadLayerFramesForRange(layer, startTime, endTime) {
     try {
         const cogs = await api.getCogsForTimeRange(
             [state.radarCode], layer.productKey,
-            startTime, endTime, 100, CD_MODE.volNrs, CD_MODE.strategy
+            startTime, endTime, 100, CD_MODE.include
         );
 
         if (!cogs.length) {
@@ -610,31 +611,34 @@ async function loadLayerFramesForRange(layer, startTime, endTime) {
         const coverageM = cogs.find(c => c.radar_coverage_m != null)?.radar_coverage_m ?? null;
         if (coverageM !== null) layer.coverageRadius = coverageM;
 
-        const newFrames = groupCogsByTimestamp(cogs);
+        const newFrames = buildGridFrames(cogs);
 
         if (state.frames.length === 0) {
             state.frames = newFrames;
             state.mapManager._frameImages = state.frames.map(() => new Map());
         }
 
-        const existingBuckets = new Map(
-            state.frames.map((f, i) => [
-                Math.round(new Date(f.timestamp).getTime() / 60000) * 60000,
-                i,
-            ])
+        // displayTimestamp (slot boundary) → frame index in the shared grid
+        const slotToFrameIdx = new Map(
+            state.frames.map((f, i) => [new Date(f.displayTimestamp).getTime(), i])
         );
 
-        const loadPromises = newFrames.map(async (frame) => {
-            const bucket = Math.round(
-                new Date(frame.timestamp).getTime() / 60000
-            ) * 60000;
-            const frameIdx = existingBuckets.get(bucket);
+        // Assign each COG for this radar to its nearest slot; latest obs_time wins per slot
+        layer.cogsByFrame = new Map();
+        cogs.forEach(cog => {
+            if (cog.radar_code !== state.radarCode) return;
+            const t    = new Date(cog.observation_time).getTime();
+            const slot = Math.round(t / GRID_STEP_MS) * GRID_STEP_MS;
+            const frameIdx = slotToFrameIdx.get(slot);
             if (frameIdx === undefined) return;
+            const prev = layer.cogsByFrame.get(frameIdx);
+            if (!prev || t > new Date(prev.observation_time).getTime()) {
+                layer.cogsByFrame.set(frameIdx, cog);
+            }
+        });
 
-            const cog = frame.cogsByRadar[state.radarCode];
-            if (!cog) return;
-
-            const key = `${state.radarCode}__${layer.productKey}`;
+        const key = `${state.radarCode}__${layer.productKey}`;
+        const loadPromises = Array.from(layer.cogsByFrame.entries()).map(async ([frameIdx, cog]) => {
             const url = state.mapManager._buildFrameUrl(cog.id, layer.productKey, getTileParamsForLayer(layer));
 
             try {
@@ -752,7 +756,7 @@ async function reloadLayerWithNewParams(layer) {
     const params = getTileParamsForLayer(layer);
 
     const promises = state.frames.map(async (frame, frameIdx) => {
-        const cog = frame.cogsByRadar?.[state.radarCode];
+        const cog = layer.cogsByFrame?.get(frameIdx);
         if (!cog) return;
         const url = state.mapManager._buildFrameUrl(cog.id, layer.productKey, params);
         try {
@@ -820,6 +824,7 @@ async function addLayer(productKey) {
         smoothingEnabled: false,
         smoothingSigma:   0.8,
         settingsExpanded: false,
+        cogsByFrame:      new Map(),
     };
     state.layers.push(layer);
     updateCoverageRadius(); // immediate update: new layer contributes full-range until COGs load
@@ -950,7 +955,7 @@ async function refreshLiveWindow() {
         // anchoring to the latest available data for the selected field set)
         const anchorLayer  = state.layers[0];
         const latestItems  = await api.getLatestCogsForRadars(
-            [state.radarCode], anchorLayer.productKey, CD_MODE.volNrs, CD_MODE.strategy
+            [state.radarCode], anchorLayer.productKey, CD_MODE.include
         );
         if (!latestItems.length) return;
 
@@ -1580,7 +1585,7 @@ const app = {
             const [radars, products] = await Promise.all([
                 api.getRadars(false),
                 // Always fetch cd-mode (Conventional + Doppler) products only
-                api.getProducts(CD_MODE.volNrs, CD_MODE.strategy),
+                api.getProducts(CD_MODE.include),
             ]);
 
             state.radar    = radars.find(r => r.code === RADAR_CODE) || null;
