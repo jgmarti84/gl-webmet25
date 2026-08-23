@@ -150,12 +150,12 @@ export function _updateRadarBadge(selectedRadars) {
     badge.style.display = count > 0 ? 'inline-flex' : 'none';
 }
 
-export function updateLiveIndicator(liveHours) {
+export function updateLiveIndicator(liveHours, lockedToLatest = false) {
     const el = document.getElementById('live-indicator');
     if (!el) return;
     if (liveHours !== null) {
-        el.textContent = '● EN VIVO';
-        el.className = 'live-indicator live-on';
+        el.textContent = lockedToLatest ? '● EN VIVO' : '● EN VIVO ↺';
+        el.className   = `live-indicator live-on${lockedToLatest ? '' : ' live-scrolled'}`;
     } else {
         el.textContent = '○ En vivo';
         el.className = 'live-indicator live-off';
