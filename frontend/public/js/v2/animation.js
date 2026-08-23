@@ -91,6 +91,25 @@ function _formatUtcFallback(isoString) {
     }
 }
 
+/**
+ * Pure helper: given the frame list and the current index, return the radar
+ * codes that should be "held" (shown from the previous slot) because they are
+ * present in frames[frameIndex-1] but absent in frames[frameIndex].
+ *
+ * One-gap rule: only the immediately prior slot is inspected, so if a radar
+ * was already missing at frameIndex-1 the hold is NOT applied.
+ *
+ * @param {Array}  frames      [{cogsByRadar: {code: cog}}, ...]
+ * @param {number} frameIndex  Current frame index
+ * @returns {string[]}  Radar codes to hold (may be empty)
+ */
+export function computeHoldRadarCodes(frames, frameIndex) {
+    if (frameIndex <= 0 || !frames[frameIndex] || !frames[frameIndex - 1]) return [];
+    const currentRadars = new Set(Object.keys(frames[frameIndex].cogsByRadar || {}));
+    return Object.keys(frames[frameIndex - 1].cogsByRadar || {})
+        .filter(code => !currentRadars.has(code));
+}
+
 export class AnimationController {
     /**
      * @param {import('./map-v2.js').MapManager} mapManager
@@ -392,14 +411,19 @@ export class AnimationController {
     }
 
     _showCurrentFrame() {
-        const frame = this._frames[this._currentFrame];
+        const i     = this._currentFrame;
+        const frame = this._frames[i];
         if (!frame) return;
 
-        const radarCodes = Object.keys(frame.cogsByRadar || {});
-        this._mapManager.showFrame(this._currentFrame, radarCodes, this._productKey);
+        const holdCodes = computeHoldRadarCodes(this._frames, i);
+        const radarCodes = [
+            ...Object.keys(frame.cogsByRadar || {}),
+            ...holdCodes,
+        ];
+        this._mapManager.showFrame(i, radarCodes, this._productKey, holdCodes);
 
         if (this._onFrameChange) {
-            this._onFrameChange(this._currentFrame, frame);
+            this._onFrameChange(i, frame, holdCodes);
         }
     }
 

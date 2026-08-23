@@ -51,7 +51,8 @@ export class TopsCoresLayer {
         this._iconSize = DEFAULT_ICON_SIZE;
 
         // Pre-loaded marker data indexed by frame index.
-        // Each element is an array of { lat, lon, dbz, alt } plain objects.
+        // Each element is a Map<radarCode, {lat,lon,dbz,alt}[]> so that
+        // per-radar hold-last-frame can look up markers from a different frame.
         this._frameData = [];
 
         // Last frameIndex passed to showFrame() — used to re-paint when
@@ -132,7 +133,7 @@ export class TopsCoresLayer {
         const radarCodes = [...radarCodesSet];
 
         if (radarCodes.length === 0) {
-            this._frameData = frames.map(() => []);
+            this._frameData = frames.map(() => new Map());
             return;
         }
 
@@ -155,7 +156,7 @@ export class TopsCoresLayer {
             if (signal.aborted) return;
 
             if (!records || records.length === 0) {
-                this._frameData = frames.map(() => []);
+                this._frameData = frames.map(() => new Map());
                 if (this._visible && this._lastShownFrameIndex !== null) {
                     this.showFrame(this._lastShownFrameIndex);
                 }
@@ -184,18 +185,20 @@ export class TopsCoresLayer {
                 return this._extractMarkerData(geojson.features);
             });
 
-            // Step 4: distribute records to frames by ±TIME_WINDOW_MS
+            // Step 4: distribute records to frames by ±TIME_WINDOW_MS, grouped by
+            // radar_code so that hold-last-frame can look up per-radar markers.
             const newFrameData = [];
             frames.forEach(frame => {
                 const frameMs = new Date(frame.timestamp || frame.observation_time).getTime();
-                const markers = [];
+                const radarMarkers = new Map();
                 records.forEach((rec, i) => {
                     const recMs = new Date(rec.observation_time).getTime();
                     if (Math.abs(recMs - frameMs) <= TIME_WINDOW_MS) {
-                        markers.push(...recordMarkerData[i]);
+                        const existing = radarMarkers.get(rec.radar_code) || [];
+                        radarMarkers.set(rec.radar_code, [...existing, ...recordMarkerData[i]]);
                     }
                 });
-                newFrameData.push(markers);
+                newFrameData.push(radarMarkers);
             });
             this._frameData = newFrameData;
 
@@ -207,25 +210,47 @@ export class TopsCoresLayer {
         } catch (err) {
             if (err.name === 'AbortError') return;
             console.warn('[TopsCoresLayer] loadForFrames error:', err);
-            this._frameData = frames.map(() => []);
+            this._frameData = frames.map(() => new Map());
         }
     }
 
     /**
      * Synchronously display the pre-loaded markers for the given frame index.
      * Called on every frame advance from the animation loop — must not block.
-     * @param {number} frameIndex
+     *
+     * @param {number}   frameIndex
+     * @param {string[]} holdRadarCodes  Radar codes whose tops/cores should be
+     *   taken from frameIndex-1 (matching the held COG image). Defaults to [].
      */
-    showFrame(frameIndex) {
+    showFrame(frameIndex, holdRadarCodes = []) {
         this._lastShownFrameIndex = frameIndex;
         this._layerGroup.clearLayers();
         if (!this._visible) return;
 
-        const data = this._frameData[frameIndex];
-        if (!data || data.length === 0) return;
+        const currentMap = this._frameData[frameIndex];
+        if (!currentMap) return;
+
+        // Collect all radar codes: those with real data at this frame plus held ones
+        const heldSet  = holdRadarCodes.length > 0 ? new Set(holdRadarCodes) : null;
+        const prevMap  = (heldSet && frameIndex > 0) ? this._frameData[frameIndex - 1] : null;
+
+        // Union of radar codes to display
+        const radarCodesToShow = new Set([
+            ...currentMap.keys(),
+            ...(heldSet ? [...heldSet] : []),
+        ]);
+
+        const markers = [];
+        radarCodesToShow.forEach(code => {
+            const sourceMap = (heldSet && heldSet.has(code) && prevMap) ? prevMap : currentMap;
+            const radarMarkers = sourceMap.get(code);
+            if (radarMarkers) markers.push(...radarMarkers);
+        });
+
+        if (markers.length === 0) return;
 
         const icon = this._coreIcon(this._iconSize);
-        data.forEach(({ lat, lon, dbz, alt }) => {
+        markers.forEach(({ lat, lon, dbz, alt }) => {
             const dbzText = dbz != null ? `${dbz} dBZ` : '—';
             const altText = alt != null ? `${alt} m` : '—';
             const marker = L.marker([lat, lon], { icon, pane: this._pane });
