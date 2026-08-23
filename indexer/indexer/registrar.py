@@ -347,6 +347,11 @@ class TopsAndCoresRegistrar:
                     f"TOPS_CORES already indexed (AVAILABLE): {file_path}"
                 )
                 return
+            if existing.status == COGStatus.ERROR:
+                logger.debug(
+                    f"TOPS_CORES previously failed (ERROR), skipping: {file_path}"
+                )
+                return
             # Fall through to update records that are in a non-AVAILABLE state
 
         # Parse GeoJSON to obtain feature counts and observation_time
@@ -358,6 +363,10 @@ class TopsAndCoresRegistrar:
 
         try:
             import json
+            import os as _os
+
+            if _os.path.getsize(file_path) == 0:
+                raise ValueError("GeoJSON file is empty")
 
             with open(file_path, "r", encoding="utf-8") as fh:
                 geojson = json.load(fh)
@@ -386,6 +395,11 @@ class TopsAndCoresRegistrar:
                         parsed_obs = parsed_obs.replace(tzinfo=_tz.utc)
                     observation_time = parsed_obs
 
+        except ValueError as e:
+            logger.warning(
+                f"Skipping TOPS_CORES file (bad content): {file_path} — {e}"
+            )
+            status = COGStatus.ERROR
         except Exception:
             logger.error(
                 f"Failed to parse GeoJSON for TOPS_CORES file: {file_path}",
