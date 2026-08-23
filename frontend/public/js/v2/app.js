@@ -1873,7 +1873,7 @@ const app = {
     // Frame change callback (from AnimationController)
     // =========================================================================
 
-    onFrameChange(index, frame) {
+    onFrameChange(index, frame, holdRadarCodes = []) {
         if (!frame) return;
         this.updateTimeWindowLabel();
 
@@ -1886,9 +1886,10 @@ const app = {
             state.ui.updateFrameCounter(index, state.animator.getFrameCount());
             state.ui.updateAnimationSlider(index, state.animator.getFrameCount());
 
-            // Synchronous frame display — data was pre-loaded by loadForFrames()
+            // Show tops/cores matching the actually-displayed COG (held radars use
+            // markers from the previous frame to stay in sync with the held image)
             if (state.topsCoresLayer && state.topsCoresVisible) {
-                state.topsCoresLayer.showFrame(index);
+                state.topsCoresLayer.showFrame(index, holdRadarCodes);
             }
             return;
         }

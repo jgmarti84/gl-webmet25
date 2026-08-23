@@ -423,7 +423,7 @@ export class AnimationController {
         this._mapManager.showFrame(i, radarCodes, this._productKey, holdCodes);
 
         if (this._onFrameChange) {
-            this._onFrameChange(i, frame);
+            this._onFrameChange(i, frame, holdCodes);
         }
     }
 

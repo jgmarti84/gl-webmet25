@@ -168,6 +168,106 @@ console.log('\nT9: edge cases — out of bounds / undefined frames');
     assert(computeHoldRadarCodes([], 0).length       === 0, 'empty frames array → empty');
 }
 
+// ─── TopsCoresLayer showFrame hold logic (data-selection only) ───────────────
+// Inline the marker-selection logic from tops-cores.js: showFrame().
+// Tests exercise which radar codes/markers are collected, without Leaflet.
+function selectTopsCoresMarkers(frameData, frameIndex, holdRadarCodes = []) {
+    const currentMap = frameData[frameIndex];
+    if (!currentMap) return [];
+
+    const heldSet  = holdRadarCodes.length > 0 ? new Set(holdRadarCodes) : null;
+    const prevMap  = (heldSet && frameIndex > 0) ? frameData[frameIndex - 1] : null;
+
+    const radarCodesToShow = new Set([
+        ...currentMap.keys(),
+        ...(heldSet ? [...heldSet] : []),
+    ]);
+
+    const markers = [];
+    radarCodesToShow.forEach(code => {
+        const sourceMap = (heldSet && heldSet.has(code) && prevMap) ? prevMap : currentMap;
+        const radarMarkers = sourceMap.get(code);
+        if (radarMarkers) markers.push(...radarMarkers);
+    });
+    return markers;
+}
+
+function makeMarker(id) { return { id, lat: 0, lon: 0, dbz: null, alt: null }; }
+
+console.log('\n=== TopsCoresLayer showFrame hold-sync tests ===\n');
+
+// ── TC1: No hold — markers from current frame only ───────────────────────────
+console.log('TC1: no hold — current frame markers shown');
+{
+    const m5a = makeMarker('RMA5-frameA');
+    const m5b = makeMarker('RMA5-frameB');
+    const frameData = [
+        new Map([['RMA5', [m5a]]]),
+        new Map([['RMA5', [m5b]]]),
+    ];
+    const markers = selectTopsCoresMarkers(frameData, 1, []);
+    assert(markers.length === 1,           'one marker at frame 1');
+    assert(markers[0].id === 'RMA5-frameB','marker is from frame 1');
+}
+
+// ── TC2: Hold — held radar gets markers from frame i-1 ───────────────────────
+console.log('\nTC2: held radar — tops/cores from frame i-1');
+{
+    const m5prev = makeMarker('RMA5-prev');
+    const m8curr = makeMarker('RMA8-curr');
+    const frameData = [
+        new Map([['RMA5', [m5prev]]]),               // frame 0: RMA5 has data
+        new Map([['RMA8', [m8curr]]]),               // frame 1: RMA5 missing, RMA8 present
+    ];
+    const markers = selectTopsCoresMarkers(frameData, 1, ['RMA5']);
+    assert(markers.length === 2,           '2 markers: held RMA5 + current RMA8');
+    assert(markers.some(m => m.id === 'RMA5-prev'), 'RMA5 markers from frame 0 (held)');
+    assert(markers.some(m => m.id === 'RMA8-curr'), 'RMA8 markers from frame 1 (current)');
+}
+
+// ── TC3: Double gap — hold not applied when prev frame also empty ─────────────
+console.log('\nTC3: double gap — no hold when prev frame also empty for that radar');
+{
+    const m8curr = makeMarker('RMA8-curr');
+    const frameData = [
+        new Map([['RMA5', [makeMarker('RMA5-f0')]]]),  // frame 0: RMA5 present
+        new Map([['RMA8', [m8curr]]]),                  // frame 1: RMA5 missing (empty for RMA5)
+        new Map([['RMA8', [makeMarker('RMA8-f2')]]]),   // frame 2: RMA5 still missing
+    ];
+    // At frame 2, computeHoldRadarCodes would return [] (frame 1 had no RMA5 data)
+    // so holdRadarCodes for RMA5 should be empty — simulating the one-gap rule
+    const markers = selectTopsCoresMarkers(frameData, 2, []);
+    assert(markers.length === 1,           'no held markers at frame 2 (one-gap rule enforced by computeHoldRadarCodes)');
+    assert(markers[0].id === 'RMA8-f2',   'only RMA8 frame-2 markers shown');
+}
+
+// ── TC4: Hold at frame 0 — no previous frame, holdRadarCodes ignored ──────────
+console.log('\nTC4: hold at frame 0 — no prev frame, held codes produce nothing');
+{
+    const frameData = [
+        new Map([['RMA5', [makeMarker('RMA5-f0')]]]),
+    ];
+    // frame 0 with hold requested — prevMap is null because frameIndex === 0
+    const markers = selectTopsCoresMarkers(frameData, 0, ['RMA8']);
+    assert(markers.length === 1,           'only real frame-0 markers shown');
+    assert(markers[0].id === 'RMA5-f0',   'held code with no prev frame shows nothing extra');
+}
+
+// ── TC5: Completely empty current frame, all radars held ──────────────────────
+console.log('\nTC5: fully empty frame — all markers from prev frame via hold');
+{
+    const m5 = makeMarker('RMA5-prev');
+    const m8 = makeMarker('RMA8-prev');
+    const frameData = [
+        new Map([['RMA5', [m5]], ['RMA8', [m8]]]),  // frame 0: both present
+        new Map(),                                    // frame 1: empty
+    ];
+    const markers = selectTopsCoresMarkers(frameData, 1, ['RMA5', 'RMA8']);
+    assert(markers.length === 2,              '2 held markers from frame 0');
+    assert(markers.some(m => m.id === 'RMA5-prev'), 'RMA5 held');
+    assert(markers.some(m => m.id === 'RMA8-prev'), 'RMA8 held');
+}
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(40)}`);
 console.log(`Results: ${passed} passed, ${failed} failed`);
