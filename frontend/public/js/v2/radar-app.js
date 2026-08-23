@@ -611,7 +611,7 @@ async function loadLayerFramesForRange(layer, startTime, endTime) {
         const coverageM = cogs.find(c => c.radar_coverage_m != null)?.radar_coverage_m ?? null;
         if (coverageM !== null) layer.coverageRadius = coverageM;
 
-        const newFrames = buildGridFrames(cogs);
+        const newFrames = buildGridFrames(cogs, 10, startTime, endTime);
 
         if (state.frames.length === 0) {
             state.frames = newFrames;
