@@ -20,7 +20,7 @@ const API_BASE = '/api/v1';
 const TIME_WINDOW_MS = 2.5 * 60 * 1000;
 
 // SVG icon for core markers
-const ICON_URL = '/img/icono_HT.svg';
+const ICON_URL = '/img/code-purple.svg';
 
 // Default icon size in pixels (slider default 4 × scale factor 4)
 const DEFAULT_ICON_SIZE = 16;
