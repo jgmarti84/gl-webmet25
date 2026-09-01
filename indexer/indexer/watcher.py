@@ -134,7 +134,13 @@ class COGWatcher:
             Number of files indexed
         """
         registrar = COGRegistrar(session, str(self.base_path))
-        
+
+        # Stamp the scan start time BEFORE the rglob so that the next scan's
+        # "since" threshold is relative to when this traversal began, not ended.
+        # Without this, files that arrive during the first (rglob_duration - 5min)
+        # of a slow scan fall into a permanent dead zone.
+        scan_start = datetime.now()
+
         # Find files to process
         if self._last_scan:
             # Incremental scan - only look at recently modified files
@@ -144,8 +150,8 @@ class COGWatcher:
         else:
             # Full scan on first run
             files = self.discover_files()
-        
-        self._last_scan = datetime.now()
+
+        self._last_scan = scan_start
         
         indexed_count = 0
         for file_path in files:
