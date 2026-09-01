@@ -32,25 +32,40 @@ class COGWatcher:
         self._indexed_files: Set[str] = set()
         self._last_scan: Optional[datetime] = None
     
+    def _active_day_dirs(self) -> List[Path]:
+        """Return per-radar day directories for today and yesterday.
+
+        Files are stored under <base>/<RADAR>/YYYY/MM/DD/, so scanning only
+        those two leaves instead of rglob-ing the entire tree cuts traversal
+        from O(all-time files) to O(two-days files).
+        """
+        now = datetime.now()
+        dirs: List[Path] = []
+        for offset in (0, 1):
+            day = now - timedelta(days=offset)
+            day_suffix = Path(str(day.year)) / f"{day.month:02d}" / f"{day.day:02d}"
+            if self.radar_filter:
+                for radar_code in self.radar_filter:
+                    d = self.base_path / radar_code / day_suffix
+                    if d.exists():
+                        dirs.append(d)
+            else:
+                dirs.extend(
+                    d for d in self.base_path.glob(f"*/{day_suffix}")
+                    if d.is_dir()
+                )
+        return dirs
+
     def discover_files(self) -> List[Path]:
         """
-        Discover all COG files in the watch path.
-        
+        Discover COG files in today's and yesterday's day directories.
+
         Returns:
             List of file paths
         """
         files = []
-        
-        if self.radar_filter:
-            # Only scan specific radar directories
-            for radar_code in self.radar_filter:
-                radar_dir = self.base_path / radar_code
-                if radar_dir.exists():
-                    files.extend(radar_dir.rglob(self.file_pattern))
-        else:
-            # Scan all subdirectories
-            files = list(self.base_path.rglob(self.file_pattern))
-        
+        for day_dir in self._active_day_dirs():
+            files.extend(day_dir.rglob(self.file_pattern))
         return files
     
     def discover_new_files(self, since: Optional[datetime] = None) -> List[Path]:
