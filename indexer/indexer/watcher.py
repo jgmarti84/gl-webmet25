@@ -226,6 +226,9 @@ class TopsAndCoresWatcher:
         self.tops_and_cores_dir = Path(tops_and_cores_dir)
         self.scan_interval = settings.scan_interval_seconds
         self._warned_missing_dir: bool = False
+        self._registered_files: Set[str] = set()
+        self._missing_check_cycles: int = 0
+        self._missing_check_interval: int = 20  # check for missing files every ~30 min
 
     def discover_files(self) -> list:
         """
@@ -263,7 +266,7 @@ class TopsAndCoresWatcher:
         self._warned_missing_dir = False
 
         files = self.discover_files()
-        logger.debug(f"TOPS_CORES scan: found {len(files)} candidate file(s)")
+        logger.debug(f"TOPS_CORES scan: found {len(files)} candidate file(s), {len(self._registered_files)} already registered")
 
         filename_parser = TopsAndCoresFilenameParser()
         registrar = TopsAndCoresRegistrar(session)
@@ -272,23 +275,34 @@ class TopsAndCoresWatcher:
 
         for file_path in files:
             str_path = str(file_path)
+
+            # Skip files already processed in a previous cycle
+            if str_path in self._registered_files:
+                continue
+
             try:
                 parsed = filename_parser.parse(str_path)
             except ValueError as exc:
                 logger.warning(f"TOPS_CORES skipping unrecognised file: {file_path} — {exc}")
+                self._registered_files.add(str_path)
                 continue
 
             registrar.register(str_path, parsed)
+            self._registered_files.add(str_path)
             registered_count += 1
 
-        # Mark files no longer on disk as MISSING
-        available_records = session.query(TopsAndCores).filter(
-            TopsAndCores.status == COGStatus.AVAILABLE
-        ).all()
-
-        for record in available_records:
-            if not Path(record.file_path).exists():
-                registrar.mark_missing(record.file_path)
+        # Mark files no longer on disk as MISSING — throttled to avoid full DB+fs
+        # scan every 90 seconds when the corpus is large.
+        self._missing_check_cycles += 1
+        if self._missing_check_cycles >= self._missing_check_interval:
+            self._missing_check_cycles = 0
+            available_records = session.query(TopsAndCores).filter(
+                TopsAndCores.status == COGStatus.AVAILABLE
+            ).all()
+            for record in available_records:
+                if not Path(record.file_path).exists():
+                    registrar.mark_missing(record.file_path)
+                    self._registered_files.discard(record.file_path)
 
         return registered_count
 
