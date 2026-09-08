@@ -74,6 +74,8 @@ class IndexerSettings(BaseSettings):
 
     # Cleanup
     mark_missing_files: bool = Field(default=True, alias="MARK_MISSING_FILES")
+    missing_check_days: int = Field(default=45, alias="MISSING_CHECK_DAYS")
+    missing_check_batch_size: int = Field(default=1000, alias="MISSING_CHECK_BATCH_SIZE")
     
     class Config:
         env_file = ".env"

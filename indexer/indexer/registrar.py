@@ -291,32 +291,44 @@ class COGRegistrar:
             self.session.rollback()
             return None
     
-    def mark_missing_files(self) -> int:
+    def mark_missing_batch(self, after_id: int, batch_size: int, cutoff) -> tuple:
         """
-        Mark files in database that no longer exist on disk.
-        
+        Check one batch of AVAILABLE RadarCOG records within the retention window.
+
+        Fetches up to `batch_size` records with id > after_id and indexed_at > cutoff,
+        ordered by id. Marks any whose file no longer exists on disk as MISSING.
+
         Returns:
-            Number of files marked as missing
+            (marked_count, new_cursor_id) where new_cursor_id is 0 when the window
+            is exhausted, signalling the caller to reset the cursor for the next pass.
         """
         from radar_db.models import RadarCOG, COGStatus
-        
-        count = 0
-        cogs = self.session.query(RadarCOG).filter(
-            RadarCOG.status == COGStatus.AVAILABLE
-        ).all()
-        
+
+        cogs = (
+            self.session.query(RadarCOG)
+            .filter(
+                RadarCOG.status == COGStatus.AVAILABLE,
+                RadarCOG.indexed_at > cutoff,
+                RadarCOG.id > after_id,
+            )
+            .order_by(RadarCOG.id)
+            .limit(batch_size)
+            .all()
+        )
+
+        if not cogs:
+            return 0, 0
+
+        marked = 0
+        last_id = after_id
         for cog in cogs:
-            full_path = self.base_path / cog.file_path
-            if not full_path.exists():
+            last_id = cog.id
+            if not (self.base_path / cog.file_path).exists():
                 cog.status = COGStatus.MISSING
-                count += 1
+                marked += 1
                 logger.warning(f"Marked as missing: {cog.file_path}")
-        
-        if count > 0:
-            self.session.commit()
-            logger.info(f"Marked {count} files as missing")
-        
-        return count
+
+        return marked, last_id
 
 
 class TopsAndCoresRegistrar:

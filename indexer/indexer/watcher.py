@@ -31,6 +31,8 @@ class COGWatcher:
         # Track indexed files to avoid re-processing
         self._indexed_files: Set[str] = set()
         self._last_scan: Optional[datetime] = None
+        # Cursor for chunked missing-file scan (advances through indexed_at window each cycle)
+        self._missing_check_cursor: int = 0
     
     def _active_day_dirs(self) -> List[Path]:
         """Return per-radar day directories for today and yesterday.
@@ -167,10 +169,19 @@ class COGWatcher:
             
             self._indexed_files.add(str_path)
         
-        # Optionally check for missing files
-        if settings.mark_missing_files and indexed_count == 0:
-            # Only do this when no new files (to avoid overhead)
-            registrar.mark_missing_files()
+        # Chunked missing-file scan: check one batch per cycle across the retention window.
+        # Advances a cursor through AVAILABLE records ordered by id; resets when the
+        # window is exhausted so the next pass starts from the beginning.
+        if settings.mark_missing_files:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=settings.missing_check_days)
+            marked, new_cursor = registrar.mark_missing_batch(
+                after_id=self._missing_check_cursor,
+                batch_size=settings.missing_check_batch_size,
+                cutoff=cutoff,
+            )
+            self._missing_check_cursor = new_cursor
+            if marked > 0:
+                logger.info(f"Marked {marked} COG file(s) as missing (cursor={new_cursor})")
         
         # Update radar activity status at the end of every scan cycle
         self.update_radar_activity(session)
@@ -291,13 +302,15 @@ class TopsAndCoresWatcher:
             self._registered_files.add(str_path)
             registered_count += 1
 
-        # Mark files no longer on disk as MISSING — throttled to avoid full DB+fs
-        # scan every 90 seconds when the corpus is large.
+        # Mark files no longer on disk as MISSING — throttled to every _missing_check_interval
+        # cycles, and scoped to the configured retention window to bound the query size.
         self._missing_check_cycles += 1
         if self._missing_check_cycles >= self._missing_check_interval:
             self._missing_check_cycles = 0
+            cutoff = datetime.now(timezone.utc) - timedelta(days=settings.missing_check_days)
             available_records = session.query(TopsAndCores).filter(
-                TopsAndCores.status == COGStatus.AVAILABLE
+                TopsAndCores.status == COGStatus.AVAILABLE,
+                TopsAndCores.created_at > cutoff,
             ).all()
             for record in available_records:
                 if not Path(record.file_path).exists():
