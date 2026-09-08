@@ -146,7 +146,49 @@ docker compose exec db-init python -m radar_db.manage reset --force --seed
 
 ---
 
-## 4. Indexer Health Checks
+## 4. Indexer — Missing-File Check
+
+The indexer continuously reconciles the database against the filesystem to mark records for files that have been deleted from disk as `MISSING`. Two watchers use different strategies optimised for their respective corpus sizes.
+
+### 4.1 How each watcher works
+
+| Watcher | Strategy | Trigger | Cost per cycle |
+|---|---|---|---|
+| **COGWatcher** | Chunked cursor scan — checks `MISSING_CHECK_BATCH_SIZE` records per cycle, ordered by `id`, advancing a cursor | Every scan cycle (30 s) | ~1 s (1 000 `Path.exists()` calls) |
+| **TopsAndCoresWatcher** | Full time-windowed scan — queries all `AVAILABLE` records within the retention window | Every 20 cycles (~10 min) | ~14 s (≈13 500 records at 45 days) |
+
+The COG cursor resets to 0 when it reaches the end of the retention window, starting the next pass from the oldest record in the window. A full pass over 45 days of COG records takes approximately 31 hours at default batch size.
+
+### 4.2 Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `MARK_MISSING_FILES` | `true` | Master on/off switch for both checks |
+| `MISSING_CHECK_DAYS` | `45` | Retention window in days. Set to ≥ the longest retention period across all radars. Changing this does not require a schema migration. |
+| `MISSING_CHECK_BATCH_SIZE` | `1000` | Records per COG cursor batch. Increase to shorten the full-pass duration; decrease to reduce per-cycle overhead. |
+
+### 4.3 Log patterns
+
+```
+# COG: files marked missing in a batch (only logged when count > 0)
+Marked N COG file(s) as missing (cursor=12345678)
+
+# COG: individual file marked missing
+WARNING - Marked as missing: RMA5/2026/09/07/RMA5_0315_01_...tif
+
+# TopsAndCores: triggered every 20 cycles
+WARNING - TOPS_CORES marked as missing: /mnt/.../RMA15_..._TOPS_CORES.geojson
+```
+
+### 4.4 Tuning guidance
+
+- **Cursor too slow** (stale MISSING records taking too long to be detected): increase `MISSING_CHECK_BATCH_SIZE` to e.g. `5000`. Each cycle will take ~5 s instead of ~1 s, reducing full-pass time to ~6 hours.
+- **Extending retention in radarlib**: update `MISSING_CHECK_DAYS` to match the new maximum retention before the change takes effect, so no files fall outside the check window.
+- **Disabling entirely**: set `MARK_MISSING_FILES=false`. Useful during planned maintenance that involves bulk file deletion, to avoid a flood of MISSING records before the DB is also updated.
+
+---
+
+## 6. Indexer Health Checks
 
 ```bash
 # View real-time indexer logs
@@ -167,7 +209,7 @@ docker exec radar_indexer python -m indexer.manage check
 
 ---
 
-## 5. API Health & Cache
+## 7. API Health & Cache
 
 ```bash
 # Health check
@@ -182,5 +224,5 @@ curl -X POST http://localhost/api/v1/colormap/cache/invalidate
 
 ---
 
-**Document Version:** 1.0.0  
-**Last Updated:** July 8, 2026
+**Document Version:** 1.1.0  
+**Last Updated:** September 7, 2026
