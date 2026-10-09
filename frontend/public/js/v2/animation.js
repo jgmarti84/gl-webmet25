@@ -38,8 +38,10 @@ export function formatTimestamp(isoString) {
         // Get the browser's local timezone from the OS
         const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-        // Format in local time with explicit timezone
-        const formatted = new Intl.DateTimeFormat(undefined, {
+        // Format in local time with explicit timezone.
+        // Use 'en-GB' so the date reads day/month/year regardless of the
+        // browser locale (en-US would render month/day/year).
+        const formatted = new Intl.DateTimeFormat('en-GB', {
             timeZone:  localTz,
             year:      'numeric',
             month:     '2-digit',
