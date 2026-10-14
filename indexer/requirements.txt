@@ -1,5 +1,7 @@
 # indexer/requirements.txt
-sqlalchemy>=2.0.0
+# Pinned <2.1: SQLAlchemy 2.1 switched the default "postgresql://" DBAPI
+# from psycopg2 to psycopg (v3), which is not installed here.
+sqlalchemy>=2.0.0,<2.1
 alembic>=1.13.0
 psycopg2-binary>=2.9.9
 geoalchemy2>=0.14.0

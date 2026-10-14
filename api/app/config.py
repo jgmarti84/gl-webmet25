@@ -63,7 +63,9 @@ class APISettings(BaseSettings):
     
     @property
     def database_url(self) -> str:
-        return f"postgresql://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+        # Dialect is explicit: SQLAlchemy 2.1 changed the default DBAPI for a
+        # bare "postgresql://" URL from psycopg2 to psycopg (v3).
+        return f"postgresql+psycopg2://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
     
     @property
     def cors_origins_list(self) -> list:

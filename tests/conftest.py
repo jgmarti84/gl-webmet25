@@ -21,7 +21,7 @@ def get_test_db_url() -> str:
     name = os.getenv("TEST_DB_NAME", "radar_test_db")
     user = os.getenv("TEST_DB_USER", "radar")
     password = os.getenv("TEST_DB_PASSWORD", "radarpass")
-    return f"postgresql://{user}:{password}@{host}:{port}/{name}"
+    return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{name}"
 
 
 @pytest.fixture(scope="session")
