@@ -12,6 +12,7 @@ from rasterio.env import Env
 from .config import settings
 from .routers import (
     admin_router,
+    auth_router,
     cogs_router,
     colormap_router,
     frames_router,
@@ -19,6 +20,7 @@ from .routers import (
     radars_router,
     tiles_router,
     tops_cores_router,
+    users_router,
 )
 from .schemas import HealthResponse
 from .services.tile_service import _tile_render_executor
@@ -38,6 +40,18 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Radar Visualization API...")
     logger.info(f"Database: {settings.db_host}:{settings.db_port}/{settings.db_name}")
     logger.info(f"COG Base Path: {settings.cog_base_path}")
+
+    try:
+        from radar_db import db_manager
+        from radar_db.accounts import count_active_admins
+        with db_manager.get_session() as session:
+            if count_active_admins(session) == 0:
+                logger.warning(
+                    "No active admin users. Create one with: "
+                    "make create-admin U=<usuario> (or set BOOTSTRAP_ADMIN_* and restart db-init)"
+                )
+    except Exception as exc:  # DB not ready must not block startup
+        logger.warning(f"Could not check admin users at startup: {exc}")
 
     gdal_env = Env(
         GDAL_CACHEMAX=settings.gdal_cachemax,
@@ -164,6 +178,8 @@ app.include_router(colormap_router, prefix=settings.api_prefix)
 app.include_router(frames_router, prefix=settings.api_prefix)
 app.include_router(tops_cores_router, prefix=settings.api_prefix)
 app.include_router(admin_router, prefix=settings.api_prefix)
+app.include_router(auth_router, prefix=settings.api_prefix)
+app.include_router(users_router, prefix=settings.api_prefix)
 
 
 # Health check endpoints
