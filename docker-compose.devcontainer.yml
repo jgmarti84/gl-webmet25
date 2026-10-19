@@ -11,9 +11,6 @@ services:
   #   command: ["tail", "-f", "/dev/null"]
   
   frontend:
-    environment:
-      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin} # TODO: set a secure admin username in your .env file
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me} # TODO: set a strong admin password in your .env file
     command: ["tail", "-f", "/dev/null"]
 
   frontend-v2:
@@ -23,9 +20,6 @@ services:
       args:
         FE_VERSION: v2
     container_name: radar_frontend_v2
-    environment:
-      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin} # TODO: set a secure admin username in your .env file
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me} # TODO: set a strong admin password in your .env file
     ports:
       - "8090:80"
     depends_on:
@@ -89,9 +83,13 @@ services:
       API_BASE_URL: http://api:8000
       # E2E target: the v2 frontend (the time wheel is only wired by v2).
       FRONTEND_URL: http://frontend-v2:80
-      # Admin Basic Auth creds — must match the frontend's ADMIN_USERNAME/PASSWORD.
-      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me}
+      # Admin account created by db-init from BOOTSTRAP_ADMIN_* (see .env)
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      # Auth settings needed to import api.app in unit tests
+      JWT_SECRET: ${JWT_SECRET}
+      COOKIE_SECURE: "false"
+      ALLOWED_ORIGINS: "http://testserver"
       # Production database (read only reference, never written by tests)
       DB_HOST: radar_db
       DB_PORT: 5432
@@ -107,6 +105,8 @@ services:
       PYTHONPATH: /app
     volumes:
       - ./tests:/app/tests
+      - ./api:/app/api:ro
+      - ./database/radar_db:/app/radar_db:ro
       - ../product_output:/product_output:ro
     depends_on:
       api:

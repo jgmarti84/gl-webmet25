@@ -29,3 +29,7 @@ cachetools>=5.0.0
 
 # Redis L2 tile cache
 redis>=5.0.0
+
+# Auth (usuarios con JWT)
+PyJWT>=2.8.0
+pwdlib[argon2]>=0.2.1
