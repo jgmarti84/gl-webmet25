@@ -1,11 +1,14 @@
 # database/radar_db/models.py
 from sqlalchemy import (
     Column, Integer, String, Text, Float, Boolean, DateTime, 
-    ForeignKey, Numeric, Table, UniqueConstraint, Index, Enum as SQLEnum
+    ForeignKey, Numeric, Table, UniqueConstraint, Index, Enum as SQLEnum,
+    CheckConstraint,
 )
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.sql import func
 from geoalchemy2 import Geometry
+from sqlalchemy.dialects.postgresql import UUID
+import uuid
 from decimal import Decimal
 from datetime import datetime
 import enum
@@ -343,3 +346,63 @@ class TopsAndCores(Base):
 
     def __repr__(self):
         return f"<TopsAndCores(id={self.id}, radar='{self.radar_code}', file='{self.file_name}')>"
+
+
+USER_ROLES = ("admin", "viewer")
+
+
+class User(Base):
+    """Application user (admin panel and, later, private endpoints)."""
+    __tablename__ = 'users'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String(32), nullable=False, unique=True, index=True)
+    full_name = Column(String(128))
+    email = Column(String(254))
+    password_hash = Column(String(255), nullable=False)
+    role = Column(String(16), nullable=False, default='viewer', server_default='viewer')
+    is_active = Column(Boolean, nullable=False, default=True, server_default='true')
+    # Incremented to invalidate every token of the user at once.
+    token_version = Column(Integer, nullable=False, default=0, server_default='0')
+    # True while the password is the one from BOOTSTRAP_ADMIN_PASSWORD.
+    password_is_bootstrap = Column(Boolean, nullable=False, default=False, server_default='false')
+    failed_login_count = Column(Integer, nullable=False, default=0, server_default='0')
+    locked_until = Column(DateTime(timezone=True))
+    last_login_at = Column(DateTime(timezone=True))
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        CheckConstraint("role IN ('admin', 'viewer')", name='ck_users_role'),
+    )
+
+    def __repr__(self):
+        return f"<User(id={self.id}, username='{self.username}', role='{self.role}')>"
+
+
+class UserSession(Base):
+    """One row per refresh token issued (rotated on every refresh)."""
+    __tablename__ = 'user_sessions'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    # Every refresh token of one login shares the family id.
+    family_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    # SHA-256 of the refresh token; the token itself only lives in the cookie.
+    token_hash = Column(String(64), nullable=False, unique=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    absolute_expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked_at = Column(DateTime(timezone=True))
+    replaced_by = Column(UUID(as_uuid=True))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    last_used_at = Column(DateTime(timezone=True))
+    user_agent = Column(String(256))
+    ip = Column(String(45))
+
+    user = relationship("User", back_populates="sessions")
+
+    def __repr__(self):
+        return f"<UserSession(id={self.id}, user_id={self.user_id}, revoked={self.revoked_at is not None})>"
