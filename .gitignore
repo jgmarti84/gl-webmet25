@@ -41,3 +41,5 @@ tests/e2e/screenshots/
 webmet-shots/
 
 .claude/
+# Documentos de trabajo de Claude (specs y planes), no se versionan
+docs-claude/
