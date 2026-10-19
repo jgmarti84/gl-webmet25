@@ -25,7 +25,7 @@ endif
         api indexer frontend db redis db-init shared rebuild \
         logs logs-api logs-indexer logs-frontend logs-db logs-redis \
         psql health stats dev-up dev-down test test-api test-indexer test-e2e \
-        db-check db-seed db-sync db-migrate
+        db-check db-seed db-sync db-migrate create-admin reset-password test-auth
 
 .DEFAULT_GOAL := help
 
@@ -68,12 +68,15 @@ help:
 	@echo   db-seed - Carga datos iniciales - solo inserta lo que falta
 	@echo   db-sync - Sincroniza el seed completo - actualiza existentes
 	@echo   db-migrate - Aplica migraciones pendientes
+	@echo   create-admin U=usuario - Crea un admin, pide la contrasena por consola
+	@echo   reset-password U=usuario - Cambia la contrasena de un usuario y cierra sus sesiones
 	@echo ----------------------------------------
 	@echo Desarrollo y tests, usa docker-compose.devcontainer.yml encima
 	@echo   dev-up - Levanta el stack de desarrollo con base de test y contenedor de tests
 	@echo   dev-down - Baja ese stack, usalo en vez de down
 	@echo   test - Corre todos los tests dentro del contenedor tests
 	@echo   test-api  test-indexer  test-e2e - Solo una parte de los tests
+	@echo   test-auth - Tests de usuarios y autenticacion
 	@echo   Cualquier objetivo acepta DEV=1, por ejemplo make logs DEV=1
 
 # ---------------------------------------------------------------------------
@@ -192,6 +195,13 @@ db-sync:
 db-migrate:
 	$(COMPOSE) run --rm db-init python -m radar_db.manage migrate upgrade
 
+# Comandos de usuarios que se corren en el servidor (piden la contrasena por consola).
+create-admin:
+	$(COMPOSE) run --rm db-init python -m radar_db.manage create-admin --username $(U)
+
+reset-password:
+	$(COMPOSE) run --rm db-init python -m radar_db.manage reset-password --username $(U)
+
 # ---------------------------------------------------------------------------
 # Desarrollo y tests (docker-compose.devcontainer.yml encima del compose normal)
 # ---------------------------------------------------------------------------
@@ -216,3 +226,6 @@ test-indexer:
 
 test-e2e:
 	$(DEV_COMPOSE) exec tests pytest tests/e2e -v
+
+test-auth:
+	$(DEV_COMPOSE) exec tests pytest tests/auth -v
