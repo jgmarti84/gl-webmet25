@@ -30,6 +30,8 @@
                 <div class="nav-group-label">Mapas de colores</div>
                 <a href="#colormaps" data-section="colormaps"><span class="nav-ico">🎨</span> Mapas de colores</a>
                 <a href="#colormap-options" data-section="colormap-options"><span class="nav-ico">⚭</span> Opciones de mapa de colores</a>
+                <div class="nav-group-label">Acceso</div>
+                <a href="#users" data-section="users"><span class="nav-ico">👤</span> Usuarios</a>
             </nav>
             <div class="sidebar-footer">
                 <button id="sidebar-back-map" class="btn btn-ghost btn-block" type="button">← Volver al mapa</button>
@@ -42,10 +44,14 @@
                     <button id="back-to-map" class="btn btn-ghost btn-back" type="button" title="Volver al mapa">←</button>
                     <h1 id="section-title">Panel</h1>
                 </div>
-                <p class="logout-hint">La autenticación HTTP Basic la gestiona el navegador. Cierre la sesión del navegador o borre las credenciales para salir.</p>
+                <div class="session-box">
+                    <span id="session-user" class="session-user"></span>
+                    <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Cerrar sesión</button>
+                </div>
             </header>
 
             <div id="feedback-message" class="feedback-message hidden"></div>
+            <div id="bootstrap-warning" class="feedback-message error hidden"></div>
             <section id="section-content"></section>
         </main>
     </div>
