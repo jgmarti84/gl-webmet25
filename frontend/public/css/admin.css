@@ -329,6 +329,7 @@ button:active { transform: translateY(1px); }
     border: 1px solid var(--border);
     background: #fff;
     text-transform: capitalize;
+    white-space: nowrap;
 }
 
 /* ── Tables ──────────────────────────────────────────────── */
@@ -644,4 +645,59 @@ th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
     .main-content { padding: 18px; }
     .logout-hint { display: none; }
     .table-wrap { max-height: none; }
+}
+
+/* ── Login page ─────────────────────────────────────────────── */
+.login-body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+}
+
+.login-card {
+    width: min(360px, calc(100vw - 32px));
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 28px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: var(--shadow-lg);
+}
+
+.login-card h1 {
+    margin: 0;
+    font-size: 1.3rem;
+}
+
+.login-card .sidebar-logo {
+    max-width: 160px;
+    align-self: center;
+}
+
+.login-card .form-grid {
+    padding: 0;
+}
+
+.login-back {
+    font-size: 0.9rem;
+    text-align: center;
+    color: var(--muted);
+}
+
+/* ── Session box in the admin header ───────────────────────── */
+.session-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.session-user {
+    font-size: 0.9rem;
+    opacity: 0.85;
 }

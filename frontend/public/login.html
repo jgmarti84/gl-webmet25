@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebMet25 — Iniciar sesión</title>
+    <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body class="login-body">
+    <main class="login-card">
+        <img class="sidebar-logo" src="/assets/images/logos/OHMC@3x.png" alt="OHMC Radar Meteorology System">
+        <h1>Iniciar sesión</h1>
+        <form id="login-form" class="form-grid" autocomplete="on">
+            <label>Usuario <input id="login-username" name="username" type="text" autocomplete="username" required autofocus></label>
+            <label>Contraseña <input id="login-password" name="password" type="password" autocomplete="current-password" required></label>
+            <div id="login-error" class="feedback-message error hidden" role="alert"></div>
+            <div class="form-actions"><button id="login-submit" class="btn btn-block" type="submit">Entrar</button></div>
+        </form>
+        <a class="login-back" href="/">← Volver al mapa</a>
+    </main>
+    <script type="module" src="/js/login.js"></script>
+</body>
+</html>
