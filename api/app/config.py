@@ -1,6 +1,6 @@
 # api/app/config.py
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, field_validator
 from typing import Optional
 
 
@@ -22,8 +22,8 @@ class APISettings(BaseSettings):
     api_version: str = "1.0.0"
     api_prefix: str = "/api/v1"
     
-    # CORS
-    cors_origins: str = Field(default="*", alias="CORS_ORIGINS")
+    # CORS - explicit list; empty means "same as ALLOWED_ORIGINS"
+    cors_origins: str = Field(default="", alias="CORS_ORIGINS")
     
     # Tile cache (optional, for future use)
     tile_cache_enabled: bool = Field(default=False, alias="TILE_CACHE_ENABLED")
@@ -57,6 +57,26 @@ class APISettings(BaseSettings):
     # Kill-switch: set REDIS_ENABLED=false to disable Redis without redeploying
     redis_enabled: bool = Field(default=True, alias="REDIS_ENABLED")
 
+    # Auth (users + JWT)
+    jwt_secret: str = Field(alias="JWT_SECRET")
+    jwt_issuer: str = Field(default="webmet25", alias="JWT_ISSUER")
+    jwt_audience: str = Field(default="webmet25-api", alias="JWT_AUDIENCE")
+    access_token_ttl_minutes: int = Field(default=15, alias="ACCESS_TOKEN_TTL_MINUTES")
+    session_idle_ttl_hours: int = Field(default=48, alias="SESSION_IDLE_TTL_HOURS")
+    session_absolute_ttl_days: int = Field(default=7, alias="SESSION_ABSOLUTE_TTL_DAYS")
+    cookie_secure: bool = Field(default=True, alias="COOKIE_SECURE")
+    # Origins allowed to send state-changing requests (CSRF defense)
+    allowed_origins: str = Field(default="", alias="ALLOWED_ORIGINS")
+    login_max_failed_attempts: int = Field(default=5, alias="LOGIN_MAX_FAILED_ATTEMPTS")
+    login_lockout_minutes: int = Field(default=15, alias="LOGIN_LOCKOUT_MINUTES")
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def _jwt_secret_long_enough(cls, value: str) -> str:
+        if len(value) < 32:
+            raise ValueError("JWT_SECRET debe tener al menos 32 caracteres")
+        return value
+
     class Config:
         env_file = ".env"
         extra = "ignore"
@@ -68,10 +88,16 @@ class APISettings(BaseSettings):
         return f"postgresql+psycopg2://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
     
     @property
+    def allowed_origins_list(self) -> list:
+        return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
+
+    @property
     def cors_origins_list(self) -> list:
-        if self.cors_origins == "*":
+        if not self.cors_origins.strip():
+            return self.allowed_origins_list
+        if self.cors_origins.strip() == "*":
             return ["*"]
-        return [origin.strip() for origin in self.cors_origins.split(",")]
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
 
 settings = APISettings()

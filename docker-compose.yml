@@ -129,7 +129,10 @@ services:
       DB_PASSWORD: radarpass
       COG_BASE_PATH: /product_output
       TOPS_AND_CORES_DIR: /tops_and_cores
-      CORS_ORIGINS: "*"
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (see .env.example)}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
     volumes:
       - ../product_output:/product_output:ro
       - ../tops_and_cores:/tops_and_cores:ro
