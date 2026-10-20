@@ -7,18 +7,19 @@ served by nginx. They require the full stack to be running (api + db + a v2
 frontend). See docs/E2E_TESTING.md for how to run them.
 
 Environment variables (with devcontainer defaults):
-    FRONTEND_URL    base URL of the running v2 frontend  (http://frontend-v2:80)
-    ADMIN_USERNAME  HTTP Basic Auth user for /admin       (admin)
-    ADMIN_PASSWORD  HTTP Basic Auth password for /admin    (change-me)
+    FRONTEND_URL              base URL of the running v2 frontend  (http://frontend-v2:80)
+    BOOTSTRAP_ADMIN_USERNAME  admin account created by db-init     (admin)
+    BOOTSTRAP_ADMIN_PASSWORD  its password (required to log in)
 """
 import os
+import time
 from pathlib import Path
 
 import pytest
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://frontend-v2:80")
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "change-me")
+ADMIN_USERNAME = os.getenv("BOOTSTRAP_ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "")
 
 SCREENSHOT_DIR = Path(__file__).parent / "screenshots"
 
@@ -31,15 +32,40 @@ def frontend_url() -> str:
 
 @pytest.fixture
 def browser_context_args(browser_context_args):
-    """Attach HTTP Basic Auth creds so `/admin` loads without a 401.
+    return {**browser_context_args, "ignore_https_errors": True}
 
-    Harmless for the public main map, required for the admin panel.
-    """
-    return {
-        **browser_context_args,
-        "http_credentials": {"username": ADMIN_USERNAME, "password": ADMIN_PASSWORD},
-        "ignore_https_errors": True,
-    }
+
+def login_via_form(page, username: str = ADMIN_USERNAME, password: str = ADMIN_PASSWORD) -> None:
+    """Log in through /login and wait until the admin panel is shown."""
+    page.goto(f"{FRONTEND_URL}/login?next=/admin", wait_until="networkidle")
+    page.fill("#login-username", username)
+    page.fill("#login-password", password)
+    page.click("#login-submit")
+    # Not "**/admin**": it would also match the login URL itself (/login?next=/admin).
+    page.wait_for_url(lambda url: "/login" not in url and "/admin" in url)
+
+
+# nginx rate-limits /api/v1/auth/login (10 requests/minute per IP), so the admin
+# tests share ONE login: its browser state (cookies) is reused for every test and
+# renewed every 10 minutes, before the 15-minute access cookie expires. Contexts
+# started from the same state must not outlive that window, otherwise two of
+# them would try to refresh the same (rotating) refresh token.
+_ADMIN_STATE = {"state": None, "at": 0.0}
+_ADMIN_STATE_MAX_AGE_S = 600
+
+
+@pytest.fixture
+def admin_storage_state(browser):
+    now = time.time()
+    if _ADMIN_STATE["state"] is None or now - _ADMIN_STATE["at"] > _ADMIN_STATE_MAX_AGE_S:
+        context = browser.new_context(ignore_https_errors=True)
+        try:
+            login_via_form(context.new_page())
+            _ADMIN_STATE["state"] = context.storage_state()
+            _ADMIN_STATE["at"] = now
+        finally:
+            context.close()
+    return _ADMIN_STATE["state"]
 
 
 # Console-error noise that is NOT an app bug and must not fail a test.
@@ -48,7 +74,9 @@ def browser_context_args(browser_context_args):
 # gracefully). In sandboxed/CI environments that host is unreachable or
 # CORS-blocked, and the BROWSER logs a console.error for the failed request that
 # the app cannot suppress. Ignore only that source; real app errors still fail.
-_IGNORED_CONSOLE_SUBSTRINGS = ("ipapi.co",)
+# "/api/v1/auth/": the browser logs every 401 of /auth/me and /auth/refresh as a
+# console error; those 401s are the expected "no session yet" answer.
+_IGNORED_CONSOLE_SUBSTRINGS = ("ipapi.co", "/api/v1/auth/")
 
 
 def _is_ignored_console(msg) -> bool:
