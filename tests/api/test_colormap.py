@@ -1,6 +1,7 @@
 # tests/api/test_colormap.py
 import httpx
 import os
+import pytest
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://api:8000")
 
@@ -257,3 +258,76 @@ def test_deprecated_product_colormap_404_has_detail_field():
         response = client.get(f"{PRODUCTS_PREFIX}/INVALID_PRODUCT_XYZ_99/colormap")
     data = response.json()
     assert "detail" in data
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/colormap/cache/invalidate  (admin only)
+# ---------------------------------------------------------------------------
+
+ADMIN_USER = os.getenv("BOOTSTRAP_ADMIN_USERNAME")
+ADMIN_PASS = os.getenv("BOOTSTRAP_ADMIN_PASSWORD")
+
+# skipif with a reason (not a plain skip): these tests need the admin account db-init creates from BOOTSTRAP_ADMIN_*.
+needs_admin = pytest.mark.skipif(not (ADMIN_USER and ADMIN_PASS), reason="BOOTSTRAP_ADMIN_* not set")
+
+_ADMIN_COOKIE = {}
+
+
+def _admin_cookie_header():
+    """Cookie header of the bootstrap admin (the login happens once per test run)."""
+    if not _ADMIN_COOKIE:
+        with httpx.Client(base_url=API_BASE_URL) as client:
+            response = client.post("/api/v1/auth/login", json={"username": ADMIN_USER, "password": ADMIN_PASS})
+            assert response.status_code == 200, f"admin login failed: {response.status_code}"
+            access = next(cookie for cookie in client.cookies.jar if cookie.name.endswith("webmet_access"))
+            _ADMIN_COOKIE["value"] = f"{access.name}={access.value}"
+    return {"Cookie": _ADMIN_COOKIE["value"]}
+
+
+def test_colormap_cache_invalidate_without_session_returns_401():
+    """POST /colormap/cache/invalidate without a session must return 401."""
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.post(f"{COLORMAP_PREFIX}/cache/invalidate")
+    assert response.status_code == 401
+    assert "detail" in response.json()
+
+
+def test_colormap_cache_invalidate_with_garbage_cookie_returns_401():
+    """POST /colormap/cache/invalidate with a forged access cookie must return 401."""
+    headers = {"Cookie": "webmet_access=garbage; __Host-webmet_access=garbage"}
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.post(f"{COLORMAP_PREFIX}/cache/invalidate", headers=headers)
+    assert response.status_code == 401
+
+
+@needs_admin
+def test_colormap_cache_invalidate_returns_200():
+    """POST /colormap/cache/invalidate must return HTTP 200 for an admin."""
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.post(f"{COLORMAP_PREFIX}/cache/invalidate", headers=_admin_cookie_header())
+    assert response.status_code == 200
+
+
+@needs_admin
+def test_colormap_cache_invalidate_returns_json():
+    """POST /colormap/cache/invalidate must return valid JSON with correct content type."""
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.post(f"{COLORMAP_PREFIX}/cache/invalidate", headers=_admin_cookie_header())
+    assert "application/json" in response.headers["content-type"]
+
+
+@needs_admin
+def test_colormap_cache_invalidate_response_has_message():
+    """POST /colormap/cache/invalidate must return a string 'message' field."""
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        data = client.post(f"{COLORMAP_PREFIX}/cache/invalidate", headers=_admin_cookie_header()).json()
+    assert isinstance(data["message"], str)
+
+
+@needs_admin
+def test_colormap_cache_invalidate_foreign_origin_returns_403():
+    """POST /colormap/cache/invalidate from a foreign Origin must be rejected."""
+    headers = {**_admin_cookie_header(), "Origin": "https://evil.example"}
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.post(f"{COLORMAP_PREFIX}/cache/invalidate", headers=headers)
+    assert response.status_code == 403
