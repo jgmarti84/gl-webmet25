@@ -1,6 +1,6 @@
 # api/app/auth/dependencies.py
 """FastAPI dependencies. Routers only import from here."""
-from typing import Optional
+from typing import Callable, Optional
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -47,7 +47,7 @@ def get_optional_user(request: Request, db: Session = Depends(get_db)) -> Option
     return _user_from_request(request, db)
 
 
-def require_role(role: str):
+def require_role(role: str) -> Callable[..., User]:
     def dependency(user: User = Depends(get_current_user)) -> User:
         if user.role != role:
             raise HTTPException(status_code=403, detail="No tenés permisos para esta acción")

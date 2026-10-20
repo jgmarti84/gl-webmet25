@@ -1,6 +1,6 @@
 # api/app/routers/auth.py
 """Login, refresh, logout and current user."""
-from typing import Optional
+from typing import Optional, Tuple, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
@@ -28,7 +28,7 @@ def _me(user: User) -> MeResponse:
     )
 
 
-def _client_info(request: Request):
+def _client_info(request: Request) -> Tuple[Optional[str], Optional[str]]:
     ip = request.client.host if request.client else None
     return request.headers.get("user-agent"), ip
 
@@ -43,7 +43,9 @@ def _unauthorized(detail: str, code: Optional[str] = None) -> JSONResponse:
 
 
 @router.post("/login", response_model=MeResponse, dependencies=[Depends(check_origin)])
-def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+def login(
+    payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)
+) -> MeResponse:
     try:
         user = service.authenticate(db, payload.username, payload.password)
     except service.AuthError:
@@ -59,7 +61,9 @@ def login(payload: LoginRequest, request: Request, response: Response, db: Sessi
 
 
 @router.post("/refresh", response_model=MeResponse, dependencies=[Depends(check_origin)])
-def refresh(request: Request, response: Response, db: Session = Depends(get_db)):
+def refresh(
+    request: Request, response: Response, db: Session = Depends(get_db)
+) -> Union[MeResponse, JSONResponse]:
     token = request.cookies.get(refresh_cookie_name())
     if not token:
         return _unauthorized("No autenticado")
@@ -81,7 +85,7 @@ def refresh(request: Request, response: Response, db: Session = Depends(get_db))
 
 
 @router.post("/logout", status_code=204, dependencies=[Depends(check_origin)])
-def logout(request: Request, db: Session = Depends(get_db)):
+def logout(request: Request, db: Session = Depends(get_db)) -> Response:
     token = request.cookies.get(refresh_cookie_name())
     if token:
         service.revoke_session_by_token(db, token)
@@ -92,5 +96,5 @@ def logout(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=MeResponse)
-def me(user: User = Depends(get_current_user)):
+def me(user: User = Depends(get_current_user)) -> MeResponse:
     return _me(user)

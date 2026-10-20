@@ -43,12 +43,14 @@ def _rule(exc: user_admin.UserRuleError) -> HTTPException:
 
 
 @router.get("", response_model=List[UserResponse])
-def list_users(db: Session = Depends(get_db), actor: User = Depends(require_admin)):
+def list_users(db: Session = Depends(get_db), actor: User = Depends(require_admin)) -> List[UserResponse]:
     return [_response(u) for u in user_admin.list_users(db)]
 
 
 @router.post("", response_model=UserResponse, status_code=201)
-def create_user(payload: UserCreate, db: Session = Depends(get_db), actor: User = Depends(require_admin)):
+def create_user(
+    payload: UserCreate, db: Session = Depends(get_db), actor: User = Depends(require_admin)
+) -> UserResponse:
     try:
         user = user_admin.create(db, payload.model_dump())
     except user_admin.UserRuleError as exc:
@@ -59,14 +61,14 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), actor: User 
 
 
 @router.get("/{user_id}", response_model=UserResponse)
-def get_user(user_id: int, db: Session = Depends(get_db), actor: User = Depends(require_admin)):
+def get_user(user_id: int, db: Session = Depends(get_db), actor: User = Depends(require_admin)) -> UserResponse:
     return _response(_get_or_404(db, user_id))
 
 
 @router.patch("/{user_id}", response_model=UserResponse)
 def update_user(
     user_id: int, payload: UserUpdate, db: Session = Depends(get_db), actor: User = Depends(require_admin)
-):
+) -> UserResponse:
     user = _get_or_404(db, user_id)
     try:
         user_admin.update_user(db, actor, user, payload.model_dump(exclude_unset=True))
@@ -80,7 +82,7 @@ def update_user(
 @router.post("/{user_id}/reset-password", status_code=204)
 def reset_password(
     user_id: int, payload: PasswordReset, db: Session = Depends(get_db), actor: User = Depends(require_admin)
-):
+) -> Response:
     user = _get_or_404(db, user_id)
     try:
         user_admin.reset_password(db, actor, user, payload.password)
@@ -91,7 +93,9 @@ def reset_password(
 
 
 @router.post("/{user_id}/revoke-sessions", status_code=204)
-def revoke_sessions(user_id: int, db: Session = Depends(get_db), actor: User = Depends(require_admin)):
+def revoke_sessions(
+    user_id: int, db: Session = Depends(get_db), actor: User = Depends(require_admin)
+) -> Response:
     user = _get_or_404(db, user_id)
     revoke_all_sessions(db, user)
     db.commit()
