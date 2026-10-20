@@ -20,6 +20,10 @@ class IndexerSettings(BaseSettings):
     logs_path: str = Field(default="/logs", alias="LOGS_PATH")
     scan_interval_seconds: int = Field(default=30, alias="SCAN_INTERVAL")
     file_pattern: str = Field(default="*.tif", alias="FILE_PATTERN")
+    # 3D Cartesian volumes ("NC cubes") written by radarlib's product daemon.
+    # Unlike TOPS_AND_CORES_DIR, which main.py reads ad hoc with os.getenv, this
+    # goes through settings so it gets the same validation as everything else.
+    nccube_dir: str = Field(default="/nccube", alias="NCCUBE_DIR")
     
     # Raw radar codes string from env (we parse it in the property).
     # Keep this as a string to avoid pydantic attempting to `json.loads` the env value

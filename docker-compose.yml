@@ -88,9 +88,11 @@ services:
       COMPUTE_CHECKSUM: "false"
       RADAR_CODES: "RMA1, RMA2, RMA3, RMA4, RMA5, RMA6, RMA7, RMA8, RMA9, RMA10, RMA11, RMA12, RMA13, RMA14, RMA15, RMA16, RMA17, RMA18, RMA20, AR5, AR7, AR8"   # Optional: limit to specific radars
       TOPS_AND_CORES_DIR: /tops_and_cores
+      NCCUBE_DIR: /nccube
     volumes:
       - ../product_output:/product_output
       - ../tops_and_cores:/tops_and_cores
+      - ../nccube:/nccube
       - ../logs:/logs
     depends_on:
       radar_db:
@@ -130,6 +132,9 @@ services:
     volumes:
       - ../product_output:/product_output:ro
       - ../tops_and_cores:/tops_and_cores:ro
+      # Read-only so the API can serve cube availability; the tracking sidecar
+      # that actually reads these arrives in the next phase.
+      - ../nccube:/nccube:ro
     ports:
       - "8000:8000"
     depends_on:

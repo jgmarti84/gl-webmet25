@@ -5,7 +5,7 @@ COG file registration and metadata extraction.
 import os
 import hashlib
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
@@ -481,3 +481,117 @@ class TopsAndCoresRegistrar:
                 f"Failed to mark TopsAndCores as missing for {file_path}: {e}"
             )
             self.session.rollback()
+
+
+class NCCubeRegistrar:
+    """Handles registration of NC cube (3D Cartesian volume) files.
+
+    Two deliberate differences from the COG and TopsAndCores registrars:
+
+    * **The file is never opened.** Everything needed is in the filename plus
+      ``stat()``. The indexer image is Alpine with no netCDF library, and a cube
+      is ~15 MB — reading them on every scan would cost far more than the
+      metadata is worth.
+    * **Vanished files have their rows deleted, not marked MISSING.** Cubes are
+      pruned on a short retention, so the churn is constant and nothing in
+      webmet25 deletes rows automatically; marking them would grow the table
+      without bound for no benefit.
+    """
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def register(self, file_path: str, parsed) -> None:
+        """
+        Register a single NC cube file in the database.
+
+        Args:
+            file_path: Absolute path to the NetCDF file on disk.
+            parsed:    :class:`~indexer.parser.ParsedNCCubeInfo` returned by
+                       :class:`~indexer.parser.NCCubeFilenameParser`.
+        """
+        from radar_db.models import NCCube, Radar, COGStatus
+
+        existing = self.session.query(NCCube).filter_by(file_path=file_path).first()
+        if existing is not None and existing.status == COGStatus.AVAILABLE:
+            logger.debug(f"NC cube already indexed: {file_path}")
+            return
+
+        # The FK would raise on an unknown radar; checking first turns that into
+        # a skip with an explanation instead of a failed scan cycle.
+        radar = self.session.query(Radar).filter_by(code=parsed.radar_code).first()
+        if radar is None:
+            logger.warning(
+                f"NC cube skipped — radar '{parsed.radar_code}' is not in the "
+                f"radars table: {file_path}"
+            )
+            return
+
+        try:
+            stat = os.stat(file_path)
+        except OSError as e:
+            logger.warning(f"NC cube skipped — cannot stat {file_path}: {e}")
+            return
+
+        file_size_bytes = stat.st_size
+        file_mtime = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+
+        if existing is not None:
+            existing.status = COGStatus.AVAILABLE
+            existing.file_size_bytes = file_size_bytes
+            existing.file_mtime = file_mtime
+            record = existing
+        else:
+            record = NCCube(
+                radar_code=parsed.radar_code,
+                observation_time=parsed.observation_time,
+                file_path=file_path,
+                file_name=Path(file_path).name,
+                file_size_bytes=file_size_bytes,
+                file_mtime=file_mtime,
+                status=COGStatus.AVAILABLE,
+                strategy=parsed.strategy,
+                vol_nr=parsed.vol_nr,
+            )
+            self.session.add(record)
+
+        try:
+            self.session.flush()
+            logger.info(
+                f"Indexed NC cube: {record.file_name} "
+                f"({file_size_bytes / 1e6:.1f} MB, {parsed.radar_code} "
+                f"@ {parsed.observation_time:%Y-%m-%d %H:%M:%S}Z)"
+            )
+        except Exception as e:
+            logger.error(f"Failed to index NC cube {file_path}: {e}")
+            self.session.rollback()
+
+    def delete_record(self, file_path: str) -> bool:
+        """
+        Delete the row for a cube that is no longer on disk.
+
+        Cubes are deliberately deleted rather than marked MISSING — see the
+        class docstring.
+
+        Args:
+            file_path: Absolute path previously stored in ``file_path``.
+
+        Returns:
+            True if a row was removed.
+        """
+        from radar_db.models import NCCube
+
+        record = self.session.query(NCCube).filter_by(file_path=file_path).first()
+        if record is None:
+            logger.debug(f"NC cube delete: record not found for {file_path}")
+            return False
+
+        try:
+            self.session.delete(record)
+            self.session.flush()
+            logger.info(f"NC cube pruned from index: {file_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete NC cube record for {file_path}: {e}")
+            self.session.rollback()
+            return False

@@ -56,6 +56,7 @@ class Radar(Base):
     # Relationships
     cog_files = relationship("RadarCOG", back_populates="radar", cascade="all, delete-orphan")
     tops_and_cores = relationship("TopsAndCores", back_populates="radar", cascade="all, delete-orphan")
+    nccubes = relationship("NCCube", back_populates="radar", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Radar(code='{self.code}', title='{self.title}')>"
@@ -343,3 +344,65 @@ class TopsAndCores(Base):
 
     def __repr__(self):
         return f"<TopsAndCores(id={self.id}, radar='{self.radar_code}', file='{self.file_name}')>"
+
+
+class NCCube(Base):
+    """
+    NC cube reference — a 3D Cartesian radar volume on disk.
+
+    Indexed by the watcher from *_NCCUBE.nc files produced by radarlib's product
+    daemon. These are the input to on-demand storm tracking, so the main job of
+    this table is to answer "which volumes can be tracked, and where are they" —
+    in particular ``min(observation_time)`` is how the frontend knows how far
+    back its time picker may go.
+
+    Unlike COGs and tops & cores, rows are **deleted** rather than marked
+    MISSING when the file disappears. Cubes are pruned on a short retention
+    (7 days by default) so the churn is constant, and nothing in webmet25
+    deletes rows automatically — marking them would grow this table without
+    bound for no benefit, since "older than the retention window" is already
+    inferable.
+
+    Metadata comes from the filename and stat() only; the file is never opened.
+    The indexer image is Alpine with no netCDF library, and everything needed
+    is in the name. Consequence: the set of fields *inside* a cube is not
+    queryable here.
+    """
+    __tablename__ = 'nccubes'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Foreign key
+    radar_code = Column(String(16), ForeignKey('radars.code', ondelete='CASCADE'),
+                        nullable=False, index=True)
+
+    # Temporal information
+    observation_time = Column(DateTime(timezone=True), nullable=False, index=True)
+
+    # File information
+    file_path = Column(String(512), nullable=False, unique=True)
+    file_name = Column(String(256), nullable=False)
+    file_size_bytes = Column(Integer, nullable=True)
+    file_mtime = Column(DateTime(timezone=True), nullable=True)
+
+    # Status
+    status = Column(SQLEnum(COGStatus), nullable=False, default=COGStatus.AVAILABLE, index=True)
+
+    # Filename components
+    strategy = Column(String(32), nullable=True)
+    vol_nr = Column(String(16), nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    radar = relationship("Radar", back_populates="nccubes")
+
+    __table_args__ = (
+        # The sidecar's only query shape: one radar, one time window, ordered.
+        Index('idx_nccube_radar_time', 'radar_code', 'observation_time'),
+    )
+
+    def __repr__(self):
+        return f"<NCCube(id={self.id}, radar='{self.radar_code}', file='{self.file_name}')>"

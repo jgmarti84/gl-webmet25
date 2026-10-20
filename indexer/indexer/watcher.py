@@ -352,3 +352,148 @@ class TopsAndCoresWatcher:
                 logger.error(f"TopsAndCores session error: {e}")
 
             time.sleep(self.scan_interval)
+
+
+class NCCubeWatcher:
+    """
+    Watches for new NC cube files (3D Cartesian volumes) and registers them.
+
+    Files must match ``*_NCCUBE.nc`` and live under ``nccube_dir`` recursively,
+    in radarlib's ``{RADAR}/YYYY/MM/DD/`` layout.
+
+    Discovery is a **full** recursive walk rather than the today/yesterday
+    window :class:`COGWatcher` uses. That window exists because a full walk over
+    ~130k COGs took minutes; the cube tree is bounded by a short retention
+    (days, not months) so the walk is cheap. More importantly, radarlib's
+    live-first download interleaves backfill, so a volume from several days ago
+    can produce a cube written into an older day directory *today* — a
+    today/yesterday window would silently never index it.
+
+    Rows for vanished files are **deleted**, not marked MISSING. See
+    :class:`~indexer.registrar.NCCubeRegistrar`.
+    """
+
+    _FILE_PATTERN = "*_NCCUBE.nc"
+
+    def __init__(self, nccube_dir: str):
+        self.nccube_dir = Path(nccube_dir)
+        self.scan_interval = settings.scan_interval_seconds
+        self._warned_missing_dir: bool = False
+        self._registered_files: Set[str] = set()
+        self._prune_cycles: int = 0
+        self._prune_interval: int = 20  # prune vanished cubes every ~10 min at a 30 s interval
+
+    def discover_files(self) -> list:
+        """
+        Recursively discover all ``*_NCCUBE.nc`` files.
+
+        Returns:
+            List of :class:`~pathlib.Path` objects.
+        """
+        return list(self.nccube_dir.rglob(self._FILE_PATTERN))
+
+    def run_scan(self, session) -> int:
+        """
+        Run a single scan cycle.
+
+        Args:
+            session: SQLAlchemy session (managed by the caller).
+
+        Returns:
+            Number of newly registered files.
+        """
+        from indexer.parser import NCCubeFilenameParser
+        from indexer.registrar import NCCubeRegistrar
+        from radar_db.models import NCCube, COGStatus
+
+        if not self.nccube_dir.exists():
+            if not self._warned_missing_dir:
+                logger.warning(
+                    f"NCCUBE_DIR does not exist: {self.nccube_dir}. "
+                    f"Skipping scan. This warning will not repeat."
+                )
+                self._warned_missing_dir = True
+            return 0
+
+        # Reset warning if the directory reappears
+        self._warned_missing_dir = False
+
+        files = self.discover_files()
+        logger.debug(
+            f"NC cube scan: found {len(files)} candidate file(s), "
+            f"{len(self._registered_files)} already registered"
+        )
+
+        filename_parser = NCCubeFilenameParser()
+        registrar = NCCubeRegistrar(session)
+
+        registered_count = 0
+
+        for file_path in files:
+            str_path = str(file_path)
+
+            # Skip files already processed in a previous cycle
+            if str_path in self._registered_files:
+                continue
+
+            try:
+                parsed = filename_parser.parse(str_path)
+            except ValueError as exc:
+                logger.warning(f"NC cube skipping unrecognised file: {file_path} — {exc}")
+                self._registered_files.add(str_path)
+                continue
+
+            registrar.register(str_path, parsed)
+            self._registered_files.add(str_path)
+            registered_count += 1
+
+        # Drop rows for cubes the retention sweep has removed. Throttled, and
+        # unscoped by date on purpose: a cube's row must not outlive its file,
+        # and the table is small enough that a full scan of AVAILABLE rows is
+        # cheap.
+        self._prune_cycles += 1
+        if self._prune_cycles >= self._prune_interval:
+            self._prune_cycles = 0
+            available_records = session.query(NCCube).filter(
+                NCCube.status == COGStatus.AVAILABLE,
+            ).all()
+            pruned = 0
+            for record in available_records:
+                if not Path(record.file_path).exists():
+                    if registrar.delete_record(record.file_path):
+                        pruned += 1
+                    self._registered_files.discard(record.file_path)
+            if pruned:
+                logger.info(f"NC cube prune: removed {pruned} row(s) for deleted file(s)")
+
+        return registered_count
+
+    def run_forever(self, get_session_func) -> None:
+        """
+        Run the watcher continuously using the same loop pattern as
+        :class:`COGWatcher`.
+
+        Args:
+            get_session_func: Callable that returns a new SQLAlchemy session.
+        """
+        logger.info(f"Starting NC cube watcher on {self.nccube_dir}")
+        logger.info(f"Scan interval: {self.scan_interval} seconds")
+
+        while True:
+            try:
+                session = get_session_func()
+                try:
+                    count = self.run_scan(session)
+                    if count > 0:
+                        logger.info(f"NC cube scan complete: processed {count} file(s)")
+                    session.commit()
+                except Exception as e:
+                    logger.error(f"NC cube scan error: {e}")
+                    session.rollback()
+                finally:
+                    session.close()
+
+            except Exception as e:
+                logger.error(f"NC cube session error: {e}")
+
+            time.sleep(self.scan_interval)

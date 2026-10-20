@@ -39,7 +39,8 @@ def wait_for_database(max_retries: int = 30, delay: int = 2) -> bool:
 def run_indexer():
     """Run the indexer service."""
     from radar_db import db_manager
-    from indexer.watcher import COGWatcher, TopsAndCoresWatcher
+    from indexer.watcher import COGWatcher, NCCubeWatcher, TopsAndCoresWatcher
+    from indexer.config import settings
 
     # Wait for database
     if not wait_for_database():
@@ -63,6 +64,17 @@ def run_indexer():
     )
     tc_thread.start()
     logger.info(f"TopsAndCores watcher started (dir={tops_and_cores_dir})")
+
+    # Start NCCubeWatcher in a background thread
+    cube_watcher = NCCubeWatcher(settings.nccube_dir)
+    cube_thread = threading.Thread(
+        target=cube_watcher.run_forever,
+        args=(db_manager.get_session_direct,),
+        name="nccube-watcher",
+        daemon=True,
+    )
+    cube_thread.start()
+    logger.info(f"NC cube watcher started (dir={settings.nccube_dir})")
 
     # Run COGWatcher on the main thread (blocks forever)
     watcher = COGWatcher()

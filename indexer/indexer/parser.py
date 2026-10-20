@@ -328,3 +328,66 @@ class TopsAndCoresFilenameParser:
             vol_nr=groups["vol_nr"],
             observation_time=observation_time,
         )
+
+
+@dataclass
+class ParsedNCCubeInfo:
+    """Parsed information from an NC cube filename."""
+
+    radar_code: str
+    strategy: str
+    vol_nr: str
+    observation_time: datetime  # Always timezone-aware UTC
+
+
+class NCCubeFilenameParser:
+    """
+    Parser for NC cube (3D Cartesian volume) filenames.
+
+    Expected format::
+
+        {radar_code}_{strategy}_{vol_nr}_{timestamp}_NCCUBE.nc
+
+    Where ``{timestamp}`` is ``YYYYMMDDTHHMMSSZ``. Deliberately the same token
+    layout as the COG and TopsAndCores conventions, so one indexer convention
+    covers every artifact radarlib publishes.
+
+    Example::
+
+        RMA1_0315_01_20261013T140818Z_NCCUBE.nc
+    """
+
+    _PATTERN = re.compile(
+        r"^(?P<radar>[A-Z0-9]+)_(?P<strategy>\d{4})_(?P<vol_nr>\d{2})"
+        r"_(?P<datetime>\d{8}T\d{6}Z)_NCCUBE\.nc$"
+    )
+
+    def parse(self, file_path: str) -> ParsedNCCubeInfo:
+        """
+        Parse an NC cube filename.
+
+        Args:
+            file_path: Full path or filename of the NetCDF file.
+
+        Returns:
+            :class:`ParsedNCCubeInfo` with extracted metadata.
+
+        Raises:
+            ValueError: If the filename does not match the expected pattern.
+        """
+        filename = Path(file_path).name
+        match = self._PATTERN.match(filename)
+        if not match:
+            raise ValueError(
+                f"Filename '{filename}' does not match the NC cube pattern "
+                f"'<RADAR>_<strategy>_<vol_nr>_<YYYYMMDDTHHMMSSZ>_NCCUBE.nc'"
+            )
+
+        groups = match.groupdict()
+
+        return ParsedNCCubeInfo(
+            radar_code=groups["radar"],
+            strategy=groups["strategy"],
+            vol_nr=groups["vol_nr"],
+            observation_time=_parse_compact_datetime_utc(groups["datetime"]),
+        )
