@@ -102,6 +102,35 @@ services:
     restart: unless-stopped
 
   # ==========================================================================
+  # STORM TRACKING SIDECAR
+  # ==========================================================================
+  # Runs gl-tracker on demand over the NC cubes radarlib produced. Kept out of
+  # the api container deliberately: its stack (GDAL + tathu + rtree +
+  # scikit-image) is heavy, and tracking is CPU-bound for seconds at a time,
+  # which would starve the api's tile render pool.
+  tracking:
+    build:
+      context: .
+      dockerfile: tracking/Dockerfile
+    container_name: radar_tracking
+    environment:
+      DB_HOST: radar_db
+      DB_PORT: 5432
+      DB_NAME: radar_prod_db
+      DB_USER: radar
+      DB_PASSWORD: radarpass
+      NCCUBE_DIR: /nccube
+    volumes:
+      # Read-only: the sidecar consumes cubes, radarlib owns their lifecycle.
+      - ../nccube:/nccube:ro
+    ports:
+      - "8001:8001"
+    depends_on:
+      radar_db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ==========================================================================
   # BACKEND API
   # ==========================================================================
   api:

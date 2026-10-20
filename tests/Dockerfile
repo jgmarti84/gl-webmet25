@@ -40,6 +40,12 @@ COPY api/ /app/api/
 # Copy indexer source
 COPY indexer/indexer/ /app/indexer/
 
+# Copy tracking sidecar source.
+# Only the parts that do not need gl-tracker are testable here — volume
+# resolution, config mapping, schemas. The driver and GeoJSON serialisation
+# need gl-tracker on the path and are exercised in the tracking image itself.
+COPY tracking/tracking_api/ /app/tracking_api/
+
 # Copy tests
 COPY tests/ /app/tests/
 

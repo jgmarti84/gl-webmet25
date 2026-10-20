@@ -1,0 +1,19 @@
+# tracking/requirements.txt
+#
+# Web layer + DB access only. The scientific stack (GDAL, tathu, numpy, scipy,
+# shapely, netCDF4, ...) is installed directly in the Dockerfile, because the
+# GDAL bindings must be pinned to the system GDAL version and tathu comes from
+# git rather than PyPI.
+
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# Pinned <2.1 to match the rest of the stack: SQLAlchemy 2.1 switched the
+# default "postgresql://" DBAPI from psycopg2 to psycopg (v3).
+sqlalchemy>=2.0.0,<2.1
+alembic>=1.13.0
+psycopg2-binary>=2.9.9
+geoalchemy2>=0.14.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+python-dotenv>=1.0.0
