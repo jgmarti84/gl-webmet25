@@ -178,11 +178,31 @@ curl http://localhost/api/v1/health
 # Ver estadísticas de caché de frames/tiles (L1 LRU + L2 Redis)
 curl http://localhost/api/v1/tiles/cache/stats
 
-# Vaciar la caché en proceso de colormaps (tras editar colormaps en el panel de administración)
-curl -X POST http://localhost/api/v1/colormap/cache/invalidate
+# Vaciar la caché en proceso de colormaps. Requiere una sesión de admin (el panel de administración y
+# scripts/import_colormap.py ya lo hacen por vos); con curl, hay que loguearse primero:
+curl -c cj.txt -X POST http://localhost/api/v1/auth/login -H "Content-Type: application/json" -d '{"username":"<admin>","password":"<password>"}'
+curl -b cj.txt -X POST http://localhost/api/v1/colormap/cache/invalidate
 ```
+
+## 6. Gestión de Usuarios
+
+Ejecutar desde la raíz del repo (`gl-webmet25`). Usan la imagen de `db-init`, así que no requieren preparación extra.
+
+```bash
+# Crear un admin (pide la contraseña dos veces, sin mostrarla)
+make create-admin U=maria
+
+# Poner una contraseña nueva a cualquier usuario y cerrar todas sus sesiones
+make reset-password U=maria
+```
+
+- El **primer admin** lo crea automáticamente `db-init` a partir de `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` cuando no hay usuarios. Tras el primer arranque, ejecutar `make reset-password U=<ese usuario>` y borrar ambas variables del `.env`.
+- Un admin **no puede resetear su propia contraseña desde el panel**; usar `make reset-password` en el servidor.
+- Los demás usuarios se gestionan desde el panel de administración (**Usuarios**): crear, cambiar rol, activar/desactivar, resetear contraseña, cerrar sesiones. Los usuarios nunca se borran, solo se desactivan.
+- Si un usuario queda bloqueado tras 5 logins fallidos, puede reintentar a los 15 minutos, o un admin puede resetearle la contraseña.
+- Si la API arranca sin ningún admin activo, deja un aviso en el log con el comando para crearlo.
 
 ---
 
-**Versión del Documento:** 1.0.0  
-**Última Actualización:** 8 de julio de 2026
+**Versión del Documento:** 1.1.0  
+**Última Actualización:** 20 de octubre de 2026

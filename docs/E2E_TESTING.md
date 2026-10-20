@@ -17,7 +17,7 @@ filtering/sorting, the colormap creator canvas + drag, and the iOS-style time wh
 | `test_admin_panel.py` | Admin panel: load, OHMC logo, back-to-map, per-column filters + global search, text-filter row hiding, sortable columns + ▲/▼ indicator, icon row actions, colormap creator (gradient canvas, draggable ticks, "Cerrar" label) |
 | `test_radar_ordering.py` | Main map: load, radar list ordering rule (RMA before AR, `RMA00` last, active before inactive), admin link present |
 | `test_time_wheel.py` | Custom time range: both wheels render (24h + 60m = 84 items), two columns + selection band, tap-to-select drives the canonical input |
-| `conftest.py` | Shared fixtures: Basic-Auth context, JS-error capture, screenshot-on-failure |
+| `conftest.py` | Shared fixtures: login helper + shared admin session, JS-error capture, screenshot-on-failure |
 
 > ⚠️ These tests require the **v2 frontend** — the time wheel is wired only by `js/v2/app.js`. Pointing them at a v1 frontend will fail `test_time_wheel.py`.
 
@@ -33,7 +33,8 @@ The tests are environment-agnostic Python + Playwright. To run them anywhere you
 | **pip packages** | `pytest`, `pytest-asyncio`, `pytest-playwright` (see [`tests/requirements.txt`](../tests/requirements.txt)) |
 | **Playwright Chromium** | `playwright install chromium` + system libs `playwright install-deps chromium` |
 | **A running API** | seeded DB (radars, products, the 8 system colormaps). Reachable at `API_BASE_URL`. |
-| **A running v2 frontend** | nginx serving the v2 build with the admin Basic-Auth htpasswd. Reachable at `FRONTEND_URL`. |
+| **A running v2 frontend** | nginx serving the v2 build. Reachable at `FRONTEND_URL`. |
+| **An admin account** | created by `db-init` from `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` (see below). |
 | **Network reachability** | the test host must reach `FRONTEND_URL` (the frontend in turn proxies `/api/v1/*` to the API). |
 
 ### Environment variables
@@ -42,13 +43,15 @@ The tests are environment-agnostic Python + Playwright. To run them anywhere you
 |-----|------------------------|---------|
 | `FRONTEND_URL` | `http://frontend-v2:80` | Base URL of the **v2** frontend under test |
 | `API_BASE_URL` | `http://api:8000` | API base (used by the API contract tests, not strictly by e2e) |
-| `ADMIN_USERNAME` | `admin` | HTTP Basic Auth user for `/admin` — **must match** the frontend's htpasswd |
-| `ADMIN_PASSWORD` | `change-me` | HTTP Basic Auth password for `/admin` |
+| `BOOTSTRAP_ADMIN_USERNAME` | `admin` | Username of the admin account the tests log in with |
+| `BOOTSTRAP_ADMIN_PASSWORD` | *(none)* | Its password — required, tests cannot log in without it |
 
-The admin panel is behind nginx Basic Auth; the frontend container generates its
-`admin.htpasswd` from `ADMIN_USERNAME`/`ADMIN_PASSWORD` at startup
-([`frontend/docker-entrypoint.sh`](../frontend/docker-entrypoint.sh)). The tests authenticate
-with the same values via Playwright `http_credentials`, so **keep them in sync**.
+The admin panel requires a login. The tests sign in through the `/login` form with the account that
+`db-init` creates from the same `BOOTSTRAP_ADMIN_*` variables of your `.env`.
+
+nginx limits `/api/v1/auth/login` to 10 requests/minute per IP, so the admin panel tests **share one
+login**: its browser state is reused by every test and renewed every 10 minutes (the access cookie
+lives 15). Do not re-run the suite more than a few times per minute.
 
 ---
 
@@ -75,12 +78,12 @@ docker exec radar_tests pytest tests/e2e/test_time_wheel.py::test_time_wheels_re
 $DC down            # add -v to also drop volumes
 ```
 
-**Custom admin credentials:** set them once in a repo-root `.env` (compose reads it):
+**Admin credentials:** set them once in a repo-root `.env` (compose reads it):
 ```dotenv
-ADMIN_USERNAME=observatorio
-ADMIN_PASSWORD=your-strong-password
+BOOTSTRAP_ADMIN_USERNAME=admin
+BOOTSTRAP_ADMIN_PASSWORD=your-strong-password   # 12+ characters
 ```
-Both the `frontend-v2` and `tests` services pick these up, so auth stays consistent.
+`db-init` creates the account from them and the `tests` service reads the same values, so they stay consistent.
 
 **Screenshots on failure** are written to `tests/e2e/screenshots/` (git-ignored). To copy them out of the container:
 ```bash
@@ -112,8 +115,8 @@ playwright install-deps chromium      # needs sudo on Debian/Ubuntu
 
 # 3. Point the tests at your running services + admin creds
 export FRONTEND_URL="http://localhost:8090"   # your v2 frontend
-export ADMIN_USERNAME="admin"
-export ADMIN_PASSWORD="change-me"
+export BOOTSTRAP_ADMIN_USERNAME="admin"
+export BOOTSTRAP_ADMIN_PASSWORD="your-strong-password"
 
 # 4. Run (PYTHONPATH=tests so the tests can `from conftest import ...`)
 PYTHONPATH=tests pytest tests/e2e/ -v
@@ -128,8 +131,8 @@ PYTHONPATH=tests pytest tests/e2e/ -v
 - run: PYTHONPATH=tests pytest tests/e2e/ -v
   env:
     FRONTEND_URL: http://localhost:8090
-    ADMIN_USERNAME: admin
-    ADMIN_PASSWORD: change-me
+    BOOTSTRAP_ADMIN_USERNAME: admin
+    BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
 ```
 (Start the API + v2 frontend in a prior step / service container, e.g. via
 `docker compose up -d`.)
@@ -148,7 +151,7 @@ PYTHONPATH=tests PWDEBUG=1 pytest tests/e2e/test_admin_panel.py # Playwright Ins
 | Symptom | Cause / fix |
 |---------|-------------|
 | `error while loading shared libraries: libnspr4.so` | Chromium OS libs missing → `playwright install-deps chromium` (sudo). |
-| Admin tests get a 401 / blank page | `ADMIN_USERNAME`/`ADMIN_PASSWORD` don't match the frontend's htpasswd. Sync them (and rebuild/restart the frontend if you changed its env). |
+| Admin tests end up on `/login`, or get 401 / 429 | `BOOTSTRAP_ADMIN_*` don't match an existing admin account, or `/api/v1/auth/login` was rate limited (10/min per IP): wait a minute and re-run. |
 | `test_time_wheels_render` fails with `items=0` | `FRONTEND_URL` points at a **v1** frontend. Point it at the v2 frontend. |
 | `net::ERR_CONNECTION_REFUSED` | `FRONTEND_URL` not reachable from the test host (wrong host/port, or frontend not up). |
 | Radar order / empty radar list | API not seeded. Run `python -m radar_db.manage seed` (the `db-init` container does this automatically). |

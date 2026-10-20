@@ -15,7 +15,8 @@ El frontend de WebMet25 es una aplicación JavaScript modular construida con ES6
 frontend/public/
 ├── index.html                 # Main multi-radar map page
 ├── radar.html                 # One-radar detail page (radar.html?code=AR5)
-├── admin.html                 # Admin panel SPA (served at /admin, Basic Auth)
+├── login.html                 # Página de login (/login)
+├── admin.html                 # Admin panel SPA (served at /admin, login required)
 ├── css/
 │   ├── styles.css            # Main app UI styling (dark theme)
 │   └── admin.css             # Admin panel styling (modern-light theme)
@@ -429,7 +430,7 @@ Pipeline de composición en canvas:
 
 **Archivo:** [`frontend/public/admin.html`](../../frontend/public/admin.html)
 
-**Responsabilidad:** Esqueleto DOM del panel de administración — barra lateral (logo OHMC + navegación de secciones agrupadas + "← Volver al mapa"), encabezado con botón de retroceso, un modal de formulario genérico y el modal del creador de colormap. Se sirve en `/admin` detrás de la autenticación HTTP Basic Auth de nginx.
+**Responsabilidad:** Esqueleto DOM del panel de administración — barra lateral (logo OHMC + navegación de secciones agrupadas + "← Volver al mapa"), encabezado con botón de retroceso, un modal de formulario genérico y el modal del creador de colormap. Se sirve en `/admin` como página estática; el login y el rol `admin` los exige la API (sin sesión, la página redirige a `/login`).
 
 **Scripts cargados:** `js/admin.js` (que importa `js/admin-api.js`). Con estilo de `css/admin.css` (tema moderno claro).
 
@@ -437,7 +438,7 @@ Pipeline de composición en canvas:
 
 ## Panel de administración
 
-> Una aplicación de administración de página única independiente para CRUD sobre cada tabla de la base de datos, más un creador/editor visual de colormap. Independiente del frontend de visualización v1/v2. **Autenticación:** HTTP Basic Auth temporal de nginx en `/admin` y `/api/v1/admin/*` (ver [`frontend/nginx.conf`](../../frontend/nginx.conf)); **TODO: reemplazar con JWT.**
+> Una aplicación de administración de página única independiente para CRUD sobre cada tabla de la base de datos, más un creador/editor visual de colormap. Independiente del frontend de visualización v1/v2. **Autenticación:** login en `/login` (`login.html` + `js/login.js`, cliente compartido `js/auth-api.js`). El panel carga el usuario actual desde `/api/v1/auth/me`, reintenta una vez por `/api/v1/auth/refresh` ante un 401 y redirige a `/login` cuando la sesión se perdió. La sección **Usuarios** gestiona cuentas (crear, cambiar rol, activar/desactivar, resetear contraseña, cerrar sesiones).
 
 ### A. **admin.js** — Orquestador de administración
 
@@ -534,9 +535,15 @@ radar.html (one-radar detail page)
     ├── v2/constants.js (MS_PER_HOUR, DEFAULT_*, COVERAGE_MODES)
     └── styles.css
 
-admin.html (admin SPA, /admin, Basic Auth)
-├── js/admin.js (CRUD, filters/sort, colormap creator/editor)
-│   └── js/admin-api.js (/api/v1/admin/* client)
+login.html (/login)
+├── js/login.js
+│   └── js/auth-api.js (login, logout, refresh, me)
+└── css/admin.css
+
+admin.html (admin SPA, /admin, login requerido)
+├── js/admin.js (CRUD, filtros/orden, creador/editor de colormaps, usuarios)
+│   ├── js/admin-api.js (cliente /api/v1/admin/*, renueva la sesión ante un 401)
+│   └── js/auth-api.js
 └── css/admin.css (modern-light theme)
 ```
 

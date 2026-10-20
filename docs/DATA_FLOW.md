@@ -254,6 +254,33 @@ cmap_name: str
 # UniqueConstraint: (product_key, cmap_name)
 ```
 
+#### **User** (Application Accounts)
+```python
+id: int (PK)
+username: str (unique, lowercase)     # 3–32 chars: a-z 0-9 . _ -
+full_name, email: str (nullable)      # contact data only
+password_hash: str                    # Argon2id
+role: str                             # 'admin' | 'viewer' (CHECK constraint)
+is_active: bool
+token_version: int                    # +1 invalidates every token of the user
+password_is_bootstrap: bool           # True while the password is BOOTSTRAP_ADMIN_PASSWORD
+failed_login_count: int, locked_until: datetime (nullable)
+last_login_at, created_at, updated_at
+```
+
+#### **UserSession** (Refresh Tokens)
+```python
+id: UUID (PK)
+user_id: int (FK → users.id, ON DELETE CASCADE)
+family_id: UUID                       # all refresh tokens of one login
+token_hash: str (unique)              # SHA-256 of the refresh token; the token only lives in the cookie
+expires_at: datetime                  # idle expiry (last use + 48 h)
+absolute_expires_at: datetime         # login + 7 days, never extended
+revoked_at, replaced_by               # rotation / revocation
+created_at, last_used_at, user_agent, ip
+```
+Reusing an already-rotated refresh token (outside a 10 s race window) revokes the whole family.
+
 ### 3.2 Indexes (Performance)
 
 ```sql
@@ -400,7 +427,7 @@ Backed by `ColormapService` — a thread-safe singleton with a 5-minute TTL cach
 **Router:** [`api/app/routers/admin.py`](../api/app/routers/admin.py) — base path `/api/v1/admin`  
 **Frontend:** [`frontend/public/admin.html`](../frontend/public/admin.html) + [`js/admin.js`](../frontend/public/js/admin.js), served at `/admin`
 
-**Authentication (temporary):** Both `/admin` and `/api/v1/admin/` are behind **nginx HTTP Basic Auth** (`admin.htpasswd`). The public `/api/v1/*` API stays open. ⚠️ TODO: replace with JWT before production.
+**Authentication:** `/api/v1/admin/*` and `/api/v1/admin/users/*` require a logged-in user with role `admin`. Sessions use a 15-minute JWT access cookie and a rotating refresh cookie (48 h idle, 7 days absolute), both `HttpOnly` and `SameSite=Strict`, validated by the API ([`api/app/auth/dependencies.py`](../api/app/auth/dependencies.py)). `/admin` and `/login` are static pages served by nginx without auth. The rest of `/api/v1/*` stays public. State-changing requests also check the `Origin` header against `ALLOWED_ORIGINS`.
 
 **Endpoint groups:**
 
@@ -727,7 +754,15 @@ See §2.2 for the full table of `IndexerSettings` env vars.
 | `db_user` | `DB_USER` | `radar` | DB user |
 | `db_password` | `DB_PASSWORD` | `radarpass` | DB password |
 | `cog_base_path` | `COG_BASE_PATH` | `/product_output` | Root path to COG files |
-| `cors_origins` | `CORS_ORIGINS` | `*` | Comma-separated allowed origins |
+| `cors_origins` | `CORS_ORIGINS` | *(empty = `ALLOWED_ORIGINS`)* | Comma-separated CORS origins |
+| `jwt_secret` | `JWT_SECRET` | — (required) | 32+ characters; the API does not start without it |
+| `allowed_origins` | `ALLOWED_ORIGINS` | *(empty)* | Origins accepted on POST/PUT/PATCH/DELETE |
+| `cookie_secure` | `COOKIE_SECURE` | `true` | `false` only for local HTTP |
+| `access_token_ttl_minutes` | `ACCESS_TOKEN_TTL_MINUTES` | `15` | Access token lifetime |
+| `session_idle_ttl_hours` | `SESSION_IDLE_TTL_HOURS` | `48` | Session expiry without activity |
+| `session_absolute_ttl_days` | `SESSION_ABSOLUTE_TTL_DAYS` | `7` | Maximum session length |
+| `login_max_failed_attempts` | `LOGIN_MAX_FAILED_ATTEMPTS` | `5` | Failed logins before a lockout |
+| `login_lockout_minutes` | `LOGIN_LOCKOUT_MINUTES` | `15` | Lockout duration |
 | `tile_render_threads` | `TILE_RENDER_THREADS` | `8` | Thread pool size for tile rendering |
 | `redis_host` | `REDIS_HOST` | `redis` | Redis hostname |
 | `redis_port` | `REDIS_PORT` | `6379` | Redis port |
@@ -745,7 +780,9 @@ Env vars: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
 
 ### 8.4 Frontend / Nginx Configuration
 
-`ADMIN_USERNAME` and `ADMIN_PASSWORD` are read by `docker-entrypoint.sh` at container startup to generate `/etc/nginx/admin.htpasswd`. Changing them requires rebuilding or restarting the frontend container.
+nginx does not authenticate anyone: it only rate-limits `POST /api/v1/auth/login` (10 requests/minute per IP, burst 5, answers 429). If a proxy (Caddy) sits in front, configure `set_real_ip_from` so the limit uses the real client IP.
+
+`BOOTSTRAP_ADMIN_USERNAME` and `BOOTSTRAP_ADMIN_PASSWORD` are read by the `db-init` service (`manage.py bootstrap-admin`), which creates that admin only when the `users` table is empty. After the first start, change the password with `make reset-password U=<user>` and remove both variables from `.env`.
 
 Nginx also caches OSM and IGN Argenmap tiles locally (30-day and 7-day TTL respectively) to reduce external requests.
 

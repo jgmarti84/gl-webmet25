@@ -218,11 +218,31 @@ curl http://localhost/api/v1/health
 # View frame/tile cache statistics (L1 LRU + L2 Redis)
 curl http://localhost/api/v1/tiles/cache/stats
 
-# Flush the colormap in-process cache (after editing colormaps in the admin panel)
-curl -X POST http://localhost/api/v1/colormap/cache/invalidate
+# Flush the colormap in-process cache. Requires an admin session (the admin panel and
+# scripts/import_colormap.py already do this for you); with curl, log in first:
+curl -c cj.txt -X POST http://localhost/api/v1/auth/login -H "Content-Type: application/json" -d '{"username":"<admin>","password":"<password>"}'
+curl -b cj.txt -X POST http://localhost/api/v1/colormap/cache/invalidate
 ```
+
+## 8. User Management
+
+Run these from the repo root (`gl-webmet25`). They use the `db-init` image, so no extra setup is needed.
+
+```bash
+# Create an admin (prompts for the password twice, nothing is echoed)
+make create-admin U=maria
+
+# Set a new password for any user and close all their sessions
+make reset-password U=maria
+```
+
+- The **first admin** is created automatically by `db-init` from `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` when there are no users. After the first start, run `make reset-password U=<that user>` and remove both variables from `.env`.
+- An admin **cannot reset their own password from the panel**; use `make reset-password` on the server.
+- Other users are managed from the admin panel (**Usuarios**): create, change role, activate/deactivate, reset password, close sessions. Users are never deleted, only deactivated.
+- If a user is locked out after 5 failed logins, they can try again after 15 minutes, or an admin can reset their password.
+- If the API starts with no active admin it logs a warning with the command to create one.
 
 ---
 
-**Document Version:** 1.1.0  
-**Last Updated:** September 7, 2026
+**Document Version:** 1.2.0  
+**Last Updated:** October 20, 2026

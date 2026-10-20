@@ -123,6 +123,27 @@ docker exec -it <container_name> python -m radar_db.manage sync
 
 ---
 
+### 2c. **bootstrap-admin / create-admin / reset-password** - User Accounts
+
+The `users` and `user_sessions` tables are created by `init` like the rest. These commands manage accounts from the server; in the normal flow use the Makefile shortcuts.
+
+```bash
+# Create the first admin from BOOTSTRAP_ADMIN_USERNAME / BOOTSTRAP_ADMIN_PASSWORD,
+# only if there are no users yet (db-init runs this automatically)
+python -m radar_db.manage bootstrap-admin
+
+# Create an admin, prompting for the password (make create-admin U=<user>)
+python -m radar_db.manage create-admin --username maria
+
+# New password for a user, prompting for it; also closes all their sessions
+# (make reset-password U=<user>)
+python -m radar_db.manage reset-password --username maria
+```
+
+Passwords must be 12–128 characters. Admins cannot reset their own password from the admin panel, so `reset-password` is the only way to change it.
+
+---
+
 ### 3. **check** - Test Database Connection
 
 Verifies connectivity to the database.

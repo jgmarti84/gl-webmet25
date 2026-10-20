@@ -13,7 +13,8 @@ The WebMet25 frontend is a modular JavaScript application built with vanilla ES6
 frontend/public/
 ├── index.html                 # Main multi-radar map page
 ├── radar.html                 # One-radar detail page (radar.html?code=AR5)
-├── admin.html                 # Admin panel SPA (served at /admin, Basic Auth)
+├── login.html                 # Login page (/login)
+├── admin.html                 # Admin panel SPA (served at /admin, login required)
 ├── cog-browser.html          # Alternative detailed COG browser view
 ├── css/
 │   ├── styles.css            # Main app UI styling (dark theme)
@@ -446,7 +447,7 @@ settings), and animation controls (bottom-center).
 
 **File:** [`frontend/public/admin.html`](../../frontend/public/admin.html)
 
-**Responsibility:** DOM skeleton for the admin panel — sidebar (OHMC logo + grouped section nav + "← Volver al mapa"), header with back button, a generic form modal, and the colormap creator modal. Served at `/admin` behind nginx HTTP Basic Auth.
+**Responsibility:** DOM skeleton for the admin panel — sidebar (OHMC logo + grouped section nav + "← Volver al mapa"), header with back button, a generic form modal, and the colormap creator modal. Served at `/admin` as a static page; login and the `admin` role are enforced by the API (without a session the page redirects to `/login`).
 
 **Loaded Scripts:** `js/admin.js` (which imports `js/admin-api.js`). Styled by `css/admin.css` (modern-light theme).
 
@@ -454,7 +455,7 @@ settings), and animation controls (bottom-center).
 
 ## Admin Panel
 
-> A standalone single-page admin app for CRUD over every database table, plus a visual colormap creator/editor. Independent from the v1/v2 visualization frontend. **Auth:** temporary nginx HTTP Basic Auth on `/admin` and `/api/v1/admin/*` (see [`frontend/nginx.conf`](../../frontend/nginx.conf)); **TODO: replace with JWT.**
+> A standalone single-page admin app for CRUD over every database table, plus a visual colormap creator/editor. Independent from the v1/v2 visualization frontend. **Auth:** login at `/login` (`login.html` + `js/login.js`, shared client `js/auth-api.js`). The panel loads the current user from `/api/v1/auth/me`, retries once through `/api/v1/auth/refresh` on a 401, and redirects to `/login` when the session is gone. The **Users** section manages accounts (create, change role, activate/deactivate, reset password, close sessions).
 
 ### A. **admin.js** — Admin Orchestrator
 
@@ -555,9 +556,15 @@ cog-browser.html (alternative view)
 ├── shared/cog-browser-api.js
 └── shared/cog-browser.js
 
-admin.html (admin SPA, /admin, Basic Auth)
-├── js/admin.js (CRUD, filters/sort, colormap creator/editor)
-│   └── js/admin-api.js (/api/v1/admin/* client)
+login.html (/login)
+├── js/login.js
+│   └── js/auth-api.js (login, logout, refresh, me)
+└── css/admin.css
+
+admin.html (admin SPA, /admin, login required)
+├── js/admin.js (CRUD, filters/sort, colormap creator/editor, users)
+│   ├── js/admin-api.js (/api/v1/admin/* client, refreshes the session on 401)
+│   └── js/auth-api.js
 └── css/admin.css (modern-light theme)
 ```
 
