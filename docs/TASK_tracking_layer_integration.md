@@ -58,6 +58,7 @@ Neither branch is merged (2026-10-20). Phase 3 branches **from
 | Initial scope | **One radar** to start, so disk is not a concern yet |
 | Concurrency of the tracking service | **Deferred.** Not a v1 concern; revisit if it becomes a problem (§8.3) |
 | gl-tracker modifications | **Forbidden.** Consumed as a read-only library; the sidecar carries its own driver (§8.0) |
+| Frontend scope | **New standalone page** for v1; single-radar only, never the multi-radar index (§9) |
 | Operational precomputed tracking | **Rejected for now** — tracking is on demand only (§4.1) |
 | Tracking output format | **In-memory GeoJSON per request. No SpatiaLite.** (§4.2) |
 
@@ -768,6 +769,36 @@ Until then, the cache above is the main thing keeping load down.
 
 A **new standalone page** (`frontend/public/tracking.html`), styled after
 `radar.html` — not a modification of the existing single-radar view.
+Confirmed 2026-10-20.
+
+### Why tracking is single-radar, not a v1 simplification
+
+Tracking belongs to the one-radar view and will never appear on the multi-radar
+index. That is a property of the data, not a scoping choice:
+
+- Every cube is gridded through **one radar's geometry**, with that radar's
+  antenna as the grid origin. There is no mosaic.
+- The gate and the convective filter are **radar-relative**: `r_max_km`,
+  `dist_centroid_km` and the echo-top reference are all measured from that
+  antenna.
+- A storm sitting in the overlap between two radars is tracked **twice**, as two
+  independent tracks with different `name` UUIDs. Rendering both radars at once
+  would duplicate it on screen, with two separate forecast fans.
+
+Unifying tracks across radars would require mosaicking the volumes before
+detection — a different project.
+
+### Build the layer as a module, not as page code
+
+v1 is a standalone page, but the intent is to fold tracking into `radar.html`
+as a toggleable layer later. That migration is cheap **only if the layer is
+written as a self-contained module from the start** — `js/shared/tracking.js`
+owning fetch, render and frame-sync, with `tracking.html` acting as a thin host
+that wires it up. `js/shared/tops-cores.js` is exactly this shape already and is
+the model to follow.
+
+Written as page-scoped code instead, folding it into `radar.html` means a
+rewrite rather than a few lines of wiring.
 
 Contents:
 
