@@ -1,5 +1,6 @@
 # api/app/routers/auth.py
 """Login, refresh, logout and current user."""
+
 from typing import Optional, Tuple, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -43,9 +44,7 @@ def _unauthorized(detail: str, code: Optional[str] = None) -> JSONResponse:
 
 
 @router.post("/login", response_model=MeResponse, dependencies=[Depends(check_origin)])
-def login(
-    payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)
-) -> MeResponse:
+def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)) -> MeResponse:
     try:
         user = service.authenticate(db, payload.username, payload.password)
     except service.AuthError:
@@ -61,9 +60,7 @@ def login(
 
 
 @router.post("/refresh", response_model=MeResponse, dependencies=[Depends(check_origin)])
-def refresh(
-    request: Request, response: Response, db: Session = Depends(get_db)
-) -> Union[MeResponse, JSONResponse]:
+def refresh(request: Request, response: Response, db: Session = Depends(get_db)) -> Union[MeResponse, JSONResponse]:
     token = request.cookies.get(refresh_cookie_name())
     if not token:
         return _unauthorized("No autenticado")

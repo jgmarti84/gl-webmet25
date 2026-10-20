@@ -18,8 +18,14 @@ from api.app.config import settings
 def _payload(**overrides):
     now = datetime.now(timezone.utc)
     payload = {
-        "sub": "1", "role": "admin", "tv": 0, "iat": now, "exp": now + timedelta(minutes=5),
-        "iss": settings.jwt_issuer, "aud": settings.jwt_audience, "jti": "x",
+        "sub": "1",
+        "role": "admin",
+        "tv": 0,
+        "iat": now,
+        "exp": now + timedelta(minutes=5),
+        "iss": settings.jwt_issuer,
+        "aud": settings.jwt_audience,
+        "jti": "x",
     }
     payload.update(overrides)
     return payload

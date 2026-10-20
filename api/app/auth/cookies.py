@@ -1,5 +1,6 @@
 # api/app/auth/cookies.py
 """Auth cookies. __Host-/__Secure- prefixes need Secure, so names change in local HTTP."""
+
 from datetime import datetime, timezone
 from typing import Optional
 

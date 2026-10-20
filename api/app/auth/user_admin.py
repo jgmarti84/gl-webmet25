@@ -1,5 +1,6 @@
 # api/app/auth/user_admin.py
 """Admin rules on top of radar_db.accounts. Functions flush; routers commit."""
+
 from typing import List
 
 from sqlalchemy.orm import Session

@@ -22,8 +22,11 @@ from .conftest import TEST_PASSWORD
 def _open_session(db, user):
     now = datetime.now(timezone.utc)
     s = UserSession(
-        user_id=user.id, family_id=uuid.uuid4(), token_hash=uuid.uuid4().hex * 2,
-        expires_at=now + timedelta(hours=1), absolute_expires_at=now + timedelta(days=1),
+        user_id=user.id,
+        family_id=uuid.uuid4(),
+        token_hash=uuid.uuid4().hex * 2,
+        expires_at=now + timedelta(hours=1),
+        absolute_expires_at=now + timedelta(days=1),
         created_at=now,
     )
     db.add(s)

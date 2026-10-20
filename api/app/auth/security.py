@@ -1,5 +1,6 @@
 # api/app/auth/security.py
 """JWT access tokens and opaque refresh tokens. No database access here."""
+
 import hashlib
 import secrets
 import uuid
@@ -25,9 +26,7 @@ class AccessClaims:
     token_version: int
 
 
-def create_access_token(
-    user_id: int, role: str, token_version: int, now: Optional[datetime] = None
-) -> str:
+def create_access_token(user_id: int, role: str, token_version: int, now: Optional[datetime] = None) -> str:
     now = now or datetime.now(timezone.utc)
     payload = {
         "sub": str(user_id),

@@ -1,5 +1,6 @@
 # api/app/auth/dependencies.py
 """FastAPI dependencies. Routers only import from here."""
+
 from typing import Callable, Optional
 
 from fastapi import Depends, HTTPException, Request
@@ -52,6 +53,7 @@ def require_role(role: str) -> Callable[..., User]:
         if user.role != role:
             raise HTTPException(status_code=403, detail="No tenés permisos para esta acción")
         return user
+
     return dependency
 
 

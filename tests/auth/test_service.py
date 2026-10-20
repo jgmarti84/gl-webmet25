@@ -6,7 +6,6 @@ import pytest
 from api.app.auth import service
 from api.app.auth.service import AuthError, RefreshRaceError
 from api.app.config import settings
-from radar_db.models import UserSession
 
 from .conftest import TEST_PASSWORD
 
@@ -14,6 +13,7 @@ NOW = datetime(2026, 10, 19, 12, 0, tzinfo=timezone.utc)
 
 
 # --- login -----------------------------------------------------------------
+
 
 def test_authenticate_ok_resets_counters(make_user, test_db_session):
     user = make_user()
@@ -58,6 +58,7 @@ def test_inactive_user_cannot_log_in(make_user, test_db_session):
 
 
 # --- sessions / refresh ------------------------------------------------------
+
 
 def test_create_session_sets_expirations(make_user, test_db_session):
     user = make_user()
@@ -146,6 +147,7 @@ def test_logout_revokes_session(make_user, test_db_session):
 
 
 # --- loading the user for each request -------------------------------------------
+
 
 def test_load_active_user_checks_version_and_active(make_user, test_db_session):
     user = make_user()

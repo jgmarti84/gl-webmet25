@@ -1,5 +1,6 @@
 # tests/e2e/test_auth_flow.py
 """E2E: login redirect, logout and the users section."""
+
 import os
 
 from playwright.sync_api import Page, expect

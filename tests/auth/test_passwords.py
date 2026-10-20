@@ -65,9 +65,7 @@ def test_same_password_hashes_differently_and_both_verify():
 
 
 def test_verify_and_update_rehashes_weaker_parameters():
-    weak = PasswordHash((Argon2Hasher(time_cost=1, memory_cost=8, parallelism=1),)).hash(
-        "correct-horse-battery"
-    )
+    weak = PasswordHash((Argon2Hasher(time_cost=1, memory_cost=8, parallelism=1),)).hash("correct-horse-battery")
     ok, new_hash = verify_and_update("correct-horse-battery", weak)
     assert ok is True
     assert new_hash is not None

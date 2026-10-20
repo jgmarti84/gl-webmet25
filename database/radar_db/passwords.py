@@ -4,6 +4,7 @@
 Single implementation shared by the API, db-init and the server CLI.
 Argon2id via pwdlib, with the library's recommended parameters.
 """
+
 from typing import Optional, Tuple
 
 from pwdlib import PasswordHash
@@ -49,8 +50,7 @@ def validate_password(password: str, username: str) -> None:
         raise PasswordPolicyError("La contraseña y el nombre de usuario deben ser texto")
     if not MIN_PASSWORD_LENGTH <= len(password) <= MAX_PASSWORD_LENGTH:
         raise PasswordPolicyError(
-            f"La contraseña debe tener entre {MIN_PASSWORD_LENGTH} y "
-            f"{MAX_PASSWORD_LENGTH} caracteres"
+            f"La contraseña debe tener entre {MIN_PASSWORD_LENGTH} y " f"{MAX_PASSWORD_LENGTH} caracteres"
         )
     if not password.strip():
         raise PasswordPolicyError("La contraseña no puede estar formada solo por espacios")

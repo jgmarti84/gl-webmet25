@@ -1,5 +1,6 @@
 # api/app/routers/users.py
 """User management (admin only)."""
+
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -93,9 +94,7 @@ def reset_password(
 
 
 @router.post("/{user_id}/revoke-sessions", status_code=204)
-def revoke_sessions(
-    user_id: int, db: Session = Depends(get_db), actor: User = Depends(require_admin)
-) -> Response:
+def revoke_sessions(user_id: int, db: Session = Depends(get_db), actor: User = Depends(require_admin)) -> Response:
     user = _get_or_404(db, user_id)
     revoke_all_sessions(db, user)
     db.commit()

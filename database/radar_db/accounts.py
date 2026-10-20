@@ -3,6 +3,7 @@
 
 Functions only flush; the caller decides when to commit.
 """
+
 import re
 from datetime import datetime, timezone
 from typing import Optional
@@ -35,8 +36,7 @@ def validate_username(username: str) -> str:
     normalized = normalize_username(username)
     if not USERNAME_RE.match(normalized):
         raise AccountError(
-            "El usuario debe tener entre 3 y 32 caracteres: letras minúsculas, "
-            "números, punto, guion o guion bajo"
+            "El usuario debe tener entre 3 y 32 caracteres: letras minúsculas, números, punto, guion o guion bajo"
         )
     return normalized
 
@@ -108,6 +108,4 @@ def bootstrap_admin(db: Session, username: str, password: str) -> Optional[User]
     """Create the first admin only if there are no users at all."""
     if db.query(User).count() > 0:
         return None
-    return create_user(
-        db, username=username, password=password, role="admin", password_is_bootstrap=True
-    )
+    return create_user(db, username=username, password=password, role="admin", password_is_bootstrap=True)

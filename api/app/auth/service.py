@@ -1,5 +1,6 @@
 # api/app/auth/service.py
 """Login, refresh rotation and logout. Functions flush; routers commit."""
+
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
@@ -106,11 +107,7 @@ def create_session(
 
 
 def _find_session(db: Session, token: str) -> Optional[UserSession]:
-    return (
-        db.query(UserSession)
-        .filter(UserSession.token_hash == hash_refresh_token(token))
-        .one_or_none()
-    )
+    return db.query(UserSession).filter(UserSession.token_hash == hash_refresh_token(token)).one_or_none()
 
 
 def _revoke_family(db: Session, family_id: uuid.UUID, now: datetime) -> None:

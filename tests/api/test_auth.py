@@ -1,5 +1,6 @@
 # tests/api/test_auth.py
 """Black-box auth tests against the running API. They never create users."""
+
 import os
 
 import httpx
@@ -9,9 +10,7 @@ API_BASE_URL = os.getenv("API_BASE_URL", "http://api:8000")
 ADMIN_USER = os.getenv("BOOTSTRAP_ADMIN_USERNAME")
 ADMIN_PASS = os.getenv("BOOTSTRAP_ADMIN_PASSWORD")
 
-needs_admin = pytest.mark.skipif(
-    not (ADMIN_USER and ADMIN_PASS), reason="BOOTSTRAP_ADMIN_* not set"
-)
+needs_admin = pytest.mark.skipif(not (ADMIN_USER and ADMIN_PASS), reason="BOOTSTRAP_ADMIN_* not set")
 
 
 def test_admin_endpoint_requires_session():
@@ -36,7 +35,9 @@ def test_foreign_origin_is_rejected():
 @needs_admin
 def test_full_session_flow():
     with httpx.Client(base_url=API_BASE_URL) as client:
-        assert client.post("/api/v1/auth/login", json={"username": ADMIN_USER, "password": ADMIN_PASS}).status_code == 200
+        assert (
+            client.post("/api/v1/auth/login", json={"username": ADMIN_USER, "password": ADMIN_PASS}).status_code == 200
+        )
         assert client.get("/api/v1/auth/me").json()["role"] == "admin"
         assert client.get("/api/v1/admin/radars").status_code == 200
         assert client.post("/api/v1/auth/refresh").status_code == 200
