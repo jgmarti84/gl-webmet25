@@ -758,7 +758,7 @@ See §2.2 for the full table of `IndexerSettings` env vars.
 | `jwt_secret` | `JWT_SECRET` | — (required) | 32+ characters; the API does not start without it |
 | `allowed_origins` | `ALLOWED_ORIGINS` | *(empty)* | Origins accepted on POST/PUT/PATCH/DELETE |
 | `cookie_secure` | `COOKIE_SECURE` | `true` | `false` only for local HTTP |
-| `access_token_ttl_minutes` | `ACCESS_TOKEN_TTL_MINUTES` | `15` | Access token lifetime |
+| `access_token_ttl_minutes` | `ACCESS_TOKEN_TTL_MINUTES` | `60` | Access token lifetime |
 | `session_idle_ttl_hours` | `SESSION_IDLE_TTL_HOURS` | `48` | Session expiry without activity |
 | `session_absolute_ttl_days` | `SESSION_ABSOLUTE_TTL_DAYS` | `7` | Maximum session length |
 | `login_max_failed_attempts` | `LOGIN_MAX_FAILED_ATTEMPTS` | `5` | Failed logins before a lockout |

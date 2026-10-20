@@ -340,7 +340,7 @@ docker compose logs -f indexer
 
 The admin panel and every `/api/v1/admin/*` endpoint require a logged-in user with the `admin` role. The rest of the API stays public. Sessions are validated **by the API**, not by nginx.
 
-- **Access token:** short-lived JWT (15 min) in an `HttpOnly`, `SameSite=Strict` cookie.
+- **Access token:** short-lived JWT (60 min) in an `HttpOnly`, `SameSite=Strict` cookie.
 - **Refresh token:** opaque, rotated on every use and stored hashed in the database. Idle expiry 48 h, absolute limit 7 days. Reusing an old refresh token closes the whole session family.
 - **Instant revocation:** deactivating a user, changing their role or resetting their password invalidates their sessions immediately.
 - **Passwords:** Argon2id, 12–128 characters. An account is locked for 15 min after 5 failed attempts, and nginx limits `/api/v1/auth/login` to 10 requests/minute per IP.
