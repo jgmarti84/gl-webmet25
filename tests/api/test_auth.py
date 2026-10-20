@@ -374,14 +374,8 @@ def test_me_with_garbage_access_cookie_returns_401():
 
 
 # ---------------------------------------------------------------------------
-# Full flow and admin protection
+# Full flow (the protection of the admin router is covered in tests/api/test_admin.py)
 # ---------------------------------------------------------------------------
-
-
-def test_admin_endpoint_requires_session():
-    """An admin endpoint without a session must return 401."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
-        assert client.get("/api/v1/admin/radars").status_code == 401
 
 
 @needs_admin
