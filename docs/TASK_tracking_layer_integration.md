@@ -1234,3 +1234,274 @@ Adding fields is safe for the tracker: `grilla.leer()` reads only the two
 variables it names (`cfg.var_dbzh` / `cfg.var_rhohv`, with alias fallbacks) and
 ignores everything else in the file. Cubes written with more fields stay
 readable by the existing pipeline with no change.
+
+---
+
+## 14. Phase 3 implementation plan — the tracking sidecar
+
+Branches from **`feat/nccube-indexer`** (needs the `NCCube` model). `gl-tracker`
+is **not modified** — see §8.0.
+
+### 14.1 Tracking semantics, measured
+
+Three different depths, often conflated. Establishing them is what justifies the
+design below.
+
+| what | depth | source |
+|---|---|---|
+| **Association** (which storm is which) | **1 previous volume** | `est.previous` holds only the immediately preceding frame |
+| **Velocity / direction / forecasts** | **up to 4 volumes** | `velocity_history_len=4`, weights `[0.2, 0.3, 0.5, 1.0]` |
+| minimum for any velocity | 2 volumes | `MIN_POINTS_FOR_FIT = 2` |
+| gap that resets everything | 20 min | `max_gap_tracking_min` -> `previous = []` |
+
+State is bounded: nothing older than 4 volumes is read. But **track identity is
+a chain** — a system's `name` UUID is inherited at each match, so a storm alive
+two hours carries an id handed down through ~13 volumes.
+
+**Consequence: a cold start has a warm-up.** Begin at 14:00 and every system in
+that frame is `SPONTANEOUS_GENERATION` with no velocity and no forecast — not
+because nothing was there, but because there is no previous frame. Full-quality
+4-point fits need **4 volumes (~36 min)**.
+
+So the resolver silently prepends up to 4 volumes before the requested start and
+the driver discards their output (§14.6).
+
+### 14.2 Where the time goes, measured
+
+31 volumes, warm page cache:
+
+| stage | ms/vol | share |
+|---|---|---|
+| `grilla.leer()` — read cube + QC + echo top | **262** | **85%** |
+| `gate.evaluar()` | 1 | <1% |
+| detect + classify + track + forecast | 47 | 15% |
+| total | **310** | |
+
+**Tracking is not the slow part.** `leer()` is a pure function of
+`(cube file, filter config)` — independent of neighbouring volumes. That is the
+hook for every future optimisation (§14.9), and the reason the job/poll shape is
+worth having even though v1 runs straight through.
+
+### 14.3 Layout — and the namespace rule
+
+```
+gl-webmet25/tracking/
+  Dockerfile
+  requirements.txt
+  tracking_api/              <- EVERYTHING lives in this package
+    __init__.py
+    main.py                  FastAPI app + routes
+    config.py                sidecar settings      (= tracking_api.config, safe)
+    schemas.py               request/response models
+    jobs.py                  job store + runner
+    volumes.py               nccubes -> ordered paths, incl. lead-in
+    driver.py                the operativo.py replacement
+    sink.py                  duck-typed Salidas stand-in
+    geojson.py               ConvectiveSystem -> GeoJSON
+```
+
+**Nothing may be a top-level module.** gl-tracker's modules are flat names —
+`config`, `estado`, `filtro_convectivo`, `gate`, `grilla`, `h0_wrf`, `pipeline`,
+`operativo`. When `pipeline.py` does `import config`, resolution walks
+`sys.path`; a top-level `config.py` in the sidecar would shadow it depending on
+path order. Keeping all sidecar code inside `tracking_api/` makes the collision
+impossible. (`radar_db/config.py` is fine — it is inside a package too.)
+
+### 14.4 The sink — proven, not assumed
+
+`procesar()` touches exactly two things on `salidas`:
+`salidas.systems.output(list)` (`pipeline.py:325`) and
+`salidas.forecasts[lead].output(list)` (`pipeline.py:321`).
+
+```python
+class _Collector:
+    def __init__(self): self.rows = []
+    def output(self, systems): self.rows.extend(systems)
+
+class VolumeSink:                       # stands in for pipeline.Salidas
+    def __init__(self, intervals):
+        self.systems = _Collector()
+        self.forecasts = {t: _Collector() for t in intervals}
+```
+
+Verified 2026-10-20: 33 systems collected across 31 volumes, no SpatiaLite file,
+no gl-tracker change.
+
+**Build one sink per volume**, not one per job. The accumulating alternative
+forces regrouping afterwards, and forecast systems carry
+`timestamp = base + lead` rather than the base time, so regrouping them means
+subtracting the lead back out. A fresh sink per volume keeps the association
+explicit and costs nothing.
+
+### 14.5 The driver
+
+~40 lines in `tracking_api/driver.py`, replacing `operativo.py`:
+
+```python
+cfg   = build_config(request)                 # §14.7
+serie = gate.serie_h0_actual(cfg, cfg.h0_lat, cfg.h0_lon)   # None -> climatology
+est   = estado_mod.Estado()                   # fresh per job == --desde-cero
+
+for ts, path, is_lead_in in volumes:          # ordered, from Postgres
+    sink   = VolumeSink(cfg.forecast_intervals)
+    result = pipeline.procesar(path, ts, cfg, serie, est, sink)
+    if not is_lead_in:
+        emit(ts, result, sink)                # -> GeoJSON, progress tick
+```
+
+`procesar()` returns a `Resultado` carrying the gate verdict, the counts and the
+per-volume timing — exactly what the per-volume response needs. It mutates
+`est`, so chronological order is the driver's responsibility; the resolver
+guarantees it.
+
+Passing `serie=None` is supported and falls back to climatology.
+
+### 14.6 Volume resolution
+
+```sql
+-- the window
+SELECT file_path, observation_time FROM nccubes
+WHERE radar_code = :radar AND status = 'AVAILABLE'
+  AND observation_time BETWEEN :start AND :end
+ORDER BY observation_time;
+
+-- the lead-in: up to 4 volumes strictly before the window
+SELECT file_path, observation_time FROM nccubes
+WHERE radar_code = :radar AND status = 'AVAILABLE'
+  AND observation_time < :start
+ORDER BY observation_time DESC LIMIT 4;
+```
+
+Lead-in rows are processed and their output discarded. If they sit more than
+`max_gap_tracking_min` before the window start, `procesar()` resets tracking on
+its own — no special handling needed, the gap logic covers it.
+
+`GET /availability` answers the frontend's time-picker bound from
+`min(observation_time)`.
+
+### 14.7 Config mapping — one trap
+
+```python
+class TrackingConfig(BaseModel):          # v1 surface
+    cappi_height_m: float = Field(2500.0, ge=500,  le=15000)
+    dbz_threshold:  float = Field(35.0,   ge=0,    le=75)
+    min_area_km2:   float = Field(50.0,   ge=1,    le=10000)
+```
+
+Mapping is **not** uniform:
+
+- `dbz_threshold`, `min_area_km2` -> **top-level `Config` fields**
+- `cappi_height_m` -> **`Config.filter_overrides`**
+
+Putting `det_threshold_dbz` / `det_min_area_km2` into `filter_overrides` does
+nothing: `Config.filtro()` overwrites both from the top-level fields
+(`config.py:161-162`). Whitelist strictly — never `setattr` from client input.
+
+### 14.8 API
+
+```
+POST /api/tracking/jobs            {radar, start, end, config?} -> {job_id, status}
+GET  /api/tracking/jobs/{job_id}   -> {status, progress, result?, error?}
+GET  /api/tracking/availability    ?radar=RMA1 -> {min_time, max_time, count}
+```
+
+States: `pending` -> `running` -> `done` | `error`. Progress is
+`volumes_done / volumes_total`.
+
+Job/poll rather than one synchronous call, because a 20 s request has nowhere to
+put progress or partial results, and it forecloses the incremental path in
+§14.9. **v1 job store is in-memory** — jobs vanish on restart, which is
+acceptable while concurrency is deferred (§8.3) but should be stated in the UI.
+
+Per-volume result shape:
+
+```json
+{
+  "timestamp": "2026-10-20T18:27:24Z",
+  "gate_passed": true,
+  "gate": {"tope_max_m": 4800, "umbral_m": 4841, "n_pixeles_pasan": 0,
+           "h0_msnm": 3716, "h0_fuente": "climatologia"},
+  "counts": {"detectados": 1, "convectivos": 0, "rastreados": 0, "forecasts": 0},
+  "features": { "type": "FeatureCollection", "features": [...] }
+}
+```
+
+Features carry `kind: "system" | "forecast"`, `lead_min` on forecasts, and the
+identity trio `name` / `event` / `relationships` (§4.2). Geometry via OGR's
+`ExportToJson()`.
+
+**Gate-failed volumes still return an entry** — zero features plus the verdict,
+so the UI distinguishes "filtered" from "no data".
+
+### 14.9 Caching
+
+**v1:** cache completed job results on `(radar, window, config-hash)`, LRU
+bounded. The default config will dominate requests, so this alone makes the
+common path instant.
+
+**v2 (not now):** cache `leer()` output per `(cube, filter-config-hash)`. From
+§14.2 that turns a tracking-only reparameterisation into **~47 ms/vol** — a
+4-hour window re-tracks in ~1.5 s — and a live request with one new volume into
+~0.31 s. Needs an explicit memory bound: a prepared volume holds the detection
+field and echo-top arrays, order ~1 MB each.
+
+### 14.10 Container, compose, nginx
+
+`tracking/Dockerfile` — gl-tracker's stack minus the gridding-only packages
+(`arm-pyart`, `pyproj`, `pandas`, `pytz`, `cachetools`, `xarray`, `psutil`,
+`matplotlib`), plus FastAPI/uvicorn and `COPY database/radar_db/` (the same
+pattern `indexer/Dockerfile` uses).
+
+gl-tracker enters by pinned clone, since it has no packaging metadata (§8.0):
+
+```dockerfile
+ARG GL_TRACKER_REF=main
+RUN git clone --depth 1 --branch ${GL_TRACKER_REF} \
+      https://github.com/jgmarti84/gl-tracker.git /opt/gl-tracker
+ENV PYTHONPATH=/app:/opt/gl-tracker
+```
+
+When gl-tracker gains a `pyproject.toml`, this becomes a one-line
+`pip install git+...` swap.
+
+compose:
+
+```yaml
+  tracking:
+    build: {context: ./, dockerfile: ./tracking/Dockerfile}
+    container_name: radar_tracking
+    environment: {DB_HOST: radar_db, ..., NCCUBE_DIR: /nccube}
+    volumes: ["../nccube:/nccube:ro"]
+    depends_on: {radar_db: {condition: service_healthy}}
+```
+
+nginx: a `location /api/tracking/` block proxying to `tracking:8001`. nginx
+prefix matching picks the longest match, so it wins over the existing `/api/`
+block regardless of order. Raise `proxy_read_timeout` there — polling is cheap,
+but the job POST should not inherit a short default.
+
+### 14.11 Verification
+
+1. Unit: config mapping (especially that `cappi_height_m` lands in
+   `filter_overrides` and `dbz_threshold` does not), volume resolution including
+   lead-in, GeoJSON serialisation preserving `name`/`event`/`relationships`,
+   sink shape.
+2. Integration: submit a job over real host cubes; assert per-volume entries
+   exist for gate-failed volumes too.
+3. Identity: a storm spanning several volumes keeps one `name`; the first
+   returned frame is *not* all `SPONTANEOUS_GENERATION` when lead-in volumes
+   exist.
+4. `docker exec radar_tests pytest tests/api/ -q` — no regression.
+
+### 14.12 Order of work
+
+```
+1. tracking/ skeleton + Dockerfile + compose      (service starts, /health)
+2. volumes.py + /availability                     (DB reachable, no tracker yet)
+3. sink.py + driver.py + geojson.py               (unit-testable, no HTTP)
+4. jobs.py + POST/GET routes                      (end to end)
+5. nginx route + cache
+```
+
+Step 3 is the risky one and is fully testable offline against the cubes already
+on disk.
