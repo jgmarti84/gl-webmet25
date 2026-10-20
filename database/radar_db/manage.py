@@ -322,7 +322,7 @@ def _prompt_new_password() -> str:
     return first
 
 
-def cmd_bootstrap_admin(args):
+def cmd_bootstrap_admin(args: argparse.Namespace) -> int:
     """Create the first admin from BOOTSTRAP_ADMIN_* if there are no users."""
     from radar_db.accounts import AccountError, bootstrap_admin
     from radar_db.database import check_db_connection, db_manager
@@ -354,7 +354,7 @@ def cmd_bootstrap_admin(args):
     return 0
 
 
-def cmd_create_admin(args):
+def cmd_create_admin(args: argparse.Namespace) -> int:
     """Create an admin, prompting for the password."""
     from radar_db.accounts import AccountError, create_user
     from radar_db.database import check_db_connection, db_manager
@@ -375,7 +375,7 @@ def cmd_create_admin(args):
     return 0
 
 
-def cmd_reset_password(args):
+def cmd_reset_password(args: argparse.Namespace) -> int:
     """Set a new password for a user, prompting for it, and close all sessions."""
     from radar_db.accounts import get_user_by_username, set_password
     from radar_db.database import check_db_connection, db_manager
