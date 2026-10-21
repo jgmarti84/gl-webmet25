@@ -326,8 +326,8 @@ const app = {
 
             // v2: AnimationController takes mapManager
             state.animator = new AnimationController(state.mapManager);
-            state.animator.setOnFrameChange((index, frame, holdRadarCodes) => {
-                this.onFrameChange(index, frame, holdRadarCodes);
+            state.animator.setOnFrameChange((index, frame, holdRadarCodes, prevFrame) => {
+                this.onFrameChange(index, frame, holdRadarCodes, prevFrame);
             });
 
             state.legend = new LegendRenderer('legend-container');
@@ -1873,7 +1873,7 @@ const app = {
     // Frame change callback (from AnimationController)
     // =========================================================================
 
-    onFrameChange(index, frame, holdRadarCodes = []) {
+    onFrameChange(index, frame, holdRadarCodes = [], prevFrame = null) {
         if (!frame) return;
         this.updateTimeWindowLabel();
 
@@ -1886,10 +1886,10 @@ const app = {
             state.ui.updateFrameCounter(index, state.animator.getFrameCount());
             state.ui.updateAnimationSlider(index, state.animator.getFrameCount());
 
-            // Show tops/cores matching the actually-displayed COG (held radars use
-            // markers from the previous frame to stay in sync with the held image)
+            // Show tops/cores of the COG(s) actually displayed (held radars use the
+            // previous frame's COG to stay in sync with the held image)
             if (state.topsCoresLayer && state.topsCoresVisible) {
-                state.topsCoresLayer.showFrame(index, holdRadarCodes);
+                state.topsCoresLayer.showFrame(frame, prevFrame, holdRadarCodes);
             }
             return;
         }
@@ -2338,8 +2338,8 @@ const app = {
             }
             state.topsCoresLayer.setVisible(true);
             // Show the current frame from pre-loaded data
-            const currentIndex = state.animator ? state.animator.getCurrentIndex() : 0;
-            state.topsCoresLayer.showFrame(currentIndex);
+            const ctx = state.animator ? state.animator.getFrameContext() : null;
+            if (ctx) state.topsCoresLayer.showFrame(ctx.frame, ctx.prevFrame, ctx.holdCodes);
         } else {
             if (state.topsCoresLayer) {
                 state.topsCoresLayer.setVisible(false);

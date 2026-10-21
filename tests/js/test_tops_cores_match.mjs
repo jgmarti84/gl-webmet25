@@ -1,16 +1,23 @@
 /**
- * Unit tests for tops-cores-match.js (match tops/cores records to displayed COGs).
+ * Unit tests for tops-cores-match.js (marker lookup by displayed-COG identity).
  *
- * Scenario taken from RMA7 on 2026-10-20: scans 22:22:35 and 22:35:24 plus
- * 22:44:27 on a 10-min grid with Math.round binning -> 22:35:24 and 22:44:27
- * collide in slot 22:40 and slot 22:30 is empty.
+ * Scenarios come from production:
+ *  - RMA7 2026-10-20: scans 22:22:35 / 22:35:24 / 22:44:27 on a 10-min grid with
+ *    Math.round binning -> 22:35:24 and 22:44:27 collide in slot 22:40, slot 22:30
+ *    is empty (image held).
+ *  - RMA14 + AR5, removing AR5 deletes the 16:30 slot and shifts every frame index;
+ *    markers must follow the displayed COG, not the frame position.
  * Run with: node tests/js/test_tops_cores_match.mjs
  */
-import { buildGridFrames } from '../../frontend/public/js/v2/radar-utils.js';
+import { buildGridFrames, } from '../../frontend/public/js/v2/radar-utils.js';
+import { computeHoldRadarCodes } from '../../frontend/public/js/v2/animation.js';
 import {
     recordKey,
-    displayedCogTimeSpan,
-    matchRecordsToFrames,
+    cogKey,
+    collectDisplayedCogs,
+    cogTimeSpan,
+    selectWantedRecords,
+    markersForFrame,
 } from '../../frontend/public/js/shared/tops-cores-match.js';
 
 let passed = 0;
@@ -20,78 +27,104 @@ function assert(cond, msg) {
     else { console.error(`  ✗  ${msg}`); failed++; }
 }
 
-const cog = (t, vol = '01', radar = 'RMA7') =>
-    ({ radar_code: radar, strategy: '0315', vol_nr: vol, observation_time: t });
-const rec = (t, vol = '01', radar = 'RMA7') =>
-    ({ radar_code: radar, strategy: '0315', vol_nr: vol, observation_time: t });
+const cog = (t, vol = '01', radar = 'RMA7', strategy = '0315') =>
+    ({ radar_code: radar, strategy, vol_nr: vol, observation_time: t });
+const rec = (t, vol = '01', radar = 'RMA7', strategy = '0315') =>
+    ({ radar_code: radar, strategy, vol_nr: vol, observation_time: t });
+// markers identify their scan so assertions can tell which one is drawn
+const cache = (...entries) => new Map(entries.map(([c, tag]) => [cogKey(c), [{ tag }]]));
+const tags = ms => ms.map(m => m.tag);
 
 const T = ['2026-10-20T22:13:32Z', '2026-10-20T22:22:35Z', '2026-10-20T22:35:24Z',
            '2026-10-20T22:44:27Z', '2026-10-20T22:53:30Z'];
 const cogs = T.map(t => cog(t));
-const records = T.map(t => rec(t));
+const byTime = new Map(cogs.map((c, i) => [cogKey(c), [{ tag: `scan${i}` }]]));
+const W0 = new Date('2026-10-20T22:00:00Z'), W1 = new Date('2026-10-20T23:00:00Z');
 
-console.log('\n=== matchRecordsToFrames unit tests ===\n');
+console.log('\n=== tops-cores-match unit tests ===\n');
 
-console.log('T1: each frame is paired with the record of its own displayed COG');
+console.log('T1: each frame draws the markers of its own displayed COG (RMA7 incident)');
 {
-    const frames = buildGridFrames(cogs, 10, new Date('2026-10-20T22:00:00Z'), new Date('2026-10-20T23:00:00Z'));
-    const m = matchRecordsToFrames(frames, records);
-    const timeAt = i => m[i].has('RMA7') ? records[m[i].get('RMA7')].observation_time : null;
-    const slot = iso => frames.findIndex(f => f.displayTimestamp === iso);
-    assert(timeAt(slot('2026-10-20T22:10:00.000Z')) === T[0], '22:10 slot -> 22:13:32 record');
-    assert(timeAt(slot('2026-10-20T22:20:00.000Z')) === T[1], '22:20 slot -> 22:22:35 record');
-    assert(timeAt(slot('2026-10-20T22:30:00.000Z')) === null, 'empty 22:30 slot -> no record of its own (hold shows previous)');
-    assert(timeAt(slot('2026-10-20T22:40:00.000Z')) === T[3], '22:40 slot shows 22:44:27 COG -> 22:44:27 record, not 22:35:24');
-    assert(timeAt(slot('2026-10-20T22:50:00.000Z')) === T[4], '22:50 slot -> 22:53:30 record');
+    const frames = buildGridFrames(cogs, 10, W0, W1);
+    const at = iso => {
+        const i = frames.findIndex(f => f.displayTimestamp === iso);
+        return tags(markersForFrame(frames[i], frames[i - 1], computeHoldRadarCodes(frames, i), byTime));
+    };
+    assert(at('2026-10-20T22:20:00.000Z')[0] === 'scan1', '22:20 slot -> 22:22:35 scan');
+    assert(at('2026-10-20T22:30:00.000Z')[0] === 'scan1', 'empty 22:30 slot holds 22:20 scan (same as the held image)');
+    assert(at('2026-10-20T22:40:00.000Z')[0] === 'scan3', '22:40 slot shows the 22:44:27 COG -> scan3, not 22:35:24');
+    assert(at('2026-10-20T22:50:00.000Z')[0] === 'scan4', '22:50 slot -> 22:53:30 scan');
+    assert(at('2026-10-20T23:00:00.000Z')[0] === 'scan4', 'empty 23:00 slot holds 22:50 scan');
 }
 
-console.log('T2: the record of a COG that is never displayed is never matched');
+console.log('T2: regression — removing a radar shifts frame indices, markers still follow the COG');
 {
-    const frames = buildGridFrames(cogs, 10, new Date('2026-10-20T22:00:00Z'), new Date('2026-10-20T23:00:00Z'));
-    const used = new Set(matchRecordsToFrames(frames, records).flatMap(mm => [...mm.values()]));
-    assert(!used.has(2), '22:35:24 record unused (its COG was displaced by 22:44:27)');
+    const rma14 = ['2026-10-21T16:46:35Z', '2026-10-21T16:54:58Z', '2026-10-21T17:03:18Z'].map(t => cog(t, '01', 'RMA14'));
+    const ar5 = [cog('2026-10-21T16:30:19Z', '03', 'AR5', '1000'), cog('2026-10-21T17:00:19Z', '03', 'AR5', '1000')];
+    const markers = new Map([
+        ...rma14.map((c, i) => [cogKey(c), [{ tag: `rma14-${i}` }]]),
+        ...ar5.map((c, i) => [cogKey(c), [{ tag: `ar5-${i}` }]]),
+    ]);
+    const w0 = new Date('2026-10-21T16:30:00Z'), w1 = new Date('2026-10-21T17:30:00Z');
+    const rma14Tag = (frames, iso) => {
+        const i = frames.findIndex(f => f.displayTimestamp === iso);
+        return tags(markersForFrame(frames[i], frames[i - 1], computeHoldRadarCodes(frames, i), markers))
+            .filter(t => t.startsWith('rma14'));
+    };
+    const before = buildGridFrames([...rma14, ...ar5], 10, w0, w1);
+    assert(rma14Tag(before, '2026-10-21T17:00:00.000Z')[0] === 'rma14-2', 'before removal: 17:00 -> 17:03:18 scan');
+
+    // what removeRadarIncremental does: drop the radar, then drop frames left empty
+    const after = before.map(f => ({ ...f, cogsByRadar: Object.fromEntries(
+        Object.entries(f.cogsByRadar).filter(([code]) => code !== 'AR5')) }))
+        .filter(f => Object.keys(f.cogsByRadar).length > 0);
+    assert(after.length === before.length - 1 || after.length < before.length, 'removal deleted at least one frame (indices shifted)');
+    assert(rma14Tag(after, '2026-10-21T17:00:00.000Z')[0] === 'rma14-2', 'after removal: 17:00 still -> 17:03:18 scan');
+    assert(rma14Tag(after, '2026-10-21T16:50:00.000Z')[0] === 'rma14-1', 'after removal: 16:50 still -> 16:54:58 scan');
+    assert(!tags(markersForFrame(after[0], null, [], markers)).some(t => t.startsWith('ar5')),
+        'removed radar contributes no markers');
 }
 
-console.log('T3: exact match only — no tolerance');
+console.log('T3: held radar uses the previous frame\'s COG; missing cache entry draws nothing');
 {
-    const frames = [{ cogsByRadar: { RMA7: cog('2026-10-20T22:22:35Z') } }];
-    const m = matchRecordsToFrames(frames, [rec('2026-10-20T22:22:36Z')]);
-    assert(!m[0].has('RMA7'), 'record 1 s off does not match');
+    const prev = { cogsByRadar: { RMA7: cog(T[1]), RMA1: cog('2026-10-20T22:20:00Z', '01', 'RMA1') } };
+    const cur = { cogsByRadar: { RMA1: cog('2026-10-20T22:30:00Z', '01', 'RMA1') } };
+    const m = new Map([[cogKey(prev.cogsByRadar.RMA7), [{ tag: 'rma7-held' }]],
+                       [cogKey(cur.cogsByRadar.RMA1), [{ tag: 'rma1-cur' }]]]);
+    const out = tags(markersForFrame(cur, prev, ['RMA7'], m)).sort();
+    assert(out.join() === 'rma1-cur,rma7-held', 'RMA7 held from previous COG, RMA1 from its current COG');
+    assert(markersForFrame(cur, prev, ['RMA7'], new Map()).length === 0, 'nothing cached -> nothing drawn (no neighbour borrowed)');
+    assert(markersForFrame(null, null, [], m).length === 0, 'null frame -> empty');
 }
 
-console.log('T4: strategy / vol_nr must agree (vol 02 COG gets no vol 01 record)');
+console.log('T4: exact identity only — time, strategy, vol_nr and radar must agree');
 {
-    const frames = [{ cogsByRadar: { RMA7: cog('2026-10-20T22:22:35Z', '02') } }];
-    const m = matchRecordsToFrames(frames, [rec('2026-10-20T22:22:35Z', '01')]);
-    assert(!m[0].has('RMA7'), 'vol 02 COG not paired with vol 01 record');
+    const f = { cogsByRadar: { RMA7: cog('2026-10-20T22:22:35Z') } };
+    const base = [cog('2026-10-20T22:22:35Z'), 'x'];
+    assert(markersForFrame(f, null, [], cache(base)).length === 1, 'identical identity matches');
+    assert(markersForFrame(f, null, [], cache([cog('2026-10-20T22:22:36Z'), 'x'])).length === 0, '1 s off does not match');
+    assert(markersForFrame(f, null, [], cache([cog('2026-10-20T22:22:35Z', '02'), 'x'])).length === 0, 'other vol_nr does not match');
+    assert(markersForFrame(f, null, [], cache([cog('2026-10-20T22:22:35Z', '01', 'RMA7', '1000'), 'x'])).length === 0, 'other strategy does not match');
+    assert(markersForFrame(f, null, [], cache([cog('2026-10-20T22:22:35Z', '01', 'RMA1'), 'x'])).length === 0, 'other radar does not match');
 }
 
-console.log('T5: multi-radar frames pair per radar; missing record leaves radar absent');
+console.log('T5: collectDisplayedCogs / cogTimeSpan / selectWantedRecords');
 {
-    const frames = [{ cogsByRadar: {
-        RMA1: cog('2026-10-20T22:20:00Z', '01', 'RMA1'),
-        RMA7: cog('2026-10-20T22:22:35Z'),
-    } }];
-    const m = matchRecordsToFrames(frames, [rec('2026-10-20T22:20:00Z', '01', 'RMA1')]);
-    assert(m[0].get('RMA1') === 0, 'RMA1 matched');
-    assert(!m[0].has('RMA7'), 'RMA7 without record absent');
-    const other = matchRecordsToFrames(frames, [rec('2026-10-20T22:20:00Z', '01', 'RMA7')]);
-    assert(other[0].size === 0, 'same time but other radar does not match');
+    const frames = buildGridFrames(cogs, 10, W0, W1);
+    const displayed = collectDisplayedCogs(frames);
+    assert(displayed.size === 4 && !displayed.has(cogKey(cogs[2])), '22:35:24 COG is not displayed (displaced) -> not collected');
+    const span = cogTimeSpan(displayed.values());
+    assert(span.from.toISOString() === '2026-10-20T22:13:32.000Z' && span.to.toISOString() === '2026-10-20T22:53:30.000Z',
+        'span covers displayed COGs only');
+    assert(cogTimeSpan([]) === null, 'null span for no COGs');
+    const wanted = selectWantedRecords(T.map(t => rec(t)), displayed);
+    assert(wanted.length === 4 && !wanted.some(r => r.observation_time === T[2]), 'records of non-displayed COGs are not fetched');
+    assert(collectDisplayedCogs(null).size === 0, 'null frames tolerated');
 }
 
-console.log('T6: displayedCogTimeSpan ignores empty slots, null when no COGs');
+console.log('T6: key is stable across ISO formats of the same instant');
 {
-    const frames = buildGridFrames(cogs, 10, new Date('2026-10-20T22:00:00Z'), new Date('2026-10-20T23:00:00Z'));
-    const span = displayedCogTimeSpan(frames);
-    assert(span.from.toISOString() === '2026-10-20T22:13:32.000Z', 'span starts at first displayed COG');
-    assert(span.to.toISOString() === '2026-10-20T22:53:30.000Z', 'span ends at last displayed COG');
-    assert(displayedCogTimeSpan([{ cogsByRadar: {} }]) === null, 'null for COG-less frames');
-}
-
-console.log('T7: recordKey is stable across ISO formats of the same instant');
-{
-    assert(recordKey('A', '0315', '01', '2026-10-20T22:22:35Z') === recordKey('A', '0315', '01', '2026-10-20T22:22:35.000Z'),
-        'Z vs .000Z identical');
+    assert(recordKey('A', '0315', '01', '2026-10-20T22:22:35Z') === recordKey('A', '0315', '01', '2026-10-20T22:22:35.000Z'), 'Z vs .000Z identical');
 }
 
 console.log(`\n${'─'.repeat(40)}`);
