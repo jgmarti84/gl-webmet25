@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seguimiento de Tormentas - WebMet25</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/tracking.css">
+</head>
+<body>
+    <div id="logo-container">
+        <img src="/assets/images/logos/OHMC@3x.png" alt="OHMC Radar Meteorology System">
+    </div>
+
+    <div id="map"></div>
+
+    <!-- ===== HEADER ===== -->
+    <div id="radar-header">
+        <button id="btn-back" class="radar-back-btn" title="Volver a la vista principal">← Volver</button>
+        <span id="radar-header-code">—</span>
+        <span id="radar-header-title">Seguimiento de tormentas</span>
+    </div>
+
+    <!-- ===== CONTROL PANEL ===== -->
+    <div id="tracking-panel" class="floating-panel">
+        <div class="panel-header">
+            <span>⛈ Seguimiento</span>
+        </div>
+        <div class="panel-body">
+            <div class="control-group">
+                <label for="radar-select">Radar</label>
+                <select id="radar-select"></select>
+                <div id="coverage-note" class="hint">—</div>
+            </div>
+
+            <div class="control-group">
+                <label for="start-input">Desde (UTC)</label>
+                <input type="datetime-local" id="start-input" step="60">
+            </div>
+            <div class="control-group">
+                <label for="end-input">Hasta (UTC)</label>
+                <input type="datetime-local" id="end-input" step="60">
+            </div>
+
+            <div class="control-group toggle-row">
+                <label class="toggle-switch-wrapper" for="toggle-colmax">
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="toggle-colmax">
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span class="toggle-label">COLMAX</span>
+                </label>
+            </div>
+
+            <button id="btn-run" class="action-btn">Activar seguimiento</button>
+            <div id="run-status" class="hint"></div>
+
+            <div class="control-group toggle-row" style="margin-top:10px">
+                <label class="toggle-switch-wrapper" for="toggle-forecasts">
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="toggle-forecasts" checked>
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span class="toggle-label">Pronósticos</span>
+                </label>
+            </div>
+            <div class="control-group toggle-row">
+                <label class="toggle-switch-wrapper" for="toggle-trails">
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="toggle-trails" checked>
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span class="toggle-label">Trayectorias</span>
+                </label>
+            </div>
+
+            <!-- Read-only: these are the values the run actually used, read
+                 back from the service rather than echoed from the request. -->
+            <details id="config-box">
+                <summary>Configuración en uso</summary>
+                <table id="config-table"></table>
+            </details>
+        </div>
+    </div>
+
+    <!-- ===== FRAME CONTROLS ===== -->
+    <div id="frame-controls" class="hidden">
+        <div class="frame-info">
+            <span id="frame-time">—</span>
+            <span id="frame-verdict" class="verdict"></span>
+            <span id="frame-counts"></span>
+        </div>
+        <input type="range" id="frame-slider" min="0" max="0" value="0" step="1">
+        <div class="frame-buttons">
+            <button id="btn-first" title="Primero">⏮</button>
+            <button id="btn-prev" title="Anterior">◀</button>
+            <button id="btn-play" title="Reproducir">▶</button>
+            <button id="btn-next" title="Siguiente">▶|</button>
+            <button id="btn-last" title="Último">⏭</button>
+            <span id="frame-counter">— / —</span>
+        </div>
+    </div>
+
+    <!-- ===== LEGEND ===== -->
+    <div id="tracking-legend">
+        <div><span class="swatch conv"></span> Sistema convectivo</div>
+        <div><span class="swatch plain"></span> Detectado, no convectivo</div>
+        <div><span class="swatch fcst"></span> Pronóstico (+9…63 min)</div>
+        <div><span class="swatch trail"></span> Trayectoria</div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script type="module" src="js/tracking-app.js"></script>
+</body>
+</html>
