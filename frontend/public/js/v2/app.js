@@ -326,8 +326,8 @@ const app = {
 
             // v2: AnimationController takes mapManager
             state.animator = new AnimationController(state.mapManager);
-            state.animator.setOnFrameChange((index, frame) => {
-                this.onFrameChange(index, frame);
+            state.animator.setOnFrameChange((index, frame, holdRadarCodes) => {
+                this.onFrameChange(index, frame, holdRadarCodes);
             });
 
             state.legend = new LegendRenderer('legend-container');

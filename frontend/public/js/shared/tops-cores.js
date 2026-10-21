@@ -14,10 +14,14 @@
  *   layer.showFrame(frameIndex);   // synchronous, called from animation loop
  */
 
+import { displayedCogTimeSpan, matchRecordsToFrames } from './tops-cores-match.js';
+
 const API_BASE = '/api/v1';
 
-// Time window on each side of a frame timestamp used to match tops/cores records (ms)
-const TIME_WINDOW_MS = 2.5 * 60 * 1000;
+// Margin around the first/last displayed COG time in the metadata query (ms).
+// Records are matched to COGs by exact observation_time; this only guards
+// against sub-second serialisation differences at the range edges.
+const QUERY_MARGIN_MS = 1000;
 
 // SVG icon for core markers
 const ICON_URL = '/img/code-purple.svg';
@@ -122,10 +126,14 @@ export class TopsCoresLayer {
         this._loadAbortController = new AbortController();
         const { signal } = this._loadAbortController;
 
-        // Compute a single time range covering all frames ± the window
-        const timestamps = frames.map(f => new Date(f.timestamp || f.observation_time).getTime());
-        const overallStart = new Date(Math.min(...timestamps) - TIME_WINDOW_MS);
-        const overallEnd   = new Date(Math.max(...timestamps) + TIME_WINDOW_MS);
+        // Time range spanning the COGs actually displayed in the frames
+        const span = displayedCogTimeSpan(frames);
+        if (!span) {
+            this._frameData = frames.map(() => new Map());
+            return;
+        }
+        const overallStart = new Date(span.from.getTime() - QUERY_MARGIN_MS);
+        const overallEnd   = new Date(span.to.getTime() + QUERY_MARGIN_MS);
 
         // Collect all unique radar codes used across all frames
         const radarCodesSet = new Set();
@@ -185,20 +193,14 @@ export class TopsCoresLayer {
                 return this._extractMarkerData(geojson.features);
             });
 
-            // Step 4: distribute records to frames by ±TIME_WINDOW_MS, grouped by
-            // radar_code so that hold-last-frame can look up per-radar markers.
-            const newFrameData = [];
-            frames.forEach(frame => {
-                const frameMs = new Date(frame.timestamp || frame.observation_time).getTime();
+            // Step 4: pair each frame's displayed COG(s) with its own record (exact
+            // radar/strategy/vol/observation_time match), grouped by radar_code so
+            // hold-last-frame can look up markers of the previous frame per radar.
+            const matches = matchRecordsToFrames(frames, records);
+            const newFrameData = matches.map(frameMatches => {
                 const radarMarkers = new Map();
-                records.forEach((rec, i) => {
-                    const recMs = new Date(rec.observation_time).getTime();
-                    if (Math.abs(recMs - frameMs) <= TIME_WINDOW_MS) {
-                        const existing = radarMarkers.get(rec.radar_code) || [];
-                        radarMarkers.set(rec.radar_code, [...existing, ...recordMarkerData[i]]);
-                    }
-                });
-                newFrameData.push(radarMarkers);
+                frameMatches.forEach((recIdx, code) => radarMarkers.set(code, recordMarkerData[recIdx]));
+                return radarMarkers;
             });
             this._frameData = newFrameData;
 
