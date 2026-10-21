@@ -76,11 +76,17 @@ RUN git clone --depth 1 --branch "${GL_TRACKER_REF}" "${GL_TRACKER_REPO}" /opt/g
 # Shared DB package, same pattern as api/ and indexer/
 COPY database/radar_db/ ./radar_db/
 
-# Sidecar code. Everything lives inside the tracking_api package on purpose:
-# gl-tracker's modules are flat top-level names (config, gate, grilla,
-# pipeline, ...), so a top-level module here could shadow them depending on
-# sys.path order. Nothing but packages may sit directly in /app.
+# Sidecar code. Service code lives inside the tracking_api package on purpose:
+# gl-tracker's modules are flat top-level names, so a top-level module here
+# sharing one of those names would shadow it depending on sys.path order.
+#
+# The rule is therefore: no module directly in /app may be named any of
+#   config  estado  filtro_convectivo  gate  grilla  h0_wrf  operativo  pipeline
+#
+# smoke_driver sits at the top level deliberately — it is a standalone script,
+# not importable service code, and its name collides with nothing.
 COPY tracking/tracking_api/ ./tracking_api/
+COPY tracking/smoke_driver.py ./smoke_driver.py
 
 ENV PYTHONPATH=/app:/opt/gl-tracker
 
