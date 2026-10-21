@@ -6,17 +6,22 @@ import logging
 import os
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, FastAPI, Query
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from tracking_api import volumes as volumes_mod
 from tracking_api.config import settings
-from tracking_api.db import check_connection, get_db
+from tracking_api.db import check_connection, get_db, session_scope
+from tracking_api.jobs import Job, JobStatus, cache_key, store
 from tracking_api.schemas import (
     AvailabilityItem,
     AvailabilityResponse,
     HealthResponse,
+    JobCreated,
+    JobProgress,
+    JobResult,
+    VolumeWindow,
 )
 
 logging.basicConfig(
@@ -87,6 +92,115 @@ def get_availability(
             )
             for r in rows
         ]
+    )
+
+
+def _execute(job: Job) -> None:
+    """Run one job. Executes on the worker thread, not the request thread.
+
+    Imports the driver lazily so that a broken gl-tracker clone surfaces as a
+    failed job with a clear message, rather than preventing the whole service
+    from starting — /health already reports that condition separately.
+    """
+    from tracking_api.driver import build_config, config_summary, run_tracking
+    from tracking_api.schemas import TrackingConfig
+
+    cfg = build_config(TrackingConfig(**job.config))
+    job.config_in_force = config_summary(cfg)
+
+    with session_scope() as session:
+        vols = volumes_mod.resolve_window(session, job.radar, job.start, job.end)
+
+    if not vols:
+        job.frames = []
+        job.volumes_total = 0
+        return
+
+    missing = volumes_mod.missing_on_disk(vols)
+    if missing:
+        # Retention and the indexer's prune pass are not synchronised, so a row
+        # can briefly outlive its file. Failing up front beats dying midway.
+        raise FileNotFoundError(
+            f"{len(missing)} cube(s) indexed but not on disk, first: {missing[0].path}"
+        )
+
+    job.volumes_total = len(vols)
+
+    def progress(done: int, total: int) -> None:
+        job.volumes_done = done
+
+    job.frames = run_tracking(vols, cfg, progress=progress)
+
+
+@router.post("/jobs", response_model=JobCreated, status_code=202)
+def submit_job(request: VolumeWindow) -> JobCreated:
+    """Queue a tracking run over a radar and time window.
+
+    Returns 202 immediately; poll ``/jobs/{job_id}`` for the result. Tracking a
+    window is seconds of CPU, so a synchronous response would have nowhere to
+    report progress and would sit on an open connection throughout.
+
+    An identical run already in the cache is returned straight away with
+    ``cached: true`` and no work queued.
+    """
+    config = request.config.model_dump()
+    key = cache_key(request.radar, request.start, request.end, config)
+
+    hit = store.find_cached(key)
+    if hit is not None:
+        return JobCreated(
+            job_id=hit.job_id, status=hit.status.value, radar=hit.radar,
+            start=hit.start, end=hit.end, volumes_total=hit.volumes_total,
+            cached=True,
+        )
+
+    job = store.create(request.radar, request.start, request.end, config)
+
+    def run_and_cache(j: Job) -> None:
+        _execute(j)
+        j.cached = False
+        store.put_cached(key, j)
+
+    store.submit(job, run_and_cache)
+
+    return JobCreated(
+        job_id=job.job_id, status=job.status.value, radar=job.radar,
+        start=job.start, end=job.end, volumes_total=job.volumes_total,
+    )
+
+
+@router.get("/jobs/{job_id}", response_model=JobResult)
+def get_job(job_id: str) -> JobResult:
+    """Poll a job.
+
+    ``frames`` is null until the job finishes, so polling stays cheap. A 404
+    means the job is unknown *or* was evicted — the store is in-memory and does
+    not survive a restart, so a client should treat it as "resubmit".
+    """
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Unknown job. The job store is in-memory; resubmit the request.",
+        )
+
+    return JobResult(
+        job_id=job.job_id,
+        status=job.status.value,
+        radar=job.radar,
+        start=job.start,
+        end=job.end,
+        progress=JobProgress(
+            volumes_total=job.volumes_total,
+            volumes_done=job.volumes_done,
+            fraction=job.progress,
+        ),
+        created_at=job.created_at,
+        finished_at=job.finished_at,
+        cached=job.cached,
+        error=job.error,
+        config_in_force=job.config_in_force,
+        frames=job.frames if job.status is JobStatus.DONE else None,
     )
 
 

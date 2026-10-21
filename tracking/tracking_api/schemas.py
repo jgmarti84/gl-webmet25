@@ -67,3 +67,46 @@ class VolumeWindow(BaseModel):
     start: datetime = Field(..., description="Window start (UTC, inclusive)")
     end: datetime = Field(..., description="Window end (UTC, inclusive)")
     config: TrackingConfig = Field(default_factory=TrackingConfig)
+
+
+class JobCreated(BaseModel):
+    """Acknowledgement of a submitted job."""
+
+    job_id: str
+    status: str
+    radar: str
+    start: datetime
+    end: datetime
+    volumes_total: int
+    #: True when an identical run was already cached and no work was queued.
+    cached: bool = False
+
+
+class JobProgress(BaseModel):
+    volumes_total: int
+    volumes_done: int
+    fraction: float
+
+
+class JobResult(BaseModel):
+    """A job's state, and its frames once finished.
+
+    ``frames`` stays null until the job completes, so a client can poll without
+    transferring a partial payload each time.
+    """
+
+    job_id: str
+    status: str
+    radar: str
+    start: datetime
+    end: datetime
+    progress: JobProgress
+    created_at: datetime
+    finished_at: Optional[datetime] = None
+    cached: bool = False
+    error: Optional[str] = None
+    #: The configuration actually in force, read back off gl-tracker's Config
+    #: rather than echoed from the request — so it includes defaults the client
+    #: never sent, and is what the UI should display.
+    config_in_force: Optional[dict] = None
+    frames: Optional[List[dict]] = None
