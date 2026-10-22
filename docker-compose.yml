@@ -27,15 +27,15 @@ services:
     image: postgis/postgis:15-3.5
     container_name: radar_db-gl
     environment: 
-      POSTGRES_DB: radar_prod_db
-      POSTGRES_USER: radar
-      POSTGRES_PASSWORD: radarpass
+      POSTGRES_DB: ${DB_NAME:-radar_prod_db}
+      POSTGRES_USER: ${DB_USER:-radar}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required (see .env.example)}
     volumes:
       - ../radar_db_data:/var/lib/postgresql/data
     ports:
       - "5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U radar -d radar_prod_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-radar} -d ${DB_NAME:-radar_prod_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -52,9 +52,9 @@ services:
     environment:
       DB_HOST: radar_db
       DB_PORT: 5432
-      DB_NAME: radar_prod_db
-      DB_USER: radar
-      DB_PASSWORD: radarpass
+      DB_NAME: ${DB_NAME:-radar_prod_db}
+      DB_USER: ${DB_USER:-radar}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required (see .env.example)}
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
     depends_on:
@@ -81,9 +81,9 @@ services:
     environment:
       DB_HOST: radar_db
       DB_PORT: 5432
-      DB_NAME: radar_prod_db
-      DB_USER: radar
-      DB_PASSWORD: radarpass
+      DB_NAME: ${DB_NAME:-radar_prod_db}
+      DB_USER: ${DB_USER:-radar}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required (see .env.example)}
       WATCH_PATH: /product_output
       SCAN_INTERVAL: 30
       FILE_PATTERN: "*.tif"
@@ -126,9 +126,9 @@ services:
     environment:
       DB_HOST: radar_db
       DB_PORT: 5432
-      DB_NAME: radar_prod_db
-      DB_USER: radar
-      DB_PASSWORD: radarpass
+      DB_NAME: ${DB_NAME:-radar_prod_db}
+      DB_USER: ${DB_USER:-radar}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required (see .env.example)}
       COG_BASE_PATH: /product_output
       TOPS_AND_CORES_DIR: /tops_and_cores
       CORS_ORIGINS: ${CORS_ORIGINS:-}

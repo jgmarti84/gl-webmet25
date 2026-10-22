@@ -174,7 +174,7 @@ stats:
 	docker stats --no-stream
 
 psql:
-	$(COMPOSE) exec radar_db psql -U radar -d radar_prod_db
+	$(COMPOSE) exec radar_db sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
 
 # Abre una shell dentro del contenedor. Ejemplo: make shell-api
 shell-%:

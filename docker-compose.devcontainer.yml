@@ -93,9 +93,9 @@ services:
       # Production database (read only reference, never written by tests)
       DB_HOST: radar_db
       DB_PORT: 5432
-      DB_NAME: radar_prod_db
-      DB_USER: radar
-      DB_PASSWORD: radarpass
+      DB_NAME: ${DB_NAME:-radar_prod_db}
+      DB_USER: ${DB_USER:-radar}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required (see .env.example)}
       # Test database (used by registrar and watcher tests)
       TEST_DB_HOST: radar_db_test
       TEST_DB_PORT: 5432

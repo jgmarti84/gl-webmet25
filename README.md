@@ -312,7 +312,7 @@ webmet25/
 git clone <repository-url> webmet25
 cd webmet25
 cp .env.example .env
-# Edit .env: JWT_SECRET, ALLOWED_ORIGINS, COOKIE_SECURE and BOOTSTRAP_ADMIN_* (see .env.example)
+# Edit .env: DB_PASSWORD, JWT_SECRET, ALLOWED_ORIGINS, COOKIE_SECURE and BOOTSTRAP_ADMIN_* (see .env.example)
 ```
 
 ### Run with Docker Compose
