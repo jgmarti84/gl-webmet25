@@ -22,7 +22,7 @@ ADMIN_PASS = os.getenv("BOOTSTRAP_ADMIN_PASSWORD")
 # skipif with a reason (not a plain skip): these tests need the admin account db-init creates from BOOTSTRAP_ADMIN_*.
 needs_admin = pytest.mark.skipif(not (ADMIN_USER and ADMIN_PASS), reason="BOOTSTRAP_ADMIN_* not set")
 
-ME_FIELDS = {"id", "username", "full_name", "role", "password_is_bootstrap"}
+ME_FIELDS = {"id", "username", "full_name", "role", "password_is_bootstrap", "access_expires_in"}
 SENSITIVE_FIELDS = {"password_hash", "token_version", "failed_login_count", "locked_until"}
 FOREIGN_ORIGIN = {"Origin": "https://evil.example"}
 # Cookie names change with COOKIE_SECURE (prefixes), so garbage cookies are sent under both names.
@@ -351,10 +351,11 @@ def test_me_response_field_types():
 
 @needs_admin
 def test_me_matches_the_login_response():
-    """/auth/me must describe the same user that logged in."""
+    """/auth/me must describe the same user that logged in (the remaining lifetime may differ)."""
     with httpx.Client(base_url=API_BASE_URL) as client:
         login_data = _login(client).json()
         me_data = client.get(f"{PREFIX}/me").json()
+    assert 0 < me_data.pop("access_expires_in") <= login_data.pop("access_expires_in")
     assert me_data == login_data
 
 
@@ -389,3 +390,40 @@ def test_full_session_flow():
         assert client.get("/api/v1/admin/radars").status_code == 200
         assert client.post(f"{PREFIX}/logout").status_code == 204
         assert client.get("/api/v1/admin/radars").status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/auth/check   (204: no body)
+# ---------------------------------------------------------------------------
+
+
+def test_check_without_session_returns_401():
+    """The nginx session probe must answer 401 without a session."""
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        assert client.get(f"{PREFIX}/check").status_code == 401
+
+
+@needs_admin
+def test_check_with_session_returns_204():
+    """With a session the probe answers 204 and no body."""
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        _login(client)
+        response = client.get(f"{PREFIX}/check")
+    assert response.status_code == 204
+    assert response.content == b""
+
+
+@needs_admin
+def test_check_admin_role_returns_204_for_the_admin():
+    """?role=admin answers 204 for the bootstrap admin."""
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        _login(client)
+        assert client.get(f"{PREFIX}/check", params={"role": "admin"}).status_code == 204
+
+
+@needs_admin
+def test_check_unknown_role_returns_422():
+    """An unknown role value is a validation error."""
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        _login(client)
+        assert client.get(f"{PREFIX}/check", params={"role": "superuser"}).status_code == 422

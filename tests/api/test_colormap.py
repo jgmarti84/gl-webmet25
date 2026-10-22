@@ -3,6 +3,8 @@ import httpx
 import os
 import pytest
 
+from ._session import session_headers
+
 API_BASE_URL = os.getenv("API_BASE_URL", "http://api:8000")
 
 COLORMAP_PREFIX = "/api/v1/colormap"
@@ -15,21 +17,21 @@ PRODUCTS_PREFIX = "/api/v1/products"
 
 def test_colormap_options_returns_200():
     """GET /colormap/options must return HTTP 200."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{COLORMAP_PREFIX}/options")
     assert response.status_code == 200
 
 
 def test_colormap_options_returns_json():
     """GET /colormap/options must return valid JSON with correct content type."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{COLORMAP_PREFIX}/options")
     assert "application/json" in response.headers["content-type"]
 
 
 def test_colormap_options_returns_dict_of_lists():
     """GET /colormap/options must return a dict mapping product keys to lists."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{COLORMAP_PREFIX}/options")
     data = response.json()
     assert isinstance(data, dict)
@@ -44,21 +46,21 @@ def test_colormap_options_returns_dict_of_lists():
 
 def test_colormap_defaults_returns_200():
     """GET /colormap/defaults must return HTTP 200."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{COLORMAP_PREFIX}/defaults")
     assert response.status_code == 200
 
 
 def test_colormap_defaults_returns_json():
     """GET /colormap/defaults must return valid JSON with correct content type."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{COLORMAP_PREFIX}/defaults")
     assert "application/json" in response.headers["content-type"]
 
 
 def test_colormap_defaults_returns_dict_of_strings():
     """GET /colormap/defaults must return a dict mapping product keys to colormap names."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{COLORMAP_PREFIX}/defaults")
     data = response.json()
     assert isinstance(data, dict)
@@ -73,21 +75,21 @@ def test_colormap_defaults_returns_dict_of_strings():
 
 def test_colormap_colors_returns_200_for_valid_cmap():
     """GET /colormap/colors/{cmap_name} must return HTTP 200 for a known colormap."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{COLORMAP_PREFIX}/colors/viridis")
     assert response.status_code == 200
 
 
 def test_colormap_colors_returns_json():
     """GET /colormap/colors/{cmap_name} must return valid JSON."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{COLORMAP_PREFIX}/colors/viridis")
     assert "application/json" in response.headers["content-type"]
 
 
 def test_colormap_colors_response_has_required_fields():
     """GET /colormap/colors/{cmap_name} must return 'colors', 'steps', 'colormap'."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{COLORMAP_PREFIX}/colors/viridis")
     data = response.json()
     assert "colors" in data
@@ -97,7 +99,7 @@ def test_colormap_colors_response_has_required_fields():
 
 def test_colormap_colors_returns_list_of_hex_colors():
     """GET /colormap/colors/{cmap_name} must return a list of hex color strings."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{COLORMAP_PREFIX}/colors/viridis")
     data = response.json()
     assert isinstance(data["colors"], list)
@@ -109,7 +111,7 @@ def test_colormap_colors_returns_list_of_hex_colors():
 
 def test_colormap_colors_default_steps_is_256():
     """GET /colormap/colors/{cmap_name} default must return 256 steps."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{COLORMAP_PREFIX}/colors/viridis")
     data = response.json()
     assert data["steps"] == 256
@@ -118,7 +120,7 @@ def test_colormap_colors_default_steps_is_256():
 
 def test_colormap_colors_custom_steps():
     """GET /colormap/colors/{cmap_name}?steps=10 must return exactly 10 colors."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{COLORMAP_PREFIX}/colors/viridis", params={"steps": 10})
     data = response.json()
     assert data["steps"] == 10
@@ -127,14 +129,14 @@ def test_colormap_colors_custom_steps():
 
 def test_colormap_colors_returns_400_for_invalid_cmap():
     """GET /colormap/colors/{cmap_name} must return HTTP 400 for an unknown colormap."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{COLORMAP_PREFIX}/colors/INVALID_CMAP_XYZ_99")
     assert response.status_code == 400
 
 
 def test_colormap_colors_400_has_detail_field():
     """GET /colormap/colors/{invalid_cmap} 400 response must include 'detail'."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{COLORMAP_PREFIX}/colors/INVALID_CMAP_XYZ_99")
     data = response.json()
     assert "detail" in data
@@ -146,21 +148,21 @@ def test_colormap_colors_400_has_detail_field():
 
 def test_colormap_info_returns_200_for_valid_product():
     """GET /colormap/info/{product_key} must return HTTP 200 for a known product."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{COLORMAP_PREFIX}/info/DBZH")
     assert response.status_code == 200
 
 
 def test_colormap_info_returns_json():
     """GET /colormap/info/{product_key} must return valid JSON."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{COLORMAP_PREFIX}/info/DBZH")
     assert "application/json" in response.headers["content-type"]
 
 
 def test_colormap_info_has_required_fields():
     """GET /colormap/info/{product_key} must return all required contract fields."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{COLORMAP_PREFIX}/info/DBZH")
     data = response.json()
     assert "product_key" in data
@@ -173,7 +175,7 @@ def test_colormap_info_has_required_fields():
 
 def test_colormap_info_colors_is_list_of_hex():
     """GET /colormap/info/{product_key} must return 'colors' as a list of hex strings."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{COLORMAP_PREFIX}/info/DBZH")
     data = response.json()
     assert isinstance(data["colors"], list)
@@ -184,7 +186,7 @@ def test_colormap_info_colors_is_list_of_hex():
 
 def test_colormap_info_vmin_less_than_vmax():
     """GET /colormap/info/{product_key} vmin must be less than vmax."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{COLORMAP_PREFIX}/info/DBZH")
     data = response.json()
     assert data["vmin"] < data["vmax"]
@@ -192,7 +194,7 @@ def test_colormap_info_vmin_less_than_vmax():
 
 def test_colormap_info_colormap_override():
     """GET /colormap/info/{product_key}?colormap=viridis must accept colormap override."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(
             f"{COLORMAP_PREFIX}/info/DBZH",
             params={"colormap": "viridis"}
@@ -208,7 +210,7 @@ def test_colormap_info_colormap_override():
 
 def test_deprecated_product_colormap_returns_200():
     """GET /products/{product_key}/colormap must return HTTP 200 for a valid key."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         products = client.get(f"{PRODUCTS_PREFIX}").json()["products"]
         if not products:
             return  # Skip: no products in database
@@ -220,7 +222,7 @@ def test_deprecated_product_colormap_returns_200():
 
 def test_deprecated_product_colormap_returns_json():
     """GET /products/{product_key}/colormap must return valid JSON."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         products = client.get(f"{PRODUCTS_PREFIX}").json()["products"]
         if not products:
             return  # Skip: no products in database
@@ -231,7 +233,7 @@ def test_deprecated_product_colormap_returns_json():
 
 def test_deprecated_product_colormap_has_required_fields():
     """GET /products/{product_key}/colormap must return 'product_key', 'entries', 'min_value', 'max_value', 'unit'."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         products = client.get(f"{PRODUCTS_PREFIX}").json()["products"]
         if not products:
             return  # Skip: no products in database
@@ -247,14 +249,14 @@ def test_deprecated_product_colormap_has_required_fields():
 
 def test_deprecated_product_colormap_returns_404_for_invalid_key():
     """GET /products/{product_key}/colormap must return 404 for an unknown key."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{PRODUCTS_PREFIX}/INVALID_PRODUCT_XYZ_99/colormap")
     assert response.status_code == 404
 
 
 def test_deprecated_product_colormap_404_has_detail_field():
     """GET /products/{invalid_key}/colormap 404 response must include 'detail'."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{PRODUCTS_PREFIX}/INVALID_PRODUCT_XYZ_99/colormap")
     data = response.json()
     assert "detail" in data
@@ -331,3 +333,11 @@ def test_colormap_cache_invalidate_foreign_origin_returns_403():
     with httpx.Client(base_url=API_BASE_URL) as client:
         response = client.post(f"{COLORMAP_PREFIX}/cache/invalidate", headers=headers)
     assert response.status_code == 403
+
+
+def test_colormap_without_session_returns_401():
+    """Every data endpoint requires a session (spec A)."""
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.get("/api/v1/colormap/names")
+    assert response.status_code == 401
+    assert "detail" in response.json()
