@@ -50,9 +50,31 @@ export function refreshSession() {
     return refreshInFlight;
 }
 
+const RELOAD_GUARD_KEY = 'webmet25_auth_reload_at';
+const RELOAD_GUARD_MS = 10000;
+
+/**
+ * The session is gone: reload so nginx serves the login in place. If this page already reloaded a few
+ * seconds ago and still has no session (nginx did not stop it), go to /login instead of looping.
+ */
+function sessionLost() {
+    let last = 0;
+    try {
+        last = Number(sessionStorage.getItem(RELOAD_GUARD_KEY)) || 0;
+        sessionStorage.setItem(RELOAD_GUARD_KEY, String(Date.now()));
+    } catch (error) {
+        // sessionStorage unavailable: fall through to a plain reload
+    }
+    if (Date.now() - last < RELOAD_GUARD_MS) {
+        redirectToLogin();
+        return;
+    }
+    window.location.reload();
+}
+
 /**
  * fetch() for API data. On a 401 it renews the session and retries once; if the session is
- * gone it reloads the page, and nginx then serves the login in place.
+ * gone it reloads the page (see sessionLost), and nginx then serves the login in place.
  */
 export async function authFetch(input, init) {
     const response = await fetch(input, init);
@@ -61,7 +83,7 @@ export async function authFetch(input, init) {
         const retried = await fetch(input, init);
         if (retried.status !== 401) return retried;
     }
-    window.location.reload();
+    sessionLost();
     return response;
 }
 
@@ -73,11 +95,11 @@ function scheduleKeepAlive(expiresIn) {
 async function keepAliveTick() {
     const before = accessExpiresAt;
     if (!(await refreshSession())) {
-        window.location.reload();
+        sessionLost();
         return;
     }
     // A refresh race gives no new lifetime: ask /me for the cookie the other tab obtained.
-    if (accessExpiresAt === before && !(await authApi.me())) window.location.reload();
+    if (accessExpiresAt === before && !(await authApi.me())) sessionLost();
 }
 
 function onVisibilityChange() {
@@ -100,7 +122,7 @@ export function startSessionKeepAlive() {
 export async function initPageSession() {
     const me = await authApi.me();
     if (!me) {
-        window.location.reload();
+        sessionLost();
         return null;
     }
     startSessionKeepAlive();
