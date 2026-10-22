@@ -37,7 +37,7 @@ def test_auth_defaults(monkeypatch):
     for name in AUTH_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
     s = APISettings(_env_file=None, JWT_SECRET=GOOD_SECRET)
-    assert s.access_token_ttl_minutes == 15
+    assert s.access_token_ttl_minutes == 30
     assert s.session_idle_ttl_hours == 48
     assert s.session_absolute_ttl_days == 7
     assert s.cookie_secure is True

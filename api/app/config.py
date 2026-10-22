@@ -61,7 +61,7 @@ class APISettings(BaseSettings):
     jwt_secret: str = Field(alias="JWT_SECRET")
     jwt_issuer: str = Field(default="webmet25", alias="JWT_ISSUER")
     jwt_audience: str = Field(default="webmet25-api", alias="JWT_AUDIENCE")
-    access_token_ttl_minutes: int = Field(default=60, alias="ACCESS_TOKEN_TTL_MINUTES")
+    access_token_ttl_minutes: int = Field(default=30, alias="ACCESS_TOKEN_TTL_MINUTES")
     session_idle_ttl_hours: int = Field(default=48, alias="SESSION_IDLE_TTL_HOURS")
     session_absolute_ttl_days: int = Field(default=7, alias="SESSION_ABSOLUTE_TTL_DAYS")
     cookie_secure: bool = Field(default=True, alias="COOKIE_SECURE")

@@ -430,7 +430,7 @@ Respaldado por `ColormapService` — un singleton thread-safe con caché de TTL 
 **Router:** [`api/app/routers/admin.py`](../api/app/routers/admin.py) — ruta base `/api/v1/admin`  
 **Frontend:** [`frontend/public/admin.html`](../frontend/public/admin.html) + [`js/admin.js`](../frontend/public/js/admin.js), servido en `/admin`
 
-**Autenticación:** `/api/v1/admin/*` y `/api/v1/admin/users/*` requieren un usuario logueado con rol `admin`. Las sesiones usan una cookie JWT de acceso de 60 minutos y una cookie de refresh rotativa (48 h sin actividad, 7 días como máximo), ambas `HttpOnly` y `SameSite=Strict`, validadas por la API ([`api/app/auth/dependencies.py`](../api/app/auth/dependencies.py)). `/admin` y `/login` son páginas estáticas que sirve nginx sin autenticación. El resto de `/api/v1/*` sigue siendo público. Los pedidos que modifican datos además comparan el header `Origin` con `ALLOWED_ORIGINS`.
+**Autenticación:** `/api/v1/admin/*` y `/api/v1/admin/users/*` requieren un usuario logueado con rol `admin`. Las sesiones usan una cookie JWT de acceso de 30 minutos y una cookie de refresh rotativa (48 h sin actividad, 7 días como máximo), ambas `HttpOnly` y `SameSite=Strict`, validadas por la API ([`api/app/auth/dependencies.py`](../api/app/auth/dependencies.py)). `/admin` y `/login` son páginas estáticas que sirve nginx sin autenticación. El resto de `/api/v1/*` sigue siendo público. Los pedidos que modifican datos además comparan el header `Origin` con `ALLOWED_ORIGINS`.
 
 **Grupos de endpoints:**
 
@@ -767,7 +767,7 @@ Ver §2.2 para la tabla completa de variables de entorno de `IndexerSettings`.
 | `jwt_secret` | `JWT_SECRET` | — (obligatoria) | 32+ caracteres; la API no arranca sin ella |
 | `allowed_origins` | `ALLOWED_ORIGINS` | *(vacío)* | Orígenes aceptados en POST/PUT/PATCH/DELETE |
 | `cookie_secure` | `COOKIE_SECURE` | `true` | `false` solo para HTTP local |
-| `access_token_ttl_minutes` | `ACCESS_TOKEN_TTL_MINUTES` | `60` | Vida del token de acceso |
+| `access_token_ttl_minutes` | `ACCESS_TOKEN_TTL_MINUTES` | `30` | Vida del token de acceso |
 | `session_idle_ttl_hours` | `SESSION_IDLE_TTL_HOURS` | `48` | Vencimiento de la sesión sin actividad |
 | `session_absolute_ttl_days` | `SESSION_ABSOLUTE_TTL_DAYS` | `7` | Duración máxima de la sesión |
 | `login_max_failed_attempts` | `LOGIN_MAX_FAILED_ATTEMPTS` | `5` | Logins fallidos antes de un bloqueo |
