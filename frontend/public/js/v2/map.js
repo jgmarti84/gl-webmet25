@@ -22,6 +22,8 @@
  *   addFrame()/removeFrame() with the same index so MapManager stays aligned.
  */
 
+import { authFetch } from '../auth-api.js';
+
 const DEFAULT_CENTER = [-34.0, -64.0];
 const DEFAULT_ZOOM   = 5;
 const DEFAULT_OPACITY = 0.7;
@@ -264,7 +266,7 @@ export class MapManager {
      * Throws on HTTP error or network failure.
      */
     async _loadImage(url) {
-        const response = await fetch(url);
+        const response = await authFetch(url);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status} for ${url}`);
         }

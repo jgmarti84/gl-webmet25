@@ -1,4 +1,5 @@
 import { api }                 from '../shared/api.js';
+import { initPageSession }      from '../auth-api.js';
 import { MapManager }          from './map.js';
 import { AnimationController } from './animation.js';
 import { UIControls }          from '../shared/controls.js';
@@ -1662,6 +1663,7 @@ const app = {
 // START APPLICATION
 // =============================================================================
 
-document.addEventListener('DOMContentLoaded', () => {
-    app.init();
+document.addEventListener('DOMContentLoaded', async () => {
+    const me = await initPageSession();
+    if (me) app.init();
 });

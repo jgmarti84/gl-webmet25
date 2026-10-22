@@ -4,6 +4,7 @@
  */
 
 import { cogBrowserApi } from './cog-browser-api.js';
+import { initPageSession } from '../auth-api.js';
 import { LegendRenderer } from './legend.js';
 
 
@@ -702,6 +703,7 @@ const app = {
 // START APPLICATION
 // =============================================================================
 
-document.addEventListener('DOMContentLoaded', () => {
-    app.init();
+document.addEventListener('DOMContentLoaded', async () => {
+    const me = await initPageSession();
+    if (me) app.init();
 });

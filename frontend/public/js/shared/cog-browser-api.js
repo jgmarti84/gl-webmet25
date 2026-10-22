@@ -3,16 +3,17 @@
  * Handles all API calls for the COG Browser page
  */
 
-const API_BASE = window.location.hostname === 'localhost' 
-    ? 'http://localhost:8000/api/v1'
-    : '/api/v1';
+import { authFetch } from '../auth-api.js';
+
+// Same origin as the page: the session cookie does not travel to another host or port.
+const API_BASE = '/api/v1';
 
 export const cogBrowserApi = {
     /**
      * Generic GET request
      */
     async get(endpoint) {
-        const response = await fetch(`${API_BASE}${endpoint}`);
+        const response = await authFetch(`${API_BASE}${endpoint}`);
         if (!response.ok) {
             throw new Error(`API error: ${response.status}`);
         }
