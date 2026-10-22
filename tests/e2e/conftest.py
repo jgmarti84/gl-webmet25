@@ -47,7 +47,7 @@ def login_via_form(page, username: str = ADMIN_USERNAME, password: str = ADMIN_P
 
 # nginx rate-limits /api/v1/auth/login (10 requests/minute per IP), so the admin
 # tests share ONE login: its browser state (cookies) is reused for every test and
-# renewed every 10 minutes, before the 15-minute access cookie expires. Contexts
+# renewed every 10 minutes, before the 30-minute access cookie expires. Contexts
 # started from the same state must not outlive that window, otherwise two of
 # them would try to refresh the same (rotating) refresh token.
 _ADMIN_STATE = {"state": None, "at": 0.0}
@@ -132,3 +132,30 @@ def _screenshot_on_failure(request):
             page.screenshot(path=str(SCREENSHOT_DIR / f"{safe}.png"), full_page=True)
         except Exception:
             pass  # never let screenshotting mask the real failure
+
+
+E2E_VIEWER = "e2e-viewer"
+E2E_VIEWER_PASSWORD = "e2e-viewer-password-1"
+
+
+def ensure_viewer(api) -> int:
+    """Create (or reactivate) the e2e viewer through the admin API; `api` is an admin APIRequestContext."""
+    users = api.get(f"{FRONTEND_URL}/api/v1/admin/users").json()
+    existing = next((u for u in users if u["username"] == E2E_VIEWER), None)
+    if existing is None:
+        response = api.post(
+            f"{FRONTEND_URL}/api/v1/admin/users",
+            data={"username": E2E_VIEWER, "password": E2E_VIEWER_PASSWORD, "role": "viewer"},
+        )
+        assert response.status == 201, response.text()
+        return response.json()["id"]
+    api.patch(f"{FRONTEND_URL}/api/v1/admin/users/{existing['id']}", data={"is_active": True, "role": "viewer"})
+    api.post(
+        f"{FRONTEND_URL}/api/v1/admin/users/{existing['id']}/reset-password",
+        data={"password": E2E_VIEWER_PASSWORD},
+    )
+    return existing["id"]
+
+
+def deactivate_user(api, user_id: int) -> None:
+    api.patch(f"{FRONTEND_URL}/api/v1/admin/users/{user_id}", data={"is_active": False})
