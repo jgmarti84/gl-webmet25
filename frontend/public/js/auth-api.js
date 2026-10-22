@@ -1,7 +1,24 @@
-// Auth client shared by the login page and the admin panel.
+// Auth client shared by every page: login, admin panel, map, radar detail and COG browser.
 const AUTH_BASE = '/api/v1/auth';
 
 let refreshInFlight = null;
+
+const REFRESH_MARGIN_S = 120;
+let accessExpiresAt = 0;      // ms since epoch; 0 = unknown
+let keepAliveEnabled = false;
+let keepAliveTimer = null;
+
+/** Milliseconds to wait before renewing a token that lives `expiresIn` more seconds. */
+export function refreshDelayMs(expiresIn) {
+    const lead = Math.min(REFRESH_MARGIN_S, expiresIn / 2);
+    return Math.max(0, Math.round((expiresIn - lead) * 1000));
+}
+
+function noteAccessExpiry(expiresIn) {
+    if (typeof expiresIn !== 'number') return;
+    accessExpiresAt = Date.now() + expiresIn * 1000;
+    if (keepAliveEnabled) scheduleKeepAlive(expiresIn);
+}
 
 /**
  * Refresh the session once, shared by all concurrent callers.
@@ -12,7 +29,11 @@ export function refreshSession() {
         refreshInFlight = (async () => {
             try {
                 const response = await fetch(`${AUTH_BASE}/refresh`, { method: 'POST', credentials: 'same-origin' });
-                if (response.ok) return true;
+                if (response.ok) {
+                    const body = await response.json().catch(() => ({}));
+                    noteAccessExpiry(body.access_expires_in);
+                    return true;
+                }
                 if (response.status === 401) {
                     const body = await response.json().catch(() => ({}));
                     // Another tab rotated the token; the browser already has the new cookie.
@@ -29,8 +50,65 @@ export function refreshSession() {
     return refreshInFlight;
 }
 
+/**
+ * fetch() for API data. On a 401 it renews the session and retries once; if the session is
+ * gone it reloads the page, and nginx then serves the login in place.
+ */
+export async function authFetch(input, init) {
+    const response = await fetch(input, init);
+    if (response.status !== 401) return response;
+    if (await refreshSession()) {
+        const retried = await fetch(input, init);
+        if (retried.status !== 401) return retried;
+    }
+    window.location.reload();
+    return response;
+}
+
+function scheduleKeepAlive(expiresIn) {
+    clearTimeout(keepAliveTimer);
+    keepAliveTimer = setTimeout(keepAliveTick, refreshDelayMs(expiresIn));
+}
+
+async function keepAliveTick() {
+    const before = accessExpiresAt;
+    if (!(await refreshSession())) {
+        window.location.reload();
+        return;
+    }
+    // A refresh race gives no new lifetime: ask /me for the cookie the other tab obtained.
+    if (accessExpiresAt === before && !(await authApi.me())) window.location.reload();
+}
+
+function onVisibilityChange() {
+    if (document.visibilityState !== 'visible' || !accessExpiresAt) return;
+    if (accessExpiresAt - Date.now() < REFRESH_MARGIN_S * 1000) keepAliveTick();
+}
+
+/** Renew the access token shortly before it expires, also after the tab was in background. */
+export function startSessionKeepAlive() {
+    if (keepAliveEnabled) return;
+    keepAliveEnabled = true;
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    if (accessExpiresAt) scheduleKeepAlive((accessExpiresAt - Date.now()) / 1000);
+}
+
+/**
+ * Entry point of every protected page: resolves the current user and starts the keep-alive.
+ * Resolves null (and reloads, so nginx shows the login) when there is no session.
+ */
+export async function initPageSession() {
+    const me = await authApi.me();
+    if (!me) {
+        window.location.reload();
+        return null;
+    }
+    startSessionKeepAlive();
+    return me;
+}
+
 /** Accept only same-site absolute paths, to avoid open redirects. */
-export function safeNextPath(raw, fallback = '/admin') {
+export function safeNextPath(raw, fallback = '/') {
     if (typeof raw !== 'string' || !raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) {
         return fallback;
     }
@@ -49,7 +127,10 @@ export const authApi = {
         if (response.status === 401 && await refreshSession()) {
             response = await fetch(`${AUTH_BASE}/me`, { credentials: 'same-origin' });
         }
-        return response.ok ? response.json() : null;
+        if (!response.ok) return null;
+        const me = await response.json();
+        noteAccessExpiry(me.access_expires_in);
+        return me;
     },
 
     async login(username, password) {
@@ -59,6 +140,10 @@ export const authApi = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password }),
         });
+        if (response.ok) {
+            const body = await response.json().catch(() => ({}));
+            noteAccessExpiry(body.access_expires_in);
+        }
         return { ok: response.ok, status: response.status };
     },
 
