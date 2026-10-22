@@ -96,6 +96,46 @@ def compass(deg):
     return points[round(deg / 45) % 8]
 
 
+def centroid(geometry):
+    """Mean of the outer ring vertices, as (lat, lon).
+
+    Not the true area-weighted centroid, but a storm polygon is compact enough
+    that the difference is far below the precision anyone will check this to —
+    and this only has to be good enough to find the cell on a map.
+    """
+    if not geometry:
+        return None
+    kind = geometry.get("type")
+    if kind == "Polygon":
+        rings = [geometry["coordinates"][0]]
+    elif kind == "MultiPolygon":
+        rings = [poly[0] for poly in geometry["coordinates"]]
+    else:
+        return None
+
+    lat_sum = lon_sum = 0.0
+    count = 0
+    for ring in rings:
+        for lon, lat in ring:
+            lat_sum += lat
+            lon_sum += lon
+            count += 1
+    return (lat_sum / count, lon_sum / count) if count else None
+
+
+def km_between(a, b):
+    """Great-circle distance in km between two (lat, lon) pairs."""
+    import math
+
+    if not a or not b:
+        return None
+    lat1, lon1 = map(math.radians, a)
+    lat2, lon2 = map(math.radians, b)
+    dlat, dlon = lat2 - lat1, lon2 - lon1
+    h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    return 6371.0 * 2 * math.asin(math.sqrt(h))
+
+
 # ------------------------------------------------------------------ report
 
 def report(radar, window, result):
@@ -134,7 +174,9 @@ def report(radar, window, result):
         for feat in (frame.get("features") or {}).get("features", []):
             props = feat.get("properties") or {}
             if props.get("kind") == "system":
-                tracks[props["name"]].append((frame["timestamp"], props))
+                tracks[props["name"]].append(
+                    (frame["timestamp"], props, feat.get("geometry"))
+                )
 
     followed = {k: v for k, v in tracks.items() if len(v) > 1}
 
@@ -142,15 +184,20 @@ def report(radar, window, result):
     print(f"   Sistemas convectivos detectados : {len(tracks)}")
     print(f"   Seguidos en el tiempo (≥2 vol.) : {len(followed)}")
 
-    if followed:
-        print(f"\n   {'Tormenta':<10} {'Desde':<7} {'Hasta':<7} {'Dur.':<7} "
-              f"{'Vol.':<5} {'Máx dBZ':<9} {'Tope':<8} {'Desplazamiento'}")
-        print(f"   {'-' * 10} {'-' * 7} {'-' * 7} {'-' * 7} {'-' * 5} "
-              f"{'-' * 9} {'-' * 8} {'-' * 20}")
+    ordered = sorted(followed.items(), key=lambda kv: -len(kv[1]))
+    positions = []   # (name, first lat/lon, last lat/lon, km from radar, minutes)
 
-        for name, entries in sorted(followed.items(), key=lambda kv: -len(kv[1])):
+    if ordered:
+        print(f"\n   {'Tormenta':<10} {'Desde':<7} {'Hasta':<7} {'Dur.':<7} "
+              f"{'Vol.':<5} {'Máx dBZ':<9} {'Tope':<9} {'Posición inicial':<21} "
+              f"{'Velocidad final'}")
+        print(f"   {'-' * 10} {'-' * 7} {'-' * 7} {'-' * 7} {'-' * 5} "
+              f"{'-' * 9} {'-' * 9} {'-' * 21} {'-' * 20}")
+
+        for name, entries in ordered:
             stamps = [e[0] for e in entries]
             props = [e[1] for e in entries]
+            geoms = [e[2] for e in entries]
             t0 = datetime.fromisoformat(stamps[0].replace("Z", "+00:00"))
             t1 = datetime.fromisoformat(stamps[-1].replace("Z", "+00:00"))
             minutes = int((t1 - t0).total_seconds() / 60)
@@ -164,9 +211,39 @@ def report(radar, window, result):
             motion = (f"{speed * 3.6:.0f} km/h hacia {compass(head)}"
                       if speed else "—")
 
+            start_at = centroid(geoms[0])
+            end_at = centroid(geoms[-1])
+            # Distance from the antenna comes from the tracker itself rather
+            # than being recomputed here — it is one of the attributes the
+            # convective filter already measures per system.
+            km = props[0].get("dist_centroid_km")
+            where = f"{start_at[0]:.3f}, {start_at[1]:.3f}" if start_at else "—"
+            positions.append((name, start_at, end_at, km, minutes))
+
             print(f"   {name[:8]:<10} {hhmm(stamps[0]):<7} {hhmm(stamps[-1]):<7} "
                   f"{str(minutes) + ' min':<7} {len(entries):<5} "
-                  f"{fmt(dbz, 1):<9} {fmt(top) + ' m':<8} {motion}")
+                  f"{fmt(dbz, 1):<9} {fmt(top) + ' m':<9} {where:<21} {motion}")
+
+        print("\n   «Velocidad final» es el ajuste ponderado sobre los últimos"
+              "\n   centroides — lo que alimenta el pronóstico — y por eso puede"
+              "\n   diferir del promedio de todo el recorrido, que se indica abajo.")
+
+        # Somewhere to click. A coordinate pair in a table is checkable in
+        # principle; a link is checkable in front of an audience.
+        print("\n   Dónde mirar (posición al inicio del seguimiento):\n")
+        for name, start_at, end_at, km, minutes in positions:
+            if not start_at:
+                continue
+            lat, lon = start_at
+            near = f"a {km:.0f} km del radar" if km is not None else ""
+            print(f"   {name[:8]}  {near}")
+            print(f"      https://www.openstreetmap.org/?mlat={lat:.4f}&mlon={lon:.4f}"
+                  f"#map=9/{lat:.4f}/{lon:.4f}")
+            moved = km_between(start_at, end_at)
+            if moved and moved > 1:
+                avg = f", {moved / (minutes / 60):.0f} km/h promedio" if minutes else ""
+                print(f"      recorrió {moved:.0f} km hasta "
+                      f"{end_at[0]:.3f}, {end_at[1]:.3f}{avg}")
 
     # -- 3. forecasts ------------------------------------------------------
     leads = sorted({
