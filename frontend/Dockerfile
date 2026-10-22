@@ -2,19 +2,19 @@
 # Unified frontend container for both v1 and v2.
 #
 # Build arguments:
-#   FE_VERSION - which frontend to serve: v1 (default) or v2
+#   FE_VERSION - which frontend to serve: v2 (default) or v1 (legacy)
 #
 # Usage:
-#   docker compose build --build-arg FE_VERSION=v2 frontend
+#   docker compose build --build-arg FE_VERSION=v1 frontend
 #   docker compose up -d frontend
 #
 # Or via .env file:
-#   FE_VERSION=v2
+#   FE_VERSION=v1
 #   docker compose up -d --build frontend
 
 FROM nginx:alpine
 
-ARG FE_VERSION=v1
+ARG FE_VERSION=v2
 
 # Copy all static files
 COPY frontend/public/ /usr/share/nginx/html/
