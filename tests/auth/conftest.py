@@ -41,3 +41,21 @@ def login(client, username="alice", password=TEST_PASSWORD):
     response = client.post("/api/v1/auth/login", json={"username": username, "password": password})
     assert response.status_code == 200, response.text
     return response
+
+
+@pytest.fixture
+def app_client(test_db_session):
+    """The real application (every router, as wired in main.py), using the test database session.
+
+    The lifespan (Redis, GDAL, admin check) does not run: the client is not used as a context manager.
+    """
+    from fastapi.testclient import TestClient
+
+    from api.app.main import app
+    from radar_db import get_db
+
+    app.dependency_overrides[get_db] = lambda: test_db_session
+    try:
+        yield TestClient(app, base_url="http://testserver")
+    finally:
+        app.dependency_overrides.pop(get_db, None)

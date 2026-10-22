@@ -1,5 +1,5 @@
 # api/app/main.py
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
@@ -9,6 +9,7 @@ import time
 import rasterio
 from rasterio.env import Env
 
+from .auth.dependencies import require_user
 from .config import settings
 from .routers import (
     admin_router,
@@ -170,13 +171,16 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # Include routers
-app.include_router(radars_router, prefix=settings.api_prefix)
-app.include_router(products_router, prefix=settings.api_prefix)
-app.include_router(cogs_router, prefix=settings.api_prefix)
-app.include_router(tiles_router, prefix=settings.api_prefix)
-app.include_router(colormap_router, prefix=settings.api_prefix)
-app.include_router(frames_router, prefix=settings.api_prefix)
-app.include_router(tops_cores_router, prefix=settings.api_prefix)
+# Every data router needs a session (admin or viewer). admin and users enforce the admin role
+# themselves, and auth handles its own public endpoints (login, refresh, logout).
+_session_required = [Depends(require_user)]
+app.include_router(radars_router, prefix=settings.api_prefix, dependencies=_session_required)
+app.include_router(products_router, prefix=settings.api_prefix, dependencies=_session_required)
+app.include_router(cogs_router, prefix=settings.api_prefix, dependencies=_session_required)
+app.include_router(tiles_router, prefix=settings.api_prefix, dependencies=_session_required)
+app.include_router(colormap_router, prefix=settings.api_prefix, dependencies=_session_required)
+app.include_router(frames_router, prefix=settings.api_prefix, dependencies=_session_required)
+app.include_router(tops_cores_router, prefix=settings.api_prefix, dependencies=_session_required)
 app.include_router(admin_router, prefix=settings.api_prefix)
 app.include_router(auth_router, prefix=settings.api_prefix)
 app.include_router(users_router, prefix=settings.api_prefix)

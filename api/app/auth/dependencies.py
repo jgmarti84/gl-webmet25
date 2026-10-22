@@ -58,3 +58,6 @@ def require_role(role: str) -> Callable[..., User]:
 
 
 require_admin = require_role("admin")
+
+# Any logged-in user (admin or viewer). Used for every data router (spec A).
+require_user = get_current_user
