@@ -174,3 +174,33 @@ def test_full_session_flow_opens_and_closes_the_admin_api(client, make_user):
     assert client.get("/api/v1/admin/radars").status_code == 200
     assert client.post("/api/v1/auth/logout").status_code == 204
     assert client.get("/api/v1/admin/radars").status_code == 401
+
+
+def test_check_without_session_is_401(client):
+    assert client.get("/api/v1/auth/check").status_code == 401
+
+
+def test_check_with_session_is_204_without_body(client, make_user):
+    make_user()
+    login(client)
+    response = client.get("/api/v1/auth/check")
+    assert response.status_code == 204
+    assert response.content == b""
+
+
+def test_check_admin_role_rejects_a_viewer(client, make_user):
+    make_user()
+    login(client)
+    assert client.get("/api/v1/auth/check", params={"role": "admin"}).status_code == 403
+
+
+def test_check_admin_role_accepts_an_admin(client, make_user):
+    make_user(username="boss", role="admin")
+    login(client, username="boss")
+    assert client.get("/api/v1/auth/check", params={"role": "admin"}).status_code == 204
+
+
+def test_check_unknown_role_is_422(client, make_user):
+    make_user()
+    login(client)
+    assert client.get("/api/v1/auth/check", params={"role": "superuser"}).status_code == 422

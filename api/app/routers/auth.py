@@ -2,7 +2,7 @@
 """Login, refresh, logout and current user."""
 
 from datetime import datetime, timezone
-from typing import Optional, Tuple, Union
+from typing import Literal, Optional, Tuple, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
@@ -105,3 +105,11 @@ def me(request: Request, user: User = Depends(get_current_user)) -> MeResponse:
     claims = decode_access_token(request.cookies[access_cookie_name()])
     remaining = int((claims.expires_at - datetime.now(timezone.utc)).total_seconds())
     return _me(user, max(0, remaining))
+
+
+@router.get("/check", status_code=204)
+def check(role: Optional[Literal["admin"]] = None, user: User = Depends(get_current_user)) -> Response:
+    """Session probe for nginx auth_request: 204 ok, 401 no session, 403 wrong role. Never has a body."""
+    if role is not None and user.role != role:
+        raise HTTPException(status_code=403, detail="No tenés permisos para esta acción")
+    return Response(status_code=204)
