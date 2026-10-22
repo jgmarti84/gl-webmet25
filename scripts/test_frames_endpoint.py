@@ -7,8 +7,12 @@ Usage:
         --host localhost \
         --port 8000 \
         --cog-id 62581 \
-        --username observatorio \
-        --password mate-nubes-radar-2026
+        --username <your-username> \
+        --password <your-password>
+
+Every data endpoint requires a session, so the script logs in first (POST /api/v1/auth/login).
+Over plain HTTP the API must run with COOKIE_SECURE=false, otherwise the client does not send
+the session cookie back.
 
 Exit codes:
     0  — all checks passed
@@ -217,8 +221,8 @@ def main() -> int:
     parser.add_argument("--host", default="localhost", help="API host")
     parser.add_argument("--port", type=int, default=8000, help="API port")
     parser.add_argument("--cog-id", type=int, required=True, help="COG ID to test")
-    parser.add_argument("--username", default=None, help="HTTP Basic auth username")
-    parser.add_argument("--password", default=None, help="HTTP Basic auth password")
+    parser.add_argument("--username", required=True, help="WebMet25 username")
+    parser.add_argument("--password", required=True, help="WebMet25 password")
     args = parser.parse_args()
 
     base = f"http://{args.host}:{args.port}"
@@ -226,8 +230,14 @@ def main() -> int:
     print(f"COG ID: {args.cog_id}\n")
 
     session = requests.Session()
-    if args.username and args.password:
-        session.auth = (args.username, args.password)
+    login = session.post(
+        f"{base}/api/v1/auth/login",
+        json={"username": args.username, "password": args.password},
+        timeout=10,
+    )
+    if login.status_code != 200:
+        print(f"Login failed: HTTP {login.status_code}")
+        return 1
 
     # --- Check 1: endpoint exists ---
     print("--- Check 1: endpoint exists and returns 200 ---")
