@@ -53,7 +53,8 @@ start already logged in (`browser_context_args` with the shared `admin_storage_s
 
 nginx limits `/api/v1/auth/login` to 10 requests/minute per IP, so the admin panel tests **share one
 login**: its browser state is reused by every test and renewed every 10 minutes (the access cookie
-lives 30). Do not re-run the suite more than a few times per minute.
+lives 30). Do not re-run the suite more than a few times per minute. Keep `ACCESS_TOKEN_TTL_MINUTES` at 15 or more
+while running the suites: the shared login is reused for up to 10 minutes and `tests/api` logs in once per run.
 
 ---
 

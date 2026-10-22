@@ -56,7 +56,9 @@ el viewer `e2e-viewer` por la API de admin (o lo reactiva) y lo desactiva al ter
 
 nginx limita `/api/v1/auth/login` a 10 pedidos por minuto por IP, así que las pruebas del panel de admin **comparten un
 solo login**: su estado de navegador se reutiliza en todos los tests y se renueva cada 10 minutos (la cookie de acceso
-dura 30). No conviene repetir la suite más de unas pocas veces por minuto.
+dura 30). No conviene repetir la suite más de unas pocas veces por minuto. Mantener `ACCESS_TOKEN_TTL_MINUTES` en 15 o
+más mientras se corren las suites: el login compartido se reutiliza hasta 10 minutos y `tests/api` se loguea una vez por
+corrida.
 
 ---
 

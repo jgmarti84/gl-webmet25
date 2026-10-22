@@ -241,6 +241,7 @@ make reset-password U=maria
 - Nobody can use the site without an account: until self-registration exists, the admin creates every account from the panel.
 - Other users are managed from the admin panel (**Usuarios**): create, change role, activate/deactivate, reset password, close sessions. Users are never deleted, only deactivated.
 - If a user is locked out after 5 failed logins, they can try again after 15 minutes, or an admin can reset their password.
+- Session lifetimes and the lockout are set from `.env` (`ACCESS_TOKEN_TTL_MINUTES`, `SESSION_IDLE_TTL_HOURS`, `SESSION_ABSOLUTE_TTL_DAYS`, `LOGIN_MAX_FAILED_ATTEMPTS`, `LOGIN_LOCKOUT_MINUTES`; defaults in [`DATA_FLOW.md`](DATA_FLOW.md)). Recreate the API afterwards with `make api`. Sessions already issued keep the lifetime they were created with.
 - If the API starts with no active admin it logs a warning with the command to create one.
 
 ---

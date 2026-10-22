@@ -201,6 +201,7 @@ make reset-password U=maria
 - Nadie puede usar la página sin cuenta: hasta que exista el registro, el admin crea todas las cuentas desde el panel.
 - Los demás usuarios se gestionan desde el panel de administración (**Usuarios**): crear, cambiar rol, activar/desactivar, resetear contraseña, cerrar sesiones. Los usuarios nunca se borran, solo se desactivan.
 - Si un usuario queda bloqueado tras 5 logins fallidos, puede reintentar a los 15 minutos, o un admin puede resetearle la contraseña.
+- La duración de las sesiones y el bloqueo se configuran desde el `.env` (`ACCESS_TOKEN_TTL_MINUTES`, `SESSION_IDLE_TTL_HOURS`, `SESSION_ABSOLUTE_TTL_DAYS`, `LOGIN_MAX_FAILED_ATTEMPTS`, `LOGIN_LOCKOUT_MINUTES`; defaults en [`DATA_FLOW.es.md`](DATA_FLOW.es.md)). Después hay que recrear la API con `make api`. Las sesiones ya emitidas conservan la duración con la que se crearon.
 - Si la API arranca sin ningún admin activo, deja un aviso en el log con el comando para crearlo.
 
 ---
