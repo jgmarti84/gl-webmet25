@@ -248,7 +248,7 @@ tests/ # Automated tests
 A standalone admin SPA for CRUD over the database, served at `/admin` and backed by the `/api/v1/admin/*` routes ([`api/app/routers/admin.py`](../api/app/routers/admin.py)).
 
 ### Authentication
-- `/admin` requires login (`/login`). The API enforces auth with FastAPI dependencies in [`api/app/auth/dependencies.py`](../api/app/auth/dependencies.py): `require_admin` for admin routes, `get_current_user` for any logged-in user, `get_optional_user` for public endpoints that want to know the user. Public endpoints stay open.
+- `/admin` requires login (`/login`). The API enforces auth with FastAPI dependencies in [`api/app/auth/dependencies.py`](../api/app/auth/dependencies.py): `require_admin` for admin routes, `get_current_user` for any logged-in user, `get_optional_user` for public endpoints that want to know the user. Every data router is registered with `require_user` in `main.py`; only `/health`, `/` and `/auth/login|refresh|logout` are public. nginx protects the HTML pages, the admin panel and the OSM/IGN tile proxies with `auth_request` against `GET /api/v1/auth/check` (frontend/nginx.conf).
 - Sessions: 15-minute JWT access cookie + rotating refresh cookie (48 h idle, 7 days absolute), `HttpOnly`, `SameSite=Strict`. Every authenticated request reads the user from the database (checks `is_active` and `token_version`), so deactivating a user or resetting a password takes effect immediately.
 - State-changing routers also depend on `check_origin` (CSRF defense against `ALLOWED_ORIGINS`).
 - Do **not** add authentication in nginx. nginx only rate-limits `POST /api/v1/auth/login`.
@@ -581,7 +581,7 @@ Updates record status to MISSING in DB if file not found at serve time.
 > touching these areas.
 
 ### Critical
-- ⚠️ PARTIAL: Only `/api/v1/admin/*` and `POST /api/v1/colormap/cache/invalidate` require login (role `admin`). The rest of `/api/v1/*` is public by design; which endpoints become private is still to be decided.
+- ✅ Every page and API endpoint require a session (`admin` or `viewer`); only `/health` and login/refresh/logout are public. Self-registration with e-mail verification is still to be built.
 - ❌ No transactions in indexer. Partial failures corrupt DB state.
 - ❌ Missing files cause 500 errors. Must be handled gracefully.
 

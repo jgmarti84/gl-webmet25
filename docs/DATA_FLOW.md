@@ -427,7 +427,7 @@ Backed by `ColormapService` — a thread-safe singleton with a 5-minute TTL cach
 **Router:** [`api/app/routers/admin.py`](../api/app/routers/admin.py) — base path `/api/v1/admin`  
 **Frontend:** [`frontend/public/admin.html`](../frontend/public/admin.html) + [`js/admin.js`](../frontend/public/js/admin.js), served at `/admin`
 
-**Authentication:** `/api/v1/admin/*` and `/api/v1/admin/users/*` require a logged-in user with role `admin`. Sessions use a 15-minute JWT access cookie and a rotating refresh cookie (48 h idle, 7 days absolute), both `HttpOnly` and `SameSite=Strict`, validated by the API ([`api/app/auth/dependencies.py`](../api/app/auth/dependencies.py)). `/admin` and `/login` are static pages served by nginx without auth. The rest of `/api/v1/*` stays public. State-changing requests also check the `Origin` header against `ALLOWED_ORIGINS`.
+**Authentication:** every `/api/v1/*` endpoint except `/auth/login`, `/auth/refresh` and `/auth/logout` requires a session (role `admin` or `viewer`); `/api/v1/admin/*` and `/api/v1/admin/users/*` require `admin`. Sessions use a 30-minute JWT access cookie and a rotating refresh cookie (48 h idle, 7 days absolute), both `HttpOnly` and `SameSite=Strict`, validated by the API ([`api/app/auth/dependencies.py`](../api/app/auth/dependencies.py)). nginx asks `GET /api/v1/auth/check` (204/401/403) before serving the HTML pages, the admin panel and the tile proxies; without a session it serves `/login` in place of the requested page. Static files (`.js`, `.css`, images), `/login` and `/health` stay public. State-changing requests also check the `Origin` header against `ALLOWED_ORIGINS`.
 
 **Endpoint groups:**
 
@@ -469,7 +469,7 @@ frontend/public/
     ├── admin.js            # Admin SPA orchestrator
     ├── admin-api.js        # Admin REST client (/api/v1/admin/*)
     ├── shared/             # Shared by v1 and v2
-    │   ├── api.js          # REST API client (all public endpoints)
+    │   ├── api.js          # REST API client (session required)
     │   ├── controls.js     # UIControls class (radar list, time wheels, badges)
     │   ├── legend.js       # LegendRenderer class
     │   ├── tops-cores.js   # TopsCoresLayer (L.circleMarker)

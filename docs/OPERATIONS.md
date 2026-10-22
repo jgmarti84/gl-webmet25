@@ -238,6 +238,7 @@ make reset-password U=maria
 
 - The **first admin** is created automatically by `db-init` from `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` when there are no users. After the first start, run `make reset-password U=<that user>` and remove both variables from `.env`.
 - An admin **cannot reset their own password from the panel**; use `make reset-password` on the server.
+- Nobody can use the site without an account: until self-registration exists, the admin creates every account from the panel.
 - Other users are managed from the admin panel (**Usuarios**): create, change role, activate/deactivate, reset password, close sessions. Users are never deleted, only deactivated.
 - If a user is locked out after 5 failed logins, they can try again after 15 minutes, or an admin can reset their password.
 - If the API starts with no active admin it logs a warning with the command to create one.

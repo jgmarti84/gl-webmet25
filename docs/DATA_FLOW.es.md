@@ -430,7 +430,7 @@ Respaldado por `ColormapService` — un singleton thread-safe con caché de TTL 
 **Router:** [`api/app/routers/admin.py`](../api/app/routers/admin.py) — ruta base `/api/v1/admin`  
 **Frontend:** [`frontend/public/admin.html`](../frontend/public/admin.html) + [`js/admin.js`](../frontend/public/js/admin.js), servido en `/admin`
 
-**Autenticación:** `/api/v1/admin/*` y `/api/v1/admin/users/*` requieren un usuario logueado con rol `admin`. Las sesiones usan una cookie JWT de acceso de 30 minutos y una cookie de refresh rotativa (48 h sin actividad, 7 días como máximo), ambas `HttpOnly` y `SameSite=Strict`, validadas por la API ([`api/app/auth/dependencies.py`](../api/app/auth/dependencies.py)). `/admin` y `/login` son páginas estáticas que sirve nginx sin autenticación. El resto de `/api/v1/*` sigue siendo público. Los pedidos que modifican datos además comparan el header `Origin` con `ALLOWED_ORIGINS`.
+**Autenticación:** todos los endpoints de `/api/v1/*` salvo `/auth/login`, `/auth/refresh` y `/auth/logout` requieren sesión (rol `admin` o `viewer`); `/api/v1/admin/*` y `/api/v1/admin/users/*` requieren `admin`. Las sesiones usan una cookie JWT de acceso de 30 minutos y una cookie de refresh rotativa (48 h sin actividad, 7 días como máximo), ambas `HttpOnly` y `SameSite=Strict`, validadas por la API ([`api/app/auth/dependencies.py`](../api/app/auth/dependencies.py)). nginx consulta `GET /api/v1/auth/check` (204/401/403) antes de servir las páginas HTML, el panel de administración y los proxies de tiles; sin sesión sirve `/login` en lugar de la página pedida. Los archivos estáticos (`.js`, `.css`, imágenes), `/login` y `/health` siguen siendo públicos. Los pedidos que modifican datos además comparan el header `Origin` con `ALLOWED_ORIGINS`.
 
 **Grupos de endpoints:**
 
@@ -472,7 +472,7 @@ frontend/public/
     ├── admin.js            # Admin SPA orchestrator
     ├── admin-api.js        # Admin REST client (/api/v1/admin/*)
     ├── shared/             # Shared by v1 and v2
-    │   ├── api.js          # REST API client (all public endpoints)
+    │   ├── api.js          # REST API client (session required)
     │   ├── controls.js     # UIControls class (radar list, time wheels, badges)
     │   ├── legend.js       # LegendRenderer class
     │   ├── tops-cores.js   # TopsCoresLayer (L.circleMarker)

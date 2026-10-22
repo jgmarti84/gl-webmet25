@@ -49,12 +49,14 @@ Las pruebas son Python + Playwright independientes del entorno. Para ejecutarlas
 | `BOOTSTRAP_ADMIN_USERNAME` | `admin` | Usuario de la cuenta de admin con la que se loguean los tests |
 | `BOOTSTRAP_ADMIN_PASSWORD` | *(ninguno)* | Su contraseña — obligatoria, sin ella los tests no pueden loguearse |
 
-El panel de administración requiere login. Las pruebas inician sesión por el formulario de `/login` con la cuenta que
-`db-init` crea a partir de las mismas variables `BOOTSTRAP_ADMIN_*` de tu `.env`.
+Todas las páginas requieren login. Las pruebas inician sesión por el formulario de `/login` con la cuenta que
+`db-init` crea a partir de las mismas variables `BOOTSTRAP_ADMIN_*` de tu `.env`. Los tests del mapa, del detalle de
+radar y del panel arrancan ya logueados (`browser_context_args` con el `admin_storage_state` compartido). Un test crea
+el viewer `e2e-viewer` por la API de admin (o lo reactiva) y lo desactiva al terminar.
 
 nginx limita `/api/v1/auth/login` a 10 pedidos por minuto por IP, así que las pruebas del panel de admin **comparten un
 solo login**: su estado de navegador se reutiliza en todos los tests y se renueva cada 10 minutos (la cookie de acceso
-dura 15). No conviene repetir la suite más de unas pocas veces por minuto.
+dura 30). No conviene repetir la suite más de unas pocas veces por minuto.
 
 ---
 

@@ -439,7 +439,15 @@ settings), and animation controls (bottom-center).
 
 **Key DOM Elements:** Table columns for COG ID, radar code, product, timestamp, file size, status, etc.
 
-**Loaded Scripts:** `cog-browser-api.js`, `cog-browser.js`
+**Loaded Scripts:** `js/shared/cog-browser.js` (which imports `cog-browser-api.js`)
+
+---
+
+### **auth-api.js / session-box.js** — Session handling on every page
+
+**Files:** [`frontend/public/js/auth-api.js`](../../frontend/public/js/auth-api.js), [`frontend/public/js/shared/session-box.js`](../../frontend/public/js/shared/session-box.js)
+
+**Responsibility:** Every page needs a session (nginx serves `/login` in place of a page when there is none). `auth-api.js` is the shared client: `authFetch()` replaces `fetch()` for API data (on a 401 it renews the session through `/auth/refresh` and retries once; if the session is gone it reloads the page, or goes to `/login` if it already reloaded a few seconds ago), and `initPageSession()` loads the current user and starts the keep-alive that renews the access token two minutes before it expires (using `access_expires_in` from `login`/`refresh`/`me`, also after a tab was in the background). `session-box.js` shows the user, "Cerrar sesión" and, only for admins, the admin panel link, in the map's settings panel.
 
 ---
 

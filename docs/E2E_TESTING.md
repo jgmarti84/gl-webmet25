@@ -46,12 +46,14 @@ The tests are environment-agnostic Python + Playwright. To run them anywhere you
 | `BOOTSTRAP_ADMIN_USERNAME` | `admin` | Username of the admin account the tests log in with |
 | `BOOTSTRAP_ADMIN_PASSWORD` | *(none)* | Its password — required, tests cannot log in without it |
 
-The admin panel requires a login. The tests sign in through the `/login` form with the account that
-`db-init` creates from the same `BOOTSTRAP_ADMIN_*` variables of your `.env`.
+Every page requires a login. The tests sign in through the `/login` form with the account that
+`db-init` creates from the same `BOOTSTRAP_ADMIN_*` variables of your `.env`. The map, radar detail and admin tests
+start already logged in (`browser_context_args` with the shared `admin_storage_state`). One test creates the viewer
+`e2e-viewer` through the admin API (or reactivates it) and deactivates it at the end.
 
 nginx limits `/api/v1/auth/login` to 10 requests/minute per IP, so the admin panel tests **share one
 login**: its browser state is reused by every test and renewed every 10 minutes (the access cookie
-lives 15). Do not re-run the suite more than a few times per minute.
+lives 30). Do not re-run the suite more than a few times per minute.
 
 ---
 

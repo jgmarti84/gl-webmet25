@@ -338,7 +338,7 @@ docker compose logs -f indexer
 
 ### Authentication & Users
 
-The admin panel and every `/api/v1/admin/*` endpoint require a logged-in user with the `admin` role. The rest of the API stays public. Sessions are validated **by the API**, not by nginx.
+Every page and every API endpoint require a logged-in user (roles `admin` and `viewer`); only `/health` and `/api/v1/auth/login|refresh|logout` are public. The admin panel and `/api/v1/admin/*` require the `admin` role. Sessions are validated **by the API**; nginx asks it (`auth_request` on `GET /api/v1/auth/check`) before serving each page and the OpenStreetMap/IGN tile proxies, and shows the login in place when there is no session.
 
 - **Access token:** short-lived JWT (30 min) in an `HttpOnly`, `SameSite=Strict` cookie.
 - **Refresh token:** opaque, rotated on every use and stored hashed in the database. Idle expiry 48 h, absolute limit 7 days. Reusing an old refresh token closes the whole session family.
@@ -395,7 +395,9 @@ http://localhost/api/v1
 ```
 (Proxied through nginx on port 80. Direct API port: 8000.)
 
-### Public Endpoints
+### Endpoints
+
+All endpoints below require a session cookie (log in with `POST /api/v1/auth/login`), except `/health`.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -540,7 +542,7 @@ See [`.github/copilot-instructions.md`](.github/copilot-instructions.md) for the
 
 ## Known Gaps & Technical Debt
 
-- ⚠️ Only `/api/v1/admin/*` and the colormap cache invalidation require login; the rest of the API is public by design (which other endpoints become private is still to be defined)
+- ✅ Every page and API endpoint require a session (`admin` or `viewer`); self-registration with e-mail verification is still to be built
 - ❌ No transactions in the indexer — partial failures can leave DB in inconsistent state
 - ❌ Database credentials in plaintext in `docker-compose.yml`
 - ❌ No rate limiting on the public API (only `/api/v1/auth/login` is limited)

@@ -426,6 +426,14 @@ Pipeline de composición en canvas:
 
 ---
 
+### **auth-api.js / session-box.js** — Manejo de la sesión en cada página
+
+**Archivos:** [`frontend/public/js/auth-api.js`](../../frontend/public/js/auth-api.js), [`frontend/public/js/shared/session-box.js`](../../frontend/public/js/shared/session-box.js)
+
+**Responsabilidad:** Todas las páginas requieren sesión (nginx sirve `/login` en lugar de la página cuando no hay). `auth-api.js` es el cliente compartido: `authFetch()` reemplaza a `fetch()` para los datos de la API (ante un 401 renueva la sesión por `/auth/refresh` y reintenta una vez; si la sesión se perdió recarga la página, o va a `/login` si ya recargó hace unos segundos), e `initPageSession()` carga el usuario actual y arranca la renovación anticipada del access token, dos minutos antes de que venza (con el `access_expires_in` de `login`/`refresh`/`me`, también después de que una pestaña estuvo en segundo plano). `session-box.js` muestra el usuario, "Cerrar sesión" y, solo para admins, el link al panel, en el panel de configuración del mapa.
+
+---
+
 ### **admin.html** — SPA del panel de administración
 
 **Archivo:** [`frontend/public/admin.html`](../../frontend/public/admin.html)
