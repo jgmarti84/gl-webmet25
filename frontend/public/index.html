@@ -348,6 +348,11 @@
                     </div>
                 </details>
             </div>
+            <!-- Current session: filled by js/shared/session-box.js (v2) -->
+            <div id="session-box" class="session-box" hidden>
+                <span id="session-box-user" class="session-box-user"></span>
+                <button id="session-box-logout" type="button" class="nav-link">Cerrar sesión</button>
+            </div>
             <!-- Admin DB panel: sets a per-tab flag so the admin's "Back" button
                  can restore this map exactly as left (via browser bfcache). -->
             <a id="admin-link" href="/admin" class="nav-link" style="margin-top:10px;"

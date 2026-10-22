@@ -2204,3 +2204,29 @@ code {
     text-align: right;
     font-family: 'Courier New', monospace;
 }
+
+/* Session box (current user + logout) in the settings panel */
+.session-box {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.session-box-user {
+    font-size: 12px;
+    color: #b0bec5;
+    text-align: center;
+}
+
+button.nav-link {
+    width: 100%;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+/* display:block/flex above would otherwise override the hidden attribute */
+.session-box[hidden],
+.nav-link[hidden] {
+    display: none;
+}
