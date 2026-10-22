@@ -1,6 +1,7 @@
 # api/app/routers/auth.py
 """Login, refresh, logout and current user."""
 
+from datetime import datetime, timezone
 from typing import Optional, Tuple, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -11,22 +12,28 @@ from radar_db import get_db
 from radar_db.models import User
 
 from ..auth import service
-from ..auth.cookies import clear_auth_cookies, refresh_cookie_name, set_auth_cookies
+from ..auth.cookies import access_cookie_name, clear_auth_cookies, refresh_cookie_name, set_auth_cookies
 from ..auth.dependencies import check_origin, get_current_user
-from ..auth.security import create_access_token
+from ..auth.security import create_access_token, decode_access_token
+from ..config import settings
 from ..schemas.auth import LoginRequest, MeResponse
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
-def _me(user: User) -> MeResponse:
+def _me(user: User, access_expires_in: int) -> MeResponse:
     return MeResponse(
         id=user.id,
         username=user.username,
         full_name=user.full_name,
         role=user.role,
         password_is_bootstrap=user.password_is_bootstrap,
+        access_expires_in=access_expires_in,
     )
+
+
+def _full_access_lifetime() -> int:
+    return settings.access_token_ttl_minutes * 60
 
 
 def _client_info(request: Request) -> Tuple[Optional[str], Optional[str]]:
@@ -56,7 +63,7 @@ def login(payload: LoginRequest, request: Request, response: Response, db: Sessi
     db.commit()
     access_token = create_access_token(user.id, user.role, user.token_version)
     set_auth_cookies(response, access_token, refresh_token, session.expires_at)
-    return _me(user)
+    return _me(user, _full_access_lifetime())
 
 
 @router.post("/refresh", response_model=MeResponse, dependencies=[Depends(check_origin)])
@@ -78,7 +85,7 @@ def refresh(request: Request, response: Response, db: Session = Depends(get_db))
     db.commit()
     access_token = create_access_token(user.id, user.role, user.token_version)
     set_auth_cookies(response, access_token, new_token, session.expires_at)
-    return _me(user)
+    return _me(user, _full_access_lifetime())
 
 
 @router.post("/logout", status_code=204, dependencies=[Depends(check_origin)])
@@ -93,5 +100,8 @@ def logout(request: Request, db: Session = Depends(get_db)) -> Response:
 
 
 @router.get("/me", response_model=MeResponse)
-def me(user: User = Depends(get_current_user)) -> MeResponse:
-    return _me(user)
+def me(request: Request, user: User = Depends(get_current_user)) -> MeResponse:
+    # get_current_user already validated this cookie, so decoding cannot fail here.
+    claims = decode_access_token(request.cookies[access_cookie_name()])
+    remaining = int((claims.expires_at - datetime.now(timezone.utc)).total_seconds())
+    return _me(user, max(0, remaining))

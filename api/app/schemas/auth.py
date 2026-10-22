@@ -16,6 +16,8 @@ class MeResponse(BaseModel):
     full_name: Optional[str] = None
     role: str
     password_is_bootstrap: bool
+    # Seconds until the current access token expires; the frontend renews the session before that.
+    access_expires_in: int
 
 
 class UserCreate(BaseModel):

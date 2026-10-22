@@ -24,6 +24,7 @@ class AccessClaims:
     user_id: int
     role: str
     token_version: int
+    expires_at: Optional[datetime] = None
 
 
 def create_access_token(user_id: int, role: str, token_version: int, now: Optional[datetime] = None) -> str:
@@ -55,6 +56,7 @@ def decode_access_token(token: str) -> AccessClaims:
             user_id=int(payload["sub"]),
             role=str(payload["role"]),
             token_version=int(payload["tv"]),
+            expires_at=datetime.fromtimestamp(int(payload["exp"]), tz=timezone.utc),
         )
     except (jwt.InvalidTokenError, KeyError, ValueError, TypeError) as exc:
         raise InvalidAccessToken(str(exc)) from exc

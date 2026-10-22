@@ -140,11 +140,29 @@ def test_refresh_response_matches_the_me_contract(client, make_user):
     make_user(full_name="Alice A.")
     login(client)
     body = client.post("/api/v1/auth/refresh").json()
-    assert set(body) == {"id", "username", "full_name", "role", "password_is_bootstrap"}
+    assert set(body) == {"id", "username", "full_name", "role", "password_is_bootstrap", "access_expires_in"}
     assert isinstance(body["id"], int)
     assert body["username"] == "alice" and body["full_name"] == "Alice A."
     assert body["role"] == "viewer"
     assert isinstance(body["password_is_bootstrap"], bool)
+
+
+def test_login_and_refresh_report_the_full_access_lifetime(client, make_user):
+    from api.app.config import settings
+
+    make_user()
+    full = settings.access_token_ttl_minutes * 60
+    assert login(client).json()["access_expires_in"] == full
+    assert client.post("/api/v1/auth/refresh").json()["access_expires_in"] == full
+
+
+def test_me_reports_the_remaining_access_lifetime(client, make_user):
+    from api.app.config import settings
+
+    make_user()
+    login(client)
+    remaining = client.get("/api/v1/auth/me").json()["access_expires_in"]
+    assert 0 < remaining <= settings.access_token_ttl_minutes * 60
 
 
 def test_full_session_flow_opens_and_closes_the_admin_api(client, make_user):
