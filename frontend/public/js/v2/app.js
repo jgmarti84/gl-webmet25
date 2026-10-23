@@ -569,6 +569,7 @@ const app = {
             'btn-module-b': 'panel-module-b',
             'btn-module-c': 'panel-module-c',
             'btn-settings':  'settings-panel',
+            'btn-account':   'panel-account',
         };
         Object.entries(PANEL_MAP).forEach(([btnId, panelId]) => {
             const btn = document.getElementById(btnId);
@@ -2359,10 +2360,11 @@ const app = {
         'panel-module-b': 'btn-module-b',
         'panel-module-c': 'btn-module-c',
         'settings-panel': 'btn-settings',
+        'panel-account':  'btn-account',
     },
 
     togglePanel(panelId) {
-        const ALL_PANELS = ['panel-module-a', 'panel-module-b', 'panel-module-c', 'settings-panel'];
+        const ALL_PANELS = ['panel-module-a', 'panel-module-b', 'panel-module-c', 'settings-panel', 'panel-account'];
         ALL_PANELS.forEach(id => {
             const panel = document.getElementById(id);
             const btnId = this._panelButtonMap[id];

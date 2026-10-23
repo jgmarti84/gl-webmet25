@@ -2205,18 +2205,116 @@ code {
     font-family: 'Courier New', monospace;
 }
 
-/* Session box (current user + logout) in the settings panel */
-.session-box {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-top: 10px;
+/* Account button: just the user's initials, styled like the other glyphs */
+.account-initials {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    line-height: 1;
 }
 
-.session-box-user {
-    font-size: 12px;
-    color: #b0bec5;
-    text-align: center;
+/* Account panel */
+.account-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.account-identity {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.account-avatar {
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4fc3f7 0%, #1e6fa8 100%);
+    color: #0d1b2a;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.account-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+}
+
+.account-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #e8eef3;
+    word-break: break-word;
+}
+
+.account-role {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 999px;
+    color: #90caf9;
+    background: rgba(144, 202, 249, 0.12);
+    border: 1px solid rgba(144, 202, 249, 0.3);
+}
+
+.account-role.is-admin {
+    color: #ffcc80;
+    background: rgba(255, 204, 128, 0.12);
+    border-color: rgba(255, 204, 128, 0.35);
+}
+
+.account-actions {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 6px;
+}
+
+.account-action {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 8px 6px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: #cfd8dc;
+    font-family: inherit;
+    font-size: 13px;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.account-action:hover {
+    background: rgba(79, 195, 247, 0.12);
+    color: #4fc3f7;
+}
+
+.account-action-arrow {
+    opacity: 0.6;
+}
+
+.account-action-logout:hover {
+    background: rgba(239, 83, 80, 0.12);
+    color: #ef9a9a;
+}
+
+.account-action[hidden] {
+    display: none;
 }
 
 button.nav-link {
@@ -2226,7 +2324,7 @@ button.nav-link {
 }
 
 /* display:block/flex above would otherwise override the hidden attribute */
-.session-box[hidden],
+.icon-btn[hidden],
 .nav-link[hidden] {
     display: none;
 }
