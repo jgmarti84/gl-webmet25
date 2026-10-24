@@ -29,7 +29,7 @@ services:
     environment: 
       POSTGRES_DB: radar_prod_db
       POSTGRES_USER: radar
-      POSTGRES_PASSWORD: radarpass
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env (see .env.example)}
     volumes:
       - ../radar_db_data:/var/lib/postgresql/data
     ports:
@@ -54,7 +54,7 @@ services:
       DB_PORT: 5432
       DB_NAME: radar_prod_db
       DB_USER: radar
-      DB_PASSWORD: radarpass
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env (see .env.example)}
     depends_on:
       radar_db:
         condition: service_healthy
@@ -80,7 +80,7 @@ services:
       DB_PORT: 5432
       DB_NAME: radar_prod_db
       DB_USER: radar
-      DB_PASSWORD: radarpass
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env (see .env.example)}
       WATCH_PATH: /product_output
       SCAN_INTERVAL: 30
       FILE_PATTERN: "*.tif"
@@ -123,7 +123,7 @@ services:
       DB_PORT: 5432
       DB_NAME: radar_prod_db
       DB_USER: radar
-      DB_PASSWORD: radarpass
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env (see .env.example)}
       COG_BASE_PATH: /product_output
       TOPS_AND_CORES_DIR: /tops_and_cores
       CORS_ORIGINS: "*"
@@ -159,7 +159,7 @@ services:
     container_name: radar_frontend
     environment:
       ADMIN_USERNAME: ${ADMIN_USERNAME:-observatorio} # TODO: set a secure admin username in your .env file
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-mate-nubes-radar-2026} # TODO: set a strong admin password in your .env file
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set in .env (on stage it must equal the Caddy login)}
     ports:
       - "${FRONTEND_PORT:-80}:80"
     depends_on:

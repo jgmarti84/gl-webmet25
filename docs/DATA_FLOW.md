@@ -725,7 +725,7 @@ See §2.2 for the full table of `IndexerSettings` env vars.
 | `db_port` | `DB_PORT` | `5432` | DB port |
 | `db_name` | `DB_NAME` | `radar_db` | DB name |
 | `db_user` | `DB_USER` | `radar` | DB user |
-| `db_password` | `DB_PASSWORD` | `radarpass` | DB password |
+| `db_password` | `DB_PASSWORD` | `""` (set in `.env`) | DB password |
 | `cog_base_path` | `COG_BASE_PATH` | `/product_output` | Root path to COG files |
 | `cors_origins` | `CORS_ORIGINS` | `*` | Comma-separated allowed origins |
 | `tile_render_threads` | `TILE_RENDER_THREADS` | `8` | Thread pool size for tile rendering |

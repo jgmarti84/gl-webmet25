@@ -728,7 +728,7 @@ Ver §2.2 para la tabla completa de variables de entorno de `IndexerSettings`.
 | `db_port` | `DB_PORT` | `5432` | Puerto de la BD |
 | `db_name` | `DB_NAME` | `radar_db` | Nombre de la BD |
 | `db_user` | `DB_USER` | `radar` | Usuario de la BD |
-| `db_password` | `DB_PASSWORD` | `radarpass` | Contraseña de la BD |
+| `db_password` | `DB_PASSWORD` | `""` (set in `.env`) | Contraseña de la BD |
 | `cog_base_path` | `COG_BASE_PATH` | `/product_output` | Ruta raíz a los archivos COG |
 | `cors_origins` | `CORS_ORIGINS` | `*` | Orígenes permitidos separados por comas |
 | `tile_render_threads` | `TILE_RENDER_THREADS` | `8` | Tamaño del pool de hilos para renderizado de tiles |
