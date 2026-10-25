@@ -8,7 +8,7 @@ Usage:
         --port 8000 \
         --cog-id 62581 \
         --username observatorio \
-        --password mate-nubes-radar-2026
+        --password "$ADMIN_PASSWORD"
 
 Exit codes:
     0  — all checks passed
