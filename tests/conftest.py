@@ -20,7 +20,7 @@ def get_test_db_url() -> str:
     port = os.getenv("TEST_DB_PORT", "5432")
     name = os.getenv("TEST_DB_NAME", "radar_test_db")
     user = os.getenv("TEST_DB_USER", "radar")
-    password = os.getenv("TEST_DB_PASSWORD", "radarpass")
+    password = os.getenv("TEST_DB_PASSWORD", "radar_test_only")
     return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{name}"
 
 

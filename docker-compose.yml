@@ -29,7 +29,7 @@ services:
     environment: 
       POSTGRES_DB: ${DB_NAME:-radar_prod_db}
       POSTGRES_USER: ${DB_USER:-radar}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required (see .env.example)}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env (see .env.example)}
     volumes:
       - ../radar_db_data:/var/lib/postgresql/data
     ports:
@@ -54,7 +54,7 @@ services:
       DB_PORT: 5432
       DB_NAME: ${DB_NAME:-radar_prod_db}
       DB_USER: ${DB_USER:-radar}
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required (see .env.example)}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env (see .env.example)}
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
     depends_on:
@@ -83,7 +83,7 @@ services:
       DB_PORT: 5432
       DB_NAME: ${DB_NAME:-radar_prod_db}
       DB_USER: ${DB_USER:-radar}
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required (see .env.example)}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env (see .env.example)}
       WATCH_PATH: /product_output
       SCAN_INTERVAL: 30
       FILE_PATTERN: "*.tif"
@@ -128,7 +128,7 @@ services:
       DB_PORT: 5432
       DB_NAME: ${DB_NAME:-radar_prod_db}
       DB_USER: ${DB_USER:-radar}
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required (see .env.example)}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env (see .env.example)}
       COG_BASE_PATH: /product_output
       TOPS_AND_CORES_DIR: /tops_and_cores
       CORS_ORIGINS: ${CORS_ORIGINS:-}

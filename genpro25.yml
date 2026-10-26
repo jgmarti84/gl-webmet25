@@ -10,8 +10,8 @@ local:
     COLMAX_TDR_UMBRAL: None
   FTP:
     FTP_HOST: "200.16.116.24"
-    FTP_USER: "IMontamat"
-    FTP_PASS: "1m0nt"
+    FTP_USER: "" # set via env vars — never commit real credentials
+    FTP_PASS: "" # set via env vars — never commit real credentials
   PNG_PLOTS:
     PNG_DPI: None
     FIELDS_TO_PLOT: None
@@ -149,8 +149,8 @@ stg:
     COLMAX_TDR_UMBRAL: None
   FTP:
     FTP_HOST: "staging.example.com"
-    FTP_USER: "staging_user"
-    FTP_PASS: "staging_pass"
+    FTP_USER: "" # set via env vars — never commit real credentials
+    FTP_PASS: "" # set via env vars — never commit real credentials
   PNG_PLOTS:
     PNG_DPI: None
     FIELDS_TO_PLOT: None
@@ -275,8 +275,8 @@ prd:
     COLMAX_TDR_UMBRAL: None
   FTP:
     FTP_HOST: "localhost"
-    FTP_USER: "local_user"
-    FTP_PASS: "local_pass"
+    FTP_USER: "" # set via env vars — never commit real credentials
+    FTP_PASS: "" # set via env vars — never commit real credentials
   PNG_PLOTS:
     PNG_DPI: None
     FIELDS_TO_PLOT: None

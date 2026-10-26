@@ -41,5 +41,13 @@ tests/e2e/screenshots/
 webmet-shots/
 
 .claude/
+# Local artifacts that must never be committed (prod logs, state DBs, dumps)
+*.db
+*.log.txt
+*.zip
+*.npz
+# Runtime evidence pulled from stage/operativo (see gl-platform) and personal scratch
+ops-data/
+local/
 # Documentos de trabajo de Claude (specs y planes), no se versionan
 docs-claude/
