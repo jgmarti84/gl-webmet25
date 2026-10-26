@@ -57,7 +57,8 @@ def test_users_section_lists_current_admin(page: Page):
     login_via_form(page)
     page.click('a[data-section="users"]')
     page.wait_for_selector("table tbody tr")
-    expect(page.locator("table tbody")).to_contain_text(ADMIN_USERNAME)
+    # Usernames are stored lowercase, whatever case BOOTSTRAP_ADMIN_USERNAME has in .env.
+    expect(page.locator("table tbody")).to_contain_text(ADMIN_USERNAME.lower())
 
 
 def test_map_shows_login_in_place_and_opens_after_login(page: Page):
