@@ -43,3 +43,66 @@ def test_auth_defaults(monkeypatch):
     assert s.cookie_secure is True
     assert s.login_max_failed_attempts == 5
     assert s.login_lockout_minutes == 15
+
+
+MAIL_ENV_VARS = (
+    "REGISTRATION_ENABLED",
+    "PUBLIC_BASE_URL",
+    "MAIL_HOST",
+    "MAIL_PORT",
+    "MAIL_USER",
+    "MAIL_PASSWORD",
+    "MAIL_FROM",
+    "MAIL_STARTTLS",
+    "MAIL_USE_SSL",
+    "TERMS_URL",
+    "PRIVACY_URL",
+    "EMAIL_VERIFY_TTL_HOURS",
+    "PASSWORD_RESET_TTL_MINUTES",
+    "MAIL_MAX_PER_HOUR",
+    "MAIL_MIN_INTERVAL_SECONDS",
+)
+
+
+def _clean_settings(monkeypatch, **values):
+    # The dev stack sets some of these in the API container; the tests container must not leak them.
+    for name in MAIL_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+    return APISettings(_env_file=None, JWT_SECRET=GOOD_SECRET, **values)
+
+
+def test_mail_defaults(monkeypatch):
+    s = _clean_settings(monkeypatch)
+    assert s.registration_enabled is False
+    assert s.mail_port == 587
+    assert s.mail_starttls is True
+    assert s.mail_use_ssl is False
+    assert s.email_verify_ttl_hours == 24
+    assert s.password_reset_ttl_minutes == 60
+    assert s.mail_max_per_hour == 3
+    assert s.mail_min_interval_seconds == 60
+    assert s.mail_configured is False
+    assert s.registration_available is False
+
+
+def test_mail_configured_needs_host_sender_and_base_url(monkeypatch):
+    full = dict(MAIL_HOST="smtp.test", MAIL_FROM="no-reply@ejemplo.com.ar", PUBLIC_BASE_URL="https://webmet.test")
+    assert _clean_settings(monkeypatch, **full).mail_configured is True
+    for missing in full:
+        partial = {k: v for k, v in full.items() if k != missing}
+        assert _clean_settings(monkeypatch, **partial).mail_configured is False, missing
+
+
+def test_registration_needs_the_switch_the_mail_and_the_legal_links(monkeypatch):
+    full = dict(
+        REGISTRATION_ENABLED=True,
+        MAIL_HOST="smtp.test",
+        MAIL_FROM="no-reply@ejemplo.com.ar",
+        PUBLIC_BASE_URL="https://webmet.test",
+        TERMS_URL="https://webmet.test/terminos",
+        PRIVACY_URL="https://webmet.test/privacidad",
+    )
+    assert _clean_settings(monkeypatch, **full).registration_available is True
+    for missing in full:
+        partial = {k: v for k, v in full.items() if k != missing}
+        assert _clean_settings(monkeypatch, **partial).registration_available is False, missing

@@ -72,6 +72,32 @@ class APISettings(BaseSettings):
     login_max_failed_attempts: int = Field(default=5, alias="LOGIN_MAX_FAILED_ATTEMPTS")
     login_lockout_minutes: int = Field(default=15, alias="LOGIN_LOCKOUT_MINUTES")
 
+    # Public registration and e-mail. Registration stays off until everything it needs is set.
+    registration_enabled: bool = Field(default=False, alias="REGISTRATION_ENABLED")
+    # Public address of the site, used to build the links inside the mails.
+    public_base_url: str = Field(default="", alias="PUBLIC_BASE_URL")
+    mail_host: str = Field(default="", alias="MAIL_HOST")
+    mail_port: int = Field(default=587, alias="MAIL_PORT")
+    mail_user: str = Field(default="", alias="MAIL_USER")
+    mail_password: str = Field(default="", alias="MAIL_PASSWORD")
+    mail_from: str = Field(default="", alias="MAIL_FROM")
+    # How the connection to the SMTP server (MAIL_HOST, the sender's side, not the recipient's) is encrypted.
+    # Use one of the two, never both:
+    #   MAIL_STARTTLS=true  starts in plain text and upgrades to TLS (usual port 587). Default; fails the send
+    #                       if the server does not offer it, so the password never goes out in clear.
+    #   MAIL_USE_SSL=true   encrypted from the first byte (usual port 465); when on, MAIL_STARTTLS is ignored.
+    # Set MAIL_STARTTLS=false only for a local test mailbox such as Mailpit, which has no encryption.
+    mail_starttls: bool = Field(default=True, alias="MAIL_STARTTLS")
+    mail_use_ssl: bool = Field(default=False, alias="MAIL_USE_SSL")
+    # Links to the terms and the privacy policy shown in the sign-up form (provided by the observatory).
+    terms_url: str = Field(default="", alias="TERMS_URL")
+    privacy_url: str = Field(default="", alias="PRIVACY_URL")
+    email_verify_ttl_hours: int = Field(default=24, alias="EMAIL_VERIFY_TTL_HOURS")
+    password_reset_ttl_minutes: int = Field(default=60, alias="PASSWORD_RESET_TTL_MINUTES")
+    # Per-account sending caps (see EmailToken): at most N mails per hour, at least S seconds apart.
+    mail_max_per_hour: int = Field(default=3, alias="MAIL_MAX_PER_HOUR")
+    mail_min_interval_seconds: int = Field(default=60, alias="MAIL_MIN_INTERVAL_SECONDS")
+
     @field_validator("jwt_secret")
     @classmethod
     def _jwt_secret_long_enough(cls, value: str) -> str:
@@ -89,6 +115,17 @@ class APISettings(BaseSettings):
         # bare "postgresql://" URL from psycopg2 to psycopg (v3).
         return f"postgresql+psycopg2://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
     
+    @property
+    def mail_configured(self) -> bool:
+        # Enough to send a mail with a working link. Also what password recovery needs.
+        return bool(self.mail_host and self.mail_from and self.public_base_url)
+
+    @property
+    def registration_available(self) -> bool:
+        # The switch alone is not enough: without mail the verification link never arrives, and without the
+        # legal links the sign-up form cannot show the terms the person must accept.
+        return bool(self.registration_enabled and self.mail_configured and self.terms_url and self.privacy_url)
+
     @property
     def allowed_origins_list(self) -> list:
         return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
