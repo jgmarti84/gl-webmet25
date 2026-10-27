@@ -36,7 +36,7 @@ export function validatePassword(password, repeat, username = '') {
 }
 
 /** Null when the whole sign-up form is acceptable, else the first problem found. */
-export function validateRegistration({ username, email, password, repeat, accepted, fullName = '' }) {
+export function validateRegistration({ username, email, password, repeat, accepted, fullName = '', termsRequired = true }) {
     const normalized = username.trim().toLowerCase();
     if (!USERNAME_RE.test(normalized)) {
         return 'El usuario debe tener entre 3 y 32 caracteres: letras minúsculas, números, punto, guion o guion bajo.';
@@ -46,7 +46,8 @@ export function validateRegistration({ username, email, password, repeat, accept
     if (fullName.trim().length > MAX_FULL_NAME) return `El nombre puede tener hasta ${MAX_FULL_NAME} caracteres.`;
     const passwordProblem = validatePassword(password, repeat, normalized);
     if (passwordProblem) return passwordProblem;
-    if (!accepted) return 'Tenés que aceptar los términos y la política de privacidad.';
+    // Only when the server asks for the terms (TERMS_REQUIRED); by default the form shows no checkbox at all.
+    if (termsRequired && !accepted) return 'Tenés que aceptar los términos y la política de privacidad.';
     return null;
 }
 

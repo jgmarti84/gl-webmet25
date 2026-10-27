@@ -2,7 +2,13 @@
 const AUTH_BASE = '/api/v1/auth';
 
 // What the pages may offer when /options cannot be read: nothing extra.
-const DEFAULT_OPTIONS = { registration: false, password_recovery: false, terms_url: null, privacy_url: null };
+const DEFAULT_OPTIONS = {
+    registration: false,
+    password_recovery: false,
+    terms_required: false,
+    terms_url: null,
+    privacy_url: null,
+};
 
 /** POST a JSON body to a public endpoint. Resolves { ok, status, data }; `data` is {} for an empty (204) answer. */
 async function postJson(path, body) {

@@ -17,15 +17,23 @@ function setLink(id, url) {
     if (url) link.href = url;
 }
 
-// The sign-up form only exists while the server has registration on; the legal links come from the server too.
+// Whether the form asks to accept the terms and the privacy policy: decided by the server (TERMS_REQUIRED).
+let termsRequired = false;
+
+// The sign-up form only exists while the server has registration on. The terms checkbox and the legal links
+// are shown only when the server asks for them; by default the form has neither.
 authApi.options().then((options) => {
     if (!options.registration) {
         form.hidden = true;
         document.getElementById('register-unavailable').hidden = false;
         return;
     }
-    setLink('terms-link', options.terms_url);
-    setLink('privacy-link', options.privacy_url);
+    termsRequired = Boolean(options.terms_required);
+    document.getElementById('reg-terms-block').hidden = !termsRequired;
+    if (termsRequired) {
+        setLink('terms-link', options.terms_url);
+        setLink('privacy-link', options.privacy_url);
+    }
 });
 
 // "Check your mail" screen, replacing the form.
@@ -49,7 +57,7 @@ form.addEventListener('submit', async (event) => {
         accepted: document.getElementById('reg-terms').checked,
     };
     // Same rules as the server, so the person sees the problem at once. The server checks everything again.
-    const problem = validateRegistration(values);
+    const problem = validateRegistration({ ...values, termsRequired });
     if (problem) {
         showMessage(errorBox, problem);
         return;
@@ -62,7 +70,8 @@ form.addEventListener('submit', async (event) => {
             // Left out when empty (undefined is dropped by JSON.stringify): the name is optional.
             full_name: values.fullName.trim() || undefined,
             password: values.password,
-            accept_terms: true,
+            // What the person ticked: false when the form has no terms checkbox (TERMS_REQUIRED off).
+            accept_terms: values.accepted,
             // Decoy field: empty for a person, filled by bots (the server ignores the request when it has text).
             website: document.getElementById('reg-website').value,
         });

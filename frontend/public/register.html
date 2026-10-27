@@ -79,7 +79,8 @@
                             <input id="reg-website" name="website" type="text" tabindex="-1" autocomplete="off">
                         </div>
 
-                        <label class="login-checkbox">
+                        <!-- Hidden until register.js sees terms_required in /auth/options: by default the sign-up asks for no terms. -->
+                        <label id="reg-terms-block" class="login-checkbox" hidden>
                             <input id="reg-terms" type="checkbox" required>
                             <span>Acepto los <a id="terms-link" href="#" target="_blank" rel="noopener">términos</a> y la <a id="privacy-link" href="#" target="_blank" rel="noopener">política de privacidad</a>.</span>
                         </label>

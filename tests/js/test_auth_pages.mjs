@@ -30,6 +30,8 @@ assert(validateRegistration({ ...valid, username: 'Ana.Perez' }) === null, 'user
 assert(validateRegistration({ ...valid, email: 'no-es-un-mail' }) !== null, 'bad mail');
 assert(validateRegistration({ ...valid, repeat: 'otra-cosa-larga-1' }) !== null, 'passwords differ');
 assert(validateRegistration({ ...valid, accepted: false }) !== null, 'terms not accepted');
+assert(validateRegistration({ ...valid, accepted: false, termsRequired: false }) === null, 'terms not needed when the server does not ask for them');
+assert(validateRegistration({ ...valid, accepted: false, termsRequired: true }) !== null, 'terms needed when the server asks for them');
 assert(validateRegistration({ ...valid, fullName: 'Ana Pérez' }) === null, 'a full name is accepted');
 assert(validateRegistration({ ...valid, fullName: '   ' }) === null, 'a blank full name counts as none');
 assert(validateRegistration({ ...valid, fullName: 'x'.repeat(129) }) !== null, 'full name longer than 128');
