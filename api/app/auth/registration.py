@@ -62,6 +62,34 @@ def _link_still_valid(user: User, now: datetime) -> bool:
     return now - user.created_at < timedelta(hours=settings.email_verify_ttl_hours)
 
 
+def _take_latest_data(
+    db: Session,
+    account: User,
+    owner: Optional[User],
+    username: str,
+    password_hash: str,
+    full_name: Optional[str],
+    terms_accepted: bool,
+    now: datetime,
+) -> None:
+    """A pending account signed up again: it takes the username, password and name typed now.
+
+    Every open verification link of the account is cancelled, so a link sent for the earlier data can no longer
+    verify the account. If the new username belongs to another pending account whose link expired (`owner`), that
+    account is removed first (the same rule as for new sign-ups). `register` already refused a username that is
+    still taken, so `owner` here is either the account itself, an expired pending one, or nobody.
+    """
+    if owner is not None and owner is not account:
+        db.delete(owner)
+        db.flush()
+    account.username = username
+    account.password_hash = password_hash
+    account.full_name = normalize_full_name(full_name)
+    account.terms_accepted_at = now if terms_accepted else None
+    cancel_open_tokens(db, account, PURPOSE_VERIFY, now)
+    db.flush()
+
+
 def register(
     db: Session,
     *,
@@ -74,15 +102,17 @@ def register(
 ) -> List[OutgoingMail]:
     """Create a pending viewer. A mail that already has a verified account gets a notice instead (neutral).
 
-    `full_name` is the optional "Nombre y apellido" of the form: it is only used when the new account is created
-    (rule 5 below); in every other path it is ignored, like the rest of the fields.
+    `full_name` is the optional "Nombre y apellido" of the form: it is stored when the account is created (rule 5)
+    or when a pending account signs up again (rule 3); for a verified mail (rule 2) it is ignored.
     `terms_accepted` says whether the person accepted terms: it stamps users.terms_accepted_at, and is False when
     the sign-up does not ask for any (TERMS_REQUIRED off), so no consent is recorded that was never given.
 
-    Order of the rules (spec 4.1):
-      1. mail of a verified account -> notice mail to its owner (neutral answer);
-      2. mail of an unverified account whose link is still valid -> no replacement, a new link for that account;
-      3. username of a verified account, or of an unverified one whose link is still valid -> UsernameTakenError;
+    Order of the rules (spec 4.1, revised 2026-10-27):
+      1. username of a verified account, or of another unverified account whose link is still valid
+         -> UsernameTakenError, whatever the mail (so the answer never tells whether a mail has an account);
+      2. mail of a verified account -> notice mail to its owner (neutral answer);
+      3. mail of an unverified account whose link is still valid -> that same account takes the data typed now and
+         every older link stops working; a new link goes to the mail (so a link always matches the latest data);
       4. unverified accounts with that mail or username (all expired by now) are replaced;
       5. the new account is created.
     Returns the mails to send ([] when a cap says to send nothing: the caller answers the same either way).
@@ -97,6 +127,18 @@ def register(
     password_hash = hash_password(password)
 
     holder = get_user_by_email(db, address)
+    owner = get_user_by_username(db, username)
+
+    # The username goes first and its answer never depends on the mail. Checked after the mail, a taken username
+    # with a registered mail got the neutral answer and with an unknown mail got "taken": anyone could test which
+    # mails have an account. A verified account's username is taken even when the mail typed is that account's
+    # own (that person should log in). A pending account keeps its username while its link is valid, except for
+    # the same account signing up again (rule 3).
+    if owner is not None and (
+        owner.email_verified_at is not None or (_link_still_valid(owner, now) and owner is not holder)
+    ):
+        raise UsernameTakenError(f"El usuario '{username}' ya existe")
+
     if holder is not None and holder.email_verified_at is not None:
         # Nobody can learn that this mail has an account: the answer is the same as for a new mail. The owner
         # is told by mail instead, within the per-account caps (record_notice is what counts those mails).
@@ -110,15 +152,14 @@ def register(
     # account's rows in email_tokens, which restarts its mail caps: repeating a registration would then flood
     # the mailbox of the address with verification mails.
     if holder is not None and _link_still_valid(holder, now):
-        # Same mail, pending: answer neutrally and send a new link to the account that already exists
-        # (still within its per-account caps). The username and password typed now are not used.
+        # Same mail, pending: the same account (same row, so its mail caps are kept) takes the data typed now, and
+        # every older link dies. Otherwise someone could sign up first with another person's mail and their own
+        # password: when that person signed up and clicked the mail they were waiting for, the account would be
+        # verified with the first password. Now any working link matches the latest data typed for the mail.
+        _take_latest_data(db, holder, owner, username, password_hash, full_name, terms_accepted, now)
         if not may_send_mail(db, holder, now):
-            return []
+            return []  # the data changed anyway; the person can ask for a new link later
         return [_verification(db, holder, now)]
-
-    owner = get_user_by_username(db, username)
-    if owner is not None and (owner.email_verified_at is not None or _link_still_valid(owner, now)):
-        raise UsernameTakenError(f"El usuario '{username}' ya existe")
 
     # What is left are unverified accounts whose link already expired: nothing is lost by replacing them.
     # Accounts made by an admin or the CLI are verified from the start, so this can never delete one of those.

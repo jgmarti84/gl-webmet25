@@ -8,7 +8,7 @@ from api.app.auth import registration
 from api.app.config import settings
 from radar_db.accounts import AccountError, UsernameTakenError
 from radar_db.models import User
-from radar_db.passwords import PasswordPolicyError
+from radar_db.passwords import PasswordPolicyError, verify_password
 
 from .conftest import TEST_PASSWORD
 
@@ -43,7 +43,7 @@ def test_register_creates_a_pending_viewer_and_a_verification_mail(test_db_sessi
     assert user.terms_accepted_at is not None
     assert user.is_active is True
     assert len(mails) == 1 and mails[0].to == f"nuevo@{DOMAIN}"
-    assert "/verify?token=" in mails[0].text
+    assert "/verify#token=" in mails[0].text
 
 
 def test_register_validates_username_and_password(test_db_session):
@@ -71,6 +71,16 @@ def test_register_with_a_username_of_a_verified_account_is_refused(make_user, te
     make_user(username="ana", email=f"ana@{DOMAIN}")
     with pytest.raises(UsernameTakenError):
         _register(test_db_session, username="ana", email=f"otra@{DOMAIN}")
+
+
+def test_a_taken_username_says_nothing_about_the_mail(make_user, test_db_session):
+    # Enumeration: with a taken username the answer must not depend on the mail. If a mail that has an account
+    # got the neutral answer and an unknown one got "username taken", anyone could test which mails are registered.
+    make_user(username="ana", email=f"ana@{DOMAIN}")
+    make_user(username="beto", email=f"beto@{DOMAIN}")
+    for mail in (f"ana@{DOMAIN}", f"beto@{DOMAIN}", f"nadie@{DOMAIN}"):
+        with pytest.raises(UsernameTakenError):
+            _register(test_db_session, username="ana", email=mail)
 
 
 def _pending(make_user, created_at, **kwargs):
@@ -116,13 +126,64 @@ def test_a_fresh_unverified_username_cannot_be_taken(make_user, test_db_session)
     assert test_db_session.query(User).filter_by(username="ana", email=f"ana@{DOMAIN}").count() == 1
 
 
-def test_a_fresh_unverified_mail_is_not_replaced_and_gets_a_new_link(make_user, test_db_session):
+def test_signing_up_again_with_a_pending_mail_takes_the_latest_data(make_user, test_db_session):
+    # The same pending account (same row, so its mail caps are kept) takes the username, password and name typed
+    # now, and the mail goes to the address with a new link greeting the new username.
     old = _pending(make_user, FRESH, username="ana", email=f"ana@{DOMAIN}")
     old_id = old.id
-    mails = _register(test_db_session, username="otro", email=f"ana@{DOMAIN}")
-    assert test_db_session.query(User).filter_by(username="otro").count() == 0
-    assert test_db_session.query(User).filter_by(id=old_id, username="ana").count() == 1
-    assert len(mails) == 1 and mails[0].to == f"ana@{DOMAIN}" and "/verify?token=" in mails[0].text
+    mails = _register(
+        test_db_session, username="otro", email=f"ana@{DOMAIN}", password="otra-clave-larga-1", full_name="Otra Persona"
+    )
+    user = test_db_session.get(User, old_id)
+    assert user.username == "otro" and user.full_name == "Otra Persona"
+    assert verify_password("otra-clave-larga-1", user.password_hash)
+    assert test_db_session.query(User).filter_by(username="ana").count() == 0
+    assert len(mails) == 1 and mails[0].to == f"ana@{DOMAIN}" and "/verify#token=" in mails[0].text
+    assert "Hola otro" in mails[0].text
+
+
+def test_a_pending_mail_cannot_be_pre_registered_with_someone_elses_password(test_db_session):
+    # Pre-hijacking: an attacker signs up first with the victim's mail. When the victim signs up with their own
+    # data and clicks the mail that arrives, the account must have the victim's data, never the attacker's.
+    attacker_mail = _register(
+        test_db_session, username="atacante", email=f"victima@{DOMAIN}", password="clave-del-atacante-1"
+    )[0]
+    victim_mail = _register(
+        test_db_session,
+        username="victima",
+        email=f"victima@{DOMAIN}",
+        password="clave-de-la-victima-1",
+        now=NOW + timedelta(minutes=2),
+    )[0]
+    # The attacker's link stopped working: it was issued for data that are no longer the account's.
+    with pytest.raises(et.InvalidEmailToken):
+        registration.verify_email(test_db_session, _token_in(attacker_mail), now=NOW + timedelta(minutes=3))
+    registration.verify_email(test_db_session, _token_in(victim_mail), now=NOW + timedelta(minutes=3))
+    user = test_db_session.query(User).filter_by(email=f"victima@{DOMAIN}").one()
+    assert user.username == "victima" and user.email_verified_at is not None
+    assert verify_password("clave-de-la-victima-1", user.password_hash)
+    assert not verify_password("clave-del-atacante-1", user.password_hash)
+
+
+def test_signing_up_again_when_capped_still_updates_and_kills_the_old_link(test_db_session):
+    # With the caps used up nothing is sent, but the data change anyway, so no old link can verify the account
+    # with data that are not the latest ones. The person asks for a new link later ("reenviar").
+    first = _register(test_db_session, username="uno", email=f"nuevo@{DOMAIN}")[0]
+    for minute in (2, 4):
+        _register(test_db_session, username="uno", email=f"nuevo@{DOMAIN}", now=NOW + timedelta(minutes=minute))
+    capped = _register(test_db_session, username="dos", email=f"nuevo@{DOMAIN}", now=NOW + timedelta(minutes=6))
+    assert capped == []
+    assert test_db_session.query(User).filter_by(email=f"nuevo@{DOMAIN}").one().username == "dos"
+    with pytest.raises(et.InvalidEmailToken):
+        registration.verify_email(test_db_session, _token_in(first), now=NOW + timedelta(minutes=7))
+
+
+def test_signing_up_again_can_take_the_username_of_an_expired_pending_account(make_user, test_db_session):
+    old = _pending(make_user, FRESH, username="ana", email=f"ana@{DOMAIN}")
+    _pending(make_user, EXPIRED, username="libre", email=f"viejo@{DOMAIN}")
+    _register(test_db_session, username="libre", email=f"ana@{DOMAIN}")
+    assert test_db_session.get(User, old.id).username == "libre"
+    assert test_db_session.query(User).filter_by(email=f"viejo@{DOMAIN}").count() == 0
 
 
 def test_repeating_a_registration_cannot_flood_a_mailbox(test_db_session):
@@ -263,13 +324,13 @@ def test_resend_respects_the_interval(test_db_session):
 def test_forgot_sends_a_reset_link_to_a_verified_account(make_user, test_db_session):
     make_user(username="ana", email=f"ana@{DOMAIN}")
     mails = registration.forgot_password(test_db_session, f"Ana@{DOMAIN}", now=NOW)
-    assert len(mails) == 1 and "/reset?token=" in mails[0].text
+    assert len(mails) == 1 and "/reset#token=" in mails[0].text
 
 
 def test_forgot_for_an_unverified_account_sends_the_verification_instead(test_db_session):
     _register(test_db_session)
     mails = registration.forgot_password(test_db_session, f"nuevo@{DOMAIN}", now=NOW + timedelta(minutes=5))
-    assert len(mails) == 1 and "/verify?token=" in mails[0].text
+    assert len(mails) == 1 and "/verify#token=" in mails[0].text
 
 
 def test_forgot_ignores_unknown_inactive_and_capped_accounts(make_user, test_db_session):
