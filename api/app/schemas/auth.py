@@ -4,8 +4,10 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from .text import StrictText
 
-class LoginRequest(BaseModel):
+
+class LoginRequest(StrictText):
     # Username or e-mail (an e-mail can be up to 254 characters).
     username: str = Field(..., min_length=1, max_length=254)
     password: str = Field(..., min_length=1, max_length=128)

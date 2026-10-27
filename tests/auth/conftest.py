@@ -21,20 +21,23 @@ def make_user(test_db_session):
 
 
 @pytest.fixture
-def client(test_db_session):
-    """FastAPI app with the auth routers, using the test database session."""
+def client(test_db_session, mailer):
+    """FastAPI app with the auth routers, using the test database session and a fake mailer."""
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
+    from api.app.mail.service import get_mailer
     from api.app.routers.admin import router as admin_router
     from api.app.routers.auth import router as auth_router
+    from api.app.routers.registration import router as registration_router
     from api.app.routers.users import router as users_router
     from radar_db import get_db
 
     app = FastAPI()
-    for router in (auth_router, users_router, admin_router):
+    for router in (auth_router, registration_router, users_router, admin_router):
         app.include_router(router, prefix="/api/v1")
     app.dependency_overrides[get_db] = lambda: test_db_session
+    app.dependency_overrides[get_mailer] = lambda: mailer
     with TestClient(app, base_url="http://testserver") as test_client:
         yield test_client
 
@@ -46,21 +49,24 @@ def login(client, username="alice", password=TEST_PASSWORD):
 
 
 @pytest.fixture
-def app_client(test_db_session):
+def app_client(test_db_session, mailer):
     """The real application (every router, as wired in main.py), using the test database session.
 
     The lifespan (Redis, GDAL, admin check) does not run: the client is not used as a context manager.
     """
     from fastapi.testclient import TestClient
 
+    from api.app.mail.service import get_mailer
     from api.app.main import app
     from radar_db import get_db
 
     app.dependency_overrides[get_db] = lambda: test_db_session
+    app.dependency_overrides[get_mailer] = lambda: mailer
     try:
         yield TestClient(app, base_url="http://testserver")
     finally:
         app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_mailer, None)
 
 
 # --- public registration (spec B) ----------------------------------------------

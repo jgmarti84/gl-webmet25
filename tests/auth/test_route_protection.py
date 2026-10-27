@@ -19,6 +19,12 @@ PUBLIC_ROUTES = {
     ("post", "/api/v1/auth/login"),
     ("post", "/api/v1/auth/refresh"),
     ("post", "/api/v1/auth/logout"),
+    ("get", "/api/v1/auth/options"),
+    ("post", "/api/v1/auth/register"),
+    ("post", "/api/v1/auth/verify-email"),
+    ("post", "/api/v1/auth/resend-verification"),
+    ("post", "/api/v1/auth/forgot-password"),
+    ("post", "/api/v1/auth/reset-password"),
 }
 
 HTTP_METHODS = {"get", "post", "put", "patch", "delete"}

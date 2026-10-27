@@ -19,6 +19,7 @@ from .routers import (
     frames_router,
     products_router,
     radars_router,
+    registration_router,
     tiles_router,
     tops_cores_router,
     users_router,
@@ -53,6 +54,13 @@ async def lifespan(app: FastAPI):
                 )
     except Exception as exc:  # DB not ready must not block startup
         logger.warning(f"Could not check admin users at startup: {exc}")
+
+    # The switch alone does not turn registration on (see Settings.registration_available): say why it is off.
+    if settings.registration_enabled and not settings.registration_available:
+        logger.warning(
+            "REGISTRATION_ENABLED=true but the setup is incomplete (needs MAIL_HOST, MAIL_FROM, "
+            "PUBLIC_BASE_URL, TERMS_URL and PRIVACY_URL): registration stays off"
+        )
 
     gdal_env = Env(
         GDAL_CACHEMAX=settings.gdal_cachemax,
@@ -183,6 +191,8 @@ app.include_router(frames_router, prefix=settings.api_prefix, dependencies=_sess
 app.include_router(tops_cores_router, prefix=settings.api_prefix, dependencies=_session_required)
 app.include_router(admin_router, prefix=settings.api_prefix)
 app.include_router(auth_router, prefix=settings.api_prefix)
+# Public (no session): sign-up, e-mail verification and password recovery.
+app.include_router(registration_router, prefix=settings.api_prefix)
 app.include_router(users_router, prefix=settings.api_prefix)
 
 
