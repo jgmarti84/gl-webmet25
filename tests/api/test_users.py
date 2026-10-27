@@ -36,6 +36,7 @@ USER_FIELDS = {
     "username",
     "full_name",
     "email",
+    "email_verified",
     "role",
     "is_active",
     "password_is_bootstrap",

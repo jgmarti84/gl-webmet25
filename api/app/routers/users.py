@@ -23,6 +23,7 @@ def _response(user: User) -> UserResponse:
         username=user.username,
         full_name=user.full_name,
         email=user.email,
+        email_verified=user.email_verified_at is not None,
         role=user.role,
         is_active=user.is_active,
         password_is_bootstrap=user.password_is_bootstrap,

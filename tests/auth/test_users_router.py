@@ -113,3 +113,59 @@ def test_last_active_admin_cannot_be_demoted(make_user, test_db_session):
     with pytest.raises(UserRuleError) as exc:
         update_user(test_db_session, actor, only_admin, {"role": "viewer"})
     assert exc.value.status_code == 409
+
+
+def test_create_user_with_a_mail_is_verified_and_normalized(client, make_user):
+    _as_admin(client, make_user)
+    response = client.post(
+        BASE,
+        json={"username": "carla", "password": TEST_PASSWORD, "role": "viewer", "email": "Carla@Ejemplo.com.ar"},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["email"] == "carla@ejemplo.com.ar"
+    assert body["email_verified"] is True
+
+
+def test_create_user_with_a_taken_mail_409(client, make_user):
+    _as_admin(client, make_user)
+    make_user(username="carla", email="carla@ejemplo.com.ar")
+    response = client.post(
+        BASE,
+        json={"username": "otra", "password": TEST_PASSWORD, "role": "viewer", "email": "CARLA@ejemplo.com.ar"},
+    )
+    assert response.status_code == 409
+
+
+def test_create_user_with_an_invalid_mail_422(client, make_user):
+    _as_admin(client, make_user)
+    response = client.post(
+        BASE, json={"username": "otra", "password": TEST_PASSWORD, "role": "viewer", "email": "no-es-un-mail"}
+    )
+    assert response.status_code == 422
+
+
+def test_patch_mail_normalizes_and_rejects_a_taken_one(client, make_user):
+    _as_admin(client, make_user)
+    make_user(username="carla", email="carla@ejemplo.com.ar")
+    other = make_user(username="dario")
+    ok = client.patch(f"{BASE}/{other.id}", json={"email": "Dario@Ejemplo.com.ar"})
+    assert ok.status_code == 200 and ok.json()["email"] == "dario@ejemplo.com.ar"
+    taken = client.patch(f"{BASE}/{other.id}", json={"email": "CARLA@ejemplo.com.ar"})
+    assert taken.status_code == 409
+
+
+def test_patch_can_clear_the_mail_and_keep_the_same_one(client, make_user):
+    _as_admin(client, make_user)
+    user = make_user(username="carla", email="carla@ejemplo.com.ar")
+    assert client.patch(f"{BASE}/{user.id}", json={"email": "carla@ejemplo.com.ar"}).status_code == 200
+    cleared = client.patch(f"{BASE}/{user.id}", json={"email": None})
+    assert cleared.status_code == 200 and cleared.json()["email"] is None
+
+
+def test_the_list_shows_whether_the_mail_is_verified(client, make_user):
+    _as_admin(client, make_user)
+    make_user(username="pend", email="pend@ejemplo.com.ar", email_verified=False)
+    by_name = {u["username"]: u for u in client.get(BASE).json()}
+    assert by_name["boss"]["email_verified"] is True
+    assert by_name["pend"]["email_verified"] is False

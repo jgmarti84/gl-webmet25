@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from .text import StrictText
 
@@ -28,7 +28,8 @@ class UserCreate(BaseModel):
     password: str = Field(..., min_length=1, max_length=128)
     role: Literal["admin", "viewer"]
     full_name: Optional[str] = Field(None, max_length=128)
-    email: Optional[str] = Field(None, max_length=254)
+    # A real address (format and length checked by email-validator); the rules lower-case it before saving.
+    email: Optional[EmailStr] = None
 
     @field_validator("username")
     @classmethod
@@ -38,7 +39,7 @@ class UserCreate(BaseModel):
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(None, max_length=128)
-    email: Optional[str] = Field(None, max_length=254)
+    email: Optional[EmailStr] = None  # null clears it
     role: Optional[Literal["admin", "viewer"]] = None
     is_active: Optional[bool] = None
 
@@ -52,6 +53,8 @@ class UserResponse(BaseModel):
     username: str
     full_name: Optional[str] = None
     email: Optional[str] = None
+    # False for a self-registered account that never opened its verification link (it cannot log in yet).
+    email_verified: bool = True
     role: str
     is_active: bool
     password_is_bootstrap: bool

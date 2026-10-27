@@ -1,15 +1,19 @@
 # api/app/auth/user_admin.py
 """Admin rules on top of radar_db.accounts. Functions flush; routers commit."""
 
+from datetime import datetime, timezone
 from typing import List
 
 from sqlalchemy.orm import Session
 
 from radar_db.accounts import (
     AccountError,
+    EmailTakenError,
     UsernameTakenError,
     count_active_admins,
     create_user,
+    get_user_by_email,
+    normalize_email,
     revoke_all_sessions,
     set_password,
 )
@@ -31,7 +35,7 @@ def list_users(db: Session) -> List[User]:
 def create(db: Session, data: dict) -> User:
     try:
         return create_user(db, **data)
-    except UsernameTakenError as exc:
+    except (UsernameTakenError, EmailTakenError) as exc:
         raise UserRuleError(409, str(exc)) from exc
     except (AccountError, PasswordPolicyError) as exc:
         raise UserRuleError(422, str(exc)) from exc
@@ -50,9 +54,18 @@ def update_user(db: Session, actor: User, user: User, changes: dict) -> User:
         if count_active_admins(db) <= 1:
             raise UserRuleError(409, "Tiene que quedar al menos un administrador activo")
 
-    for field in ("full_name", "email"):
-        if field in changes:
-            setattr(user, field, changes[field])
+    if "full_name" in changes:
+        user.full_name = changes["full_name"]
+    if "email" in changes:
+        # Same rule as sign-up: stored normalized and unique. null clears it.
+        new_email = normalize_email(changes["email"])
+        if new_email != user.email:
+            holder = get_user_by_email(db, new_email)
+            if holder is not None and holder.id != user.id:
+                raise UserRuleError(409, "Ese mail ya está en uso")
+            user.email = new_email
+            if user.email_verified_at is None:
+                user.email_verified_at = datetime.now(timezone.utc)  # the admin vouches for it
 
     must_revoke = False
     if new_role is not None and new_role != user.role:
