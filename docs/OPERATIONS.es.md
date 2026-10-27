@@ -228,6 +228,8 @@ Todo va en el `.env` (comentado en `.env.example`); docker compose se lo pasa a 
 | `PASSWORD_RESET_TTL_MINUTES` | `60` | Vida del link de recupero |
 | `MAIL_MAX_PER_HOUR` | `3` | Mails que puede recibir una cuenta por hora (cuentan todos los tipos) |
 | `MAIL_MIN_INTERVAL_SECONDS` | `60` | Tiempo mínimo entre dos mails a una misma cuenta |
+| `MAIL_MAX_GLOBAL_PER_HOUR` | `200` | Mails de todo el sitio por hora; pasado ese número solo sale el recupero de contraseña |
+| `MAIL_MAX_GLOBAL_PER_DAY` | `1500` | Mails de todo el sitio por día; mantenerlo por debajo del límite diario del proveedor de SMTP (Gmail Workspace: unos 2.000) |
 
 Cuando un tope frena un mail, la API no envía nada y responde exactamente igual que si lo hubiera enviado, así que la respuesta nunca revela si una cuenta existe.
 

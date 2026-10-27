@@ -268,6 +268,8 @@ All go in `.env` (commented in `.env.example`); docker compose passes them to th
 | `PASSWORD_RESET_TTL_MINUTES` | `60` | Life of the reset link |
 | `MAIL_MAX_PER_HOUR` | `3` | Mails one account may receive per hour (all kinds count) |
 | `MAIL_MIN_INTERVAL_SECONDS` | `60` | Minimum time between two mails to one account |
+| `MAIL_MAX_GLOBAL_PER_HOUR` | `200` | Mails of the whole site per hour; past it only password recovery goes out |
+| `MAIL_MAX_GLOBAL_PER_DAY` | `1500` | Mails of the whole site per day; keep it under the SMTP provider's daily limit (Gmail Workspace: about 2,000) |
 
 When a cap stops a mail, the API sends nothing and answers exactly as if it had, so the answer never reveals whether an account exists.
 

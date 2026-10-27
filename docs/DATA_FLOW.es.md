@@ -503,7 +503,7 @@ Todos los endpoints son públicos y comprueban el header `Origin` como el login.
 - **Login:** acepta el usuario o el mail (un usuario nunca puede contener `@`). Con la contraseña correcta y el mail sin verificar responde `403 {"code": "email_not_verified"}`; con una contraseña incorrecta es el 401 genérico de siempre. `load_active_user` y el refresh también rechazan una cuenta sin verificar.
 - **Recupero:** fija la contraseña nueva con la misma política, sube `token_version`, cierra todas las sesiones con `revoke_reason = "password_reset"`, levanta el bloqueo y verifica el mail si no lo estaba (abrir el link prueba que controla el buzón).
 - **Los mails** salen en segundo plano después de confirmar la transacción, así ni la respuesta ni su tiempo dependen de ellos. Una falla se registra en el log con la dirección enmascarada (`j***@host`); nunca se registran tokens ni contraseñas.
-- **Topes:** por cuenta, como máximo `MAIL_MAX_PER_HOUR` mails por hora y separados por `MAIL_MIN_INTERVAL_SECONDS`. Un pedido frenado no envía nada y responde igual. nginx además limita estos endpoints por IP (§8.4).
+- **Topes:** por cuenta, como máximo `MAIL_MAX_PER_HOUR` mails por hora y separados por `MAIL_MIN_INTERVAL_SECONDS`. Globales (todas las cuentas juntas, contra alguien que registra muchas direcciones distintas): como máximo `MAIL_MAX_GLOBAL_PER_HOUR` mails por hora, salvo los de recupero de contraseña, y `MAIL_MAX_GLOBAL_PER_DAY` por día para todos (mantenerlo por debajo del límite del proveedor de SMTP). Al llegar a un tope global queda un WARNING en el log, uno por ventana. Un pedido frenado no envía nada y responde igual (una cuenta nueva se crea igual). nginx además limita estos endpoints por IP (§8.4).
 - **Validación:** `StrictText` ([`api/app/schemas/text.py`](../api/app/schemas/text.py)) rechaza con 422 el carácter nulo y los caracteres inválidos en UTF-8, y el handler del 422 en `main.py` no repite el valor rechazado en su respuesta.
 
 Del lado del panel de admin: un mail escrito por un admin se guarda normalizado y se controla que no esté repetido (409), cuenta como verificado, y la lista de usuarios muestra `email_verified`.
@@ -845,6 +845,8 @@ Ver §2.2 para la tabla completa de variables de entorno de `IndexerSettings`.
 | `password_reset_ttl_minutes` | `PASSWORD_RESET_TTL_MINUTES` | `60` | Vida del link de recupero |
 | `mail_max_per_hour` | `MAIL_MAX_PER_HOUR` | `3` | Mails por cuenta por hora |
 | `mail_min_interval_seconds` | `MAIL_MIN_INTERVAL_SECONDS` | `60` | Segundos mínimos entre dos mails a una cuenta |
+| `mail_max_global_per_hour` | `MAIL_MAX_GLOBAL_PER_HOUR` | `200` | Mails de todo el sitio por hora (pasado ese número sigue saliendo solo el recupero de contraseña) |
+| `mail_max_global_per_day` | `MAIL_MAX_GLOBAL_PER_DAY` | `1500` | Mails de todo el sitio por día (todos) |
 
 Derivadas: `mail_configured` (necesita `MAIL_HOST`, `MAIL_FROM` y `PUBLIC_BASE_URL`; alcanza para la verificación y el recupero) y `registration_available` (además necesita `REGISTRATION_ENABLED` y, solo si `TERMS_REQUIRED` está activo, los dos links legales).
 

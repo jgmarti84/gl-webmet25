@@ -499,7 +499,7 @@ All endpoints are public and check the `Origin` header like the login. "Neutral"
 - **Login:** accepts the username or the mail (a username can never contain `@`). With the right password and an unverified mail it answers `403 {"code": "email_not_verified"}`; with a wrong password it is the usual generic 401. `load_active_user` and the refresh also refuse an unverified account.
 - **Reset:** sets the new password with the same policy, bumps `token_version`, closes every session with `revoke_reason = "password_reset"`, clears the lockout and verifies the mail if it was not (opening the link proves control of the mailbox).
 - **Mails** go out in the background after the transaction commits, so neither the answer nor its time depends on them. A failure is logged with the address masked (`j***@host`); tokens and passwords are never logged.
-- **Caps:** per account, at most `MAIL_MAX_PER_HOUR` mails an hour and `MAIL_MIN_INTERVAL_SECONDS` apart. A capped request sends nothing and answers the same. nginx also limits these endpoints per IP (§8.4).
+- **Caps:** per account, at most `MAIL_MAX_PER_HOUR` mails an hour and `MAIL_MIN_INTERVAL_SECONDS` apart. Global (all accounts together, against someone signing up many different addresses): at most `MAIL_MAX_GLOBAL_PER_HOUR` mails an hour, except password recovery, and `MAIL_MAX_GLOBAL_PER_DAY` a day for every mail (keep it under the SMTP provider's limit). Reaching a global cap logs one WARNING per window. A capped request sends nothing and answers the same (a new account is still created). nginx also limits these endpoints per IP (§8.4).
 - **Validation:** `StrictText` ([`api/app/schemas/text.py`](../api/app/schemas/text.py)) rejects NUL and invalid UTF-8 characters with a 422, and the 422 handler in `main.py` does not repeat the rejected value in its answer.
 
 Admin panel side: a mail typed by an admin is stored normalized and checked for duplicates (409), counts as verified, and the user list shows `email_verified`.
@@ -835,6 +835,8 @@ See §2.2 for the full table of `IndexerSettings` env vars.
 | `password_reset_ttl_minutes` | `PASSWORD_RESET_TTL_MINUTES` | `60` | Life of the reset link |
 | `mail_max_per_hour` | `MAIL_MAX_PER_HOUR` | `3` | Mails per account per hour |
 | `mail_min_interval_seconds` | `MAIL_MIN_INTERVAL_SECONDS` | `60` | Minimum seconds between two mails to one account |
+| `mail_max_global_per_hour` | `MAIL_MAX_GLOBAL_PER_HOUR` | `200` | Mails of the whole site per hour (password recovery is exempt) |
+| `mail_max_global_per_day` | `MAIL_MAX_GLOBAL_PER_DAY` | `1500` | Mails of the whole site per day (every mail) |
 
 Derived: `mail_configured` (needs `MAIL_HOST`, `MAIL_FROM` and `PUBLIC_BASE_URL`; enough for verification and recovery) and `registration_available` (also needs `REGISTRATION_ENABLED` and, only when `TERMS_REQUIRED` is on, both legal links).
 | `tile_render_threads` | `TILE_RENDER_THREADS` | `8` | Thread pool size for tile rendering |
