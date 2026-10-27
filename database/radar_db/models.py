@@ -414,7 +414,7 @@ class UserSession(Base):
     expires_at = Column(DateTime(timezone=True), nullable=False)
     absolute_expires_at = Column(DateTime(timezone=True), nullable=False)
     revoked_at = Column(DateTime(timezone=True))
-    # Why the login was closed: logout | reuse | admin | inactive_user | migration
+    # Why the login was closed: logout | reuse | admin | inactive_user | password_reset | migration
     revoke_reason = Column(String(20))
     # Login time and the client that logged in (refreshes do not overwrite them).
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

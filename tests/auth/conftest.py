@@ -1,4 +1,6 @@
 # tests/auth/conftest.py
+import re
+
 import pytest
 
 from radar_db.accounts import create_user
@@ -59,3 +61,51 @@ def app_client(test_db_session):
         yield TestClient(app, base_url="http://testserver")
     finally:
         app.dependency_overrides.pop(get_db, None)
+
+
+# --- public registration (spec B) ----------------------------------------------
+
+TEST_EMAIL_DOMAIN = "ejemplo.com.ar"
+
+
+@pytest.fixture
+def mailer():
+    """Collects the mails the API would send."""
+    from api.app.mail.service import FakeMailer
+
+    return FakeMailer()
+
+
+@pytest.fixture
+def registration_on(monkeypatch):
+    """Mail and registration fully configured."""
+    from api.app.config import settings
+
+    values = dict(
+        registration_enabled=True,
+        public_base_url="https://webmet.test",
+        mail_host="smtp.test",
+        mail_from=f"no-reply@{TEST_EMAIL_DOMAIN}",
+        terms_url="https://webmet.test/terminos",
+        privacy_url="https://webmet.test/privacidad",
+    )
+    for name, value in values.items():
+        monkeypatch.setattr(settings, name, value)
+
+
+def register_payload(**overrides):
+    """Body of POST /auth/register with valid values; tests override the field they are checking."""
+    payload = {
+        "username": "nuevo",
+        "email": f"nuevo@{TEST_EMAIL_DOMAIN}",
+        "password": TEST_PASSWORD,
+        "accept_terms": True,
+        "website": "",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def token_from(mail) -> str:
+    """The token inside the link of a mail."""
+    return re.search(r"token=([A-Za-z0-9_-]{43})", mail.text).group(1)

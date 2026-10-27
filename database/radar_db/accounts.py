@@ -119,25 +119,32 @@ def create_user(
     return user
 
 
-def revoke_all_sessions(db: Session, user: User, now: Optional[datetime] = None) -> None:
-    """Invalidate every access token (token_version) and refresh token of the user."""
+def revoke_all_sessions(db: Session, user: User, now: Optional[datetime] = None, reason: str = "admin") -> None:
+    """Invalidate every access token (token_version) and refresh token of the user.
+
+    reason goes to user_sessions.revoke_reason: "admin" for the panel, the CLI and deactivation;
+    "password_reset" when the user recovers their own password by e-mail.
+    """
     now = now or _utcnow()
     user.token_version += 1
     (
         db.query(UserSession)
         .filter(UserSession.user_id == user.id, UserSession.revoked_at.is_(None))
-        .update({UserSession.revoked_at: now, UserSession.revoke_reason: "admin"}, synchronize_session=False)
+        .update({UserSession.revoked_at: now, UserSession.revoke_reason: reason}, synchronize_session=False)
     )
     db.flush()
 
 
-def set_password(db: Session, user: User, new_password: str, now: Optional[datetime] = None) -> None:
+def set_password(
+    db: Session, user: User, new_password: str, now: Optional[datetime] = None, reason: str = "admin"
+) -> None:
+    """Change the password, clear the lockout and close every session of the user (with that reason)."""
     validate_password(new_password, user.username)
     user.password_hash = hash_password(new_password)
     user.password_is_bootstrap = False
     user.failed_login_count = 0
     user.locked_until = None
-    revoke_all_sessions(db, user, now)
+    revoke_all_sessions(db, user, now, reason=reason)
 
 
 def count_active_admins(db: Session) -> int:

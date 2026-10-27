@@ -161,3 +161,19 @@ def test_find_by_identifier_uses_the_mail_only_when_it_has_an_at_sign(test_db_se
     assert find_by_identifier(test_db_session, "UNO").id == user.id
     assert find_by_identifier(test_db_session, "x@ejemplo.com.ar").id == user.id
     assert find_by_identifier(test_db_session, "uno@ejemplo.com.ar") is None
+
+
+def test_set_password_closes_sessions_as_admin_by_default(make_user, test_db_session):
+    user = make_user()
+    s = _open_session(test_db_session, user)
+    set_password(test_db_session, user, "otra-contrasena-larga")
+    test_db_session.refresh(s)
+    assert s.revoke_reason == "admin"
+
+
+def test_set_password_records_the_given_reason(make_user, test_db_session):
+    user = make_user()
+    s = _open_session(test_db_session, user)
+    set_password(test_db_session, user, "otra-contrasena-larga", reason="password_reset")
+    test_db_session.refresh(s)
+    assert s.revoke_reason == "password_reset"
