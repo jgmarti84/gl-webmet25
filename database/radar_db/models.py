@@ -364,7 +364,7 @@ class User(Base):
     is_active = Column(Boolean, nullable=False, default=True, server_default='true')
     # Incremented to invalidate every token of the user at once.
     token_version = Column(Integer, nullable=False, default=0, server_default='0')
-    # True while the password is the one from BOOTSTRAP_ADMIN_PASSWORD.
+    # True while the password is the one from ADMIN_PASSWORD.
     password_is_bootstrap = Column(Boolean, nullable=False, default=False, server_default='false')
     failed_login_count = Column(Integer, nullable=False, default=0, server_default='0')
     locked_until = Column(DateTime(timezone=True))

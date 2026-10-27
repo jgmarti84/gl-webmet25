@@ -19,11 +19,11 @@ import pytest
 API_BASE_URL = os.getenv("API_BASE_URL", "http://api:8000")
 ADMIN_PREFIX = "/api/v1/admin"
 AUTH_PREFIX = "/api/v1/auth"
-ADMIN_USER = os.getenv("BOOTSTRAP_ADMIN_USERNAME")
-ADMIN_PASS = os.getenv("BOOTSTRAP_ADMIN_PASSWORD")
+ADMIN_USER = os.getenv("ADMIN_USERNAME")
+ADMIN_PASS = os.getenv("ADMIN_PASSWORD")
 
-# skipif with a reason (not a plain skip): these tests need the admin account db-init creates from BOOTSTRAP_ADMIN_*.
-needs_admin = pytest.mark.skipif(not (ADMIN_USER and ADMIN_PASS), reason="BOOTSTRAP_ADMIN_* not set")
+# skipif with a reason (not a plain skip): these tests need the admin account db-init creates from ADMIN_USERNAME / ADMIN_PASSWORD.
+needs_admin = pytest.mark.skipif(not (ADMIN_USER and ADMIN_PASS), reason="ADMIN_USERNAME / ADMIN_PASSWORD not set")
 
 UNKNOWN_ID = 999999999
 FOREIGN_ORIGIN = {"Origin": "https://evil.example"}

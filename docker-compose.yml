@@ -55,8 +55,8 @@ services:
       DB_NAME: ${DB_NAME:-radar_prod_db}
       DB_USER: ${DB_USER:-radar}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env (see .env.example)}
-      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}
-      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     depends_on:
       radar_db:
         condition: service_healthy
@@ -65,7 +65,7 @@ services:
         echo 'Waiting for database...' &&
         python -m radar_db.manage init &&
         python -m radar_db.manage seed &&
-        python -m radar_db.manage bootstrap-admin &&
+        python -m radar_db.manage init-admin &&
         echo 'Database initialized!'
       "
     restart: "no"

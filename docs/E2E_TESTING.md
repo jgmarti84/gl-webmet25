@@ -34,7 +34,7 @@ The tests are environment-agnostic Python + Playwright. To run them anywhere you
 | **Playwright Chromium** | `playwright install chromium` + system libs `playwright install-deps chromium` |
 | **A running API** | seeded DB (radars, products, the 8 system colormaps). Reachable at `API_BASE_URL`. |
 | **A running v2 frontend** | nginx serving the v2 build. Reachable at `FRONTEND_URL`. |
-| **An admin account** | created by `db-init` from `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` (see below). |
+| **An admin account** | created by `db-init` from `ADMIN_USERNAME` / `ADMIN_PASSWORD` (see below). |
 | **Network reachability** | the test host must reach `FRONTEND_URL` (the frontend in turn proxies `/api/v1/*` to the API). |
 
 ### Environment variables
@@ -43,11 +43,11 @@ The tests are environment-agnostic Python + Playwright. To run them anywhere you
 |-----|------------------------|---------|
 | `FRONTEND_URL` | `http://frontend-v2:80` | Base URL of the **v2** frontend under test |
 | `API_BASE_URL` | `http://api:8000` | API base (used by the API contract tests, not strictly by e2e) |
-| `BOOTSTRAP_ADMIN_USERNAME` | `admin` | Username of the admin account the tests log in with |
-| `BOOTSTRAP_ADMIN_PASSWORD` | *(none)* | Its password — required, tests cannot log in without it |
+| `ADMIN_USERNAME` | `admin` | Username of the admin account the tests log in with |
+| `ADMIN_PASSWORD` | *(none)* | Its password — required, tests cannot log in without it |
 
 Every page requires a login. The tests sign in through the `/login` form with the account that
-`db-init` creates from the same `BOOTSTRAP_ADMIN_*` variables of your `.env`. The map, radar detail and admin tests
+`db-init` creates from the same `ADMIN_USERNAME` / `ADMIN_PASSWORD` variables of your `.env`. The map, radar detail and admin tests
 start already logged in (`browser_context_args` with the shared `admin_storage_state`). One test creates the viewer
 `e2e-viewer` through the admin API (or reactivates it) and deactivates it at the end.
 
@@ -83,8 +83,8 @@ $DC down            # add -v to also drop volumes
 
 **Admin credentials:** set them once in a repo-root `.env` (compose reads it):
 ```dotenv
-BOOTSTRAP_ADMIN_USERNAME=admin
-BOOTSTRAP_ADMIN_PASSWORD=your-strong-password   # 12+ characters
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your-strong-password   # 12+ characters
 ```
 `db-init` creates the account from them and the `tests` service reads the same values, so they stay consistent.
 
@@ -118,8 +118,8 @@ playwright install-deps chromium      # needs sudo on Debian/Ubuntu
 
 # 3. Point the tests at your running services + admin creds
 export FRONTEND_URL="http://localhost:8090"   # your v2 frontend
-export BOOTSTRAP_ADMIN_USERNAME="admin"
-export BOOTSTRAP_ADMIN_PASSWORD="your-strong-password"
+export ADMIN_USERNAME="admin"
+export ADMIN_PASSWORD="your-strong-password"
 
 # 4. Run (PYTHONPATH=tests so the tests can `from conftest import ...`)
 PYTHONPATH=tests pytest tests/e2e/ -v
@@ -134,8 +134,8 @@ PYTHONPATH=tests pytest tests/e2e/ -v
 - run: PYTHONPATH=tests pytest tests/e2e/ -v
   env:
     FRONTEND_URL: http://localhost:8090
-    BOOTSTRAP_ADMIN_USERNAME: admin
-    BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+    ADMIN_USERNAME: admin
+    ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
 ```
 (Start the API + v2 frontend in a prior step / service container, e.g. via
 `docker compose up -d`.)
@@ -154,7 +154,7 @@ PYTHONPATH=tests PWDEBUG=1 pytest tests/e2e/test_admin_panel.py # Playwright Ins
 | Symptom | Cause / fix |
 |---------|-------------|
 | `error while loading shared libraries: libnspr4.so` | Chromium OS libs missing → `playwright install-deps chromium` (sudo). |
-| Admin tests end up on `/login`, or get 401 / 429 | `BOOTSTRAP_ADMIN_*` don't match an existing admin account, or `/api/v1/auth/login` was rate limited (10/min per IP): wait a minute and re-run. |
+| Admin tests end up on `/login`, or get 401 / 429 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` don't match an existing admin account, or `/api/v1/auth/login` was rate limited (10/min per IP): wait a minute and re-run. |
 | `test_time_wheels_render` fails with `items=0` | `FRONTEND_URL` points at a **v1** frontend. Point it at the v2 frontend. |
 | `net::ERR_CONNECTION_REFUSED` | `FRONTEND_URL` not reachable from the test host (wrong host/port, or frontend not up). |
 | Radar order / empty radar list | API not seeded. Run `python -m radar_db.manage seed` (the `db-init` container does this automatically). |

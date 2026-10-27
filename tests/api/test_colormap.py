@@ -266,11 +266,11 @@ def test_deprecated_product_colormap_404_has_detail_field():
 # POST /api/v1/colormap/cache/invalidate  (admin only)
 # ---------------------------------------------------------------------------
 
-ADMIN_USER = os.getenv("BOOTSTRAP_ADMIN_USERNAME")
-ADMIN_PASS = os.getenv("BOOTSTRAP_ADMIN_PASSWORD")
+ADMIN_USER = os.getenv("ADMIN_USERNAME")
+ADMIN_PASS = os.getenv("ADMIN_PASSWORD")
 
-# skipif with a reason (not a plain skip): these tests need the admin account db-init creates from BOOTSTRAP_ADMIN_*.
-needs_admin = pytest.mark.skipif(not (ADMIN_USER and ADMIN_PASS), reason="BOOTSTRAP_ADMIN_* not set")
+# skipif with a reason (not a plain skip): these tests need the admin account db-init creates from ADMIN_USERNAME / ADMIN_PASSWORD.
+needs_admin = pytest.mark.skipif(not (ADMIN_USER and ADMIN_PASS), reason="ADMIN_USERNAME / ADMIN_PASSWORD not set")
 
 _ADMIN_COOKIE = {}
 

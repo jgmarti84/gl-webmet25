@@ -2120,7 +2120,7 @@ async function showBootstrapWarningIfNeeded() {
         const pending = users.filter((u) => u.role === 'admin' && u.is_active && u.password_is_bootstrap);
         if (pending.length) {
             box.textContent = `Atención: ${pending.map((u) => u.username).join(', ')} sigue con la contraseña inicial del .env. `
-                + 'Cambiala desde el servidor con make reset-password U=<usuario> y borrá BOOTSTRAP_ADMIN_* del .env.';
+                + 'Cambiala desde el servidor con make reset-password U=<usuario> y borrá ADMIN_USERNAME / ADMIN_PASSWORD del .env.';
             box.classList.remove('hidden');
         }
     } catch (error) {

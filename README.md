@@ -150,7 +150,7 @@ webmet25/
 │   │   ├── accounts.py           # Account operations (create user, bootstrap admin, ...)
 │   │   ├── seeds.py              # DataSeeder (seed_all / sync_all)
 │   │   └── manage.py             # CLI: init, seed, sync, check, info, reset, migrate, shell,
-│   │                             #      bootstrap-admin, create-admin, reset-password
+│   │                             #      init-admin, create-admin, reset-password
 │   └── seed_data/
 │       └── initial_data.json     # 21 radars, 20 products, references, colormaps
 │
@@ -312,7 +312,7 @@ webmet25/
 git clone <repository-url> webmet25
 cd webmet25
 cp .env.example .env
-# Edit .env: DB_PASSWORD, JWT_SECRET, ALLOWED_ORIGINS, COOKIE_SECURE and BOOTSTRAP_ADMIN_* (see .env.example)
+# Edit .env: DB_PASSWORD, JWT_SECRET, ALLOWED_ORIGINS, COOKIE_SECURE and ADMIN_USERNAME / ADMIN_PASSWORD (see .env.example)
 ```
 
 ### Run with Docker Compose
@@ -332,7 +332,7 @@ docker compose logs -f indexer
 ### Access the Application
 
 - **Frontend map:** `http://localhost`
-- **Admin panel:** `http://localhost/admin` (log in at `/login`; the first admin comes from `BOOTSTRAP_ADMIN_*`)
+- **Admin panel:** `http://localhost/admin` (log in at `/login`; the first admin comes from `ADMIN_USERNAME` / `ADMIN_PASSWORD`)
 - **API docs (Swagger):** `http://localhost:8000/docs` (port 8000 is published on `127.0.0.1` only)
 - **API health:** `http://localhost/api/v1/health`
 
@@ -351,9 +351,9 @@ Every page and every API endpoint require a logged-in user (roles `admin` and `v
 | `JWT_SECRET` | yes | 32+ random characters. The API refuses to start without it |
 | `COOKIE_SECURE` | production: `true` | `false` only for local HTTP development |
 | `ALLOWED_ORIGINS` | yes | Origins allowed to send POST/PUT/PATCH/DELETE (CSRF defense) |
-| `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` | first start | `db-init` creates this admin only when there are no users |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | first start | `db-init` creates this admin only when there are no users |
 
-After the first start, change the bootstrap password from the server and remove `BOOTSTRAP_ADMIN_*` from `.env`:
+After the first start, change the bootstrap password from the server and remove `ADMIN_USERNAME` / `ADMIN_PASSWORD` from `.env`:
 
 ```bash
 make reset-password U=admin       # prompts for the new password, closes the user's sessions

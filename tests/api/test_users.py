@@ -11,7 +11,7 @@ These tests never write to the database (apart from the admin's login session):
 * The admin logs in once per run and the cookie is reused: expired sessions are never cleaned up, so one login
   per test would pile up rows in user_sessions.
 
-The admin is the bootstrap account (BOOTSTRAP_ADMIN_*). Responses without a body (204) have no content-type,
+The admin is the bootstrap account (ADMIN_USERNAME / ADMIN_PASSWORD). Responses without a body (204) have no content-type,
 fields or data types to assert. The 403 answered to a logged-in viewer needs a second account and is covered
 in tests/auth.
 """
@@ -25,11 +25,11 @@ import pytest
 API_BASE_URL = os.getenv("API_BASE_URL", "http://api:8000")
 PREFIX = "/api/v1/admin/users"
 AUTH_PREFIX = "/api/v1/auth"
-ADMIN_USER = os.getenv("BOOTSTRAP_ADMIN_USERNAME")
-ADMIN_PASS = os.getenv("BOOTSTRAP_ADMIN_PASSWORD")
+ADMIN_USER = os.getenv("ADMIN_USERNAME")
+ADMIN_PASS = os.getenv("ADMIN_PASSWORD")
 
-# skipif with a reason (not a plain skip): these tests need the admin account db-init creates from BOOTSTRAP_ADMIN_*.
-needs_admin = pytest.mark.skipif(not (ADMIN_USER and ADMIN_PASS), reason="BOOTSTRAP_ADMIN_* not set")
+# skipif with a reason (not a plain skip): these tests need the admin account db-init creates from ADMIN_USERNAME / ADMIN_PASSWORD.
+needs_admin = pytest.mark.skipif(not (ADMIN_USER and ADMIN_PASS), reason="ADMIN_USERNAME / ADMIN_PASSWORD not set")
 
 USER_FIELDS = {
     "id",

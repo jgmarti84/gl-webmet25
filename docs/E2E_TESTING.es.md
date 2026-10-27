@@ -37,7 +37,7 @@ Las pruebas son Python + Playwright independientes del entorno. Para ejecutarlas
 | **Playwright Chromium** | `playwright install chromium` + librerías del sistema `playwright install-deps chromium` |
 | **Una API en ejecución** | DB inicializada con datos (radares, productos, los 8 colormaps del sistema). Accesible en `API_BASE_URL`. |
 | **Un frontend v2 en ejecución** | nginx sirviendo el build de v2. Accesible en `FRONTEND_URL`. |
-| **Una cuenta de admin** | creada por `db-init` a partir de `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` (ver abajo). |
+| **Una cuenta de admin** | creada por `db-init` a partir de `ADMIN_USERNAME` / `ADMIN_PASSWORD` (ver abajo). |
 | **Accesibilidad de red** | el host de pruebas debe alcanzar `FRONTEND_URL` (el frontend a su vez hace proxy de `/api/v1/*` hacia la API). |
 
 ### Variables de entorno
@@ -46,11 +46,11 @@ Las pruebas son Python + Playwright independientes del entorno. Para ejecutarlas
 |----------|----------------------------------|-------------|
 | `FRONTEND_URL` | `http://frontend-v2:80` | URL base del frontend **v2** bajo prueba |
 | `API_BASE_URL` | `http://api:8000` | Base de la API (usada por los tests de contrato de la API, no estrictamente por e2e) |
-| `BOOTSTRAP_ADMIN_USERNAME` | `admin` | Usuario de la cuenta de admin con la que se loguean los tests |
-| `BOOTSTRAP_ADMIN_PASSWORD` | *(ninguno)* | Su contraseña — obligatoria, sin ella los tests no pueden loguearse |
+| `ADMIN_USERNAME` | `admin` | Usuario de la cuenta de admin con la que se loguean los tests |
+| `ADMIN_PASSWORD` | *(ninguno)* | Su contraseña — obligatoria, sin ella los tests no pueden loguearse |
 
 Todas las páginas requieren login. Las pruebas inician sesión por el formulario de `/login` con la cuenta que
-`db-init` crea a partir de las mismas variables `BOOTSTRAP_ADMIN_*` de tu `.env`. Los tests del mapa, del detalle de
+`db-init` crea a partir de las mismas variables `ADMIN_USERNAME` / `ADMIN_PASSWORD` de tu `.env`. Los tests del mapa, del detalle de
 radar y del panel arrancan ya logueados (`browser_context_args` con el `admin_storage_state` compartido). Un test crea
 el viewer `e2e-viewer` por la API de admin (o lo reactiva) y lo desactiva al terminar.
 
@@ -87,8 +87,8 @@ $DC down            # agregar -v para también eliminar los volúmenes
 
 **Credenciales de admin:** definirlas una vez en un `.env` en la raíz del repositorio (Compose lo lee):
 ```dotenv
-BOOTSTRAP_ADMIN_USERNAME=admin
-BOOTSTRAP_ADMIN_PASSWORD=your-strong-password   # 12+ caracteres
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your-strong-password   # 12+ caracteres
 ```
 `db-init` crea la cuenta con ellas y el servicio `tests` lee los mismos valores, así que se mantienen consistentes.
 
@@ -122,8 +122,8 @@ playwright install-deps chromium      # requiere sudo en Debian/Ubuntu
 
 # 3. Apuntar los tests a los servicios en ejecución + credenciales de admin
 export FRONTEND_URL="http://localhost:8090"   # tu frontend v2
-export BOOTSTRAP_ADMIN_USERNAME="admin"
-export BOOTSTRAP_ADMIN_PASSWORD="your-strong-password"
+export ADMIN_USERNAME="admin"
+export ADMIN_PASSWORD="your-strong-password"
 
 # 4. Ejecutar (PYTHONPATH=tests para que los tests puedan `from conftest import ...`)
 PYTHONPATH=tests pytest tests/e2e/ -v
@@ -138,8 +138,8 @@ PYTHONPATH=tests pytest tests/e2e/ -v
 - run: PYTHONPATH=tests pytest tests/e2e/ -v
   env:
     FRONTEND_URL: http://localhost:8090
-    BOOTSTRAP_ADMIN_USERNAME: admin
-    BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+    ADMIN_USERNAME: admin
+    ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
 ```
 (Iniciar la API + frontend v2 en un paso anterior / contenedor de servicio, p. ej. vía
 `docker compose up -d`.)
@@ -158,7 +158,7 @@ PYTHONPATH=tests PWDEBUG=1 pytest tests/e2e/test_admin_panel.py # Playwright Ins
 | Síntoma | Causa / solución |
 |---------|-----------------|
 | `error while loading shared libraries: libnspr4.so` | Librerías del SO para Chromium ausentes → `playwright install-deps chromium` (sudo). |
-| Las pruebas de admin terminan en `/login`, o reciben 401 / 429 | `BOOTSTRAP_ADMIN_*` no coinciden con una cuenta de admin existente, o `/api/v1/auth/login` fue limitado (10/min por IP): esperar un minuto y repetir. |
+| Las pruebas de admin terminan en `/login`, o reciben 401 / 429 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` no coinciden con una cuenta de admin existente, o `/api/v1/auth/login` fue limitado (10/min por IP): esperar un minuto y repetir. |
 | `test_time_wheels_render` falla con `items=0` | `FRONTEND_URL` apunta a un frontend **v1**. Apuntarlo al frontend v2. |
 | `net::ERR_CONNECTION_REFUSED` | `FRONTEND_URL` no es accesible desde el host de pruebas (host/puerto incorrecto, o frontend no iniciado). |
 | Orden de radares / lista de radares vacía | API sin datos iniciales. Ejecutar `python -m radar_db.manage seed` (el contenedor `db-init` hace esto automáticamente). |

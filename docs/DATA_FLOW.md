@@ -263,7 +263,7 @@ password_hash: str                    # Argon2id
 role: str                             # 'admin' | 'viewer' (CHECK constraint)
 is_active: bool
 token_version: int                    # +1 invalidates every token of the user
-password_is_bootstrap: bool           # True while the password is BOOTSTRAP_ADMIN_PASSWORD
+password_is_bootstrap: bool           # True while the password is ADMIN_PASSWORD
 failed_login_count: int, locked_until: datetime (nullable)
 last_login_at, created_at, updated_at
 ```
@@ -782,7 +782,7 @@ Env vars: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
 
 nginx does not authenticate anyone: it only rate-limits `POST /api/v1/auth/login` (10 requests/minute per IP, burst 5, answers 429). If a proxy (Caddy) sits in front, configure `set_real_ip_from` so the limit uses the real client IP.
 
-`BOOTSTRAP_ADMIN_USERNAME` and `BOOTSTRAP_ADMIN_PASSWORD` are read by the `db-init` service (`manage.py bootstrap-admin`), which creates that admin only when the `users` table is empty. After the first start, change the password with `make reset-password U=<user>` and remove both variables from `.env`.
+`ADMIN_USERNAME` and `ADMIN_PASSWORD` are read by the `db-init` service (`manage.py init-admin`), which creates that admin only when the `users` table is empty. After the first start, change the password with `make reset-password U=<user>` and remove both variables from `.env`.
 
 Nginx also caches OSM and IGN Argenmap tiles locally (30-day and 7-day TTL respectively) to reduce external requests.
 

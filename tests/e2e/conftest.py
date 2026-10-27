@@ -8,8 +8,8 @@ frontend). See docs/E2E_TESTING.md for how to run them.
 
 Environment variables (with devcontainer defaults):
     FRONTEND_URL              base URL of the running v2 frontend  (http://frontend-v2:80)
-    BOOTSTRAP_ADMIN_USERNAME  admin account created by db-init     (admin)
-    BOOTSTRAP_ADMIN_PASSWORD  its password (required to log in)
+    ADMIN_USERNAME  admin account created by db-init     (admin)
+    ADMIN_PASSWORD  its password (required to log in)
 """
 import os
 import time
@@ -18,8 +18,8 @@ from pathlib import Path
 import pytest
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://frontend-v2:80")
-ADMIN_USERNAME = os.getenv("BOOTSTRAP_ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "")
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 
 SCREENSHOT_DIR = Path(__file__).parent / "screenshots"
 

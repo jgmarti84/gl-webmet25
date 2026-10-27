@@ -1,7 +1,7 @@
 # tests/api/test_auth.py
 """Black-box contract tests for /api/v1/auth/* against the running API.
 
-They only open sessions for the bootstrap admin (BOOTSTRAP_ADMIN_*): they never create users and never send a
+They only open sessions for the bootstrap admin (ADMIN_USERNAME / ADMIN_PASSWORD): they never create users and never send a
 wrong password for a real account (5 failed attempts lock it). The login/refresh/logout flows need
 COOKIE_SECURE=false on the API, because httpx does not send Secure cookies over plain HTTP.
 
@@ -16,11 +16,11 @@ import pytest
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://api:8000")
 PREFIX = "/api/v1/auth"
-ADMIN_USER = os.getenv("BOOTSTRAP_ADMIN_USERNAME")
-ADMIN_PASS = os.getenv("BOOTSTRAP_ADMIN_PASSWORD")
+ADMIN_USER = os.getenv("ADMIN_USERNAME")
+ADMIN_PASS = os.getenv("ADMIN_PASSWORD")
 
-# skipif with a reason (not a plain skip): these tests need the admin account db-init creates from BOOTSTRAP_ADMIN_*.
-needs_admin = pytest.mark.skipif(not (ADMIN_USER and ADMIN_PASS), reason="BOOTSTRAP_ADMIN_* not set")
+# skipif with a reason (not a plain skip): these tests need the admin account db-init creates from ADMIN_USERNAME / ADMIN_PASSWORD.
+needs_admin = pytest.mark.skipif(not (ADMIN_USER and ADMIN_PASS), reason="ADMIN_USERNAME / ADMIN_PASSWORD not set")
 
 ME_FIELDS = {"id", "username", "full_name", "role", "password_is_bootstrap", "access_expires_in"}
 SENSITIVE_FIELDS = {"password_hash", "token_version", "failed_login_count", "locked_until"}

@@ -46,7 +46,7 @@ def test_login_ignores_open_redirect_in_next(page: Page):
     """A crafted `next` must not take the user to another site after login."""
     page.goto(f"{FRONTEND_URL}/login?next=//evil.example", wait_until="networkidle")
     page.fill("#login-username", ADMIN_USERNAME)
-    page.fill("#login-password", os.getenv("BOOTSTRAP_ADMIN_PASSWORD", ""))
+    page.fill("#login-password", os.getenv("ADMIN_PASSWORD", ""))
     page.click("#login-submit")
     page.wait_for_url(lambda url: "/login" not in url)
     assert "evil.example" not in page.url
@@ -57,7 +57,7 @@ def test_users_section_lists_current_admin(page: Page):
     login_via_form(page)
     page.click('a[data-section="users"]')
     page.wait_for_selector("table tbody tr")
-    # Usernames are stored lowercase, whatever case BOOTSTRAP_ADMIN_USERNAME has in .env.
+    # Usernames are stored lowercase, whatever case ADMIN_USERNAME has in .env.
     expect(page.locator("table tbody")).to_contain_text(ADMIN_USERNAME.lower())
 
 
@@ -65,7 +65,7 @@ def test_map_shows_login_in_place_and_opens_after_login(page: Page):
     page.goto(f"{FRONTEND_URL}/", wait_until="networkidle")
     expect(page.locator("#login-form")).to_be_visible()
     page.fill("#login-username", ADMIN_USERNAME)
-    page.fill("#login-password", os.getenv("BOOTSTRAP_ADMIN_PASSWORD", ""))
+    page.fill("#login-password", os.getenv("ADMIN_PASSWORD", ""))
     page.click("#login-submit")
     page.wait_for_selector("#radar-list", state="attached")
     expect(page.locator("#login-form")).to_have_count(0)
@@ -75,7 +75,7 @@ def test_protected_url_survives_the_login(page: Page):
     page.goto(f"{FRONTEND_URL}/cog-browser.html?probe=1&x=2", wait_until="networkidle")
     expect(page.locator("#login-form")).to_be_visible()
     page.fill("#login-username", ADMIN_USERNAME)
-    page.fill("#login-password", os.getenv("BOOTSTRAP_ADMIN_PASSWORD", ""))
+    page.fill("#login-password", os.getenv("ADMIN_PASSWORD", ""))
     page.click("#login-submit")
     page.wait_for_selector("#radar-select", state="attached")
     parsed = urlparse(page.url)

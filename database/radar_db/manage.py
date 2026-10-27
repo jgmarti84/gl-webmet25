@@ -10,7 +10,7 @@ Usage:
     python -m radar_db.manage reset         # Reset database (DESTRUCTIVE)
     python -m radar_db.manage info          # Show database info
     python -m radar_db.manage migrate       # Run Alembic migrations
-    python -m radar_db.manage bootstrap-admin   # First admin from BOOTSTRAP_ADMIN_*
+    python -m radar_db.manage init-admin    # First admin from ADMIN_USERNAME / ADMIN_PASSWORD
     python -m radar_db.manage create-admin --username X
     python -m radar_db.manage reset-password --username X
 """
@@ -322,16 +322,16 @@ def _prompt_new_password() -> str:
     return first
 
 
-def cmd_bootstrap_admin(args: argparse.Namespace) -> int:
-    """Create the first admin from BOOTSTRAP_ADMIN_* if there are no users."""
+def cmd_init_admin(args: argparse.Namespace) -> int:
+    """Create the first admin from ADMIN_USERNAME / ADMIN_PASSWORD if there are no users."""
     from radar_db.accounts import AccountError, bootstrap_admin
     from radar_db.database import check_db_connection, db_manager
     from radar_db.passwords import PasswordPolicyError
 
-    username = os.getenv("BOOTSTRAP_ADMIN_USERNAME", "").strip()
-    password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "")
+    username = os.getenv("ADMIN_USERNAME", "").strip()
+    password = os.getenv("ADMIN_PASSWORD", "")
     if not username or not password:
-        logger.info("BOOTSTRAP_ADMIN_* no definidas: no se crea ningún admin.")
+        logger.info("ADMIN_USERNAME / ADMIN_PASSWORD no definidas: no se crea ningún admin.")
         return 0
     if not check_db_connection():
         logger.error("Cannot connect to database.")
@@ -340,16 +340,25 @@ def cmd_bootstrap_admin(args: argparse.Namespace) -> int:
         with db_manager.get_session() as session:
             user = bootstrap_admin(session, username, password)
             created = user.username if user else None
-    except (AccountError, PasswordPolicyError) as exc:
-        logger.error(f"bootstrap-admin: {exc}")
+    except PasswordPolicyError as exc:
+        logger.error(
+            f"init-admin: ADMIN_PASSWORD no cumple la política de contraseñas ({exc}). "
+            "No se creó el admin y db-init se detiene: corregí ADMIN_PASSWORD en el .env y volvé a levantarlo."
+        )
+        return 1
+    except AccountError as exc:
+        logger.error(
+            f"init-admin: ADMIN_USERNAME no es válido ({exc}). "
+            "No se creó el admin y db-init se detiene: corregí ADMIN_USERNAME en el .env y volvé a levantarlo."
+        )
         return 1
     if created is None:
-        logger.info("Ya existen usuarios: bootstrap-admin no hace nada.")
+        logger.info("Ya existen usuarios: init-admin no hace nada.")
         return 0
     logger.warning(
-        f"Admin inicial '{created}' creado desde BOOTSTRAP_ADMIN_*. "
+        f"Admin inicial '{created}' creado desde ADMIN_USERNAME / ADMIN_PASSWORD. "
         f"Cambiá su contraseña con 'make reset-password U={created}' y "
-        "borrá BOOTSTRAP_ADMIN_* del .env."
+        "borrá ADMIN_USERNAME / ADMIN_PASSWORD del .env."
     )
     return 0
 
@@ -496,10 +505,10 @@ Examples:
     shell_parser.set_defaults(func=cmd_shell)
     
     # user commands
-    bootstrap_parser = subparsers.add_parser(
-        'bootstrap-admin', help='Create the first admin from BOOTSTRAP_ADMIN_* if there are no users'
+    init_admin_parser = subparsers.add_parser(
+        'init-admin', help='Create the first admin from ADMIN_USERNAME / ADMIN_PASSWORD if there are no users'
     )
-    bootstrap_parser.set_defaults(func=cmd_bootstrap_admin)
+    init_admin_parser.set_defaults(func=cmd_init_admin)
 
     create_admin_parser = subparsers.add_parser('create-admin', help='Create an admin (prompts for password)')
     create_admin_parser.add_argument('--username', required=True)

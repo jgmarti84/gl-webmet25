@@ -83,9 +83,9 @@ services:
       API_BASE_URL: http://api:8000
       # E2E target: the v2 frontend (the time wheel is only wired by v2).
       FRONTEND_URL: http://frontend-v2:80
-      # Admin account created by db-init from BOOTSTRAP_ADMIN_* (see .env)
-      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}
-      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      # Admin account created by db-init from ADMIN_USERNAME / ADMIN_PASSWORD (see .env)
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       # Auth settings needed to import api.app in unit tests
       JWT_SECRET: ${JWT_SECRET}
       COOKIE_SECURE: "false"

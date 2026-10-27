@@ -49,7 +49,7 @@ async def lifespan(app: FastAPI):
             if count_active_admins(session) == 0:
                 logger.warning(
                     "No active admin users. Create one with: "
-                    "make create-admin U=<usuario> (or set BOOTSTRAP_ADMIN_* and restart db-init)"
+                    "make create-admin U=<usuario> (or set ADMIN_USERNAME / ADMIN_PASSWORD and restart db-init)"
                 )
     except Exception as exc:  # DB not ready must not block startup
         logger.warning(f"Could not check admin users at startup: {exc}")

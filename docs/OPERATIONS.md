@@ -236,7 +236,7 @@ make create-admin U=maria
 make reset-password U=maria
 ```
 
-- The **first admin** is created automatically by `db-init` from `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` when there are no users. After the first start, run `make reset-password U=<that user>` and remove both variables from `.env`.
+- The **first admin** is created automatically by `db-init` from `ADMIN_USERNAME` / `ADMIN_PASSWORD` when there are no users. After the first start, run `make reset-password U=<that user>` and remove both variables from `.env`.
 - An admin **cannot reset their own password from the panel**; use `make reset-password` on the server.
 - Nobody can use the site without an account: until self-registration exists, the admin creates every account from the panel.
 - Other users are managed from the admin panel (**Usuarios**): create, change role, activate/deactivate, reset password, close sessions. Users are never deleted, only deactivated.
