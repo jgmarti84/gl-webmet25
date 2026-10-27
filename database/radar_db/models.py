@@ -362,7 +362,8 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role = Column(String(16), nullable=False, default='viewer', server_default='viewer')
     is_active = Column(Boolean, nullable=False, default=True, server_default='true')
-    # Incremented to invalidate every token of the user at once.
+    # Copied into each access token at login and compared on every request. Adding 1 makes all
+    # the user's older tokens invalid at once (role change, deactivation, admin "revoke sessions").
     token_version = Column(Integer, nullable=False, default=0, server_default='0')
     # True while the password is the one from ADMIN_PASSWORD.
     password_is_bootstrap = Column(Boolean, nullable=False, default=False, server_default='false')
@@ -389,7 +390,8 @@ class UserSession(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
-    # Every refresh token of one login shares the family id.
+    # Groups all the rows of one login: each refresh adds a row with the same family_id.
+    # Reusing an already rotated token revokes the whole family (stolen token detection).
     family_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     # SHA-256 of the refresh token; the token itself only lives in the cookie.
     token_hash = Column(String(64), nullable=False, unique=True)
