@@ -450,6 +450,20 @@
     gap: 16px;
 }
 
+/* h1 on the verify and reset screens takes the look of the page heading (.login-heading h1). */
+.login-done h1 {
+    margin: 0;
+    font-size: 30px;
+    font-weight: 600;
+    line-height: 1.15;
+    color: var(--login-navy);
+}
+
+/* After the rule above on purpose: with equal specificity the later one wins. */
+@media (max-width: 480px) {
+    .login-done h1 { font-size: 26px; }
+}
+
 .login-done h2 {
     margin: 0;
     font-size: 22px;

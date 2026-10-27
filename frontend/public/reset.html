@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <title>WebMet25 — Nueva contraseña</title>
+    <link rel="stylesheet" href="/css/login.css">
+</head>
+<body class="login-page">
+    <div class="login-layout">
+        <aside class="login-hero">
+            <img class="login-hero-logo" src="/assets/images/logos/OHMC@3x.png" alt="Observatorio Hidro-Meteorológico de la Provincia de Córdoba">
+            <div class="login-hero-body">
+                <span class="login-eyebrow">WebMet25</span>
+                <p class="login-hero-title">Sistema de visualización de la Red de Radares Meteorológicos de Argentina</p>
+                <p>Plataforma del Observatorio Hidro-Meteorológico de la Provincia de Córdoba para el monitoreo en tiempo real de productos de radar y la evolución de sistemas convectivos.</p>
+                <hr>
+                <span class="login-gov-hero">Gobierno de la Provincia de Córdoba</span>
+            </div>
+        </aside>
+
+        <main class="login-panel">
+            <div class="login-panel-main">
+                <div class="login-form-wrap">
+                    <img class="login-logo-mobile" src="/assets/images/logos/OHMC@3x.png" alt="Observatorio Hidro-Meteorológico de la Provincia de Córdoba">
+                    <div id="reset-form-section">
+                        <div class="login-heading">
+                            <h1>Elegí una contraseña nueva</h1>
+                            <p>Al cambiarla se cierran todas tus sesiones abiertas.</p>
+                        </div>
+
+                        <form id="reset-form" class="login-form" novalidate>
+                            <div class="login-field">
+                                <label for="reset-password">Contraseña nueva</label>
+                                <div class="login-input-wrap">
+                                    <input id="reset-password" class="login-input has-toggle" type="password" autocomplete="new-password" maxlength="128" required>
+                                    <button class="login-pw-toggle" data-target="reset-password" type="button" aria-label="Mostrar contraseña" aria-pressed="false">
+                                        <svg class="icon-eye" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                                        <svg class="icon-eye-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A9.8 9.8 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.1"/><path d="M6.6 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7a9.7 9.7 0 0 0 4.4-1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+                                    </button>
+                                </div>
+                                <p class="login-hint">Al menos 12 caracteres.</p>
+                            </div>
+
+                            <div class="login-field">
+                                <label for="reset-repeat">Repetir contraseña</label>
+                                <div class="login-input-wrap">
+                                    <input id="reset-repeat" class="login-input has-toggle" type="password" autocomplete="new-password" maxlength="128" required>
+                                    <button class="login-pw-toggle" data-target="reset-repeat" type="button" aria-label="Mostrar contraseña" aria-pressed="false">
+                                        <svg class="icon-eye" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                                        <svg class="icon-eye-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A9.8 9.8 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.1"/><path d="M6.6 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7a9.7 9.7 0 0 0 4.4-1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="reset-error" class="login-error hidden" role="alert"></div>
+
+                            <button id="reset-submit" class="login-submit" type="submit">Cambiar contraseña</button>
+                        </form>
+                    </div>
+
+                    <div id="reset-ok" class="login-done" hidden>
+                        <h1>Contraseña cambiada</h1>
+                        <p>Ya podés iniciar sesión con tu contraseña nueva.</p>
+                        <a class="login-button-link" href="/login">Iniciar sesión</a>
+                    </div>
+
+                    <div id="reset-invalid" class="login-done" hidden>
+                        <h1>El link no es válido</h1>
+                        <p>El link ya se usó o venció. Pedí uno nuevo.</p>
+                        <a class="login-button-link" href="/forgot">Recuperar contraseña</a>
+                    </div>
+                </div>
+            </div>
+
+            <footer class="login-footer">
+                <span class="login-gov-mobile">Gobierno de la Provincia de Córdoba</span>
+                <span>¿Problemas para ingresar? Escribinos a <a href="mailto:info@ohmc.ar">info@ohmc.ar</a></span>
+            </footer>
+        </main>
+    </div>
+    <script type="module" src="/js/login-ui.js"></script>
+    <script type="module" src="/js/reset.js"></script>
+</body>
+</html>

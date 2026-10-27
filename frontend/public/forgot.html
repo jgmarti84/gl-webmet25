@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <title>WebMet25 — Recuperar contraseña</title>
+    <link rel="stylesheet" href="/css/login.css">
+</head>
+<body class="login-page">
+    <div class="login-layout">
+        <aside class="login-hero">
+            <img class="login-hero-logo" src="/assets/images/logos/OHMC@3x.png" alt="Observatorio Hidro-Meteorológico de la Provincia de Córdoba">
+            <div class="login-hero-body">
+                <span class="login-eyebrow">WebMet25</span>
+                <p class="login-hero-title">Sistema de visualización de la Red de Radares Meteorológicos de Argentina</p>
+                <p>Plataforma del Observatorio Hidro-Meteorológico de la Provincia de Córdoba para el monitoreo en tiempo real de productos de radar y la evolución de sistemas convectivos.</p>
+                <hr>
+                <span class="login-gov-hero">Gobierno de la Provincia de Córdoba</span>
+            </div>
+        </aside>
+
+        <main class="login-panel">
+            <div class="login-panel-main">
+                <div class="login-form-wrap">
+                    <img class="login-logo-mobile" src="/assets/images/logos/OHMC@3x.png" alt="Observatorio Hidro-Meteorológico de la Provincia de Córdoba">
+                    <div class="login-heading">
+                        <h1>Recuperar contraseña</h1>
+                        <p>Ingresá el mail de tu cuenta y te mandamos un link para elegir una contraseña nueva.</p>
+                    </div>
+
+                    <div id="forgot-unavailable" class="login-info" role="status" hidden>
+                        La recuperación por mail no está disponible por ahora. Escribinos a <a href="mailto:info@ohmc.ar">info@ohmc.ar</a>.
+                    </div>
+
+                    <form id="forgot-form" class="login-form" novalidate>
+                        <div class="login-field">
+                            <label for="forgot-email">Mail</label>
+                            <input id="forgot-email" class="login-input" name="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254" required autofocus>
+                        </div>
+
+                        <div id="forgot-error" class="login-error hidden" role="alert"></div>
+
+                        <button id="forgot-submit" class="login-submit" type="submit">Enviar link</button>
+                    </form>
+
+                    <div id="forgot-done" class="login-done" hidden>
+                        <h2>Revisá tu mail</h2>
+                        <p>Si hay una cuenta con ese mail, te enviamos un link para cambiar la contraseña. Vence en 1 hora.</p>
+                    </div>
+
+                    <p class="login-switch"><a href="/login">Volver a iniciar sesión</a></p>
+                </div>
+            </div>
+
+            <footer class="login-footer">
+                <span class="login-gov-mobile">Gobierno de la Provincia de Córdoba</span>
+                <span>¿Problemas para ingresar? Escribinos a <a href="mailto:info@ohmc.ar">info@ohmc.ar</a></span>
+            </footer>
+        </main>
+    </div>
+    <script type="module" src="/js/login-ui.js"></script>
+    <script type="module" src="/js/forgot.js"></script>
+</body>
+</html>
