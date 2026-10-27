@@ -63,6 +63,21 @@ def test_register_without_the_terms_returns_422():
     assert "detail" in response.json()
 
 
+def test_register_with_a_too_long_full_name_returns_422():
+    # The name is optional, but 128 characters is the limit: a longer one is refused and nothing is created.
+    _need("registration")
+    body = {
+        "username": "nombre-largo",
+        "email": "nombre-largo@ejemplo.com.ar",
+        "password": "una-clave-larga-1",
+        "accept_terms": True,
+        "full_name": "x" * 129,
+    }
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.post(f"{PREFIX}/register", json=body)
+    assert response.status_code == 422
+
+
 def test_register_foreign_origin_returns_403():
     with httpx.Client(base_url=API_BASE_URL) as client:
         response = client.post(f"{PREFIX}/register", json={}, headers=FOREIGN_ORIGIN)

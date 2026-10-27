@@ -80,7 +80,7 @@ def test_login_identifier_and_password(client, known_user, test_db_session, payl
 @pytest.mark.parametrize("payload", PAYLOADS)
 def test_register_fields(client, known_user, test_db_session, mailer, payload):
     base = {"username": "nuevo", "email": f"nuevo@{TEST_EMAIL_DOMAIN}", "password": TEST_PASSWORD, "accept_terms": True}
-    for field in ("username", "email", "password"):
+    for field in ("username", "email", "password", "full_name"):
         response = _post(client, "register", {**base, field: payload, "website": ""})
         _no_server_error(response)
         assert response.status_code in (202, 409, 422), (field, response.text)
@@ -124,6 +124,16 @@ def test_mail_header_injection_is_rejected_by_the_validation(client, mailer):
         )
         assert response.status_code == 422
     assert not mailer.sent
+
+
+def test_a_hostile_looking_full_name_is_stored_as_plain_text(client, known_user, test_db_session):
+    # The name is a free text field: SQL or markup in it is just text (bound parameters, escaped when shown).
+    hostile = "'; DROP TABLE users;-- <img src=x onerror=alert(1)>"
+    body = {"username": "nuevo", "email": f"nuevo@{TEST_EMAIL_DOMAIN}", "password": TEST_PASSWORD}
+    response = _post(client, "register", {**body, "accept_terms": True, "full_name": hostile})
+    assert response.status_code == 202
+    assert test_db_session.query(User).filter_by(username="nuevo").one().full_name == hostile
+    assert test_db_session.query(User).filter_by(username="ana").one().email == f"ana@{TEST_EMAIL_DOMAIN}"
 
 
 def test_a_validation_error_does_not_echo_what_was_sent(client):

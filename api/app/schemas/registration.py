@@ -32,6 +32,9 @@ class RegisterRequest(_EmailField):
     username: str = Field(..., min_length=3, max_length=32)
     # The password policy (12 to 128 characters, not the username...) is checked by the service.
     password: str = Field(..., min_length=1, max_length=128)
+    # Optional "Nombre y apellido" in a single field (same size as users.full_name). The service cleans it up
+    # (white space, non-printable characters) and stores NULL when it ends up empty.
+    full_name: Optional[str] = Field(None, max_length=128)
     accept_terms: bool
     # Decoy: hidden in the form, a person never fills it. A bot that does is answered but ignored.
     website: str = Field("", max_length=256)

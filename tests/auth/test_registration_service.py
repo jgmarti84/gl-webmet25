@@ -23,8 +23,8 @@ def _mail_settings(monkeypatch):
     monkeypatch.setattr(settings, "mail_max_per_hour", 3)
 
 
-def _register(db, username="nuevo", email=f"nuevo@{DOMAIN}", password=TEST_PASSWORD, now=NOW):
-    return registration.register(db, username=username, email=email, password=password, now=now)
+def _register(db, username="nuevo", email=f"nuevo@{DOMAIN}", password=TEST_PASSWORD, now=NOW, full_name=None):
+    return registration.register(db, username=username, email=email, password=password, now=now, full_name=full_name)
 
 
 def _token_in(mail):
@@ -162,6 +162,34 @@ def test_notices_to_a_verified_account_are_capped(make_user, test_db_session):
         when = NOW + timedelta(minutes=minute)
         sent += len(_register(test_db_session, username=f"user{minute}", email=f"ana@{DOMAIN}", now=when))
     assert sent == 3
+
+
+# --- full name (optional) ----------------------------------------------------
+
+
+def test_register_saves_the_normalized_full_name(test_db_session):
+    _register(test_db_session, full_name="  Ana   Pérez ")
+    assert test_db_session.query(User).filter_by(username="nuevo").one().full_name == "Ana Pérez"
+
+
+def test_register_without_a_full_name_stores_null(test_db_session):
+    _register(test_db_session)
+    _register(test_db_session, username="otro", email=f"otro@{DOMAIN}", full_name="   ")
+    assert test_db_session.query(User).filter_by(username="nuevo").one().full_name is None
+    assert test_db_session.query(User).filter_by(username="otro").one().full_name is None
+
+
+def test_the_full_name_is_ignored_when_the_mail_has_a_verified_account(make_user, test_db_session):
+    owner = make_user(username="ana", email=f"ana@{DOMAIN}", full_name="Ana Original")
+    _register(test_db_session, username="otro", email=f"ana@{DOMAIN}", full_name="Otra Persona")
+    assert owner.full_name == "Ana Original"
+    assert test_db_session.query(User).filter_by(username="otro").count() == 0
+
+
+def test_a_replaced_expired_account_takes_the_new_full_name(make_user, test_db_session):
+    _pending(make_user, EXPIRED, username="nuevo", email=f"viejo@{DOMAIN}", full_name="Nombre Viejo")
+    _register(test_db_session, full_name="Nombre Nuevo")
+    assert test_db_session.query(User).filter_by(username="nuevo").one().full_name == "Nombre Nuevo"
 
 
 # --- verify ------------------------------------------------------------------

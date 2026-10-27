@@ -76,7 +76,13 @@ def register(
     if not payload.accept_terms:
         raise HTTPException(status_code=422, detail="Tenés que aceptar los términos y la política de privacidad")
     try:
-        mails = registration.register(db, username=payload.username, email=payload.email, password=payload.password)
+        mails = registration.register(
+            db,
+            username=payload.username,
+            email=payload.email,
+            password=payload.password,
+            full_name=payload.full_name,
+        )
         db.commit()
     except UsernameTakenError:
         raise HTTPException(status_code=409, detail="Ese usuario ya existe")

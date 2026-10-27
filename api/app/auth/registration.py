@@ -19,6 +19,7 @@ from radar_db.accounts import (
     get_user_by_email,
     get_user_by_username,
     normalize_email,
+    normalize_full_name,
     set_password,
     validate_username,
 )
@@ -62,9 +63,18 @@ def _link_still_valid(user: User, now: datetime) -> bool:
 
 
 def register(
-    db: Session, *, username: str, email: str, password: str, now: Optional[datetime] = None
+    db: Session,
+    *,
+    username: str,
+    email: str,
+    password: str,
+    full_name: Optional[str] = None,
+    now: Optional[datetime] = None,
 ) -> List[OutgoingMail]:
     """Create a pending viewer. A mail that already has a verified account gets a notice instead (neutral).
+
+    `full_name` is the optional "Nombre y apellido" of the form: it is only used when the new account is created
+    (rule 5 below); in every other path it is ignored, like the rest of the fields.
 
     Order of the rules (spec 4.1):
       1. mail of a verified account -> notice mail to its owner (neutral answer);
@@ -123,6 +133,7 @@ def register(
         username=username,
         password=password,
         role="viewer",
+        full_name=normalize_full_name(full_name),
         email=address,
         email_verified=False,
         terms_accepted=True,

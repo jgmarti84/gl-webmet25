@@ -44,6 +44,17 @@ def normalize_email(email: Optional[str]) -> Optional[str]:
     return value or None
 
 
+def normalize_full_name(full_name: Optional[str]) -> Optional[str]:
+    """Clean a free-text name: drop non-printable characters and collapse runs of white space into one space.
+
+    Empty (or only blanks) means "no name" and gives None. Used for the optional name of the sign-up form.
+    """
+    if full_name is None:
+        return None
+    printable = "".join(ch for ch in full_name if ch.isprintable() or ch.isspace())
+    return " ".join(printable.split()) or None
+
+
 def validate_username(username: str) -> str:
     normalized = normalize_username(username)
     if not USERNAME_RE.match(normalized):

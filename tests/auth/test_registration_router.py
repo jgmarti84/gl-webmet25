@@ -58,6 +58,23 @@ def test_register_creates_a_pending_account_and_sends_the_mail(client, mailer, t
     assert [m.to for m in mailer.sent] == [f"nuevo@{DOMAIN}"]
 
 
+def test_register_saves_the_full_name(client, test_db_session):
+    assert _register(client, full_name="  Ana   Pérez ").status_code == 202
+    assert test_db_session.query(User).filter_by(username="nuevo").one().full_name == "Ana Pérez"
+
+
+def test_the_full_name_is_optional(client, test_db_session):
+    assert _register(client).status_code == 202  # the payload has no full_name at all
+    assert _register(client, username="otro", email=f"otro@{DOMAIN}", full_name="").status_code == 202
+    assert test_db_session.query(User).filter_by(username="nuevo").one().full_name is None
+    assert test_db_session.query(User).filter_by(username="otro").one().full_name is None
+
+
+def test_a_too_long_full_name_is_a_422(client, mailer, test_db_session):
+    assert _register(client, full_name="x" * 129).status_code == 422
+    assert test_db_session.query(User).count() == 0 and not mailer.sent
+
+
 def test_register_requires_the_terms(client, mailer, test_db_session):
     response = _register(client, accept_terms=False)
     assert response.status_code == 422
@@ -96,6 +113,7 @@ def test_register_rejects_a_missing_field(client):
         {"email": "nuevo\x00@ejemplo.com.ar"},
         {"password": "contrasena-larga\x00-con-nulo"},
         {"website": "\x00"},
+        {"full_name": "Ana\x00 Pérez"},
     ],
 )
 def test_a_null_character_is_a_422_not_a_500(client, mailer, test_db_session, bad):

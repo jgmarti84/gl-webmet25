@@ -14,6 +14,7 @@ from radar_db.accounts import (
     find_by_identifier,
     get_user_by_email,
     normalize_email,
+    normalize_full_name,
     revoke_all_sessions,
     set_password,
 )
@@ -177,3 +178,12 @@ def test_set_password_records_the_given_reason(make_user, test_db_session):
     set_password(test_db_session, user, "otra-contrasena-larga", reason="password_reset")
     test_db_session.refresh(s)
     assert s.revoke_reason == "password_reset"
+
+
+def test_normalize_full_name():
+    assert normalize_full_name("  Ana   María \t Pérez\n") == "Ana María Pérez"
+    # Non-printable characters are dropped, not turned into spaces.
+    assert normalize_full_name("Ana\x07 Pérez") == "Ana Pérez"
+    assert normalize_full_name("   ") is None
+    assert normalize_full_name("") is None
+    assert normalize_full_name(None) is None
