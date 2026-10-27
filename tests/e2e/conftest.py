@@ -12,9 +12,11 @@ Environment variables (with devcontainer defaults):
     ADMIN_PASSWORD  its password (required to log in)
 """
 import os
+import re
 import time
 from pathlib import Path
 
+import httpx
 import pytest
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://frontend-v2:80")
@@ -159,3 +161,41 @@ def ensure_viewer(api) -> int:
 
 def deactivate_user(api, user_id: int) -> None:
     api.patch(f"{FRONTEND_URL}/api/v1/admin/users/{user_id}", data={"is_active": False})
+
+
+# ---------------------------------------------------------------------------
+# Local mailbox (Mailpit): the registration tests read the mails the API sends instead of a real inbox.
+# ---------------------------------------------------------------------------
+MAILPIT_URL = os.getenv("MAILPIT_URL", "http://mailpit:8025")
+
+
+def mailpit_clear() -> None:
+    """Empty the local mailbox so a test only sees its own mails."""
+    httpx.delete(f"{MAILPIT_URL}/api/v1/messages", timeout=10)
+
+
+def mailpit_message(address: str, subject_part: str, timeout_s: float = 20.0) -> dict:
+    """Newest mail to `address` whose subject contains `subject_part` (polls: delivery is asynchronous)."""
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        found = httpx.get(f"{MAILPIT_URL}/api/v1/search", params={"query": f"to:{address}"}, timeout=10).json()
+        for item in found.get("messages", []):
+            if subject_part in item["Subject"]:
+                return httpx.get(f"{MAILPIT_URL}/api/v1/message/{item['ID']}", timeout=10).json()
+        time.sleep(0.5)
+    raise AssertionError(f"No llegó un mail a {address} con '{subject_part}'")
+
+
+def link_in(message: dict) -> str:
+    """The /verify or /reset link of a mail, re-based on FRONTEND_URL (the mail carries PUBLIC_BASE_URL)."""
+    match = re.search(r"https?://[^\s\"<>]+?(/(?:verify|reset)\?token=[A-Za-z0-9_-]{43})", message["Text"])
+    assert match, message["Text"]
+    return f"{FRONTEND_URL}{match.group(1)}"
+
+
+def deactivate_by_username(api, username: str) -> None:
+    """Deactivate a test account through the admin API; `api` is an admin APIRequestContext."""
+    users = api.get(f"{FRONTEND_URL}/api/v1/admin/users").json()
+    for user in users:
+        if user["username"] == username:
+            deactivate_user(api, user["id"])

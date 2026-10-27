@@ -218,7 +218,10 @@ services:
       TERMS_URL: https://example.org/terminos
       PRIVACY_URL: https://example.org/privacidad
       MAIL_MAX_PER_HOUR: "30"
-      MAIL_MIN_INTERVAL_SECONDS: "2"
+      # 0 = no wait between two mails to the same account. The e2e tests ask for a second mail (resend, forgot
+      # password) a second after the first, and with a wait the API answers 202 but sends nothing. The interval
+      # itself is covered by tests/auth.
+      MAIL_MIN_INTERVAL_SECONDS: "0"
     volumes:
       - ../product_output:/product_output:ro
       - ../tops_and_cores:/tops_and_cores:ro
