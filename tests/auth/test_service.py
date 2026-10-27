@@ -1,4 +1,5 @@
 # tests/auth/test_service.py
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -227,6 +228,41 @@ def test_logout_with_an_unknown_token_changes_nothing(make_user, test_db_session
     service.revoke_session_by_token(test_db_session, "garbage", now=NOW)
     assert session.revoked_at is None
     assert user.token_version == 0
+
+
+def test_login_purges_old_logins_of_the_same_user_only(make_user, test_db_session):
+    alice = make_user()
+    bob = make_user(username="bobby")
+    long_ago = NOW - timedelta(days=settings.session_retention_days + 10)  # absolute expiry also past the cutoff
+    old_alice, _ = service.create_session(test_db_session, alice, now=long_ago)
+    recent, recent_token = service.create_session(test_db_session, alice, now=NOW - timedelta(days=2))
+    service.revoke_session_by_token(test_db_session, recent_token, now=NOW - timedelta(days=2))
+    old_bob, _ = service.create_session(test_db_session, bob, now=long_ago)
+    ids = {"old_alice": old_alice.id, "recent": recent.id, "old_bob": old_bob.id}
+
+    new, _ = service.create_session(test_db_session, alice, now=NOW)
+
+    test_db_session.expire_all()
+    wanted = list(ids.values()) + [new.id]
+    remaining = {s.id for s in test_db_session.query(UserSession).filter(UserSession.id.in_(wanted))}
+    assert ids["old_alice"] not in remaining
+    assert {ids["recent"], ids["old_bob"], new.id} <= remaining
+
+
+def test_refresh_and_reuse_are_logged_without_secrets(make_user, test_db_session, caplog):
+    user = make_user()
+    session, token = service.create_session(test_db_session, user, now=NOW)
+    with caplog.at_level(logging.INFO, logger="auth.sessions"):
+        _, _, new_token = service.rotate_refresh(test_db_session, token, ip="10.0.0.9", now=NOW)
+        with pytest.raises(AuthError):
+            service.rotate_refresh(test_db_session, token, now=NOW + timedelta(seconds=30))
+    records = [r for r in caplog.records if r.name == "auth.sessions"]
+    assert any(r.getMessage().startswith("refresh ") and "ip=10.0.0.9" in r.getMessage() for r in records)
+    assert any(r.levelno == logging.WARNING and r.getMessage().startswith("reuse ") for r in records)
+    text = " ".join(r.getMessage() for r in records)
+    for secret in (token, new_token, session.token_hash, session.previous_token_hash):
+        assert secret not in text
+    assert str(session.id)[:8] in text and str(session.id) not in text
 
 
 # --- loading the user for each request -------------------------------------------
