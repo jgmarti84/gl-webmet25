@@ -107,6 +107,8 @@ services:
       - ./tests:/app/tests
       - ./api:/app/api:ro
       - ./database/radar_db:/app/radar_db:ro
+      # Alembic migrations, loaded by tests/auth/test_session_migration.py
+      - ./database/migrations:/app/migrations:ro
       - ../product_output:/product_output:ro
     depends_on:
       api:
