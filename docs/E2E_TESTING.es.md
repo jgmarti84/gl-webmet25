@@ -81,6 +81,7 @@ corrida.
 **Tests de registro y el buzón local.** `api-e2e` tiene el registro encendido y manda sus mails a **Mailpit** (contenedor `mailpit` del stack de desarrollo, el mismo que usa la API principal; pantalla en `http://localhost:8025`). `test_registration_flow.py` vacía el buzón, lee el mail por la API HTTP de Mailpit (`MAILPIT_URL`) y abre su link contra `FRONTEND_URL`. Para tener en cuenta:
 
 - nginx limita los endpoints de registro (`register`, `verify-email`, `resend-verification`, `forgot-password`, `reset-password`) a 10 pedidos por minuto por IP, con ráfaga de 5, en un contador propio. El archivo hace 13 pedidos de esos, así que sus tests se espacian solos (12 s entre test y test). Si igual aparece un `429`, esperar un minuto y repetir el test que falló.
+- `api-e2e` tiene `TERMS_REQUIRED=true`: los tests tildan la casilla de términos. El caso por defecto (sin términos) lo cubren `tests/auth` y los tests de JS.
 - `api-e2e` usa `MAIL_MIN_INTERVAL_SECONDS=0`: los tests piden un segundo mail a la misma cuenta apenas después del primero, y con una espera la API responde 202 pero no envía nada. El intervalo en sí lo cubre `tests/auth`.
 - Toda cuenta que crean los tests (`e2e-reg-*`) se desactiva al terminar, por la API de admin.
 - Los mails usan el dominio `ejemplo.com.ar`: las direcciones `.test` o `.local` las rechaza la validación de mails.

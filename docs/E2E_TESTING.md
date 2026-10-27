@@ -77,6 +77,7 @@ while running the suites: the shared login is reused for up to 10 minutes and `t
 **Registration tests and the local mailbox.** `api-e2e` has the sign-up on and sends its mails to **Mailpit** (container `mailpit` of the dev stack, the same one the main API uses; screen at `http://localhost:8025`). `test_registration_flow.py` empties the mailbox, reads the mail through Mailpit's HTTP API (`MAILPIT_URL`) and opens its link against `FRONTEND_URL`. Things to know:
 
 - nginx limits the sign-up endpoints (`register`, `verify-email`, `resend-verification`, `forgot-password`, `reset-password`) to 10 requests/minute per IP, burst 5, in a counter of its own. The file makes 13 such requests, so its tests pace themselves (12 s between tests). If a `429` still shows up, wait a minute and re-run the test that failed.
+- `api-e2e` has `TERMS_REQUIRED=true`: the tests tick the terms checkbox. The default (no terms) is covered by `tests/auth` and the JS tests.
 - `api-e2e` uses `MAIL_MIN_INTERVAL_SECONDS=0`: the tests ask for a second mail to the same account right after the first, and with a wait the API answers 202 but sends nothing. The interval itself is covered by `tests/auth`.
 - Every account the tests create (`e2e-reg-*`) is deactivated at the end through the admin API.
 - Mails use the domain `ejemplo.com.ar`: addresses on `.test` or `.local` are rejected by the mail validation.

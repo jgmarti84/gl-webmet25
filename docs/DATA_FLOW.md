@@ -487,8 +487,8 @@ All endpoints are public and check the `Origin` header like the login. "Neutral"
 
 | Method | Path | Body | Answers |
 |--------|------|------|---------|
-| GET | `/auth/options` | — | 200 `{registration, password_recovery, terms_url, privacy_url}` |
-| POST | `/auth/register` | `username, email, password, accept_terms, website`, optional `full_name` | **202** neutral; 409 username taken; 422 invalid data; 503 sign-up off |
+| GET | `/auth/options` | — | 200 `{registration, password_recovery, terms_required, terms_url, privacy_url}` (the two links are `null` when `terms_required` is false) |
+| POST | `/auth/register` | `username, email, password, website`, optional `full_name`, and `accept_terms` (must be true only when `TERMS_REQUIRED` is on; otherwise it is ignored and `terms_accepted_at` stays `NULL`) | **202** neutral; 409 username taken; 422 invalid data; 503 sign-up off |
 | POST | `/auth/verify-email` | `token` | 204; 400 invalid, expired or used link |
 | POST | `/auth/resend-verification` | `identifier` (mail or username) | **202** neutral |
 | POST | `/auth/forgot-password` | `email` | **202** neutral |
@@ -828,14 +828,15 @@ See §2.2 for the full table of `IndexerSettings` env vars.
 | `mail_from` | `MAIL_FROM` | *(empty)* | Sender address |
 | `mail_starttls` | `MAIL_STARTTLS` | `true` | Upgrade the connection with STARTTLS (ignored when `MAIL_USE_SSL`) |
 | `mail_use_ssl` | `MAIL_USE_SSL` | `false` | Encrypted from the first byte (port 465) |
-| `terms_url` | `TERMS_URL` | *(empty)* | Terms link of the sign-up form |
+| `terms_required` | `TERMS_REQUIRED` | `false` | Sign-up asks to accept the terms and privacy policy (checkbox and links); off = neither shown nor needed |
+| `terms_url` | `TERMS_URL` | *(empty)* | Terms link of the sign-up form (only with `TERMS_REQUIRED`) |
 | `privacy_url` | `PRIVACY_URL` | *(empty)* | Privacy policy link of the sign-up form |
 | `email_verify_ttl_hours` | `EMAIL_VERIFY_TTL_HOURS` | `24` | Life of the verification link |
 | `password_reset_ttl_minutes` | `PASSWORD_RESET_TTL_MINUTES` | `60` | Life of the reset link |
 | `mail_max_per_hour` | `MAIL_MAX_PER_HOUR` | `3` | Mails per account per hour |
 | `mail_min_interval_seconds` | `MAIL_MIN_INTERVAL_SECONDS` | `60` | Minimum seconds between two mails to one account |
 
-Derived: `mail_configured` (needs `MAIL_HOST`, `MAIL_FROM` and `PUBLIC_BASE_URL`; enough for verification and recovery) and `registration_available` (also needs `REGISTRATION_ENABLED` and both legal links).
+Derived: `mail_configured` (needs `MAIL_HOST`, `MAIL_FROM` and `PUBLIC_BASE_URL`; enough for verification and recovery) and `registration_available` (also needs `REGISTRATION_ENABLED` and, only when `TERMS_REQUIRED` is on, both legal links).
 | `tile_render_threads` | `TILE_RENDER_THREADS` | `8` | Thread pool size for tile rendering |
 | `redis_host` | `REDIS_HOST` | `redis` | Redis hostname |
 | `redis_port` | `REDIS_PORT` | `6379` | Redis port |

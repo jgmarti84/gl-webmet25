@@ -262,7 +262,8 @@ All go in `.env` (commented in `.env.example`); docker compose passes them to th
 | `MAIL_FROM` | empty | Sender address |
 | `MAIL_STARTTLS` | `true` | Encrypt the connection by upgrading it (port 587). Ignored when `MAIL_USE_SSL` is on |
 | `MAIL_USE_SSL` | `false` | Encrypted from the first byte (port 465) |
-| `TERMS_URL` / `PRIVACY_URL` | empty | Links shown in the sign-up form; the texts are provided by the observatory |
+| `TERMS_REQUIRED` | `false` | Ask the person to accept the terms and the privacy policy in the sign-up (checkbox and links). Off by default: the form shows neither. Turn it on before opening the sign-up to the public (see §9.3) |
+| `TERMS_URL` / `PRIVACY_URL` | empty | Links shown in the sign-up form when `TERMS_REQUIRED=true`; the texts are provided by the observatory |
 | `EMAIL_VERIFY_TTL_HOURS` | `24` | Life of the verification link. A pending account can only be replaced by a new sign-up after this time |
 | `PASSWORD_RESET_TTL_MINUTES` | `60` | Life of the reset link |
 | `MAIL_MAX_PER_HOUR` | `3` | Mails one account may receive per hour (all kinds count) |
@@ -272,7 +273,7 @@ When a cap stops a mail, the API sends nothing and answers exactly as if it had,
 
 ### 9.2 When it is available
 
-- **Sign-up** needs `REGISTRATION_ENABLED=true` **and** `MAIL_HOST`, `MAIL_FROM`, `PUBLIC_BASE_URL`, `TERMS_URL` and `PRIVACY_URL`.
+- **Sign-up** needs `REGISTRATION_ENABLED=true` **and** `MAIL_HOST`, `MAIL_FROM` and `PUBLIC_BASE_URL`; only with `TERMS_REQUIRED=true` it also needs `TERMS_URL` and `PRIVACY_URL`.
 - **Verification and password recovery** only need the mail settings (`MAIL_HOST`, `MAIL_FROM`, `PUBLIC_BASE_URL`).
 - If `REGISTRATION_ENABLED=true` but something is missing, the API says what in its log at startup and the sign-up stays off (the endpoint answers 503 and the login does not offer "Crear cuenta").
 
@@ -281,7 +282,7 @@ When a cap stops a mail, the API sends nothing and answers exactly as if it had,
 1. If a proxy sits in front of nginx, configure `set_real_ip_from` / `real_ip_header` first. The limits of these endpoints (10 requests/minute per IP) are per client IP: without the real IP every visitor shares the proxy's and the quota runs out for everybody.
 2. Set SPF and DKIM for the sender domain, or the mails land in spam.
 3. Gmail / Workspace: use an app password (not the account password) and mind the daily caps (about 500 and 2,000 mails).
-4. Provide `TERMS_URL` and `PRIVACY_URL` (the texts come from the observatory).
+4. Get the terms and the privacy policy (the texts come from the observatory, ideally reviewed by its legal area), put their addresses in `TERMS_URL` and `PRIVACY_URL` and set `TERMS_REQUIRED=true`. It is off by default so the sign-up can be tried before the texts exist, but **before opening it to the public** the people must be shown them: it is the information and consent notice that the data protection law (Ley 25.326) expects when personal data is collected. While it is off the API warns about it in its log at startup, and no acceptance is recorded (`terms_accepted_at` stays empty).
 5. Fill `MAIL_*`, `PUBLIC_BASE_URL` and set `REGISTRATION_ENABLED=true`, then deploy with `make up` (or `make db-init` and `make api`). `db-init` applies the pending database migration; it fails with a clear message, listing them, if two users have the same mail. Fix those rows and run it again.
 6. To turn it off at once: `REGISTRATION_ENABLED=false` and `make api`. Accounts already created keep working.
 

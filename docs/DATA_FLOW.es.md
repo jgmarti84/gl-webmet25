@@ -491,8 +491,8 @@ Todos los endpoints son públicos y comprueban el header `Origin` como el login.
 
 | Método | Ruta | Cuerpo | Respuestas |
 |--------|------|--------|------------|
-| GET | `/auth/options` | — | 200 `{registration, password_recovery, terms_url, privacy_url}` |
-| POST | `/auth/register` | `username, email, password, accept_terms, website`, opcional `full_name` | **202** neutro; 409 usuario ya existe; 422 datos inválidos; 503 registro apagado |
+| GET | `/auth/options` | — | 200 `{registration, password_recovery, terms_required, terms_url, privacy_url}` (los dos links son `null` si `terms_required` es false) |
+| POST | `/auth/register` | `username, email, password, website`, opcional `full_name`, y `accept_terms` (debe ser true solo cuando `TERMS_REQUIRED` está activo; si no, se ignora y `terms_accepted_at` queda `NULL`) | **202** neutro; 409 usuario ya existe; 422 datos inválidos; 503 registro apagado |
 | POST | `/auth/verify-email` | `token` | 204; 400 link inválido, vencido o usado |
 | POST | `/auth/resend-verification` | `identifier` (mail o usuario) | **202** neutro |
 | POST | `/auth/forgot-password` | `email` | **202** neutro |
@@ -838,14 +838,15 @@ Ver §2.2 para la tabla completa de variables de entorno de `IndexerSettings`.
 | `mail_from` | `MAIL_FROM` | *(vacío)* | Dirección del remitente |
 | `mail_starttls` | `MAIL_STARTTLS` | `true` | Sube la conexión a TLS con STARTTLS (se ignora con `MAIL_USE_SSL`) |
 | `mail_use_ssl` | `MAIL_USE_SSL` | `false` | Cifrada desde el primer byte (puerto 465) |
-| `terms_url` | `TERMS_URL` | *(vacío)* | Link a los términos en el formulario de registro |
+| `terms_required` | `TERMS_REQUIRED` | `false` | El registro pide aceptar los términos y la política de privacidad (casilla y links); apagado = no se muestran ni hacen falta |
+| `terms_url` | `TERMS_URL` | *(vacío)* | Link a los términos en el formulario de registro (solo con `TERMS_REQUIRED`) |
 | `privacy_url` | `PRIVACY_URL` | *(vacío)* | Link a la política de privacidad en el formulario de registro |
 | `email_verify_ttl_hours` | `EMAIL_VERIFY_TTL_HOURS` | `24` | Vida del link de verificación |
 | `password_reset_ttl_minutes` | `PASSWORD_RESET_TTL_MINUTES` | `60` | Vida del link de recupero |
 | `mail_max_per_hour` | `MAIL_MAX_PER_HOUR` | `3` | Mails por cuenta por hora |
 | `mail_min_interval_seconds` | `MAIL_MIN_INTERVAL_SECONDS` | `60` | Segundos mínimos entre dos mails a una cuenta |
 
-Derivadas: `mail_configured` (necesita `MAIL_HOST`, `MAIL_FROM` y `PUBLIC_BASE_URL`; alcanza para la verificación y el recupero) y `registration_available` (además necesita `REGISTRATION_ENABLED` y los dos links legales).
+Derivadas: `mail_configured` (necesita `MAIL_HOST`, `MAIL_FROM` y `PUBLIC_BASE_URL`; alcanza para la verificación y el recupero) y `registration_available` (además necesita `REGISTRATION_ENABLED` y, solo si `TERMS_REQUIRED` está activo, los dos links legales).
 
 Ajuste de GDAL: `GDAL_CACHEMAX`, `VSI_CACHE`, `VSI_CACHE_SIZE`, `GDAL_DISABLE_READDIR_ON_OPEN`.
 

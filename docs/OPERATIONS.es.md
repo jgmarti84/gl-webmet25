@@ -222,7 +222,8 @@ Todo va en el `.env` (comentado en `.env.example`); docker compose se lo pasa a 
 | `MAIL_FROM` | vacío | Dirección del remitente |
 | `MAIL_STARTTLS` | `true` | Cifra la conexión subiéndola a TLS (puerto 587). Se ignora si `MAIL_USE_SSL` está activo |
 | `MAIL_USE_SSL` | `false` | Cifrada desde el primer byte (puerto 465) |
-| `TERMS_URL` / `PRIVACY_URL` | vacío | Links que muestra el formulario de registro; los textos los provee el observatorio |
+| `TERMS_REQUIRED` | `false` | Pedir que la persona acepte los términos y la política de privacidad en el registro (casilla y links). Apagado por defecto: el formulario no muestra ninguno. Encenderlo antes de abrir el registro al público (ver §7.3) |
+| `TERMS_URL` / `PRIVACY_URL` | vacío | Links que muestra el formulario de registro cuando `TERMS_REQUIRED=true`; los textos los provee el observatorio |
 | `EMAIL_VERIFY_TTL_HOURS` | `24` | Vida del link de verificación. Una cuenta pendiente solo puede ser reemplazada por un registro nuevo pasado este tiempo |
 | `PASSWORD_RESET_TTL_MINUTES` | `60` | Vida del link de recupero |
 | `MAIL_MAX_PER_HOUR` | `3` | Mails que puede recibir una cuenta por hora (cuentan todos los tipos) |
@@ -232,7 +233,7 @@ Cuando un tope frena un mail, la API no envía nada y responde exactamente igual
 
 ### 7.2 Cuándo está disponible
 
-- **El registro** necesita `REGISTRATION_ENABLED=true` **y** `MAIL_HOST`, `MAIL_FROM`, `PUBLIC_BASE_URL`, `TERMS_URL` y `PRIVACY_URL`.
+- **El registro** necesita `REGISTRATION_ENABLED=true` **y** `MAIL_HOST`, `MAIL_FROM` y `PUBLIC_BASE_URL`; solo con `TERMS_REQUIRED=true` necesita además `TERMS_URL` y `PRIVACY_URL`.
 - **La verificación y el recupero de contraseña** solo necesitan la configuración del mail (`MAIL_HOST`, `MAIL_FROM`, `PUBLIC_BASE_URL`).
 - Si `REGISTRATION_ENABLED=true` pero falta algo, la API dice qué en su log al arrancar y el registro queda apagado (el endpoint responde 503 y el login no ofrece "Crear cuenta").
 
@@ -241,7 +242,7 @@ Cuando un tope frena un mail, la API no envía nada y responde exactamente igual
 1. Si hay un proxy delante de nginx, configurar antes `set_real_ip_from` / `real_ip_header`. Los límites de estos endpoints (10 pedidos por minuto por IP) son por IP del cliente: sin la IP real todos los visitantes comparten la del proxy y la cuota se agota para todos.
 2. Configurar SPF y DKIM del dominio del remitente, o los mails caen en spam.
 3. Gmail / Workspace: usar una contraseña de aplicación (no la de la cuenta) y tener en cuenta los topes diarios (unos 500 y 2.000 mails).
-4. Tener `TERMS_URL` y `PRIVACY_URL` (los textos los provee el observatorio).
+4. Conseguir los términos y la política de privacidad (los textos los provee el observatorio, idealmente revisados por su área legal), poner sus direcciones en `TERMS_URL` y `PRIVACY_URL` y activar `TERMS_REQUIRED=true`. Viene apagado para poder probar el registro antes de que existan los textos, pero **antes de abrirlo al público** hay que mostrárselos a las personas: es el aviso y el consentimiento que pide la ley de datos personales (Ley 25.326) cuando se recolectan datos. Mientras esté apagado, la API lo avisa en su log al arrancar y no se registra ninguna aceptación (`terms_accepted_at` queda vacío).
 5. Completar `MAIL_*`, `PUBLIC_BASE_URL` y poner `REGISTRATION_ENABLED=true`, y desplegar con `make up` (o `make db-init` y `make api`). `db-init` aplica la migración pendiente de la base; si dos usuarios tienen el mismo mail, falla con un mensaje claro que los lista. Hay que corregir esas filas y volver a correrlo.
 6. Para apagarlo de inmediato: `REGISTRATION_ENABLED=false` y `make api`. Las cuentas ya creadas siguen funcionando.
 
