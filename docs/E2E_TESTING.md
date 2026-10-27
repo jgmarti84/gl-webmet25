@@ -17,6 +17,7 @@ filtering/sorting, the colormap creator canvas + drag, and the iOS-style time wh
 | `test_admin_panel.py` | Admin panel: load, OHMC logo, back-to-map, per-column filters + global search, text-filter row hiding, sortable columns + ▲/▼ indicator, icon row actions, colormap creator (gradient canvas, draggable ticks, "Cerrar" label) |
 | `test_radar_ordering.py` | Main map: load, radar list ordering rule (RMA before AR, `RMA00` last, active before inactive), admin link present |
 | `test_time_wheel.py` | Custom time range: both wheels render (24h + 60m = 84 items), two columns + selection band, tap-to-select drives the canonical input |
+| `test_registration_flow.py` | Public sign-up: sign up, verify the mail from its link, log in with the mail; an unverified account cannot log in and can ask for a new mail; password recovery end to end; the form checks the passwords; a registered mail gets the same screen; a garbage verification link. The mails are read from Mailpit (see below) |
 | `conftest.py` | Shared fixtures: login helper + shared admin session, JS-error capture, screenshot-on-failure |
 
 > ⚠️ These tests require the **v2 frontend** — the time wheel is wired only by `js/v2/app.js`. Pointing them at a v1 frontend will fail `test_time_wheel.py`.
@@ -45,6 +46,7 @@ The tests are environment-agnostic Python + Playwright. To run them anywhere you
 | `API_BASE_URL` | `http://api-e2e:8000` | API base (used by the API contract tests, not strictly by e2e; code default: `http://api:8000`) |
 | `ADMIN_USERNAME` | `admin` | Username of the admin account the tests log in with |
 | `ADMIN_PASSWORD` | *(none)* | Its password — required, tests cannot log in without it |
+| `MAILPIT_URL` | `http://mailpit:8025` | Local mailbox the registration tests read the verification and reset mails from |
 
 **Which database each suite writes to.** `tests/api` and `tests/e2e` are black-box: they go through a running API
 and frontend, and they write (the e2e viewer, the admin's sessions). In the dev stack they run against an isolated
@@ -71,6 +73,13 @@ nginx limits `/api/v1/auth/login` to 10 requests/minute per IP, so the admin pan
 login**: its browser state is reused by every test and renewed every 10 minutes (the access cookie
 lives 30). Do not re-run the suite more than a few times per minute. Keep `ACCESS_TOKEN_TTL_MINUTES` at 15 or more
 while running the suites: the shared login is reused for up to 10 minutes and `tests/api` logs in once per run.
+
+**Registration tests and the local mailbox.** `api-e2e` has the sign-up on and sends its mails to **Mailpit** (container `mailpit` of the dev stack, the same one the main API uses; screen at `http://localhost:8025`). `test_registration_flow.py` empties the mailbox, reads the mail through Mailpit's HTTP API (`MAILPIT_URL`) and opens its link against `FRONTEND_URL`. Things to know:
+
+- nginx limits the sign-up endpoints (`register`, `verify-email`, `resend-verification`, `forgot-password`, `reset-password`) to 10 requests/minute per IP, burst 5, in a counter of its own. The file makes 13 such requests, so its tests pace themselves (12 s between tests). If a `429` still shows up, wait a minute and re-run the test that failed.
+- `api-e2e` uses `MAIL_MIN_INTERVAL_SECONDS=0`: the tests ask for a second mail to the same account right after the first, and with a wait the API answers 202 but sends nothing. The interval itself is covered by `tests/auth`.
+- Every account the tests create (`e2e-reg-*`) is deactivated at the end through the admin API.
+- Mails use the domain `ejemplo.com.ar`: addresses on `.test` or `.local` are rejected by the mail validation.
 
 ---
 
@@ -176,8 +185,10 @@ PYTHONPATH=tests PWDEBUG=1 pytest tests/e2e/test_admin_panel.py # Playwright Ins
 | `net::ERR_CONNECTION_REFUSED` | `FRONTEND_URL` not reachable from the test host (wrong host/port, or frontend not up). |
 | Radar order / empty radar list | API not seeded. Run `python -m radar_db.manage seed` (the `db-init` container does this automatically). |
 | Tests hang on `networkidle` | Frontend can't reach the API (nginx `/api/v1` proxy target down). Check the API is up. |
+| Registration test: `No llegó un mail a …` | Mailpit is not running or `MAILPIT_URL` is wrong, or the API did not send (a mail cap, or the sign-up is off: `GET /api/v1/auth/options` on `api-e2e` must show `registration: true`). Look at `http://localhost:8025`. |
+| Registration test: a locator is not visible after a request | nginx answered `429` (the sign-up endpoints allow 10 requests/minute per IP). Wait a minute and re-run that test. |
 
 ---
 
-**Document Version:** 1.1.0  
-**Last Updated:** July 8, 2026
+**Document Version:** 1.2.0  
+**Last Updated:** October 27, 2026

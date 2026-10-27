@@ -16,11 +16,20 @@ frontend/public/
 ├── index.html                 # Main multi-radar map page
 ├── radar.html                 # One-radar detail page (radar.html?code=AR5)
 ├── login.html                 # Página de login (/login)
+├── register.html              # Página de registro (/register, pública)
+├── verify.html                # Página de verificación del mail (/verify?token=…, pública)
+├── forgot.html                # Página "Olvidé mi contraseña" (/forgot, pública)
+├── reset.html                 # Página de contraseña nueva (/reset?token=…, pública)
 ├── admin.html                 # Admin panel SPA (served at /admin, login required)
 ├── css/
 │   ├── styles.css            # Main app UI styling (dark theme)
-│   └── admin.css             # Admin panel styling (modern-light theme)
+│   ├── admin.css             # Admin panel styling (modern-light theme)
+│   └── login.css             # Páginas de login, registro y recupero (panel azul + formulario)
 └── js/
+    ├── auth-api.js           # Cliente de auth compartido por todas las páginas (login, sesión, registro, recupero)
+    ├── auth-pages.js         # Reglas y textos de formularios compartidos por las páginas de registro y recupero
+    ├── login.js, login-ui.js # Lógica del login / mostrar-ocultar contraseña (también lo usan las páginas de abajo)
+    ├── register.js, verify.js, forgot.js, reset.js   # Un script por página pública
     ├── admin.js              # Admin panel orchestrator (CRUD, filters, colormap creator)
     ├── admin-api.js          # Admin REST client (/api/v1/admin/*)
     ├── shared/               # Shared by v1 and v2
@@ -432,6 +441,35 @@ Pipeline de composición en canvas:
 
 **Responsabilidad:** Todas las páginas requieren sesión (nginx sirve `/login` en lugar de la página cuando no hay). `auth-api.js` es el cliente compartido: `authFetch()` reemplaza a `fetch()` para los datos de la API (ante un 401 renueva la sesión por `/auth/refresh` y reintenta una vez; si la sesión se perdió recarga la página, o va a `/login` si ya recargó hace unos segundos), e `initPageSession()` carga el usuario actual y arranca la renovación anticipada del access token, dos minutos antes de que venza (con el `access_expires_in` de `login`/`refresh`/`me`, también después de que una pestaña estuvo en segundo plano). `session-box.js` completa el botón de cuenta al final de la barra de íconos (las iniciales del usuario) y su panel (`#panel-account`): nombre, rol, "Cerrar sesión" y, solo para admins, el link al panel. Lo usan el mapa y el detalle de radar.
 
+`auth-api.js` también habla con los endpoints públicos del registro (DATA_FLOW §4.10): `login(username, password)` (el campo de usuario también acepta el mail, y la respuesta trae el `code` del fallo, por ejemplo `email_not_verified`), `options()` (qué pueden ofrecer las páginas; nunca lanza error y, si falla, devuelve "nada extra"), `register(payload)`, `verifyEmail(token)`, `resendVerification(identifier)`, `forgotPassword(email)` y `resetPassword(token, password)`. Los últimos cinco devuelven `{ ok, status, data }` y dejan los textos a cargo de la página.
+
+---
+
+### **auth-pages.js** — Reglas y textos de las páginas de registro y recupero
+
+**Archivo:** [`frontend/public/js/auth-pages.js`](../../frontend/public/js/auth-pages.js) — tests unitarios: `tests/js/test_auth_pages.mjs`
+
+**Responsabilidad:** Ayudas solo de presentación compartidas por el login y las cuatro páginas públicas; el servidor vuelve a validar todo. Exporta las mismas formas que exige el servidor (`USERNAME_RE`, un `EMAIL_RE` flexible, de 12 a 128 caracteres para las contraseñas), `validatePassword()` y `validateRegistration()` (null si está bien, si no el mensaje), `errorText()` / `statusMessage()` (el texto del propio servidor, o uno fijo para 429 y 503) y las ayudas de interfaz `showMessage()` / `hideMessage()` (siempre `textContent`, nunca `innerHTML`) y `startCooldown()` (un botón que cuenta hacia atrás, usado por "Reenviar mail").
+
+---
+
+### **register.html / verify.html / forgot.html / reset.html** — Páginas públicas de registro y recupero
+
+**Archivos:** [`frontend/public/register.html`](../../frontend/public/register.html), `verify.html`, `forgot.html`, `reset.html` y sus scripts `js/register.js`, `verify.js`, `forgot.js`, `reset.js`
+
+**Responsabilidad:** Cuatro páginas estáticas con el diseño del login (panel azul y formulario, responsive). nginx las sirve sin sesión (`/register`, `/verify`, `/forgot`, `/reset`); el trabajo lo hacen las llamadas a la API que ellas hacen. Ninguna acepta un `next` ni un destino de redirección por la URL.
+
+| Página | Para qué sirve | Ids principales |
+|--------|----------------|-----------------|
+| `register.html` | Crear una cuenta: usuario, mail, contraseña (con ojo) dos veces, casilla de términos y un campo señuelo oculto. Al enviar muestra "Revisá tu mail" con un botón de reenvío que cuenta 60 s. Muestra un aviso en lugar del formulario cuando `options().registration` es falso, y toma los links de términos y privacidad de `options()` | `#register-form`, `#reg-username`, `#reg-email`, `#reg-password`, `#reg-repeat`, `#reg-terms`, `#reg-website` (señuelo), `#register-error`, `#register-done`, `#register-resend` |
+| `verify.html` | Destino del link del mail de verificación. Lee el token de la dirección, lo quita de la barra y del historial y **lo envía ella misma**: los filtros de correo y los escáneres abren los links de los mails, y un GET que verificara gastaría el token de un solo uso antes de que la persona haga clic. Muestra "Verificando…", el éxito (botón para entrar) o el error con un formulario para pedir un mail nuevo | `#verify-working`, `#verify-ok`, `#verify-error`, `#verify-resend-form`, `#verify-identifier` |
+| `forgot.html` | Pide el mail y muestra siempre la misma pantalla "Revisá tu mail" (el servidor responde 202 exista o no la cuenta). Aviso en lugar del formulario cuando el recupero está apagado | `#forgot-form`, `#forgot-email`, `#forgot-error`, `#forgot-done` |
+| `reset.html` | Destino del link del mail de recupero: contraseña nueva dos veces. Quita el token de la barra igual que `verify.html`. Un link inválido, vencido, ya usado o ausente muestra "El link no es válido" | `#reset-form`, `#reset-password`, `#reset-repeat`, `#reset-ok`, `#reset-invalid` |
+
+`login.html` también cambió: el campo es "Usuario o mail", muestra "¿Olvidaste tu contraseña?" y "Crear cuenta" solo cuando `options()` lo permite, y cuando el login responde `email_not_verified` muestra un aviso y un botón "Reenviar mail de verificación" (`#login-resend`).
+
+**Scripts cargados:** cada página carga `css/login.css`, `js/login-ui.js` (los botones de mostrar/ocultar contraseña apuntan a su campo con `data-target`) y su propio script.
+
 ---
 
 ### **admin.html** — SPA del panel de administración
@@ -545,8 +583,17 @@ radar.html (one-radar detail page)
 
 login.html (/login)
 ├── js/login.js
-│   └── js/auth-api.js (login, logout, refresh, me)
-└── css/admin.css
+│   ├── js/auth-api.js (login, logout, refresh, me, options, resendVerification)
+│   └── js/auth-pages.js (statusMessage, startCooldown)
+├── js/login-ui.js (mostrar/ocultar contraseña)
+└── css/login.css
+
+register.html (/register) · verify.html (/verify) · forgot.html (/forgot) · reset.html (/reset)
+├── js/register.js | verify.js | forgot.js | reset.js (uno por página)
+│   ├── js/auth-api.js (options, register, verifyEmail, resendVerification, forgotPassword, resetPassword)
+│   └── js/auth-pages.js (validaciones, textos, cuenta regresiva)
+├── js/login-ui.js (mostrar/ocultar contraseña)
+└── css/login.css
 
 admin.html (admin SPA, /admin, login requerido)
 ├── js/admin.js (CRUD, filtros/orden, creador/editor de colormaps, usuarios)

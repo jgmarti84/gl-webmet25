@@ -20,6 +20,7 @@ y el selector de tiempo con rueda estilo iOS.
 | `test_admin_panel.py` | Panel de administración: carga, logo OHMC, volver al mapa, filtros por columna + búsqueda global, ocultamiento de filas por filtro de texto, columnas ordenables + indicador ▲/▼, acciones de fila con íconos, creador de colormaps (canvas de gradiente, ticks arrastrables, etiqueta "Cerrar") |
 | `test_radar_ordering.py` | Mapa principal: carga, regla de ordenamiento de la lista de radares (RMA antes que AR, `RMA00` al final, activos antes que inactivos), presencia del enlace al panel de administración |
 | `test_time_wheel.py` | Rango de tiempo personalizado: ambas ruedas se renderizan (24h + 60m = 84 ítems), dos columnas + banda de selección, tap para seleccionar actualiza el campo canónico |
+| `test_registration_flow.py` | Registro público: registrarse, verificar el mail desde su link y entrar con el mail; una cuenta sin verificar no puede entrar y puede pedir un mail nuevo; recupero de contraseña de punta a punta; el formulario controla las contraseñas; un mail ya registrado muestra la misma pantalla; un link de verificación basura. Los mails se leen de Mailpit (ver abajo) |
 | `conftest.py` | Fixtures compartidos: helper de login + sesión de admin compartida, captura de errores JS, captura de pantalla en caso de falla |
 
 > ⚠️ Estas pruebas requieren el **frontend v2** — la rueda de tiempo solo está integrada por `js/v2/app.js`. Apuntarlas a un frontend v1 hará fallar `test_time_wheel.py`.
@@ -48,6 +49,7 @@ Las pruebas son Python + Playwright independientes del entorno. Para ejecutarlas
 | `API_BASE_URL` | `http://api-e2e:8000` | Base de la API (usada por los tests de contrato de la API, no estrictamente por e2e; valor por defecto del código: `http://api:8000`) |
 | `ADMIN_USERNAME` | `admin` | Usuario de la cuenta de admin con la que se loguean los tests |
 | `ADMIN_PASSWORD` | *(ninguno)* | Su contraseña — obligatoria, sin ella los tests no pueden loguearse |
+| `MAILPIT_URL` | `http://mailpit:8025` | Buzón local del que los tests de registro leen los mails de verificación y de recupero |
 
 **En qué base escribe cada suite.** `tests/api` y `tests/e2e` son de caja negra: pasan por una API y un frontend que
 están corriendo, y escriben (el viewer de e2e, las sesiones del admin). En el stack de desarrollo corren contra una
@@ -75,6 +77,13 @@ solo login**: su estado de navegador se reutiliza en todos los tests y se renuev
 dura 30). No conviene repetir la suite más de unas pocas veces por minuto. Mantener `ACCESS_TOKEN_TTL_MINUTES` en 15 o
 más mientras se corren las suites: el login compartido se reutiliza hasta 10 minutos y `tests/api` se loguea una vez por
 corrida.
+
+**Tests de registro y el buzón local.** `api-e2e` tiene el registro encendido y manda sus mails a **Mailpit** (contenedor `mailpit` del stack de desarrollo, el mismo que usa la API principal; pantalla en `http://localhost:8025`). `test_registration_flow.py` vacía el buzón, lee el mail por la API HTTP de Mailpit (`MAILPIT_URL`) y abre su link contra `FRONTEND_URL`. Para tener en cuenta:
+
+- nginx limita los endpoints de registro (`register`, `verify-email`, `resend-verification`, `forgot-password`, `reset-password`) a 10 pedidos por minuto por IP, con ráfaga de 5, en un contador propio. El archivo hace 13 pedidos de esos, así que sus tests se espacian solos (12 s entre test y test). Si igual aparece un `429`, esperar un minuto y repetir el test que falló.
+- `api-e2e` usa `MAIL_MIN_INTERVAL_SECONDS=0`: los tests piden un segundo mail a la misma cuenta apenas después del primero, y con una espera la API responde 202 pero no envía nada. El intervalo en sí lo cubre `tests/auth`.
+- Toda cuenta que crean los tests (`e2e-reg-*`) se desactiva al terminar, por la API de admin.
+- Los mails usan el dominio `ejemplo.com.ar`: las direcciones `.test` o `.local` las rechaza la validación de mails.
 
 ---
 
@@ -180,8 +189,10 @@ PYTHONPATH=tests PWDEBUG=1 pytest tests/e2e/test_admin_panel.py # Playwright Ins
 | `net::ERR_CONNECTION_REFUSED` | `FRONTEND_URL` no es accesible desde el host de pruebas (host/puerto incorrecto, o frontend no iniciado). |
 | Orden de radares / lista de radares vacía | API sin datos iniciales. Ejecutar `python -m radar_db.manage seed` (el contenedor `db-init` hace esto automáticamente). |
 | Las pruebas se cuelgan en `networkidle` | El frontend no puede alcanzar la API (el proxy de nginx `/api/v1` apunta a la API caída). Verificar que la API esté en funcionamiento. |
+| Test de registro: `No llegó un mail a …` | Mailpit no está corriendo o `MAILPIT_URL` está mal, o la API no envió (un tope de mails, o el registro está apagado: `GET /api/v1/auth/options` en `api-e2e` debe mostrar `registration: true`). Mirar `http://localhost:8025`. |
+| Test de registro: un elemento no aparece después de un pedido | nginx respondió `429` (los endpoints de registro permiten 10 pedidos por minuto por IP). Esperar un minuto y repetir ese test. |
 
 ---
 
-**Versión del Documento:** 1.1.0  
-**Última Actualización:** 8 de julio de 2026
+**Versión del Documento:** 1.2.0  
+**Última Actualización:** 27 de octubre de 2026
