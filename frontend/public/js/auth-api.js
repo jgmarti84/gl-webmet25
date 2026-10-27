@@ -1,6 +1,21 @@
 // Auth client shared by every page: login, admin panel, map, radar detail and COG browser.
 const AUTH_BASE = '/api/v1/auth';
 
+// What the pages may offer when /options cannot be read: nothing extra.
+const DEFAULT_OPTIONS = { registration: false, password_recovery: false, terms_url: null, privacy_url: null };
+
+/** POST a JSON body to a public endpoint. Resolves { ok, status, data }; `data` is {} for an empty (204) answer. */
+async function postJson(path, body) {
+    const response = await fetch(`${AUTH_BASE}${path}`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+    const data = response.status === 204 ? {} : await response.json().catch(() => ({}));
+    return { ok: response.ok, status: response.status, data };
+}
+
 let refreshInFlight = null;
 
 const REFRESH_MARGIN_S = 120;
@@ -162,12 +177,27 @@ export const authApi = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password }),
         });
-        if (response.ok) {
-            const body = await response.json().catch(() => ({}));
-            noteAccessExpiry(body.access_expires_in);
-        }
-        return { ok: response.ok, status: response.status };
+        const body = await response.json().catch(() => ({}));
+        if (response.ok) noteAccessExpiry(body.access_expires_in);
+        // `code` tells the page why a login failed beyond the status (e.g. "email_not_verified" on a 403).
+        return { ok: response.ok, status: response.status, code: response.ok ? null : body.code || null };
     },
+
+    /** What the pages may offer: sign-up and password recovery. Never throws. */
+    async options() {
+        try {
+            const response = await fetch(`${AUTH_BASE}/options`, { credentials: 'same-origin' });
+            return response.ok ? await response.json() : DEFAULT_OPTIONS;
+        } catch (error) {
+            return DEFAULT_OPTIONS;
+        }
+    },
+
+    register: (payload) => postJson('/register', payload),
+    verifyEmail: (token) => postJson('/verify-email', { token }),
+    resendVerification: (identifier) => postJson('/resend-verification', { identifier }),
+    forgotPassword: (email) => postJson('/forgot-password', { email }),
+    resetPassword: (token, password) => postJson('/reset-password', { token, password }),
 
     async logout() {
         await fetch(`${AUTH_BASE}/logout`, { method: 'POST', credentials: 'same-origin' });

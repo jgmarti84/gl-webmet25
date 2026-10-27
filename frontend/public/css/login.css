@@ -328,3 +328,157 @@
     .login-heading h1 { font-size: 26px; }
     .login-panel { padding-top: 32px; }
 }
+
+/* ── Links, hints and secondary controls (sign-up and recovery pages) ───── */
+/* The elements of these pages start with the "hidden" attribute and a script shows them; this keeps the
+   attribute stronger than any display rule below. */
+.login-page [hidden] {
+    display: none !important;
+}
+
+.login-link {
+    align-self: flex-start;
+    margin-top: -8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--login-blue);
+}
+
+.login-link:hover {
+    text-decoration: underline;
+}
+
+.login-hint {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--login-faint);
+}
+
+.login-info,
+.login-success {
+    padding: 12px 14px;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.login-info {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e3a8a;
+}
+
+.login-success {
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    color: #166534;
+}
+
+/* Outlined button for the secondary action next to the main (filled) one. */
+.login-secondary {
+    display: block;
+    width: 100%;
+    height: 44px;
+    padding: 0;
+    border: 1px solid var(--login-border);
+    border-radius: 6px;
+    background: #ffffff;
+    color: var(--login-navy-btn);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.login-secondary:hover {
+    background: #f1f5f9;
+}
+
+.login-secondary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.login-switch {
+    margin: 0;
+    font-size: 14px;
+    text-align: center;
+    color: var(--login-muted);
+}
+
+.login-switch a {
+    color: var(--login-blue);
+    font-weight: 600;
+}
+
+.login-checkbox {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--login-text);
+}
+
+.login-checkbox input {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    margin-top: 2px;
+    accent-color: var(--login-navy-btn);
+}
+
+.login-checkbox a {
+    color: var(--login-blue);
+}
+
+/* Decoy field: people never see it, bots fill it. Moved off screen instead of display:none, because simple
+   bots skip fields they can tell are hidden. */
+.login-honeypot {
+    position: absolute;
+    left: -10000px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}
+
+/* Final screens ("Revisá tu mail", "Mail verificado"...) that replace the form. */
+.login-done {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.login-done h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--login-navy);
+}
+
+.login-done p {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--login-muted);
+}
+
+/* A link that looks like the main submit button. */
+.login-button-link {
+    display: block;
+    width: 100%;
+    height: 46px;
+    line-height: 46px;
+    border-radius: 6px;
+    background: var(--login-navy-btn);
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+    text-decoration: none;
+}
+
+.login-button-link:hover {
+    background: var(--login-navy-btn-hover);
+}
