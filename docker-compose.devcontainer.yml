@@ -25,7 +25,14 @@ services:
     depends_on:
       - api
     restart: unless-stopped
-    
+
+  # Shared L2 tile cache. Also on the e2e network: api-e2e uses Redis database 1 and the main API database 0,
+  # because tile keys are built from COG ids and both databases reuse the same ids.
+  redis:
+    networks:
+      - default
+      - e2e
+
   # ==========================================================================
   # TEST DATABASE (devcontainer only, never used in production)
   # ==========================================================================
@@ -71,6 +78,166 @@ services:
     restart: "no"
 
   # ==========================================================================
+  # BLACK-BOX TEST STACK (devcontainer only)
+  # tests/api and tests/e2e run against these services, never against the
+  # main api / frontend-v2 / radar_db: they create users and sessions, and those
+  # writes must land in the disposable radar_e2e_db.
+  # ==========================================================================
+
+  # Own PostgreSQL for radar_e2e_db: the image creates the database from POSTGRES_DB on the first start,
+  # exactly like radar_db_test does with radar_test_db. Disposable; no published ports.
+  radar_db_e2e:
+    image: postgis/postgis:15-3.5
+    container_name: radar_db_e2e
+    environment:
+      POSTGRES_DB: radar_e2e_db
+      POSTGRES_USER: radar
+      POSTGRES_PASSWORD: radar_test_only
+    networks:
+      - e2e
+    healthcheck:
+      # -h 127.0.0.1 checks over TCP: on the very first start the image runs a temporary server that only listens
+      # on the local socket, and a socket check would report "healthy" before the real server is up.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U radar -d radar_e2e_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: "no"
+
+  # Same init / seed / first admin as db-init, on radar_e2e_db.
+  db-init-e2e:
+    build:
+      context: ./database
+      dockerfile: Dockerfile
+    container_name: radar_db_init_e2e
+    environment:
+      DB_HOST: radar_db_e2e
+      DB_PORT: 5432
+      DB_NAME: radar_e2e_db
+      DB_USER: radar
+      DB_PASSWORD: radar_test_only
+      # The tests log in with these, so the test admin is the same account name as in .env
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    networks:
+      - e2e
+    depends_on:
+      radar_db_e2e:
+        condition: service_healthy
+    command: >
+      sh -c "
+        python -m radar_db.manage init &&
+        python -m radar_db.manage seed &&
+        python -m radar_db.manage init-admin &&
+        echo 'E2E database ready!'
+      "
+    restart: "no"
+
+  # Same image and command as api, on radar_e2e_db. Only on the e2e network, where it is "api".
+  # No published ports: only the tests reach it (a browser on localhost would share cookies with the main frontend).
+  api-e2e:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: radar_api_e2e
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --workers 2
+      --loop uvloop
+      --http httptools
+      --proxy-headers
+      --forwarded-allow-ips '*'
+    environment:
+      DB_HOST: radar_db_e2e
+      DB_PORT: 5432
+      DB_NAME: radar_e2e_db
+      DB_USER: radar
+      DB_PASSWORD: radar_test_only
+      COG_BASE_PATH: /product_output
+      TOPS_AND_CORES_DIR: /tops_and_cores
+      CORS_ORIGINS: ""
+      # Browser requests of the e2e tests carry Origin http://frontend-e2e; httpx and Playwright's request
+      # context send no Origin, which check_origin lets through.
+      ALLOWED_ORIGINS: "http://frontend-e2e"
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (see .env.example)}
+      COOKIE_SECURE: "false"   # the tests use plain HTTP inside Docker
+      REDIS_HOST: redis
+      REDIS_DB: "1"            # the main API uses database 0
+      ACCESS_TOKEN_TTL_MINUTES: ${ACCESS_TOKEN_TTL_MINUTES:-30}
+      SESSION_IDLE_TTL_HOURS: ${SESSION_IDLE_TTL_HOURS:-48}
+      SESSION_ABSOLUTE_TTL_DAYS: ${SESSION_ABSOLUTE_TTL_DAYS:-7}
+      SESSION_RETENTION_DAYS: ${SESSION_RETENTION_DAYS:-90}
+      LOGIN_MAX_FAILED_ATTEMPTS: ${LOGIN_MAX_FAILED_ATTEMPTS:-5}
+      LOGIN_LOCKOUT_MINUTES: ${LOGIN_LOCKOUT_MINUTES:-15}
+    volumes:
+      - ../product_output:/product_output:ro
+      - ../tops_and_cores:/tops_and_cores:ro
+    networks:
+      e2e:
+        aliases:
+          - api
+    depends_on:
+      db-init-e2e:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5).read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: "no"
+
+  # The v2 frontend, only on the e2e network: its proxy_pass http://api:8000 resolves to api-e2e.
+  # If it were also on the default network, "api" could resolve to the main API.
+  frontend-e2e:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        FE_VERSION: v2
+    container_name: radar_frontend_e2e
+    networks:
+      - e2e
+    depends_on:
+      api-e2e:
+        condition: service_healthy   # nginx resolves "api" when it starts
+    restart: "no"
+
+  # Same indexer as the main stack, loading the COGs of ../product_output into radar_e2e_db (read only mounts).
+  indexer-e2e:
+    build:
+      context: ./
+      dockerfile: ./indexer/Dockerfile
+    container_name: radar_indexer_e2e
+    command: ["python", "-m", "indexer.main"]
+    environment:
+      DB_HOST: radar_db_e2e
+      DB_PORT: 5432
+      DB_NAME: radar_e2e_db
+      DB_USER: radar
+      DB_PASSWORD: radar_test_only
+      WATCH_PATH: /product_output
+      SCAN_INTERVAL: 30
+      FILE_PATTERN: "*.tif"
+      COMPUTE_STATS: "true"
+      COMPUTE_CHECKSUM: "false"
+      RADAR_CODES: "RMA1, RMA2, RMA3, RMA4, RMA5, RMA6, RMA7, RMA8, RMA9, RMA10, RMA11, RMA12, RMA13, RMA14, RMA15, RMA16, RMA17, RMA18, RMA20, AR5, AR7, AR8"
+      TOPS_AND_CORES_DIR: /tops_and_cores
+    volumes:
+      - ../product_output:/product_output:ro
+      - ../tops_and_cores:/tops_and_cores:ro
+    networks:
+      - e2e
+    depends_on:
+      db-init-e2e:
+        condition: service_completed_successfully
+    restart: "no"
+
+  # ==========================================================================
   # TESTING SERVICE (devcontainer only)
   # ==========================================================================
   tests:
@@ -79,23 +246,24 @@ services:
       dockerfile: tests/Dockerfile
     container_name: radar_tests
     environment:
-      # API connection
-      API_BASE_URL: http://api:8000
-      # E2E target: the v2 frontend (the time wheel is only wired by v2).
-      FRONTEND_URL: http://frontend-v2:80
-      # Admin account created by db-init from ADMIN_USERNAME / ADMIN_PASSWORD (see .env)
+      # Black-box targets: the isolated test stack (radar_e2e_db), never the main api / frontend-v2.
+      API_BASE_URL: http://api-e2e:8000
+      # E2E target: the v2 frontend of the test stack (the time wheel is only wired by v2).
+      FRONTEND_URL: http://frontend-e2e:80
+      # Admin account created by db-init-e2e from ADMIN_USERNAME / ADMIN_PASSWORD (see .env)
       ADMIN_USERNAME: ${ADMIN_USERNAME:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       # Auth settings needed to import api.app in unit tests
       JWT_SECRET: ${JWT_SECRET}
       COOKIE_SECURE: "false"
       ALLOWED_ORIGINS: "http://testserver"
-      # Production database (read only reference, never written by tests)
-      DB_HOST: radar_db
+      # Default database of radar_db / api.app inside this container: the test server too, so nothing here can
+      # connect to radar_prod_db. (tests/auth overrides get_db with the TEST_DB_* session anyway.)
+      DB_HOST: radar_db_test
       DB_PORT: 5432
-      DB_NAME: ${DB_NAME:-radar_prod_db}
-      DB_USER: ${DB_USER:-radar}
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env (see .env.example)}
+      DB_NAME: radar_test_db
+      DB_USER: radar
+      DB_PASSWORD: radar_test_only
       # Test database (used by registrar and watcher tests)
       TEST_DB_HOST: radar_db_test
       TEST_DB_PORT: 5432
@@ -110,13 +278,25 @@ services:
       # Alembic migrations, loaded by tests/auth/test_session_migration.py
       - ./database/migrations:/app/migrations:ro
       - ../product_output:/product_output:ro
+    networks:
+      - default
+      - e2e
     depends_on:
-      api:
-        condition: service_started
-      frontend-v2:
+      api-e2e:
+        condition: service_healthy
+      frontend-e2e:
         condition: service_started
       radar_db_test:
         condition: service_healthy
       db-init-test:
         condition: service_completed_successfully
     command: ["tail", "-f", "/dev/null"]
+# ==========================================================================
+# NETWORKS
+# ==========================================================================
+networks:
+  # Private network of the black-box test stack (radar_db_e2e, db-init-e2e, api-e2e, frontend-e2e, indexer-e2e).
+  # Inside it, api-e2e answers to the name "api", so the frontend image (nginx.conf has
+  # proxy_pass http://api:8000 hard-coded) talks to the test API without changing nginx.conf.
+  # Not "internal": the frontend still needs the internet for the OSM / IGN basemap proxies.
+  e2e: {}

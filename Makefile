@@ -72,7 +72,7 @@ help:
 	@echo   reset-password U=usuario - Cambia la contrasena de un usuario y cierra sus sesiones
 	@echo ----------------------------------------
 	@echo Desarrollo y tests, usa docker-compose.devcontainer.yml encima
-	@echo   dev-up - Levanta el stack de desarrollo con base de test y contenedor de tests
+	@echo   dev-up - Levanta el stack de desarrollo, el stack de test aislado y el contenedor de tests
 	@echo   dev-down - Baja ese stack, usalo en vez de down
 	@echo   test - Corre todos los tests dentro del contenedor tests
 	@echo   test-api  test-indexer  test-e2e - Solo una parte de los tests
@@ -207,8 +207,10 @@ reset-password:
 # ---------------------------------------------------------------------------
 # Lista de servicios tomada de docs/E2E_TESTING.md. Deja afuera indexer y frontend,
 # que en este override quedan dormidos con "tail -f /dev/null".
+# Levanta el stack de desarrollo (api, frontend-v2 sobre radar_prod_db), la base de test de tests/auth y
+# tests/indexer, y el stack aislado de tests/api y tests/e2e (radar_db_e2e, api-e2e, frontend-e2e, indexer-e2e).
 dev-up:
-	$(DEV_COMPOSE) up -d --build radar_db redis db-init api frontend-v2 radar_db_test db-init-test tests
+	$(DEV_COMPOSE) up -d --build radar_db redis db-init api frontend-v2 radar_db_test db-init-test radar_db_e2e db-init-e2e api-e2e frontend-e2e indexer-e2e tests
 
 # Usar este y no "down": los servicios nuevos del override (tests, frontend-v2,
 # radar_db_test) no se bajan sin pasar el archivo devcontainer.
