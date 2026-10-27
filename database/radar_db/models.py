@@ -385,20 +385,25 @@ class User(Base):
 
 
 class UserSession(Base):
-    """One row per refresh token issued (rotated on every refresh)."""
+    """One row per login (rotated in place on every refresh)."""
     __tablename__ = 'user_sessions'
 
+    # Id of the login. It travels inside the refresh token ("<id>.<secret>"): presenting an old token
+    # of this login (stolen and already rotated) closes the login (stolen token detection).
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
-    # Groups all the rows of one login: each refresh adds a row with the same family_id.
-    # Reusing an already rotated token revokes the whole family (stolen token detection).
-    family_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    # SHA-256 of the refresh token; the token itself only lives in the cookie.
+    # SHA-256 of the current refresh token; the token itself only lives in the cookie.
     token_hash = Column(String(64), nullable=False, unique=True)
+    # Hash of the token before the last rotation, accepted for 10 s (two tabs refreshing at once).
+    previous_token_hash = Column(String(64))
+    rotated_at = Column(DateTime(timezone=True))
+    refresh_count = Column(Integer, nullable=False, default=0, server_default='0')
     expires_at = Column(DateTime(timezone=True), nullable=False)
     absolute_expires_at = Column(DateTime(timezone=True), nullable=False)
     revoked_at = Column(DateTime(timezone=True))
-    replaced_by = Column(UUID(as_uuid=True))
+    # Why the login was closed: logout | reuse | admin | inactive_user | migration
+    revoke_reason = Column(String(20))
+    # Login time and the client that logged in (refreshes do not overwrite them).
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     last_used_at = Column(DateTime(timezone=True))
     user_agent = Column(String(256))

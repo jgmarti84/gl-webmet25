@@ -79,7 +79,7 @@ def refresh(request: Request, response: Response, db: Session = Depends(get_db))
         # Another tab already rotated it; keep the cookies the browser now holds.
         return JSONResponse(status_code=401, content={"detail": "Refresh en curso", "code": "refresh_race"})
     except service.AuthError as exc:
-        db.commit()  # persist a family revocation, if any
+        db.commit()  # persist a login closed on reuse (and the bumped token_version), if any
         return _unauthorized(str(exc))
 
     db.commit()

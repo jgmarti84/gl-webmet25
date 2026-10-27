@@ -86,7 +86,7 @@ def revoke_all_sessions(db: Session, user: User, now: Optional[datetime] = None)
     (
         db.query(UserSession)
         .filter(UserSession.user_id == user.id, UserSession.revoked_at.is_(None))
-        .update({UserSession.revoked_at: now}, synchronize_session=False)
+        .update({UserSession.revoked_at: now, UserSession.revoke_reason: "admin"}, synchronize_session=False)
     )
     db.flush()
 

@@ -23,7 +23,6 @@ def _open_session(db, user):
     now = datetime.now(timezone.utc)
     s = UserSession(
         user_id=user.id,
-        family_id=uuid.uuid4(),
         token_hash=uuid.uuid4().hex * 2,
         expires_at=now + timedelta(hours=1),
         absolute_expires_at=now + timedelta(days=1),
@@ -73,6 +72,7 @@ def test_revoke_all_sessions_bumps_version_and_revokes(make_user, test_db_sessio
     test_db_session.refresh(s2)
     assert user.token_version == 1
     assert s1.revoked_at is not None and s2.revoked_at is not None
+    assert s1.revoke_reason == "admin" and s2.revoke_reason == "admin"
 
 
 def test_set_password_changes_hash_and_clears_bootstrap(make_user, test_db_session):

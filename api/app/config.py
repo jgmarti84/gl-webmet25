@@ -64,6 +64,8 @@ class APISettings(BaseSettings):
     access_token_ttl_minutes: int = Field(default=30, alias="ACCESS_TOKEN_TTL_MINUTES")
     session_idle_ttl_hours: int = Field(default=48, alias="SESSION_IDLE_TTL_HOURS")
     session_absolute_ttl_days: int = Field(default=7, alias="SESSION_ABSOLUTE_TTL_DAYS")
+    # Closed or expired logins older than this are deleted when that user logs in again (audit window).
+    session_retention_days: int = Field(default=90, alias="SESSION_RETENTION_DAYS")
     cookie_secure: bool = Field(default=True, alias="COOKIE_SECURE")
     # Origins allowed to send state-changing requests (CSRF defense)
     allowed_origins: str = Field(default="", alias="ALLOWED_ORIGINS")

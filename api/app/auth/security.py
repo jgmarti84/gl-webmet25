@@ -63,10 +63,6 @@ def decode_access_token(token: str) -> AccessClaims:
         raise InvalidAccessToken(str(exc)) from exc
 
 
-def generate_refresh_token() -> str:
-    return secrets.token_urlsafe(32)
-
-
 # secrets.token_urlsafe(32) is always 43 URL-safe characters and never contains a dot.
 _REFRESH_SECRET_RE = re.compile(r"[A-Za-z0-9_-]{43}")
 

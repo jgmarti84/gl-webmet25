@@ -47,7 +47,6 @@ def test_session_belongs_to_user(test_db_session):
     now = datetime.now(timezone.utc)
     session = UserSession(
         user_id=user.id,
-        family_id=uuid.uuid4(),
         token_hash="a" * 64,
         expires_at=now + timedelta(hours=48),
         absolute_expires_at=now + timedelta(days=7),
@@ -57,3 +56,5 @@ def test_session_belongs_to_user(test_db_session):
     test_db_session.flush()
     assert isinstance(session.id, uuid.UUID)
     assert session.user.username == "alice"
+    assert session.refresh_count == 0
+    assert session.previous_token_hash is None and session.revoke_reason is None

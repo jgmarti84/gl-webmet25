@@ -1,10 +1,13 @@
 # api/app/auth/service.py
 """Login, refresh rotation and logout. Functions flush; routers commit."""
 
+import hmac
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from radar_db.accounts import get_user_by_username, normalize_username
@@ -12,12 +15,20 @@ from radar_db.models import User, UserSession
 from radar_db.passwords import DUMMY_HASH, verify_and_update, verify_password
 
 from ..config import settings
-from .security import generate_refresh_token, hash_refresh_token
+from .security import build_refresh_token, hash_refresh_token, parse_refresh_token
 
 GENERIC_LOGIN_ERROR = "Usuario o contraseña incorrectos"
 # A refresh token reused this soon after rotation is treated as two tabs racing,
 # not as theft (the browser already holds the new cookie).
 REFRESH_RACE_WINDOW = timedelta(seconds=10)
+
+# Values of user_sessions.revoke_reason set here ("admin" is set by radar_db.accounts.revoke_all_sessions).
+REVOKE_LOGOUT = "logout"
+REVOKE_REUSE = "reuse"
+REVOKE_INACTIVE_USER = "inactive_user"
+
+# Audit trail of logins, refreshes, logouts and reuse. Never log tokens or their hashes.
+logger = logging.getLogger("auth.sessions")
 
 
 class AuthError(Exception):
@@ -58,32 +69,20 @@ def authenticate(db: Session, username: str, password: str, now: Optional[dateti
     return user
 
 
-def _new_session(
-    db: Session,
-    user: User,
-    *,
-    family_id: uuid.UUID,
-    absolute_expires_at: datetime,
-    now: datetime,
-    user_agent: Optional[str],
-    ip: Optional[str],
-) -> Tuple[UserSession, str]:
-    token = generate_refresh_token()
-    session = UserSession(
-        id=uuid.uuid4(),
-        user_id=user.id,
-        family_id=family_id,
-        token_hash=hash_refresh_token(token),
-        expires_at=min(now + timedelta(hours=settings.session_idle_ttl_hours), absolute_expires_at),
-        absolute_expires_at=absolute_expires_at,
-        created_at=now,
-        last_used_at=now,
-        user_agent=(user_agent or "")[:256] or None,
-        ip=ip,
-    )
-    db.add(session)
-    db.flush()
-    return session, token
+def _short(session_id: uuid.UUID) -> str:
+    """First 8 characters of a login id: enough to follow it in the logs, useless to rebuild a token."""
+    return str(session_id)[:8]
+
+
+def _close(session: UserSession, reason: str, now: datetime) -> None:
+    """Mark a login as closed, recording when and why (see the REVOKE_* values)."""
+    session.revoked_at = now
+    session.revoke_reason = reason
+
+
+def _hash_matches(token_hash: str, stored: Optional[str]) -> bool:
+    """Constant-time comparison of two token hashes; a missing stored hash never matches."""
+    return stored is not None and hmac.compare_digest(token_hash, stored)
 
 
 def create_session(
@@ -94,29 +93,58 @@ def create_session(
     ip: Optional[str] = None,
     now: Optional[datetime] = None,
 ) -> Tuple[UserSession, str]:
+    """Open a login: one row that every refresh of this login updates in place."""
     now = _now(now)
-    return _new_session(
-        db,
-        user,
-        family_id=uuid.uuid4(),
-        absolute_expires_at=now + timedelta(days=settings.session_absolute_ttl_days),
-        now=now,
-        user_agent=user_agent,
+    session_id = uuid.uuid4()
+    token = build_refresh_token(session_id)
+    absolute_expires_at = now + timedelta(days=settings.session_absolute_ttl_days)
+    session = UserSession(
+        id=session_id,
+        user_id=user.id,
+        token_hash=hash_refresh_token(token),
+        expires_at=min(now + timedelta(hours=settings.session_idle_ttl_hours), absolute_expires_at),
+        absolute_expires_at=absolute_expires_at,
+        refresh_count=0,
+        created_at=now,
+        last_used_at=now,
+        user_agent=(user_agent or "")[:256] or None,
         ip=ip,
     )
+    db.add(session)
+    db.flush()
+    _purge_old_sessions(db, user.id, now)
+    logger.info("login user=%s session=%s ip=%s", user.id, _short(session_id), ip)
+    return session, token
 
 
-def _find_session(db: Session, token: str) -> Optional[UserSession]:
-    return db.query(UserSession).filter(UserSession.token_hash == hash_refresh_token(token)).one_or_none()
+def _purge_old_sessions(db: Session, user_id: int, now: datetime) -> int:
+    """Delete this user's logins closed or expired more than SESSION_RETENTION_DAYS ago.
 
-
-def _revoke_family(db: Session, family_id: uuid.UUID, now: datetime) -> None:
-    (
+    Runs on every login of that user, so the table stays bounded without a scheduled job.
+    """
+    cutoff = now - timedelta(days=settings.session_retention_days)
+    deleted = (
         db.query(UserSession)
-        .filter(UserSession.family_id == family_id, UserSession.revoked_at.is_(None))
-        .update({UserSession.revoked_at: now}, synchronize_session=False)
+        .filter(
+            UserSession.user_id == user_id,
+            or_(UserSession.revoked_at < cutoff, UserSession.absolute_expires_at < cutoff),
+        )
+        .delete(synchronize_session=False)
     )
     db.flush()
+    return deleted
+
+
+def _lock_session(db: Session, token: str) -> Optional[UserSession]:
+    """The login row of a well-formed token, locked until the transaction ends (one refresh at a time).
+
+    SELECT ... FOR UPDATE: a second refresh of the same login waits here until the first one commits,
+    and then sees the already rotated row.
+    """
+    session_id = parse_refresh_token(token)
+    if session_id is None:
+        return None
+    return db.query(UserSession).filter(UserSession.id == session_id).with_for_update().one_or_none()
 
 
 def rotate_refresh(
@@ -127,47 +155,65 @@ def rotate_refresh(
     ip: Optional[str] = None,
     now: Optional[datetime] = None,
 ) -> Tuple[User, UserSession, str]:
+    """Renew a login: rotate its token in place, wait out a refresh race, or close it on reuse."""
     now = _now(now)
-    current = _find_session(db, token)
-    if current is None:
+    session = _lock_session(db, token)
+    if session is None or session.revoked_at is not None:
         raise AuthError("Sesión inválida")
-
-    if current.revoked_at is not None:
-        if current.replaced_by is not None and now - current.revoked_at < REFRESH_RACE_WINDOW:
-            raise RefreshRaceError("Refresh en curso")
-        _revoke_family(db, current.family_id, now)
-        raise AuthError("Sesión inválida")
-
-    if current.expires_at <= now or current.absolute_expires_at <= now:
+    # Before comparing hashes: an old token of an expired login is not a theft worth acting on.
+    if session.expires_at <= now or session.absolute_expires_at <= now:
         raise AuthError("Sesión vencida")
 
-    user = db.get(User, current.user_id)
-    if user is None or not user.is_active:
-        current.revoked_at = now
+    token_hash = hash_refresh_token(token)
+    if _hash_matches(token_hash, session.token_hash):
+        user = db.get(User, session.user_id)
+        if user is None or not user.is_active:
+            _close(session, REVOKE_INACTIVE_USER, now)
+            db.flush()
+            raise AuthError("Sesión inválida")
+        new_token = build_refresh_token(session.id)
+        session.previous_token_hash = session.token_hash
+        session.token_hash = hash_refresh_token(new_token)
+        session.rotated_at = now
+        session.last_used_at = now
+        session.expires_at = min(now + timedelta(hours=settings.session_idle_ttl_hours), session.absolute_expires_at)
+        session.refresh_count += 1
         db.flush()
-        raise AuthError("Sesión inválida")
+        logger.info("refresh user=%s session=%s ip=%s", user.id, _short(session.id), ip)
+        return user, session, new_token
 
-    new_session, new_token = _new_session(
-        db,
-        user,
-        family_id=current.family_id,
-        absolute_expires_at=current.absolute_expires_at,
-        now=now,
-        user_agent=user_agent,
-        ip=ip,
-    )
-    current.revoked_at = now
-    current.replaced_by = new_session.id
-    current.last_used_at = now
+    if (
+        _hash_matches(token_hash, session.previous_token_hash)
+        and session.rotated_at is not None
+        and now - session.rotated_at < REFRESH_RACE_WINDOW
+    ):
+        # Another tab of the same browser rotated it a moment ago and already holds the new cookie.
+        # Never hand out a token here: the previous token only buys a wait.
+        raise RefreshRaceError("Refresh en curso")
+
+    # An old (or invented) token of this login: somebody else has a copy. Close the login and kill every
+    # access token of the user; their other logins renew silently with their own refresh tokens.
+    _close(session, REVOKE_REUSE, now)
+    user = db.get(User, session.user_id)
+    if user is not None:
+        user.token_version += 1
     db.flush()
-    return user, new_session, new_token
+    logger.warning(
+        "reuse user=%s session=%s ip=%s ua=%s", session.user_id, _short(session.id), ip, (user_agent or "")[:256]
+    )
+    raise AuthError("Sesión inválida")
 
 
 def revoke_session_by_token(db: Session, token: str, now: Optional[datetime] = None) -> None:
-    session = _find_session(db, token)
-    if session is not None and session.revoked_at is None:
-        session.revoked_at = _now(now)
+    """Logout. A token that is neither the current nor the previous one changes nothing (no theft logic)."""
+    session = _lock_session(db, token)
+    if session is None or session.revoked_at is not None:
+        return
+    token_hash = hash_refresh_token(token)
+    if _hash_matches(token_hash, session.token_hash) or _hash_matches(token_hash, session.previous_token_hash):
+        _close(session, REVOKE_LOGOUT, _now(now))
         db.flush()
+        logger.info("logout user=%s session=%s", session.user_id, _short(session.id))
 
 
 def load_active_user(db: Session, user_id: int, token_version: int) -> Optional[User]:
