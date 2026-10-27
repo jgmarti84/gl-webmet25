@@ -66,7 +66,10 @@ Replace `<service_name>` with your service name from `docker-compose.yml` (e.g.,
 
 ### 1. **init** - Initialize Database Tables
 
-Creates all database tables based on the SQLAlchemy models.
+Creates the missing tables from the SQLAlchemy models and brings Alembic up to date: a database that already has
+a version **applies the pending migrations** (`create_all` never adds columns to existing tables); a database
+without a version is stamped at `head`. If a migration fails, `init` fails too (it never stamps over it).
+`db-init` runs this on every start.
 
 **Inside container:**
 ```bash

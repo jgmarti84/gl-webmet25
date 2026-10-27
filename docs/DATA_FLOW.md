@@ -268,18 +268,25 @@ failed_login_count: int, locked_until: datetime (nullable)
 last_login_at, created_at, updated_at
 ```
 
-#### **UserSession** (Refresh Tokens)
+#### **UserSession** (one row per login)
 ```python
-id: UUID (PK)
+id: UUID (PK)                         # login id; the refresh token is "<id>.<secret>"
 user_id: int (FK → users.id, ON DELETE CASCADE)
-family_id: UUID                       # all refresh tokens of one login
-token_hash: str (unique)              # SHA-256 of the refresh token; the token only lives in the cookie
-expires_at: datetime                  # idle expiry (last use + 48 h)
+token_hash: str (unique)              # SHA-256 of the current refresh token; the token only lives in the cookie
+previous_token_hash: str | None       # token before the last rotation, accepted for 10 s (two tabs at once)
+rotated_at: datetime | None
+refresh_count: int
+expires_at: datetime                  # idle expiry (last refresh + 48 h, never past absolute)
 absolute_expires_at: datetime         # login + 7 days, never extended
-revoked_at, replaced_by               # rotation / revocation
-created_at, last_used_at, user_agent, ip
+revoked_at, revoke_reason             # logout | reuse | admin | inactive_user | migration
+created_at, ip, user_agent            # the login itself (refreshes do not overwrite them)
+last_used_at
 ```
-Reusing an already-rotated refresh token (outside a 10 s race window) revokes the whole family.
+Every refresh locks the row (`FOR UPDATE`) and rotates it in place. The previous token within 10 s answers
+`refresh_race` without issuing anything. Any other token of the login (an old or invented one) closes it with
+`reuse` and bumps the user's `token_version`, so every access token of that user stops working; their other
+logins renew silently. Closed or expired logins older than `SESSION_RETENTION_DAYS` (90) are deleted when that
+user logs in. Logins, refreshes, logouts and reuse go to the `auth.sessions` log, never with tokens or hashes.
 
 ### 3.2 Indexes (Performance)
 

@@ -270,18 +270,25 @@ failed_login_count: int, locked_until: datetime (nullable)
 last_login_at, created_at, updated_at
 ```
 
-#### **UserSession** (Refresh Tokens)
+#### **UserSession** (una fila por login)
 ```python
-id: UUID (PK)
+id: UUID (PK)                         # id del login; el refresh token es "<id>.<secreto>"
 user_id: int (FK → users.id, ON DELETE CASCADE)
-family_id: UUID                       # todos los refresh tokens de un mismo login
-token_hash: str (único)               # SHA-256 del refresh token; el token solo vive en la cookie
-expires_at: datetime                  # vencimiento por inactividad (último uso + 48 h)
+token_hash: str (único)               # SHA-256 del refresh token vigente; el token solo vive en la cookie
+previous_token_hash: str | None       # token anterior a la última rotación, aceptado 10 s (dos pestañas a la vez)
+rotated_at: datetime | None
+refresh_count: int
+expires_at: datetime                  # vencimiento por inactividad (último refresh + 48 h, nunca después del absoluto)
 absolute_expires_at: datetime         # login + 7 días, nunca se extiende
-revoked_at, replaced_by               # rotación / revocación
-created_at, last_used_at, user_agent, ip
+revoked_at, revoke_reason             # logout | reuse | admin | inactive_user | migration
+created_at, ip, user_agent            # el login en sí (los refresh no los pisan)
+last_used_at
 ```
-Reusar un refresh token ya rotado (fuera de una ventana de 10 s por carrera entre pestañas) revoca toda la familia.
+Cada refresh bloquea la fila (`FOR UPDATE`) y la rota en el lugar. El token anterior dentro de los 10 s responde
+`refresh_race` sin entregar nada. Cualquier otro token de ese login (uno viejo o inventado) lo cierra con `reuse` y
+sube el `token_version` del usuario: todos sus access tokens dejan de valer y sus otros logins renuevan solos. Los
+logins cerrados o vencidos hace más de `SESSION_RETENTION_DAYS` (90) se borran cuando ese usuario se loguea. Los
+logins, refresh, logouts y reusos van al log `auth.sessions`, nunca con tokens ni hashes.
 
 ### 3.2 Índices (Rendimiento)
 

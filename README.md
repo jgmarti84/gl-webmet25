@@ -341,7 +341,7 @@ docker compose logs -f indexer
 Every page and every API endpoint require a logged-in user (roles `admin` and `viewer`); only `/health` and `/api/v1/auth/login|refresh|logout` are public. The admin panel and `/api/v1/admin/*` require the `admin` role. Sessions are validated **by the API**; nginx asks it (`auth_request` on `GET /api/v1/auth/check`) before serving each page and the OpenStreetMap/IGN tile proxies, and shows the login in place when there is no session.
 
 - **Access token:** short-lived JWT (30 min) in an `HttpOnly`, `SameSite=Strict` cookie.
-- **Refresh token:** opaque, rotated on every use and stored hashed in the database. Idle expiry 48 h, absolute limit 7 days. Reusing an old refresh token closes the whole session family.
+- **Refresh token:** opaque (`<login id>.<secret>`), rotated on every use and stored hashed in the database, one row per login. Idle expiry 48 h, absolute limit 7 days. Reusing an old refresh token closes that login and invalidates the user's access tokens. Closed logins are kept 90 days (`SESSION_RETENTION_DAYS`) for auditing.
 - **Instant revocation:** deactivating a user, changing their role or resetting their password invalidates their sessions immediately.
 - **Passwords:** Argon2id, 12–128 characters. An account is locked for 15 min after 5 failed attempts, and nginx limits `/api/v1/auth/login` to 10 requests/minute per IP.
 - **Roles:** `admin` (everything, including user management) and `viewer` (logged in, no admin access yet).
