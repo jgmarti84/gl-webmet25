@@ -365,7 +365,8 @@ class User(Base):
     # Copied into each access token at login and compared on every request. Adding 1 makes all
     # the user's older tokens invalid at once (role change, deactivation, admin "revoke sessions").
     token_version = Column(Integer, nullable=False, default=0, server_default='0')
-    # True while the password is the one from ADMIN_PASSWORD.
+    # True while the password is still the initial one from ADMIN_PASSWORD (.env). Set on the first
+    # admin; set_password turns it off. The admin panel warns while it is true.
     password_is_bootstrap = Column(Boolean, nullable=False, default=False, server_default='false')
     failed_login_count = Column(Integer, nullable=False, default=0, server_default='0')
     locked_until = Column(DateTime(timezone=True))
