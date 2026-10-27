@@ -1,5 +1,5 @@
 import { authApi } from './auth-api.js';
-import { statusMessage } from './auth-pages.js';
+import { statusMessage, tokenFromHash } from './auth-pages.js';
 
 const sections = {
     working: document.getElementById('verify-working'),
@@ -10,8 +10,9 @@ const errorText = document.getElementById('verify-error-text');
 const resendForm = document.getElementById('verify-resend-form');
 const resendInfo = document.getElementById('verify-resend-info');
 
-// The link carries a one-time token: take it out of the address bar and of the history.
-const token = new URLSearchParams(window.location.search).get('token') || '';
+// The link carries a one-time token after "#" (never sent to the server): take it out of the address bar and of
+// the history.
+const token = tokenFromHash(window.location.hash);
 window.history.replaceState(null, '', window.location.pathname);
 
 // Shows one of the three screens (working / ok / error) and hides the others.

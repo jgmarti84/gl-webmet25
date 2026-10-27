@@ -188,7 +188,7 @@ def mailpit_message(address: str, subject_part: str, timeout_s: float = 20.0) ->
 
 def link_in(message: dict) -> str:
     """The /verify or /reset link of a mail, re-based on FRONTEND_URL (the mail carries PUBLIC_BASE_URL)."""
-    match = re.search(r"https?://[^\s\"<>]+?(/(?:verify|reset)\?token=[A-Za-z0-9_-]{43})", message["Text"])
+    match = re.search(r"https?://[^\s\"<>]+?(/(?:verify|reset)#token=[A-Za-z0-9_-]{43})", message["Text"])
     assert match, message["Text"]
     return f"{FRONTEND_URL}{match.group(1)}"
 

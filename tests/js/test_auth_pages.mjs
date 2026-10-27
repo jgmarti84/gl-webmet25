@@ -6,6 +6,7 @@ import {
     cooldownLabel,
     errorText,
     statusMessage,
+    tokenFromHash,
     validatePassword,
     validateRegistration,
 } from '../../frontend/public/js/auth-pages.js';
@@ -51,6 +52,14 @@ assert(statusMessage(429, {}).startsWith('Demasiados intentos'), '429 text');
 assert(statusMessage(503, {}).includes('no está disponible'), '503 text');
 assert(statusMessage(409, { detail: 'Ese usuario ya existe' }) === 'Ese usuario ya existe', '409 uses the server text');
 assert(cooldownLabel('Reenviar mail', 42) === 'Reenviar mail (42 s)', 'cooldown label');
+
+console.log('T4: token of the mail links (after "#", never sent to the server)');
+const T = 'a'.repeat(43);
+assert(tokenFromHash(`#token=${T}`) === T, 'reads the token after #');
+assert(tokenFromHash('') === '', 'no fragment: empty');
+assert(tokenFromHash('#') === '', 'empty fragment: empty');
+assert(tokenFromHash('#otra=1') === '', 'fragment without token: empty');
+assert(tokenFromHash(`#token=${T}&x=1`) === T, 'ignores other values in the fragment');
 
 console.log(`\n${'─'.repeat(40)}`);
 console.log(`Results: ${passed} passed, ${failed} failed`);

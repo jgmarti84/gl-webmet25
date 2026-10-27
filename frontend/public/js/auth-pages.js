@@ -56,6 +56,15 @@ export function cooldownLabel(label, remaining) {
     return `${label} (${remaining} s)`;
 }
 
+/**
+ * The one-time token of a mail link ("/verify#token=..."), read from the fragment (location.hash).
+ * The links carry it after "#" on purpose: browsers never send that part to the server, so the token never
+ * reaches the nginx access log. Returns '' when there is none.
+ */
+export function tokenFromHash(hash) {
+    return new URLSearchParams((hash || '').replace(/^#/, '')).get('token') || '';
+}
+
 // Messages go in with textContent, never innerHTML: some of the text comes from the server.
 export function showMessage(box, text) {
     box.textContent = text;

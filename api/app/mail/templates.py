@@ -11,9 +11,14 @@ from .service import OutgoingMail
 
 
 def link(path: str, token: Optional[str] = None) -> str:
-    """Absolute link to a page of the site. rstrip avoids "//verify" when PUBLIC_BASE_URL ends with a slash."""
+    """Absolute link to a page of the site. rstrip avoids "//verify" when PUBLIC_BASE_URL ends with a slash.
+
+    The token goes after "#" (the fragment), not after "?": browsers never send the fragment to the server, so the
+    token cannot end up in the nginx access log (nor in any proxy log), and it is not sent as Referer either. The
+    page reads it with JavaScript from location.hash.
+    """
     base = settings.public_base_url.rstrip("/")
-    return f"{base}{path}" + (f"?token={token}" if token else "")
+    return f"{base}{path}" + (f"#token={token}" if token else "")
 
 
 def _build(to: str, subject: str, heading: str, lines: List[str], action: str, url: str, footer: str) -> OutgoingMail:

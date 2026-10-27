@@ -1,5 +1,5 @@
 import { authApi } from './auth-api.js';
-import { hideMessage, showMessage, statusMessage, validatePassword } from './auth-pages.js';
+import { hideMessage, showMessage, statusMessage, tokenFromHash, validatePassword } from './auth-pages.js';
 
 const formSection = document.getElementById('reset-form-section');
 const form = document.getElementById('reset-form');
@@ -8,8 +8,9 @@ const submit = document.getElementById('reset-submit');
 const ok = document.getElementById('reset-ok');
 const invalid = document.getElementById('reset-invalid');
 
-// The link carries a one-time token: take it out of the address bar and of the history.
-const token = new URLSearchParams(window.location.search).get('token') || '';
+// The link carries a one-time token after "#" (never sent to the server): take it out of the address bar and of
+// the history.
+const token = tokenFromHash(window.location.hash);
 window.history.replaceState(null, '', window.location.pathname);
 
 // Opened without a token (typed by hand, or the address was cleaned): there is nothing to redeem.

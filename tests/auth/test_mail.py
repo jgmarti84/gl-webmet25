@@ -110,15 +110,17 @@ def test_verification_mail_has_the_link_and_the_expiry(smtp_settings, monkeypatc
     user = SimpleNamespace(username="ana", email="ana@ejemplo.com.ar")
     mail = templates.verification_mail(user, "T" * 43)
     assert mail.to == "ana@ejemplo.com.ar"
-    assert "https://webmet.test/verify?token=" + "T" * 43 in mail.text
-    assert "https://webmet.test/verify?token=" + "T" * 43 in mail.html
+    # The token goes after "#": browsers never send that part to the server, so it cannot end up in a log.
+    assert "https://webmet.test/verify#token=" + "T" * 43 in mail.text
+    assert "https://webmet.test/verify#token=" + "T" * 43 in mail.html
+    assert "?token=" not in mail.text
     assert "24 horas" in mail.text
 
 
 def test_reset_mail_points_to_the_reset_page(smtp_settings):
     user = SimpleNamespace(username="ana", email="ana@ejemplo.com.ar")
     mail = templates.reset_mail(user, "R" * 43)
-    assert "https://webmet.test/reset?token=" + "R" * 43 in mail.text
+    assert "https://webmet.test/reset#token=" + "R" * 43 in mail.text
     assert "60 minutos" in mail.text
 
 

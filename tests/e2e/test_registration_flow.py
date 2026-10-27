@@ -140,6 +140,6 @@ def test_a_registered_mail_gets_the_same_screen(page: Page, account):
 
 
 def test_the_verify_page_rejects_a_garbage_link(page: Page):
-    page.goto(f"{FRONTEND_URL}/verify?token=basura", wait_until="networkidle")
+    page.goto(f"{FRONTEND_URL}/verify#token=basura", wait_until="networkidle")
     expect(page.locator("#verify-error")).to_be_visible()
     assert "token" not in page.url  # the token is taken out of the address bar
