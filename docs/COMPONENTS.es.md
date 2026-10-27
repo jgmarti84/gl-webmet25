@@ -17,9 +17,9 @@ frontend/public/
 ├── radar.html                 # One-radar detail page (radar.html?code=AR5)
 ├── login.html                 # Página de login (/login)
 ├── register.html              # Página de registro (/register, pública)
-├── verify.html                # Página de verificación del mail (/verify?token=…, pública)
+├── verify.html                # Página de verificación del mail (/verify#token=…, pública)
 ├── forgot.html                # Página "Olvidé mi contraseña" (/forgot, pública)
-├── reset.html                 # Página de contraseña nueva (/reset?token=…, pública)
+├── reset.html                 # Página de contraseña nueva (/reset#token=…, pública)
 ├── admin.html                 # Admin panel SPA (served at /admin, login required)
 ├── css/
 │   ├── styles.css            # Main app UI styling (dark theme)

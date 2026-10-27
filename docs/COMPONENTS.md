@@ -15,9 +15,9 @@ frontend/public/
 ├── radar.html                 # One-radar detail page (radar.html?code=AR5)
 ├── login.html                 # Login page (/login)
 ├── register.html              # Sign-up page (/register, public)
-├── verify.html                # Mail verification page (/verify?token=…, public)
+├── verify.html                # Mail verification page (/verify#token=…, public)
 ├── forgot.html                # "Forgot my password" page (/forgot, public)
-├── reset.html                 # New password page (/reset?token=…, public)
+├── reset.html                 # New password page (/reset#token=…, public)
 ├── admin.html                 # Admin panel SPA (served at /admin, login required)
 ├── cog-browser.html          # Alternative detailed COG browser view
 ├── css/
