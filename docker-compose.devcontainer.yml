@@ -1,5 +1,41 @@
 version: "3.8"
 services:
+  # ==========================================================================
+  # LOCAL MAILBOX (devcontainer only): receives the mails of the API instead of sending them.
+  # Web screen and HTTP API: http://localhost:8025 (only reachable from this machine).
+  # ==========================================================================
+  mailpit:
+    image: axllent/mailpit:v1.21
+    container_name: radar_mailpit
+    ports:
+      # 127.0.0.1 only: the mailbox shows the links of every verification mail, nobody else should reach it.
+      - "127.0.0.1:8025:8025"
+    # Both APIs send to it: api (manual checks) on the default network, api-e2e (tests) on the e2e network.
+    networks:
+      - default
+      - e2e
+    restart: unless-stopped
+
+  # API of the development stack: registration on and mail to Mailpit, for manual checks at http://localhost:8090.
+  # The rest of this service comes from docker-compose.yml; only these variables are added or overridden.
+  api:
+    environment:
+      REGISTRATION_ENABLED: "true"
+      PUBLIC_BASE_URL: http://localhost:8090
+      MAIL_HOST: mailpit
+      MAIL_PORT: "1025"
+      MAIL_FROM: no-reply@webmet.local
+      # Mailpit has no encryption: STARTTLS would make every send fail.
+      MAIL_STARTTLS: "false"
+      TERMS_URL: https://example.org/terminos
+      PRIVACY_URL: https://example.org/privacidad
+      # Loose caps so manual checks can resend without waiting.
+      MAIL_MAX_PER_HOUR: "30"
+      MAIL_MIN_INTERVAL_SECONDS: "2"
+    depends_on:
+      mailpit:
+        condition: service_started
+
   # db-init:
   #   command: ["tail", "-f", "/dev/null"]
   # genpro25:
@@ -171,6 +207,18 @@ services:
       SESSION_RETENTION_DAYS: ${SESSION_RETENTION_DAYS:-90}
       LOGIN_MAX_FAILED_ATTEMPTS: ${LOGIN_MAX_FAILED_ATTEMPTS:-5}
       LOGIN_LOCKOUT_MINUTES: ${LOGIN_LOCKOUT_MINUTES:-15}
+      # Registration on and mail to Mailpit, with short caps so the e2e tests can resend.
+      # The links in the mails are opened by the e2e browser, which reaches the test frontend by this name.
+      REGISTRATION_ENABLED: "true"
+      PUBLIC_BASE_URL: http://frontend-e2e
+      MAIL_HOST: mailpit
+      MAIL_PORT: "1025"
+      MAIL_FROM: no-reply@webmet.local
+      MAIL_STARTTLS: "false"
+      TERMS_URL: https://example.org/terminos
+      PRIVACY_URL: https://example.org/privacidad
+      MAIL_MAX_PER_HOUR: "30"
+      MAIL_MIN_INTERVAL_SECONDS: "2"
     volumes:
       - ../product_output:/product_output:ro
       - ../tops_and_cores:/tops_and_cores:ro
@@ -183,6 +231,8 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5).read()"]
       interval: 30s
@@ -250,6 +300,8 @@ services:
       API_BASE_URL: http://api-e2e:8000
       # E2E target: the v2 frontend of the test stack (the time wheel is only wired by v2).
       FRONTEND_URL: http://frontend-e2e:80
+      # Local mailbox of the stack: the e2e registration tests read the verification mails from it.
+      MAILPIT_URL: http://mailpit:8025
       # Admin account created by db-init-e2e from ADMIN_USERNAME / ADMIN_PASSWORD (see .env)
       ADMIN_USERNAME: ${ADMIN_USERNAME:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
