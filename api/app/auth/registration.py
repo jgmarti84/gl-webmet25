@@ -186,6 +186,11 @@ def register(
     # Same clock as the rest of the flow (the column default is the database clock); the age rule reads it.
     user.created_at = now
     db.flush()
+    # A brand-new account has no mails yet, so only the global caps can say no here. This is the path of someone
+    # signing up many different addresses: the account is still created (the answer must not change) and the
+    # person can ask for the mail again later.
+    if not may_send_mail(db, user, now):
+        return []
     return [_verification(db, user, now)]
 
 
@@ -219,7 +224,8 @@ def forgot_password(db: Session, email: str, now: Optional[datetime] = None) -> 
     user = get_user_by_email(db, email)
     if user is None or not user.is_active:
         return []
-    if not may_send_mail(db, user, now):
+    # A reset link is a recovery mail: it keeps going out past the global hourly cap (not past the daily one).
+    if not may_send_mail(db, user, now, recovery=user.email_verified_at is not None):
         return []
     if user.email_verified_at is None:
         return [_verification(db, user, now)]

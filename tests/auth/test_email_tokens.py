@@ -98,3 +98,47 @@ def test_notices_count_toward_the_caps(make_user, test_db_session, monkeypatch):
     # A notice is not redeemable.
     row = test_db_session.query(EmailToken).first()
     assert row.used_at is not None
+
+
+# --- global caps (all accounts together) -----------------------------------------
+
+
+@pytest.fixture
+def global_caps(monkeypatch):
+    """Generous per-account caps, so only the global ones decide; returns a setter for the global ones."""
+    monkeypatch.setattr(settings, "mail_max_per_hour", 100)
+    monkeypatch.setattr(settings, "mail_min_interval_seconds", 0)
+
+    def _set(per_hour=1000, per_day=10000):
+        monkeypatch.setattr(settings, "mail_max_global_per_hour", per_hour)
+        monkeypatch.setattr(settings, "mail_max_global_per_day", per_day)
+
+    return _set
+
+
+def _accounts(make_user, n):
+    return [make_user(username=f"cuenta{i}", email=f"cuenta{i}@ejemplo.com.ar", email_verified=False) for i in range(n)]
+
+
+def test_global_hourly_cap_stops_new_mails_but_not_recovery(make_user, test_db_session, global_caps):
+    # Someone signs up many different addresses: each one is a new account, so only a global cap can stop it.
+    global_caps(per_hour=2)
+    first, second, third = _accounts(make_user, 3)
+    et.issue_token(test_db_session, first, et.PURPOSE_VERIFY, DAY, NOW)
+    et.issue_token(test_db_session, second, et.PURPOSE_VERIFY, DAY, NOW)
+    assert not et.may_send_mail(test_db_session, third, NOW + timedelta(minutes=1))
+    # Password recovery still goes out, so real users can get back in while the sign-up is being abused.
+    assert et.may_send_mail(test_db_session, third, NOW + timedelta(minutes=1), recovery=True)
+    # An hour later the window has moved on.
+    assert et.may_send_mail(test_db_session, third, NOW + timedelta(minutes=61))
+
+
+def test_global_daily_cap_stops_every_mail(make_user, test_db_session, global_caps):
+    # The daily cap stays under the provider's limit (Gmail blocks the account for a day if it is passed).
+    global_caps(per_day=2)
+    first, second, third = _accounts(make_user, 3)
+    et.issue_token(test_db_session, first, et.PURPOSE_VERIFY, DAY, NOW)
+    et.issue_token(test_db_session, second, et.PURPOSE_RESET, DAY, NOW + timedelta(hours=5))
+    assert not et.may_send_mail(test_db_session, third, NOW + timedelta(hours=6))
+    assert not et.may_send_mail(test_db_session, third, NOW + timedelta(hours=6), recovery=True)
+    assert et.may_send_mail(test_db_session, third, NOW + timedelta(hours=24, minutes=1))

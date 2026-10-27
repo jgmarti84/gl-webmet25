@@ -462,6 +462,9 @@ class EmailToken(Base):
         ),
         # Lets the sending caps count a user's recent mails without scanning the whole table.
         Index('ix_email_tokens_user_created', 'user_id', 'created_at'),
+        # Lets the global caps count the mails of the whole site in the last hour / day (no user in the filter,
+        # so the index above cannot be used for it).
+        Index('ix_email_tokens_created_at', 'created_at'),
     )
 
     def __repr__(self):

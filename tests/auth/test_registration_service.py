@@ -343,6 +343,17 @@ def test_forgot_ignores_unknown_inactive_and_capped_accounts(make_user, test_db_
     assert registration.forgot_password(test_db_session, f"ana@{DOMAIN}", now=NOW + timedelta(seconds=10)) == []
 
 
+def test_global_hourly_cap_stops_sign_ups_but_not_password_recovery(make_user, test_db_session, monkeypatch):
+    # The sign-up is being abused (many different addresses): new sign-ups stop sending, recovery does not.
+    monkeypatch.setattr(settings, "mail_max_global_per_hour", 1)
+    make_user(username="ana", email=f"ana@{DOMAIN}")
+    assert len(_register(test_db_session, username="uno", email=f"uno@{DOMAIN}")) == 1
+    assert _register(test_db_session, username="dos", email=f"dos@{DOMAIN}", now=NOW + timedelta(minutes=1)) == []
+    # The account is created anyway (the answer must not change); the person can ask for the mail again later.
+    assert test_db_session.query(User).filter_by(username="dos").count() == 1
+    assert len(registration.forgot_password(test_db_session, f"ana@{DOMAIN}", now=NOW + timedelta(minutes=2))) == 1
+
+
 def test_reset_changes_the_password_closes_sessions_and_unlocks(make_user, test_db_session):
     from api.app.auth import service
 

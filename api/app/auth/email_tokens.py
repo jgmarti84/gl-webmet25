@@ -1,20 +1,27 @@
 # api/app/auth/email_tokens.py
-"""Single-use e-mail tokens (verify the address, reset the password) and the per-account sending caps.
+"""Single-use e-mail tokens (verify the address, reset the password) and the sending caps (per account and global).
 
 Functions flush; routers commit.
 """
 
 import hashlib
+import logging
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, Set, Tuple
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from radar_db.models import EmailToken, User
 
 from ..config import settings
+
+logger = logging.getLogger(__name__)
+
+# Windows ("hour"/"day", key) whose reached global cap was already logged by this worker (see _warn_once).
+_cap_warned: Set[Tuple[str, str]] = set()
 
 PURPOSE_VERIFY = "verify_email"
 PURPOSE_RESET = "reset_password"
@@ -43,12 +50,49 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def may_send_mail(db: Session, user: User, now: Optional[datetime] = None) -> bool:
-    """Per-account caps: at most MAIL_MAX_PER_HOUR in the last hour and MAIL_MIN_INTERVAL_SECONDS apart.
+def _sent_since(db: Session, since: datetime) -> int:
+    """How many mails the whole site sent after `since` (one email_tokens row per mail, of every account)."""
+    return db.query(func.count(EmailToken.id)).filter(EmailToken.created_at > since).scalar()
 
-    Every row of email_tokens counts, whatever its purpose (verify, reset or account_exists notice), so mixing
-    request types does not get around the cap. The caller must not send (and must not log a new row) when
-    this returns False, and must answer exactly as if it had sent.
+
+def _warn_once(window: str, key: str, message: str) -> None:
+    """Log a reached global cap once per window (per worker), not once per refused mail: under abuse there would
+    be thousands of refusals, and a single line is enough to notice it."""
+    if (window, key) not in _cap_warned:
+        _cap_warned.add((window, key))
+        logger.warning(message)
+
+
+def _global_cap_reached(db: Session, now: datetime, recovery: bool) -> bool:
+    """Global caps (all accounts together): MAIL_MAX_GLOBAL_PER_DAY for every mail, MAIL_MAX_GLOBAL_PER_HOUR for
+    every mail but password recovery, so real users can still get back in while the sign-up is being abused."""
+    if _sent_since(db, now - timedelta(days=1)) >= settings.mail_max_global_per_day:
+        _warn_once(
+            "day",
+            now.strftime("%Y-%m-%d"),
+            "MAIL_MAX_GLOBAL_PER_DAY reached: no mail goes out until the 24 h window moves on (abuse of the sign-up, "
+            "or the cap is too low for the real traffic)",
+        )
+        return True
+    if not recovery and _sent_since(db, now - timedelta(hours=1)) >= settings.mail_max_global_per_hour:
+        _warn_once(
+            "hour",
+            now.strftime("%Y-%m-%d %H"),
+            "MAIL_MAX_GLOBAL_PER_HOUR reached: only password recovery mails go out this hour (abuse of the sign-up, "
+            "or the cap is too low for the real traffic)",
+        )
+        return True
+    return False
+
+
+def may_send_mail(db: Session, user: User, now: Optional[datetime] = None, recovery: bool = False) -> bool:
+    """Whether a mail may go out to this account now: per-account caps first, then the global ones.
+
+    Per account: at most MAIL_MAX_PER_HOUR in the last hour and MAIL_MIN_INTERVAL_SECONDS apart. Every row of
+    email_tokens counts, whatever its purpose (verify, reset or account_exists notice), so mixing request types
+    does not get around the cap. `recovery=True` (a password reset link) is only exempt from the global hourly cap.
+    The caller must not send (and must not log a new row) when this returns False, and must answer exactly as if
+    it had sent.
     """
     now = _now(now)
     recent = [
@@ -61,7 +105,7 @@ def may_send_mail(db: Session, user: User, now: Optional[datetime] = None) -> bo
         return False
     if recent and max(recent) > now - timedelta(seconds=settings.mail_min_interval_seconds):
         return False
-    return True
+    return not _global_cap_reached(db, now, recovery)
 
 
 def cancel_open_tokens(db: Session, user: User, purpose: str, now: Optional[datetime] = None) -> None:

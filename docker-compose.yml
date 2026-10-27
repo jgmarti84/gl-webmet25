@@ -159,6 +159,8 @@ services:
       PASSWORD_RESET_TTL_MINUTES: ${PASSWORD_RESET_TTL_MINUTES:-60}
       MAIL_MAX_PER_HOUR: ${MAIL_MAX_PER_HOUR:-3}
       MAIL_MIN_INTERVAL_SECONDS: ${MAIL_MIN_INTERVAL_SECONDS:-60}
+      MAIL_MAX_GLOBAL_PER_HOUR: ${MAIL_MAX_GLOBAL_PER_HOUR:-200}
+      MAIL_MAX_GLOBAL_PER_DAY: ${MAIL_MAX_GLOBAL_PER_DAY:-1500}
     volumes:
       - ../product_output:/product_output:ro
       - ../tops_and_cores:/tops_and_cores:ro

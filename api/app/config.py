@@ -103,6 +103,12 @@ class APISettings(BaseSettings):
     # Per-account sending caps (see EmailToken): at most N mails per hour, at least S seconds apart.
     mail_max_per_hour: int = Field(default=3, alias="MAIL_MAX_PER_HOUR")
     mail_min_interval_seconds: int = Field(default=60, alias="MAIL_MIN_INTERVAL_SECONDS")
+    # Global caps: all the mails of the site together (every account). A fuse well above normal traffic, against
+    # someone signing up many different addresses (each one a new account, so the per-account caps never apply).
+    # Past the hourly cap only password recovery keeps going out; past the daily cap nothing does. Keep the daily
+    # cap under the SMTP provider's limit (Gmail Workspace: about 2,000 a day; passing it blocks the account a day).
+    mail_max_global_per_hour: int = Field(default=200, alias="MAIL_MAX_GLOBAL_PER_HOUR")
+    mail_max_global_per_day: int = Field(default=1500, alias="MAIL_MAX_GLOBAL_PER_DAY")
 
     @field_validator("jwt_secret")
     @classmethod
