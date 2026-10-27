@@ -258,7 +258,7 @@ cmap_name: str
 ```python
 id: int (PK)
 username: str (unique, lowercase)     # 3–32 chars: a-z 0-9 . _ -
-full_name: str (nullable)
+full_name: str (nullable)             # optional "Nombre y apellido" (set by an admin or typed at sign-up, up to 128 chars)
 email: str (nullable)                 # stored lower case, no spaces; unique among the accounts that have one
                                       #   (partial unique index uq_users_email); the login also accepts it
 password_hash: str                    # Argon2id
@@ -488,13 +488,14 @@ All endpoints are public and check the `Origin` header like the login. "Neutral"
 | Method | Path | Body | Answers |
 |--------|------|------|---------|
 | GET | `/auth/options` | — | 200 `{registration, password_recovery, terms_url, privacy_url}` |
-| POST | `/auth/register` | `username, email, password, accept_terms, website` | **202** neutral; 409 username taken; 422 invalid data; 503 sign-up off |
+| POST | `/auth/register` | `username, email, password, accept_terms, website`, optional `full_name` | **202** neutral; 409 username taken; 422 invalid data; 503 sign-up off |
 | POST | `/auth/verify-email` | `token` | 204; 400 invalid, expired or used link |
 | POST | `/auth/resend-verification` | `identifier` (mail or username) | **202** neutral |
 | POST | `/auth/forgot-password` | `email` | **202** neutral |
 | POST | `/auth/reset-password` | `token, password` | 204; 400 invalid link; 422 invalid password (the link is not spent) |
 
 - **Sign-up rules, in order:** a mail with a *verified* account gets a "you already have an account" mail instead (neutral answer); a mail with a *pending* account whose link is still valid (under `EMAIL_VERIFY_TTL_HOURS`) is not replaced and receives a new link; a username of a verified account, or of a pending one whose link is still valid, is a 409; pending accounts whose link already expired are replaced; then the pending `viewer` is created. `website` is a hidden decoy: with text in it the request is answered 202 and ignored. The password is hashed in every path so the response time says nothing.
+- **Full name:** `full_name` is an optional "Nombre y apellido" in a single field (up to 128 characters). The service strips the ends, collapses runs of white space into one space and drops non-printable characters; if nothing is left it stores `NULL`. It is only used when the new account is created: in every other path (a registered mail, a pending account whose link is still valid) it is ignored like the rest of the fields, so the answer does not change. It is what the admin panel and the account button show.
 - **Login:** accepts the username or the mail (a username can never contain `@`). With the right password and an unverified mail it answers `403 {"code": "email_not_verified"}`; with a wrong password it is the usual generic 401. `load_active_user` and the refresh also refuse an unverified account.
 - **Reset:** sets the new password with the same policy, bumps `token_version`, closes every session with `revoke_reason = "password_reset"`, clears the lockout and verifies the mail if it was not (opening the link proves control of the mailbox).
 - **Mails** go out in the background after the transaction commits, so neither the answer nor its time depends on them. A failure is logged with the address masked (`j***@host`); tokens and passwords are never logged.

@@ -260,7 +260,7 @@ cmap_name: str
 ```python
 id: int (PK)
 username: str (único, minúsculas)     # 3–32 caracteres: a-z 0-9 . _ -
-full_name: str (nullable)
+full_name: str (nullable)             # "Nombre y apellido" opcional (lo carga un admin o la persona al registrarse, hasta 128 caracteres)
 email: str (nullable)                 # se guarda en minúsculas y sin espacios; único entre las cuentas que lo tienen
                                       #   (índice único parcial uq_users_email); el login también lo acepta
 password_hash: str                    # Argon2id
@@ -492,13 +492,14 @@ Todos los endpoints son públicos y comprueban el header `Origin` como el login.
 | Método | Ruta | Cuerpo | Respuestas |
 |--------|------|--------|------------|
 | GET | `/auth/options` | — | 200 `{registration, password_recovery, terms_url, privacy_url}` |
-| POST | `/auth/register` | `username, email, password, accept_terms, website` | **202** neutro; 409 usuario ya existe; 422 datos inválidos; 503 registro apagado |
+| POST | `/auth/register` | `username, email, password, accept_terms, website`, opcional `full_name` | **202** neutro; 409 usuario ya existe; 422 datos inválidos; 503 registro apagado |
 | POST | `/auth/verify-email` | `token` | 204; 400 link inválido, vencido o usado |
 | POST | `/auth/resend-verification` | `identifier` (mail o usuario) | **202** neutro |
 | POST | `/auth/forgot-password` | `email` | **202** neutro |
 | POST | `/auth/reset-password` | `token, password` | 204; 400 link inválido; 422 contraseña inválida (el link no se gasta) |
 
 - **Reglas del registro, en orden:** un mail con una cuenta *verificada* recibe en cambio un mail "ya tenés una cuenta" (respuesta neutra); un mail con una cuenta *pendiente* cuyo link sigue vigente (menos de `EMAIL_VERIFY_TTL_HOURS`) no se reemplaza y recibe un link nuevo; un usuario de una cuenta verificada, o de una pendiente con el link vigente, es un 409; las cuentas pendientes cuyo link ya venció se reemplazan; después se crea el `viewer` pendiente. `website` es un señuelo oculto: con texto, el pedido se responde 202 y se ignora. La contraseña se hashea en todos los caminos para que el tiempo de respuesta no diga nada.
+- **Nombre y apellido:** `full_name` es un "Nombre y apellido" opcional en un solo campo (hasta 128 caracteres). El servicio quita los extremos, reemplaza las secuencias de espacios por uno solo y descarta los caracteres no imprimibles; si no queda nada guarda `NULL`. Solo se usa al crear la cuenta nueva: en cualquier otro camino (un mail ya registrado, una cuenta pendiente con el link vigente) se ignora igual que el resto de los campos, así que la respuesta no cambia. Es lo que muestran el panel de admin y el botón de cuenta.
 - **Login:** acepta el usuario o el mail (un usuario nunca puede contener `@`). Con la contraseña correcta y el mail sin verificar responde `403 {"code": "email_not_verified"}`; con una contraseña incorrecta es el 401 genérico de siempre. `load_active_user` y el refresh también rechazan una cuenta sin verificar.
 - **Recupero:** fija la contraseña nueva con la misma política, sube `token_version`, cierra todas las sesiones con `revoke_reason = "password_reset"`, levanta el bloqueo y verifica el mail si no lo estaba (abrir el link prueba que controla el buzón).
 - **Los mails** salen en segundo plano después de confirmar la transacción, así ni la respuesta ni su tiempo dependen de ellos. Una falla se registra en el log con la dirección enmascarada (`j***@host`); nunca se registran tokens ni contraseñas.

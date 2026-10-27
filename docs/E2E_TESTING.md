@@ -17,7 +17,7 @@ filtering/sorting, the colormap creator canvas + drag, and the iOS-style time wh
 | `test_admin_panel.py` | Admin panel: load, OHMC logo, back-to-map, per-column filters + global search, text-filter row hiding, sortable columns + ▲/▼ indicator, icon row actions, colormap creator (gradient canvas, draggable ticks, "Cerrar" label) |
 | `test_radar_ordering.py` | Main map: load, radar list ordering rule (RMA before AR, `RMA00` last, active before inactive), admin link present |
 | `test_time_wheel.py` | Custom time range: both wheels render (24h + 60m = 84 items), two columns + selection band, tap-to-select drives the canonical input |
-| `test_registration_flow.py` | Public sign-up: sign up, verify the mail from its link, log in with the mail; an unverified account cannot log in and can ask for a new mail; password recovery end to end; the form checks the passwords; a registered mail gets the same screen; a garbage verification link. The mails are read from Mailpit (see below) |
+| `test_registration_flow.py` | Public sign-up: sign up (with the optional full name, which the account panel then shows), verify the mail from its link, log in with the mail; an unverified account cannot log in and can ask for a new mail; password recovery end to end; the form checks the passwords; a registered mail gets the same screen; a garbage verification link. The mails are read from Mailpit (see below) |
 | `conftest.py` | Shared fixtures: login helper + shared admin session, JS-error capture, screenshot-on-failure |
 
 > ⚠️ These tests require the **v2 frontend** — the time wheel is wired only by `js/v2/app.js`. Pointing them at a v1 frontend will fail `test_time_wheel.py`.

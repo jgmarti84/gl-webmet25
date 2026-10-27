@@ -347,7 +347,7 @@ Every page and every API endpoint require a logged-in user (roles `admin` and `v
 - **Passwords:** Argon2id, 12–128 characters. An account is locked for 15 min after 5 failed attempts, and nginx limits `/api/v1/auth/login` to 10 requests/minute per IP.
 - **Roles:** `admin` (everything, including user management) and `viewer` (logged in, no admin access yet).
 
-**Public sign-up.** When `REGISTRATION_ENABLED=true` (and the mail settings are filled), anyone can create an account at `/register` with a username, a mail and a password. The account is a `viewer` and cannot log in until the mail is verified through the one-time link sent to it. Users log in with their username or their mail, and recover a forgotten password at `/forgot`. Mails go out through the SMTP server configured in `.env` (`MAIL_*`); in development they land in Mailpit (`http://localhost:8025`). Setup and the production checklist are in [`docs/OPERATIONS.md`](docs/OPERATIONS.md) §9.
+**Public sign-up.** When `REGISTRATION_ENABLED=true` (and the mail settings are filled), anyone can create an account at `/register` with a username, a mail, a password and, optionally, their full name. The account is a `viewer` and cannot log in until the mail is verified through the one-time link sent to it. Users log in with their username or their mail, and recover a forgotten password at `/forgot`. Mails go out through the SMTP server configured in `.env` (`MAIL_*`); in development they land in Mailpit (`http://localhost:8025`). Setup and the production checklist are in [`docs/OPERATIONS.md`](docs/OPERATIONS.md) §9.
 
 | Variable | Required | Description |
 |---|---|---|
@@ -434,7 +434,7 @@ All endpoints below require a session cookie (log in with `POST /api/v1/auth/log
 | POST | `/auth/logout` | Revokes the session and clears the cookies |
 | GET | `/auth/me` | Current user (requires a session) |
 | GET | `/auth/options` | Public: whether sign-up and password recovery are on, and the terms/privacy links |
-| POST | `/auth/register` | Public: create a pending `viewer` (202 for a new or an already-registered mail alike, 409 username taken, 422 invalid data, 503 sign-up off) |
+| POST | `/auth/register` | Public: create a pending `viewer`, with an optional full name (202 for a new or an already-registered mail alike, 409 username taken, 422 invalid data, 503 sign-up off) |
 | POST | `/auth/verify-email` | Public: redeem the one-time link of the verification mail (204, 400) |
 | POST | `/auth/resend-verification` | Public: new verification mail for a pending account (always 202) |
 | POST | `/auth/forgot-password` | Public: password reset link by mail (always 202) |
