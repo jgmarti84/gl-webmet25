@@ -204,3 +204,21 @@ def test_check_unknown_role_is_422(client, make_user):
     make_user()
     login(client)
     assert client.get("/api/v1/auth/check", params={"role": "superuser"}).status_code == 422
+
+
+def test_login_with_the_e_mail(client, make_user):
+    make_user(email="ana@ejemplo.com.ar")
+    response = client.post("/api/v1/auth/login", json={"username": "ana@ejemplo.com.ar", "password": TEST_PASSWORD})
+    assert response.status_code == 200
+    assert response.json()["username"] == "alice"
+
+
+def test_login_with_an_unverified_mail_says_so_only_with_the_right_password(client, make_user):
+    make_user(username="pend", email="pend@ejemplo.com.ar", email_verified=False)
+    right = client.post("/api/v1/auth/login", json={"username": "pend", "password": TEST_PASSWORD})
+    assert right.status_code == 403
+    assert right.json()["code"] == "email_not_verified"
+    assert not right.cookies
+    wrong = client.post("/api/v1/auth/login", json={"username": "pend", "password": "wrong-password-xx"})
+    assert wrong.status_code == 401
+    assert wrong.json()["detail"] == "Usuario o contraseña incorrectos"

@@ -51,9 +51,14 @@ def _unauthorized(detail: str, code: Optional[str] = None) -> JSONResponse:
 
 
 @router.post("/login", response_model=MeResponse, dependencies=[Depends(check_origin)])
-def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)) -> MeResponse:
+def login(
+    payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)
+) -> Union[MeResponse, JSONResponse]:
     try:
         user = service.authenticate(db, payload.username, payload.password)
+    except service.EmailNotVerifiedError as exc:
+        # 403 (not 401) with a code the login page uses to offer "resend the verification mail". No cookies.
+        return JSONResponse(status_code=403, content={"detail": str(exc), "code": "email_not_verified"})
     except service.AuthError:
         db.commit()  # keep the failed-attempt counter
         raise HTTPException(status_code=401, detail=service.GENERIC_LOGIN_ERROR)

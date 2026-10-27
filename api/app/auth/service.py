@@ -10,7 +10,7 @@ from typing import Optional, Tuple
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from radar_db.accounts import get_user_by_username, normalize_username
+from radar_db.accounts import find_by_identifier
 from radar_db.models import User, UserSession
 from radar_db.passwords import DUMMY_HASH, verify_and_update, verify_password
 
@@ -39,13 +39,22 @@ class RefreshRaceError(AuthError):
     """Refresh token reused within the race window; nothing was revoked."""
 
 
+class EmailNotVerifiedError(Exception):
+    """The password was right but the e-mail was never verified (answered with 403, not 401).
+
+    Deliberately not an AuthError: it is only raised after the password checked out, so saying it does not
+    reveal anything to someone who does not already know the password.
+    """
+
+
 def _now(now: Optional[datetime]) -> datetime:
     return now or datetime.now(timezone.utc)
 
 
 def authenticate(db: Session, username: str, password: str, now: Optional[datetime] = None) -> User:
     now = _now(now)
-    user = get_user_by_username(db, normalize_username(username))
+    # `username` may be a username or an e-mail (usernames can never contain "@", so there is no ambiguity).
+    user = find_by_identifier(db, username)
 
     if user is None or not user.is_active or (user.locked_until and user.locked_until > now):
         verify_password(password, DUMMY_HASH)  # same cost as a real check
@@ -59,6 +68,11 @@ def authenticate(db: Session, username: str, password: str, now: Optional[dateti
             user.failed_login_count = 0
         db.flush()
         raise AuthError(GENERIC_LOGIN_ERROR)
+
+    # Only after the password is right, so a wrong guess still gets the generic 401 and the unverified state
+    # cannot be probed. Nothing is reset or saved here: the person has not logged in.
+    if user.email_verified_at is None:
+        raise EmailNotVerifiedError("Tenés que verificar tu mail para entrar")
 
     if new_hash:
         user.password_hash = new_hash
@@ -167,7 +181,8 @@ def rotate_refresh(
     token_hash = hash_refresh_token(token)
     if _hash_matches(token_hash, session.token_hash):
         user = db.get(User, session.user_id)
-        if user is None or not user.is_active:
+        # An unverified account is treated like an inactive one (defense in depth: it should have no login).
+        if user is None or not user.is_active or user.email_verified_at is None:
             _close(session, REVOKE_INACTIVE_USER, now)
             db.flush()
             raise AuthError("Sesión inválida")
@@ -219,6 +234,6 @@ def revoke_session_by_token(db: Session, token: str, now: Optional[datetime] = N
 def load_active_user(db: Session, user_id: int, token_version: int) -> Optional[User]:
     """Decision D11 (see spec): every authenticated request reads the user."""
     user = db.get(User, user_id)
-    if user is None or not user.is_active or user.token_version != token_version:
+    if user is None or not user.is_active or user.email_verified_at is None or user.token_version != token_version:
         return None
     return user

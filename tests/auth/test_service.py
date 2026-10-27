@@ -275,3 +275,37 @@ def test_load_active_user_checks_version_and_active(make_user, test_db_session):
     user.is_active = False
     assert service.load_active_user(test_db_session, user.id, 0) is None
     assert service.load_active_user(test_db_session, 999999, 0) is None
+
+
+# --- login by e-mail and unverified accounts --------------------------------
+
+
+def test_authenticate_accepts_the_e_mail(make_user, test_db_session):
+    user = make_user(email="ana@ejemplo.com.ar")
+    assert service.authenticate(test_db_session, "ana@ejemplo.com.ar", TEST_PASSWORD, now=NOW).id == user.id
+    assert service.authenticate(test_db_session, " ANA@Ejemplo.COM.ar ", TEST_PASSWORD, now=NOW).id == user.id
+
+
+def test_unverified_account_with_the_right_password_is_reported(make_user, test_db_session):
+    make_user(username="pend", email="pend@ejemplo.com.ar", email_verified=False)
+    with pytest.raises(service.EmailNotVerifiedError):
+        service.authenticate(test_db_session, "pend", TEST_PASSWORD, now=NOW)
+
+
+def test_unverified_account_with_a_wrong_password_gets_the_generic_error(make_user, test_db_session):
+    user = make_user(username="pend", email="pend@ejemplo.com.ar", email_verified=False)
+    with pytest.raises(AuthError):
+        service.authenticate(test_db_session, "pend", "wrong-password-xx", now=NOW)
+    assert user.failed_login_count == 1
+
+
+def test_load_active_user_rejects_an_unverified_account(make_user, test_db_session):
+    user = make_user(username="pend", email="pend@ejemplo.com.ar", email_verified=False)
+    assert service.load_active_user(test_db_session, user.id, user.token_version) is None
+
+
+def test_refresh_is_refused_to_an_unverified_account(make_user, test_db_session):
+    user = make_user(username="pend", email="pend@ejemplo.com.ar", email_verified=False)
+    _, token = service.create_session(test_db_session, user, now=NOW)
+    with pytest.raises(AuthError):
+        service.rotate_refresh(test_db_session, token, now=NOW + timedelta(minutes=1))
