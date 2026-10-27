@@ -41,10 +41,26 @@ The tests are environment-agnostic Python + Playwright. To run them anywhere you
 
 | Var | Default (devcontainer) | Meaning |
 |-----|------------------------|---------|
-| `FRONTEND_URL` | `http://frontend-v2:80` | Base URL of the **v2** frontend under test |
-| `API_BASE_URL` | `http://api:8000` | API base (used by the API contract tests, not strictly by e2e) |
+| `FRONTEND_URL` | `http://frontend-e2e:80` | Base URL of the **v2** frontend under test (code default: `http://frontend-v2:80`) |
+| `API_BASE_URL` | `http://api-e2e:8000` | API base (used by the API contract tests, not strictly by e2e; code default: `http://api:8000`) |
 | `ADMIN_USERNAME` | `admin` | Username of the admin account the tests log in with |
 | `ADMIN_PASSWORD` | *(none)* | Its password — required, tests cannot log in without it |
+
+**Which database each suite writes to.** `tests/api` and `tests/e2e` are black-box: they go through a running API
+and frontend, and they write (the e2e viewer, the admin's sessions). In the dev stack they run against an isolated
+copy, never against your main database:
+
+| Suites | Target | Database |
+|---|---|---|
+| `tests/auth`, `tests/indexer` | in process | `radar_test_db` (empty; every test rolls back) |
+| `tests/api`, `tests/e2e` | `api-e2e`, `frontend-e2e` | `radar_e2e_db` in its own container `radar_db_e2e` (initialized by `db-init-e2e`, COGs loaded by `indexer-e2e`) |
+| your own use | `api`, `frontend-v2` | `radar_prod_db` (no test touches it) |
+
+`api-e2e` answers to the name `api` inside the private `e2e` network, so `frontend-e2e` runs the normal frontend image
+with its normal `nginx.conf`. The test services publish no ports.
+
+> **Never point `API_BASE_URL` or `FRONTEND_URL` at stage or the operational server:** the suites create the user
+> `e2e-viewer` and admin sessions in whatever database is behind them.
 
 Every page requires a login. The tests sign in through the `/login` form with the account that
 `db-init` creates from the same `ADMIN_USERNAME` / `ADMIN_PASSWORD` variables of your `.env`. The map, radar detail and admin tests
@@ -67,8 +83,8 @@ The dev stack already ships a `tests` service (Playwright + Chromium preinstalle
 # From the repo root. Compose both files (base + devcontainer override).
 DC="docker compose -f docker-compose.yml -f docker-compose.devcontainer.yml"
 
-# 1. Bring up the API, a v2 frontend, the test DB, and the tests container.
-$DC up -d --build radar_db redis db-init api frontend-v2 radar_db_test db-init-test tests
+# 1. Bring up the dev stack, the isolated test stack and the tests container (same as `make dev-up`).
+$DC up -d --build radar_db redis db-init api frontend-v2 radar_db_test db-init-test radar_db_e2e db-init-e2e api-e2e frontend-e2e indexer-e2e tests
 
 # 2. Run the e2e suite inside the tests container.
 docker exec radar_tests pytest tests/e2e/ -v
@@ -77,8 +93,8 @@ docker exec radar_tests pytest tests/e2e/ -v
 docker exec radar_tests pytest tests/e2e/test_admin_panel.py -v
 docker exec radar_tests pytest tests/e2e/test_time_wheel.py::test_time_wheels_render -v
 
-# Tear down when done:
-$DC down            # add -v to also drop volumes
+# Stop when done (keeps containers and the test databases for the next run):
+$DC stop
 ```
 
 **Admin credentials:** set them once in a repo-root `.env` (compose reads it):
@@ -86,7 +102,8 @@ $DC down            # add -v to also drop volumes
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=your-strong-password   # 12+ characters
 ```
-`db-init` creates the account from them and the `tests` service reads the same values, so they stay consistent.
+`db-init` (main stack) and `db-init-e2e` (test stack) create the account from them and the `tests` service reads the
+same values, so they stay consistent.
 
 **Screenshots on failure** are written to `tests/e2e/screenshots/` (git-ignored). To copy them out of the container:
 ```bash

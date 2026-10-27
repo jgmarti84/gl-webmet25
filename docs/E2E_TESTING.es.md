@@ -44,10 +44,26 @@ Las pruebas son Python + Playwright independientes del entorno. Para ejecutarlas
 
 | Variable | Valor por defecto (devcontainer) | Significado |
 |----------|----------------------------------|-------------|
-| `FRONTEND_URL` | `http://frontend-v2:80` | URL base del frontend **v2** bajo prueba |
-| `API_BASE_URL` | `http://api:8000` | Base de la API (usada por los tests de contrato de la API, no estrictamente por e2e) |
+| `FRONTEND_URL` | `http://frontend-e2e:80` | URL base del frontend **v2** bajo prueba (valor por defecto del código: `http://frontend-v2:80`) |
+| `API_BASE_URL` | `http://api-e2e:8000` | Base de la API (usada por los tests de contrato de la API, no estrictamente por e2e; valor por defecto del código: `http://api:8000`) |
 | `ADMIN_USERNAME` | `admin` | Usuario de la cuenta de admin con la que se loguean los tests |
 | `ADMIN_PASSWORD` | *(ninguno)* | Su contraseña — obligatoria, sin ella los tests no pueden loguearse |
+
+**En qué base escribe cada suite.** `tests/api` y `tests/e2e` son de caja negra: pasan por una API y un frontend que
+están corriendo, y escriben (el viewer de e2e, las sesiones del admin). En el stack de desarrollo corren contra una
+copia aislada, nunca contra tu base principal:
+
+| Suites | Contra qué | Base |
+|---|---|---|
+| `tests/auth`, `tests/indexer` | en proceso | `radar_test_db` (vacía; cada test se revierte) |
+| `tests/api`, `tests/e2e` | `api-e2e`, `frontend-e2e` | `radar_e2e_db`, en su propio contenedor `radar_db_e2e` (la inicializa `db-init-e2e`; los COGs los carga `indexer-e2e`) |
+| tu uso | `api`, `frontend-v2` | `radar_prod_db` (ningún test la toca) |
+
+`api-e2e` responde al nombre `api` dentro de la red privada `e2e`, así `frontend-e2e` usa la imagen normal del
+frontend con su `nginx.conf` normal. Los servicios de test no publican puertos.
+
+> **Nunca apuntar `API_BASE_URL` ni `FRONTEND_URL` a stage ni al operativo:** las suites crean el usuario
+> `e2e-viewer` y sesiones del admin en la base que esté detrás.
 
 Todas las páginas requieren login. Las pruebas inician sesión por el formulario de `/login` con la cuenta que
 `db-init` crea a partir de las mismas variables `ADMIN_USERNAME` / `ADMIN_PASSWORD` de tu `.env`. Los tests del mapa, del detalle de
@@ -71,8 +87,8 @@ El stack de desarrollo ya incluye un servicio `tests` (Playwright + Chromium pre
 # Desde la raíz del repositorio. Compose con ambos archivos (base + override del devcontainer).
 DC="docker compose -f docker-compose.yml -f docker-compose.devcontainer.yml"
 
-# 1. Levantar la API, un frontend v2, la DB de pruebas y el contenedor de tests.
-$DC up -d --build radar_db redis db-init api frontend-v2 radar_db_test db-init-test tests
+# 1. Levantar el stack de desarrollo, el stack de test aislado y el contenedor de tests (igual que `make dev-up`).
+$DC up -d --build radar_db redis db-init api frontend-v2 radar_db_test db-init-test radar_db_e2e db-init-e2e api-e2e frontend-e2e indexer-e2e tests
 
 # 2. Ejecutar el conjunto de pruebas e2e dentro del contenedor de tests.
 docker exec radar_tests pytest tests/e2e/ -v
@@ -81,8 +97,8 @@ docker exec radar_tests pytest tests/e2e/ -v
 docker exec radar_tests pytest tests/e2e/test_admin_panel.py -v
 docker exec radar_tests pytest tests/e2e/test_time_wheel.py::test_time_wheels_render -v
 
-# Detener cuando termine:
-$DC down            # agregar -v para también eliminar los volúmenes
+# Al terminar, detener (conserva los contenedores y las bases de test para la próxima corrida):
+$DC stop
 ```
 
 **Credenciales de admin:** definirlas una vez en un `.env` en la raíz del repositorio (Compose lo lee):
@@ -90,7 +106,8 @@ $DC down            # agregar -v para también eliminar los volúmenes
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=your-strong-password   # 12+ caracteres
 ```
-`db-init` crea la cuenta con ellas y el servicio `tests` lee los mismos valores, así que se mantienen consistentes.
+`db-init` (stack principal) y `db-init-e2e` (stack de test) crean la cuenta con ellas y el servicio `tests` lee los
+mismos valores, así que se mantienen consistentes.
 
 **Capturas de pantalla en caso de falla** se escriben en `tests/e2e/screenshots/` (ignorado por git). Para copiarlas fuera del contenedor:
 ```bash
