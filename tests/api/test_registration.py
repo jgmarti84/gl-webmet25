@@ -37,6 +37,7 @@ def test_options_field_types():
     data = _options()
     assert isinstance(data["registration"], bool)
     assert isinstance(data["password_recovery"], bool)
+    assert isinstance(data["terms_required"], bool)
     assert data["terms_url"] is None or isinstance(data["terms_url"], str)
     assert data["privacy_url"] is None or isinstance(data["privacy_url"], str)
 
@@ -51,6 +52,8 @@ def test_register_with_invalid_data_returns_422():
 
 def test_register_without_the_terms_returns_422():
     _need("registration")
+    # Only when this environment asks for the terms: without TERMS_REQUIRED the same request would create an account.
+    _need("terms_required")
     body = {
         "username": "sin-terminos",
         "email": "sin-terminos@ejemplo.com.ar",

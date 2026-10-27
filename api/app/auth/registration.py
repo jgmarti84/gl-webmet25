@@ -69,12 +69,15 @@ def register(
     email: str,
     password: str,
     full_name: Optional[str] = None,
+    terms_accepted: bool = True,
     now: Optional[datetime] = None,
 ) -> List[OutgoingMail]:
     """Create a pending viewer. A mail that already has a verified account gets a notice instead (neutral).
 
     `full_name` is the optional "Nombre y apellido" of the form: it is only used when the new account is created
     (rule 5 below); in every other path it is ignored, like the rest of the fields.
+    `terms_accepted` says whether the person accepted terms: it stamps users.terms_accepted_at, and is False when
+    the sign-up does not ask for any (TERMS_REQUIRED off), so no consent is recorded that was never given.
 
     Order of the rules (spec 4.1):
       1. mail of a verified account -> notice mail to its owner (neutral answer);
@@ -136,7 +139,7 @@ def register(
         full_name=normalize_full_name(full_name),
         email=address,
         email_verified=False,
-        terms_accepted=True,
+        terms_accepted=terms_accepted,
         password_hash=password_hash,
     )
     # Same clock as the rest of the flow (the column default is the database clock); the age rule reads it.

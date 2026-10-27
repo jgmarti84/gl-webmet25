@@ -55,6 +55,7 @@ MAIL_ENV_VARS = (
     "MAIL_FROM",
     "MAIL_STARTTLS",
     "MAIL_USE_SSL",
+    "TERMS_REQUIRED",
     "TERMS_URL",
     "PRIVACY_URL",
     "EMAIL_VERIFY_TTL_HOURS",
@@ -74,6 +75,7 @@ def _clean_settings(monkeypatch, **values):
 def test_mail_defaults(monkeypatch):
     s = _clean_settings(monkeypatch)
     assert s.registration_enabled is False
+    assert s.terms_required is False
     assert s.mail_port == 587
     assert s.mail_starttls is True
     assert s.mail_use_ssl is False
@@ -93,16 +95,47 @@ def test_mail_configured_needs_host_sender_and_base_url(monkeypatch):
         assert _clean_settings(monkeypatch, **partial).mail_configured is False, missing
 
 
-def test_registration_needs_the_switch_the_mail_and_the_legal_links(monkeypatch):
-    full = dict(
-        REGISTRATION_ENABLED=True,
-        MAIL_HOST="smtp.test",
-        MAIL_FROM="no-reply@ejemplo.com.ar",
-        PUBLIC_BASE_URL="https://webmet.test",
-        TERMS_URL="https://webmet.test/terminos",
-        PRIVACY_URL="https://webmet.test/privacidad",
-    )
+SIGN_UP_BASE = dict(
+    REGISTRATION_ENABLED=True,
+    MAIL_HOST="smtp.test",
+    MAIL_FROM="no-reply@ejemplo.com.ar",
+    PUBLIC_BASE_URL="https://webmet.test",
+)
+LEGAL_LINKS = dict(TERMS_URL="https://webmet.test/terminos", PRIVACY_URL="https://webmet.test/privacidad")
+
+
+def test_registration_needs_the_switch_and_the_mail(monkeypatch):
+    assert _clean_settings(monkeypatch, **SIGN_UP_BASE).registration_available is True
+    for missing in SIGN_UP_BASE:
+        partial = {k: v for k, v in SIGN_UP_BASE.items() if k != missing}
+        assert _clean_settings(monkeypatch, **partial).registration_available is False, missing
+
+
+def test_the_terms_are_not_required_by_default(monkeypatch):
+    # Without TERMS_REQUIRED the form asks for nothing, so the legal links are not needed to open the sign-up.
+    s = _clean_settings(monkeypatch, **SIGN_UP_BASE)
+    assert s.terms_required is False
+    assert s.registration_available is True
+
+
+def test_when_the_terms_are_required_both_links_are_needed(monkeypatch):
+    full = dict(SIGN_UP_BASE, TERMS_REQUIRED=True, **LEGAL_LINKS)
     assert _clean_settings(monkeypatch, **full).registration_available is True
-    for missing in full:
+    for missing in LEGAL_LINKS:
         partial = {k: v for k, v in full.items() if k != missing}
         assert _clean_settings(monkeypatch, **partial).registration_available is False, missing
+
+
+def test_registration_warnings(monkeypatch):
+    def warnings(**values):
+        return _clean_settings(monkeypatch, **values).registration_warnings
+
+    # Off: nothing to say.
+    assert warnings() == []
+    # On but incomplete: says what is missing, and the sign-up stays off.
+    assert any("MAIL_HOST" in w for w in warnings(REGISTRATION_ENABLED=True))
+    assert any("TERMS_URL" in w for w in warnings(**dict(SIGN_UP_BASE, TERMS_REQUIRED=True)))
+    # On and complete but without terms (the default): a reminder, because people would sign up accepting nothing.
+    assert any("TERMS_REQUIRED" in w for w in warnings(**SIGN_UP_BASE))
+    # On, complete and with the terms: all good.
+    assert warnings(**dict(SIGN_UP_BASE, TERMS_REQUIRED=True, **LEGAL_LINKS)) == []

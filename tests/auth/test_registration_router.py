@@ -26,6 +26,7 @@ def test_options_when_everything_is_configured(client):
     assert response.json() == {
         "registration": True,
         "password_recovery": True,
+        "terms_required": True,
         "terms_url": "https://webmet.test/terminos",
         "privacy_url": "https://webmet.test/privacidad",
     }
@@ -43,6 +44,28 @@ def test_options_with_the_switch_off(client, monkeypatch):
     body = client.get(f"{URL}/options").json()
     assert body["registration"] is False
     assert body["password_recovery"] is True
+
+
+def test_options_without_the_terms(client, monkeypatch):
+    # The default: TERMS_REQUIRED is off. The sign-up is on without any legal link and the options say so.
+    monkeypatch.setattr(settings, "terms_required", False)
+    monkeypatch.setattr(settings, "terms_url", "")
+    monkeypatch.setattr(settings, "privacy_url", "")
+    assert client.get(f"{URL}/options").json() == {
+        "registration": True,
+        "password_recovery": True,
+        "terms_required": False,
+        "terms_url": None,
+        "privacy_url": None,
+    }
+
+
+def test_options_hide_the_links_when_the_terms_are_not_required(client, monkeypatch):
+    # The links are configured but TERMS_REQUIRED is off: the pages must not get them to show.
+    monkeypatch.setattr(settings, "terms_required", False)
+    body = client.get(f"{URL}/options").json()
+    assert body["terms_required"] is False
+    assert body["terms_url"] is None and body["privacy_url"] is None
 
 
 # --- register ----------------------------------------------------------------
@@ -98,6 +121,25 @@ def test_register_requires_the_terms(client, mailer, test_db_session):
 def test_register_rejects_invalid_data(client, mailer, test_db_session, bad):
     assert _register(client, **bad).status_code == 422
     assert test_db_session.query(User).count() == 0 and not mailer.sent
+
+
+def test_the_acceptance_is_recorded_when_the_terms_are_required(client, test_db_session):
+    assert _register(client).status_code == 202
+    assert test_db_session.query(User).filter_by(username="nuevo").one().terms_accepted_at is not None
+
+
+def test_register_without_terms_when_they_are_not_required(client, mailer, monkeypatch, test_db_session):
+    monkeypatch.setattr(settings, "terms_required", False)
+    monkeypatch.setattr(settings, "terms_url", "")
+    monkeypatch.setattr(settings, "privacy_url", "")
+    payload = register_payload()
+    del payload["accept_terms"]  # the page does not even send it
+    assert client.post(f"{URL}/register", json=payload).status_code == 202
+    assert _register(client, username="otro", email=f"otro@{DOMAIN}", accept_terms=False).status_code == 202
+    users = {u.username: u for u in test_db_session.query(User).all()}
+    # Nothing was accepted, so no consent is recorded.
+    assert users["nuevo"].terms_accepted_at is None and users["otro"].terms_accepted_at is None
+    assert len(mailer.sent) == 2
 
 
 def test_register_rejects_a_missing_field(client):

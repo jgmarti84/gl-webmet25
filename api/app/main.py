@@ -57,12 +57,10 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # DB not ready must not block startup
         logger.warning(f"Could not check admin users at startup: {exc}")
 
-    # The switch alone does not turn registration on (see Settings.registration_available): say why it is off.
-    if settings.registration_enabled and not settings.registration_available:
-        logger.warning(
-            "REGISTRATION_ENABLED=true but the setup is incomplete (needs MAIL_HOST, MAIL_FROM, "
-            "PUBLIC_BASE_URL, TERMS_URL and PRIVACY_URL): registration stays off"
-        )
+    # The switch alone does not turn registration on (see Settings.registration_available): say why it is off,
+    # and warn when it is on without the terms.
+    for message in settings.registration_warnings:
+        logger.warning(message)
 
     gdal_env = Env(
         GDAL_CACHEMAX=settings.gdal_cachemax,

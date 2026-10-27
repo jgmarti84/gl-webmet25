@@ -56,8 +56,10 @@ def options() -> OptionsResponse:
     return OptionsResponse(
         registration=settings.registration_available,
         password_recovery=settings.mail_configured,
-        terms_url=settings.terms_url or None,
-        privacy_url=settings.privacy_url or None,
+        terms_required=settings.terms_required,
+        # The links are only handed out when the terms are required: otherwise the pages must not show them.
+        terms_url=(settings.terms_url or None) if settings.terms_required else None,
+        privacy_url=(settings.privacy_url or None) if settings.terms_required else None,
     )
 
 
@@ -73,7 +75,7 @@ def register(
         raise HTTPException(status_code=503, detail="El registro no está disponible por ahora")
     if payload.website.strip():
         return MessageResponse(detail=NEUTRAL)  # decoy filled: a bot; do nothing
-    if not payload.accept_terms:
+    if settings.terms_required and not payload.accept_terms:
         raise HTTPException(status_code=422, detail="Tenés que aceptar los términos y la política de privacidad")
     try:
         mails = registration.register(
@@ -82,6 +84,8 @@ def register(
             email=payload.email,
             password=payload.password,
             full_name=payload.full_name,
+            # Only record an acceptance when the person was actually asked for it (and, if so, said yes above).
+            terms_accepted=settings.terms_required,
         )
         db.commit()
     except UsernameTakenError:

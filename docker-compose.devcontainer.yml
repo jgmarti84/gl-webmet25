@@ -27,6 +27,8 @@ services:
       MAIL_FROM: no-reply@webmet.local
       # Mailpit has no encryption: STARTTLS would make every send fail.
       MAIL_STARTTLS: "false"
+      # Sign-up with the terms checkbox, as in production once the legal texts exist (the default is off).
+      TERMS_REQUIRED: "true"
       TERMS_URL: https://example.org/terminos
       PRIVACY_URL: https://example.org/privacidad
       # Loose caps so manual checks can resend without waiting.
@@ -215,6 +217,8 @@ services:
       MAIL_PORT: "1025"
       MAIL_FROM: no-reply@webmet.local
       MAIL_STARTTLS: "false"
+      # The e2e tests tick the terms checkbox, so this API asks for the terms.
+      TERMS_REQUIRED: "true"
       TERMS_URL: https://example.org/terminos
       PRIVACY_URL: https://example.org/privacidad
       MAIL_MAX_PER_HOUR: "30"

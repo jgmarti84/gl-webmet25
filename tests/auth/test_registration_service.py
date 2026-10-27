@@ -164,6 +164,23 @@ def test_notices_to_a_verified_account_are_capped(make_user, test_db_session):
     assert sent == 3
 
 
+# --- terms acceptance --------------------------------------------------------
+
+
+def test_register_records_the_terms_acceptance_only_when_told(test_db_session):
+    _register(test_db_session)
+    registration.register(
+        test_db_session,
+        username="otro",
+        email=f"otro@{DOMAIN}",
+        password=TEST_PASSWORD,
+        terms_accepted=False,
+        now=NOW,
+    )
+    assert test_db_session.query(User).filter_by(username="nuevo").one().terms_accepted_at is not None
+    assert test_db_session.query(User).filter_by(username="otro").one().terms_accepted_at is None
+
+
 # --- full name (optional) ----------------------------------------------------
 
 

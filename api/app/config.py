@@ -89,7 +89,13 @@ class APISettings(BaseSettings):
     # Set MAIL_STARTTLS=false only for a local test mailbox such as Mailpit, which has no encryption.
     mail_starttls: bool = Field(default=True, alias="MAIL_STARTTLS")
     mail_use_ssl: bool = Field(default=False, alias="MAIL_USE_SSL")
+    # Whether the sign-up form asks the person to accept the terms and the privacy policy. Off by default: the form
+    # then shows no checkbox and no legal link, and TERMS_URL / PRIVACY_URL are not needed. Turn it on (with both
+    # links) before opening the sign-up to the public: it is the information and consent notice that the data
+    # protection law expects when personal data is collected.
+    terms_required: bool = Field(default=False, alias="TERMS_REQUIRED")
     # Links to the terms and the privacy policy shown in the sign-up form (provided by the observatory).
+    # Only used when TERMS_REQUIRED=true.
     terms_url: str = Field(default="", alias="TERMS_URL")
     privacy_url: str = Field(default="", alias="PRIVACY_URL")
     email_verify_ttl_hours: int = Field(default=24, alias="EMAIL_VERIFY_TTL_HOURS")
@@ -122,9 +128,37 @@ class APISettings(BaseSettings):
 
     @property
     def registration_available(self) -> bool:
-        # The switch alone is not enough: without mail the verification link never arrives, and without the
-        # legal links the sign-up form cannot show the terms the person must accept.
-        return bool(self.registration_enabled and self.mail_configured and self.terms_url and self.privacy_url)
+        # The switch alone is not enough: without mail the verification link never arrives, and when the terms are
+        # required the sign-up form needs both legal links to show what the person must accept.
+        legal_links_ready = not self.terms_required or bool(self.terms_url and self.privacy_url)
+        return bool(self.registration_enabled and self.mail_configured and legal_links_ready)
+
+    @property
+    def registration_warnings(self) -> list:
+        """What to tell in the log at startup about the sign-up: empty when it is off or everything is in place."""
+        if not self.registration_enabled:
+            return []
+        needed = [
+            ("MAIL_HOST", self.mail_host),
+            ("MAIL_FROM", self.mail_from),
+            ("PUBLIC_BASE_URL", self.public_base_url),
+        ]
+        if self.terms_required:
+            needed += [("TERMS_URL", self.terms_url), ("PRIVACY_URL", self.privacy_url)]
+        missing = [name for name, value in needed if not value]
+        if missing:
+            return [
+                "REGISTRATION_ENABLED=true but the setup is incomplete "
+                f"(missing: {', '.join(missing)}): registration stays off"
+            ]
+        if not self.terms_required:
+            # Working, but people would give their data without being shown any terms or privacy policy.
+            return [
+                "REGISTRATION_ENABLED=true with TERMS_REQUIRED=false: people sign up without accepting any terms "
+                "or privacy policy. Set TERMS_REQUIRED=true, TERMS_URL and PRIVACY_URL before opening the "
+                "sign-up to the public"
+            ]
+        return []
 
     @property
     def allowed_origins_list(self) -> list:

@@ -92,6 +92,8 @@ def registration_on(monkeypatch):
         public_base_url="https://webmet.test",
         mail_host="smtp.test",
         mail_from=f"no-reply@{TEST_EMAIL_DOMAIN}",
+        # The "with terms" setup: tests of the default (no terms) turn this off themselves.
+        terms_required=True,
         terms_url="https://webmet.test/terminos",
         privacy_url="https://webmet.test/privacidad",
     )

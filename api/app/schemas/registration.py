@@ -35,7 +35,8 @@ class RegisterRequest(_EmailField):
     # Optional "Nombre y apellido" in a single field (same size as users.full_name). The service cleans it up
     # (white space, non-printable characters) and stores NULL when it ends up empty.
     full_name: Optional[str] = Field(None, max_length=128)
-    accept_terms: bool
+    # Must be true only when the server asks for the terms (TERMS_REQUIRED); otherwise the page does not send it.
+    accept_terms: bool = False
     # Decoy: hidden in the form, a person never fills it. A bot that does is answered but ignored.
     website: str = Field("", max_length=256)
 
@@ -70,5 +71,7 @@ class OptionsResponse(BaseModel):
 
     registration: bool
     password_recovery: bool
+    # When false the sign-up page shows no terms checkbox, and the two links below are null.
+    terms_required: bool
     terms_url: Optional[str] = None
     privacy_url: Optional[str] = None
