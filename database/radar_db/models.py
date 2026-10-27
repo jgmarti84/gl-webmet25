@@ -5,6 +5,7 @@ from sqlalchemy import (
     CheckConstraint,
 )
 from sqlalchemy.orm import relationship, declarative_base
+from sqlalchemy import text
 from sqlalchemy.sql import func
 from geoalchemy2 import Geometry
 from sqlalchemy.dialects.postgresql import UUID
@@ -371,14 +372,25 @@ class User(Base):
     failed_login_count = Column(Integer, nullable=False, default=0, server_default='0')
     locked_until = Column(DateTime(timezone=True))
     last_login_at = Column(DateTime(timezone=True))
+    # NULL = self-registered and still unverified: the account cannot log in. Accounts created by an
+    # admin or by the server CLI are verified when they are created.
+    email_verified_at = Column(DateTime(timezone=True))
+    # When the person accepted the terms and privacy policy at sign-up (proof of consent).
+    terms_accepted_at = Column(DateTime(timezone=True))
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
+    email_tokens = relationship(
+        "EmailToken", back_populates="user", cascade="all, delete-orphan", passive_deletes=True
+    )
 
     __table_args__ = (
         CheckConstraint("role IN ('admin', 'viewer')", name='ck_users_role'),
+        # The mail is unique among the accounts that have one (stored normalized: lower case, no spaces).
+        # Partial index: many accounts may have no mail at all.
+        Index('uq_users_email', 'email', unique=True, postgresql_where=text("email IS NOT NULL")),
     )
 
     def __repr__(self):
@@ -414,3 +426,43 @@ class UserSession(Base):
 
     def __repr__(self):
         return f"<UserSession(id={self.id}, user_id={self.user_id}, revoked={self.revoked_at is not None})>"
+
+
+EMAIL_TOKEN_PURPOSES = ("verify_email", "reset_password", "account_exists")
+
+
+class EmailToken(Base):
+    """Single-use e-mail link (verify the address / reset the password) and the log of mails sent.
+
+    Rows with purpose "account_exists" are not redeemable tokens: they are born expired, with a random
+    hash, and only count toward the per-account sending caps.
+
+    Why they exist (privacy): signing up with a mail that already has an account gets the same neutral
+    answer as a new mail, so nobody can find out who has an account. The owner of that mail gets an
+    "you already have an account" mail instead. That mail has no token, so this row is its only trace
+    and lets the caps stop someone from flooding the owner's inbox.
+    """
+    __tablename__ = 'email_tokens'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    # verify_email | reset_password | account_exists (a log entry, not a token; see the class docstring)
+    purpose = Column(String(32), nullable=False)
+    # SHA-256 of the token; the token itself only travels in the mail.
+    token_hash = Column(String(64), nullable=False, unique=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used_at = Column(DateTime(timezone=True))
+
+    user = relationship("User", back_populates="email_tokens")
+
+    __table_args__ = (
+        CheckConstraint(
+            "purpose IN ('verify_email', 'reset_password', 'account_exists')", name='ck_email_tokens_purpose'
+        ),
+        # Lets the sending caps count a user's recent mails without scanning the whole table.
+        Index('ix_email_tokens_user_created', 'user_id', 'created_at'),
+    )
+
+    def __repr__(self):
+        return f"<EmailToken(user_id={self.user_id}, purpose='{self.purpose}', used={self.used_at is not None})>"

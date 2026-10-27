@@ -24,12 +24,24 @@ class UsernameTakenError(AccountError):
     """The username already exists."""
 
 
+class EmailTakenError(AccountError):
+    """The e-mail already belongs to another account."""
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
 def normalize_username(username: str) -> str:
     return username.strip().lower()
+
+
+def normalize_email(email: Optional[str]) -> Optional[str]:
+    """Lower case, no surrounding spaces; empty means "no e-mail"."""
+    if email is None:
+        return None
+    value = email.strip().lower()
+    return value or None
 
 
 def validate_username(username: str) -> str:
@@ -45,6 +57,21 @@ def get_user_by_username(db: Session, username: str) -> Optional[User]:
     return db.query(User).filter(User.username == normalize_username(username)).one_or_none()
 
 
+def get_user_by_email(db: Session, email: Optional[str]) -> Optional[User]:
+    normalized = normalize_email(email)
+    if normalized is None:
+        return None
+    return db.query(User).filter(User.email == normalized).one_or_none()
+
+
+def find_by_identifier(db: Session, identifier: str) -> Optional[User]:
+    """Look up by e-mail when the text has an "@" (usernames can never have one), else by username."""
+    value = identifier.strip()
+    if "@" in value:
+        return get_user_by_email(db, value)
+    return get_user_by_username(db, value)
+
+
 def create_user(
     db: Session,
     *,
@@ -55,24 +82,37 @@ def create_user(
     email: Optional[str] = None,
     is_active: bool = True,
     password_is_bootstrap: bool = False,
+    email_verified: bool = True,
+    terms_accepted: bool = False,
+    password_hash: Optional[str] = None,
 ) -> User:
+    """Create an account. `password_hash` lets a caller that already hashed the password reuse it.
+
+    Accounts are verified by default (admin panel and CLI); self-registration passes email_verified=False.
+    """
     normalized = validate_username(username)
     if role not in USER_ROLES:
         raise AccountError(f"Rol inválido: {role}")
     validate_password(password, normalized)
     if get_user_by_username(db, normalized) is not None:
         raise UsernameTakenError(f"El usuario '{normalized}' ya existe")
+    normalized_email = normalize_email(email)
+    if normalized_email is not None and get_user_by_email(db, normalized_email) is not None:
+        raise EmailTakenError("Ese mail ya está en uso")
 
+    now = _utcnow()
     user = User(
         username=normalized,
         full_name=full_name,
-        email=email,
-        password_hash=hash_password(password),
+        email=normalized_email,
+        password_hash=password_hash or hash_password(password),
         role=role,
         is_active=is_active,
         token_version=0,
         password_is_bootstrap=password_is_bootstrap,
         failed_login_count=0,
+        email_verified_at=now if email_verified else None,
+        terms_accepted_at=now if terms_accepted else None,
     )
     db.add(user)
     db.flush()

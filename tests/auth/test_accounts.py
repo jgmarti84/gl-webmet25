@@ -6,10 +6,14 @@ import pytest
 
 from radar_db.accounts import (
     AccountError,
+    EmailTakenError,
     UsernameTakenError,
     bootstrap_admin,
     count_active_admins,
     create_user,
+    find_by_identifier,
+    get_user_by_email,
+    normalize_email,
     revoke_all_sessions,
     set_password,
 )
@@ -111,3 +115,49 @@ def test_bootstrap_admin_noop_when_users_exist(make_user, test_db_session):
 def test_bootstrap_admin_rejects_weak_password(test_db_session):
     with pytest.raises(PasswordPolicyError):
         bootstrap_admin(test_db_session, "admin", "short")
+
+
+def test_normalize_email():
+    assert normalize_email("  Ana@Ejemplo.COM.ar ") == "ana@ejemplo.com.ar"
+    assert normalize_email("   ") is None
+    assert normalize_email(None) is None
+
+
+def test_create_user_is_verified_by_default(test_db_session):
+    user = create_user(test_db_session, username="verif", password=TEST_PASSWORD, role="viewer")
+    assert user.email_verified_at is not None
+
+
+def test_create_user_can_be_pending_with_terms(test_db_session):
+    user = create_user(
+        test_db_session,
+        username="pend",
+        password=TEST_PASSWORD,
+        role="viewer",
+        email="PEND@ejemplo.com.ar",
+        email_verified=False,
+        terms_accepted=True,
+    )
+    assert user.email == "pend@ejemplo.com.ar"
+    assert user.email_verified_at is None
+    assert user.terms_accepted_at is not None
+
+
+def test_create_user_rejects_a_taken_email(test_db_session):
+    create_user(test_db_session, username="uno", password=TEST_PASSWORD, role="viewer", email="x@ejemplo.com.ar")
+    with pytest.raises(EmailTakenError):
+        create_user(test_db_session, username="dos", password=TEST_PASSWORD, role="viewer", email="X@ejemplo.com.ar")
+
+
+def test_get_user_by_email_is_case_insensitive(test_db_session):
+    user = create_user(test_db_session, username="uno", password=TEST_PASSWORD, role="viewer", email="x@ejemplo.com.ar")
+    assert get_user_by_email(test_db_session, " X@Ejemplo.com.ar ").id == user.id
+    assert get_user_by_email(test_db_session, "nadie@ejemplo.com.ar") is None
+    assert get_user_by_email(test_db_session, "") is None
+
+
+def test_find_by_identifier_uses_the_mail_only_when_it_has_an_at_sign(test_db_session):
+    user = create_user(test_db_session, username="uno", password=TEST_PASSWORD, role="viewer", email="x@ejemplo.com.ar")
+    assert find_by_identifier(test_db_session, "UNO").id == user.id
+    assert find_by_identifier(test_db_session, "x@ejemplo.com.ar").id == user.id
+    assert find_by_identifier(test_db_session, "uno@ejemplo.com.ar") is None
