@@ -1,8 +1,10 @@
 # api/app/main.py
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+import json
 import logging
 import os
 import time
@@ -169,6 +171,20 @@ async def add_timing_header(request: Request, call_next):
     process_time = time.time() - start_time
     response.headers["X-Process-Time"] = str(process_time)
     return response
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """422 for a body or parameter that fails validation, same shape as FastAPI's default minus two things.
+
+    The default repeats each rejected value ("input") in the answer. That echoes back what was sent (a password
+    typed in a wrong field, for example) and, for a character that is not valid UTF-8, the answer itself could
+    not be encoded and the request ended in a 500. "input" and "ctx" are dropped, and the body is written with
+    ASCII escapes so no character in a message can break it.
+    """
+    errors = [{key: value for key, value in error.items() if key not in ("input", "ctx")} for error in exc.errors()]
+    content = json.dumps({"detail": errors}, ensure_ascii=True, default=str)
+    return Response(content=content, status_code=422, media_type="application/json")
 
 
 # Exception handler
