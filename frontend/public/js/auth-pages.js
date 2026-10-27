@@ -8,6 +8,8 @@ export const USERNAME_RE = /^[a-z0-9._-]{3,32}$/;
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const MIN_PASSWORD = 12;
 export const MAX_PASSWORD = 128;
+// Size of users.full_name: the optional "Nombre y apellido" of the sign-up form.
+export const MAX_FULL_NAME = 128;
 
 /** The server's own message (a string `detail`), or the fallback for validation lists and empty bodies. */
 export function errorText(data, fallback) {
@@ -34,12 +36,14 @@ export function validatePassword(password, repeat, username = '') {
 }
 
 /** Null when the whole sign-up form is acceptable, else the first problem found. */
-export function validateRegistration({ username, email, password, repeat, accepted }) {
+export function validateRegistration({ username, email, password, repeat, accepted, fullName = '' }) {
     const normalized = username.trim().toLowerCase();
     if (!USERNAME_RE.test(normalized)) {
         return 'El usuario debe tener entre 3 y 32 caracteres: letras minúsculas, números, punto, guion o guion bajo.';
     }
     if (!EMAIL_RE.test(email.trim())) return 'Ingresá un mail válido.';
+    // Optional: an empty name is fine, only a too long one is refused (the server cleans the rest up).
+    if (fullName.trim().length > MAX_FULL_NAME) return `El nombre puede tener hasta ${MAX_FULL_NAME} caracteres.`;
     const passwordProblem = validatePassword(password, repeat, normalized);
     if (passwordProblem) return passwordProblem;
     if (!accepted) return 'Tenés que aceptar los términos y la política de privacidad.';

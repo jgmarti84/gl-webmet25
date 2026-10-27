@@ -48,10 +48,12 @@ def account(browser, admin_storage_state):
         admin.close()
 
 
-def _sign_up(page: Page, username: str, email: str, password: str = PASSWORD) -> None:
+def _sign_up(page: Page, username: str, email: str, password: str = PASSWORD, full_name: str = "") -> None:
     page.goto(f"{FRONTEND_URL}/register", wait_until="networkidle")
     page.fill("#reg-username", username)
     page.fill("#reg-email", email)
+    if full_name:
+        page.fill("#reg-fullname", full_name)  # optional field: most tests leave it empty
     page.fill("#reg-password", password)
     page.fill("#reg-repeat", password)
     page.check("#reg-terms")
@@ -73,13 +75,15 @@ def _log_in(page: Page, identifier: str, password: str) -> None:
 
 def test_sign_up_verify_and_log_in_with_the_mail(page: Page, account):
     username, email = account
-    _sign_up(page, username, email)
+    _sign_up(page, username, email, full_name="Ana Pérez E2E")
     expect(page.locator("#register-done-text")).to_contain_text(email)
     _verify(page, email)
     _log_in(page, email, PASSWORD)
     page.wait_for_selector("#radar-list", state="attached")
     page.click("#btn-account")
     expect(page.locator("#account-role")).to_have_text("Lector")
+    # The optional full name typed at sign-up is what the account panel shows.
+    expect(page.locator("#account-name")).to_have_text("Ana Pérez E2E")
 
 
 def test_an_unverified_account_cannot_log_in_and_can_ask_for_a_new_mail(page: Page, account):

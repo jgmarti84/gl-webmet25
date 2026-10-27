@@ -43,6 +43,7 @@ form.addEventListener('submit', async (event) => {
     const values = {
         username: document.getElementById('reg-username').value,
         email: document.getElementById('reg-email').value,
+        fullName: document.getElementById('reg-fullname').value,
         password: document.getElementById('reg-password').value,
         repeat: document.getElementById('reg-repeat').value,
         accepted: document.getElementById('reg-terms').checked,
@@ -58,6 +59,8 @@ form.addEventListener('submit', async (event) => {
         const { status, data } = await authApi.register({
             username: values.username.trim().toLowerCase(),
             email: values.email.trim(),
+            // Left out when empty (undefined is dropped by JSON.stringify): the name is optional.
+            full_name: values.fullName.trim() || undefined,
             password: values.password,
             accept_terms: true,
             // Decoy field: empty for a person, filled by bots (the server ignores the request when it has text).

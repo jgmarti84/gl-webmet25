@@ -30,6 +30,9 @@ assert(validateRegistration({ ...valid, username: 'Ana.Perez' }) === null, 'user
 assert(validateRegistration({ ...valid, email: 'no-es-un-mail' }) !== null, 'bad mail');
 assert(validateRegistration({ ...valid, repeat: 'otra-cosa-larga-1' }) !== null, 'passwords differ');
 assert(validateRegistration({ ...valid, accepted: false }) !== null, 'terms not accepted');
+assert(validateRegistration({ ...valid, fullName: 'Ana Pérez' }) === null, 'a full name is accepted');
+assert(validateRegistration({ ...valid, fullName: '   ' }) === null, 'a blank full name counts as none');
+assert(validateRegistration({ ...valid, fullName: 'x'.repeat(129) }) !== null, 'full name longer than 128');
 
 console.log('T2: password rules');
 assert(validatePassword('corta', 'corta') !== null, 'shorter than 12');
