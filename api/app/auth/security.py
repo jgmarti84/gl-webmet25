@@ -2,6 +2,7 @@
 """JWT access tokens and opaque refresh tokens. No database access here."""
 
 import hashlib
+import re
 import secrets
 import uuid
 from dataclasses import dataclass
@@ -64,6 +65,28 @@ def decode_access_token(token: str) -> AccessClaims:
 
 def generate_refresh_token() -> str:
     return secrets.token_urlsafe(32)
+
+
+# secrets.token_urlsafe(32) is always 43 URL-safe characters and never contains a dot.
+_REFRESH_SECRET_RE = re.compile(r"[A-Za-z0-9_-]{43}")
+
+
+def build_refresh_token(session_id: uuid.UUID) -> str:
+    """Refresh token "<session id>.<secret>": the id finds the login row, the secret proves possession."""
+    return f"{session_id}.{secrets.token_urlsafe(32)}"
+
+
+def parse_refresh_token(token: str) -> Optional[uuid.UUID]:
+    """Session id of a well-formed refresh token, or None (malformed or old format) without touching the database."""
+    parts = token.split(".")
+    if len(parts) != 2 or not _REFRESH_SECRET_RE.fullmatch(parts[1]):
+        return None
+    try:
+        session_id = uuid.UUID(parts[0])
+    except ValueError:
+        return None
+    # Only the canonical form we issue: rejects hex without dashes, upper case, braces.
+    return session_id if str(session_id) == parts[0] else None
 
 
 def hash_refresh_token(token: str) -> str:

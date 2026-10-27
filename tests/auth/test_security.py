@@ -1,4 +1,5 @@
 # tests/auth/test_security.py
+import uuid
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -7,10 +8,11 @@ import pytest
 from api.app.auth.security import (
     ALGORITHM,
     InvalidAccessToken,
+    build_refresh_token,
     create_access_token,
     decode_access_token,
-    generate_refresh_token,
     hash_refresh_token,
+    parse_refresh_token,
 )
 from api.app.config import settings
 
@@ -67,8 +69,44 @@ def test_garbage_is_rejected():
         decode_access_token("not-a-jwt")
 
 
-def test_refresh_token_is_random_and_hash_is_stable():
-    a, b = generate_refresh_token(), generate_refresh_token()
-    assert a != b and len(a) >= 40
-    assert hash_refresh_token(a) == hash_refresh_token(a)
-    assert len(hash_refresh_token(a)) == 64
+SESSION_ID = uuid.UUID("3f2a9c1e-5b7d-4e8f-9a0b-1c2d3e4f5a6b")
+SECRET = "a" * 43
+
+
+def test_refresh_token_carries_the_session_id():
+    token = build_refresh_token(SESSION_ID)
+    head, secret = token.split(".")
+    assert head == str(SESSION_ID)
+    assert len(secret) == 43
+    assert parse_refresh_token(token) == SESSION_ID
+    assert build_refresh_token(SESSION_ID) != token  # the secret is random
+
+
+def test_refresh_token_hash_is_stable():
+    token = build_refresh_token(SESSION_ID)
+    assert hash_refresh_token(token) == hash_refresh_token(token)
+    assert len(hash_refresh_token(token)) == 64
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "",
+        "garbage",
+        "Xb3kQ9" * 7 + "A",  # old format: 43 URL-safe characters, no dot
+        f"{SESSION_ID}.",
+        f"{SESSION_ID}.{'a' * 42}",
+        f"{SESSION_ID}.{'a' * 44}",
+        f"{SESSION_ID}.{SECRET}.extra",
+        f"{SESSION_ID.hex}.{SECRET}",
+        f"{str(SESSION_ID).upper()}.{SECRET}",
+        f"not-a-uuid.{SECRET}",
+        f"{SESSION_ID}.{'a' * 42}!",
+    ],
+)
+def test_malformed_refresh_tokens_do_not_parse(token):
+    assert parse_refresh_token(token) is None
+
+
+def test_well_formed_refresh_token_parses():
+    assert parse_refresh_token(f"{SESSION_ID}.{SECRET}") == SESSION_ID
