@@ -9,6 +9,7 @@
 
 import { TrackingLayer } from './shared/tracking.js';
 import { authFetch } from './auth-api.js';
+import { indexCogsByMinute, closestCog } from './shared/colmax-match.js';
 
 const API_V1 = '/api/v1';
 
@@ -192,35 +193,49 @@ function countTracks(frames) {
 
 // ---------------------------------------------------------------- COLMAX
 
+/** /api/v1/cogs caps page_size at 200; a long window needs several pages. */
+const COGS_PAGE_SIZE = 200;
+const COGS_MAX_PAGES = 20;
+
 /**
- * Fetch COLMAX COGs for the window and index them by observation time.
+ * Fetch COLMAX COGs for the window and index them by observation minute.
  *
  * Reuses the existing COG/frames API — radarlib already produces COLMAX, so
  * this needs no new backend. Failure is non-fatal: the tracking layer is the
- * point of the page and an absent underlay should not break it.
+ * point of the page and an absent underlay should not break it — but it is
+ * logged, so a broken underlay is visible in the console instead of silent.
+ *
+ * Several volumes can have a COLMAX in the same minute, so each minute keeps a
+ * list and showColmaxFor picks the one closest to the cube (colmax-match.js).
  */
 async function loadColmax(radar, start, end) {
     try {
-        const params = new URLSearchParams({
-            radar_codes: radar, product: 'COLMAX',
-            time_from: start, time_to: end, limit: '500',
-        });
-        const res = await authFetch(`${API_V1}/cogs?${params}`);
-        if (!res.ok) return;
-        const cogs = (await res.json()).cogs || [];
-        for (const cog of cogs) {
-            if (!cog.bbox) continue;
-            state.colmaxByTime.set(isoMinute(cog.observation_time), cog);
+        for (let page = 1; page <= COGS_MAX_PAGES; page++) {
+            const params = new URLSearchParams({
+                radar_code: radar, product_key: 'COLMAX',
+                start_time: start, end_time: end,
+                page: String(page), page_size: String(COGS_PAGE_SIZE),
+            });
+            const res = await authFetch(`${API_V1}/cogs?${params}`);
+            if (!res.ok) {
+                console.warn(`COLMAX underlay: /cogs returned ${res.status}`);
+                return;
+            }
+            const body = await res.json();
+            const cogs = body.cogs || [];
+            indexCogsByMinute(state.colmaxByTime, cogs);
+            if (cogs.length < COGS_PAGE_SIZE || page * COGS_PAGE_SIZE >= (body.total ?? 0)) return;
         }
-    } catch {
-        /* underlay is optional */
+        console.warn(`COLMAX underlay: window has more than ${COGS_MAX_PAGES * COGS_PAGE_SIZE} COGs; showing the newest only`);
+    } catch (err) {
+        console.warn('COLMAX underlay: failed to load', err);
     }
 }
 
 function showColmaxFor(frame) {
     state.colmax.clearLayers();
     if (!el('toggle-colmax').checked || !frame) return;
-    const cog = state.colmaxByTime.get(isoMinute(frame.timestamp));
+    const cog = closestCog(state.colmaxByTime, frame.timestamp);
     if (!cog?.bbox) return;
     const b = cog.bbox;
     L.imageOverlay(
@@ -325,9 +340,6 @@ function status(message, isError = false) {
 
 const fmt = iso => iso ? String(iso).replace('T', ' ').replace(/(\.\d+)?Z?$/, '') + ' UTC' : '—';
 const fmtNum = v => (v == null ? '—' : Math.round(v));
-/** COG and cube timestamps come from the same volume but may differ in
- *  sub-minute precision, so match at minute resolution. */
-const isoMinute = iso => String(iso).slice(0, 16);
 const toLocalInput = d => new Date(d.getTime() - d.getTimezoneOffset() * 0).toISOString().slice(0, 16);
 const fromLocalInput = v => (v ? `${v}:00Z` : null);
 
