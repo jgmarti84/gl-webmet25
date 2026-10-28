@@ -303,19 +303,38 @@ const elements = {
     creatorModal: document.getElementById('creator-modal'),
 };
 
+// How long a success notice stays on screen before it closes by itself. Errors never close by themselves:
+// they carry something the admin has to read and act on, so only the × closes them.
+const SUCCESS_MESSAGE_MS = 4000;
+let messageTimer = null;
+
 function showMessage(text, type = 'success') {
     state.message = text;
-    elements.feedbackMessage.textContent = text;
+    elements.feedbackMessage.querySelector('.feedback-text').textContent = text;
     elements.feedbackMessage.classList.remove('hidden', 'success', 'error');
     elements.feedbackMessage.classList.add(type);
+    // A new notice replaces the previous one, so the old timer must not close the new notice early.
+    clearTimeout(messageTimer);
+    messageTimer = type === 'success' ? setTimeout(hideMessage, SUCCESS_MESSAGE_MS) : null;
 }
 
 function hideMessage() {
+    clearTimeout(messageTimer);
+    messageTimer = null;
     state.message = null;
-    elements.feedbackMessage.textContent = '';
+    elements.feedbackMessage.querySelector('.feedback-text').textContent = '';
     elements.feedbackMessage.classList.add('hidden');
     elements.feedbackMessage.classList.remove('success', 'error');
 }
+
+// The × of any notice (the feedback one and the initial-password warning) hides its own box.
+document.addEventListener('click', (event) => {
+    const close = event.target.closest('.feedback-close');
+    if (!close) return;
+    const box = close.closest('.feedback-message');
+    if (box === elements.feedbackMessage) hideMessage();
+    else box.classList.add('hidden');
+});
 
 function safeText(value) {
     const raw = value === null || value === undefined ? '' : String(value);
@@ -2119,7 +2138,7 @@ async function showBootstrapWarningIfNeeded() {
         const users = await adminApi.listUsers();
         const pending = users.filter((u) => u.role === 'admin' && u.is_active && u.password_is_bootstrap);
         if (pending.length) {
-            box.textContent = `Atención: ${pending.map((u) => u.username).join(', ')} sigue con la contraseña inicial del .env. `
+            box.querySelector('.feedback-text').textContent = `Atención:${pending.map((u) => u.username).join(', ')} sigue con la contraseña inicial del .env. `
                 + 'Cambiala desde el servidor con make reset-password U=<usuario> y borrá ADMIN_USERNAME / ADMIN_PASSWORD del .env.';
             box.classList.remove('hidden');
         }
