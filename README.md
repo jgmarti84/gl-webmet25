@@ -444,7 +444,7 @@ All endpoints below require a session cookie (log in with `POST /api/v1/auth/log
 
 CRUD for: `radars`, `products`, `references`, `cogs`, `tops-cores`, `estrategias`, `volumenes`, `colormap-stops`, `colormap-from-hex`, `colormap-options`.
 
-User management under `/api/v1/admin/users`: list, create, edit (name, email, role, active), reset password and revoke sessions. There is no delete: users are deactivated. `POST /api/v1/colormap/cache/invalidate` also requires the `admin` role.
+User management under `/api/v1/admin/users`: list, create, edit (name, email, role, active), reset password, revoke sessions and verify a pending mail by hand (`POST /{id}/verify-email`, 200; 404; 409 when the account has no mail). There is no delete: users are deactivated. `POST /api/v1/colormap/cache/invalidate` also requires the `admin` role.
 
 See [`docs/DATA_FLOW.md`](docs/DATA_FLOW.md) §4.9 for the full admin endpoint table.
 

@@ -427,3 +427,32 @@ def test_check_unknown_role_returns_422():
     with httpx.Client(base_url=API_BASE_URL) as client:
         _login(client)
         assert client.get(f"{PREFIX}/check", params={"role": "superuser"}).status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/auth/check-token   (204: no body; light probe of the tile proxies)
+# ---------------------------------------------------------------------------
+
+
+def test_check_token_without_session_returns_401():
+    """The light probe must answer 401 without a session."""
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        assert client.get(f"{PREFIX}/check-token").status_code == 401
+
+
+def test_check_token_with_garbage_cookie_returns_401():
+    """A cookie that is not a valid JWT is not a session."""
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        client.cookies.set("webmet_access", "not-a-jwt")
+        client.cookies.set("__Host-webmet_access", "not-a-jwt")
+        assert client.get(f"{PREFIX}/check-token").status_code == 401
+
+
+@needs_admin
+def test_check_token_with_session_returns_204():
+    """With a session the light probe answers 204 and no body."""
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        _login(client)
+        response = client.get(f"{PREFIX}/check-token")
+    assert response.status_code == 204
+    assert response.content == b""

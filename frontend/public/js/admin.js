@@ -303,18 +303,43 @@ const elements = {
     creatorModal: document.getElementById('creator-modal'),
 };
 
+// How long a success notice stays on screen before it closes by itself. Errors never close by themselves:
+// they carry something the admin has to read and act on, so only the × closes them.
+const SUCCESS_MESSAGE_MS = 4000;
+let messageTimer = null;
+
 function showMessage(text, type = 'success') {
     state.message = text;
-    elements.feedbackMessage.textContent = text;
+    elements.feedbackMessage.querySelector('.feedback-text').textContent = text;
     elements.feedbackMessage.classList.remove('hidden', 'success', 'error');
     elements.feedbackMessage.classList.add(type);
+    // A new notice replaces the previous one, so the old timer must not close the new notice early.
+    clearTimeout(messageTimer);
+    messageTimer = type === 'success' ? setTimeout(hideMessage, SUCCESS_MESSAGE_MS) : null;
 }
 
 function hideMessage() {
+    clearTimeout(messageTimer);
+    messageTimer = null;
     state.message = null;
-    elements.feedbackMessage.textContent = '';
+    elements.feedbackMessage.querySelector('.feedback-text').textContent = '';
     elements.feedbackMessage.classList.add('hidden');
     elements.feedbackMessage.classList.remove('success', 'error');
+}
+
+// The × of any notice (the feedback one and the initial-password warning) hides its own box.
+document.addEventListener('click', (event) => {
+    const close = event.target.closest('.feedback-close');
+    if (!close) return;
+    const box = close.closest('.feedback-message');
+    if (box === elements.feedbackMessage) hideMessage();
+    else box.classList.add('hidden');
+});
+
+// An account with a mail that was never confirmed: it shows "Activo: Sí" but cannot log in until the owner opens the
+// link of the mail, or an admin vouches for it ("Verificar mail"). Accounts without a mail have nothing to verify.
+function needsMailVerification(user) {
+    return Boolean(user.email) && !user.email_verified;
 }
 
 function safeText(value) {
@@ -1946,7 +1971,7 @@ async function renderUsers() {
             <tbody>
                 ${users.map((user) => `
                     <tr${rowFacetAttr('users', user)}>
-                        <td>${safeText(user.username)}${user.password_is_bootstrap ? ' <span class="status-pill">contraseña inicial</span>' : ''}</td>
+                        <td>${safeText(user.username)}${user.password_is_bootstrap ? ' <span class="status-pill">contraseña inicial</span>' : ''}${needsMailVerification(user) ? ' <span class="status-pill">mail sin verificar</span>' : ''}</td>
                         <td>${safeText(user.full_name)}</td>
                         <td>${ROLE_LABELS[user.role] || safeText(user.role)}</td>
                         <td>${user.is_active ? 'Sí' : 'No'}</td>
@@ -1957,6 +1982,7 @@ async function renderUsers() {
                                 <button class="btn-secondary" data-toggle-user="${user.id}">${user.is_active ? 'Desactivar' : 'Activar'}</button>
                                 <button class="btn-secondary" data-reset-user="${user.id}">Resetear contraseña</button>
                             `}
+                            ${needsMailVerification(user) ? `<button class="btn-secondary" data-verify-user="${user.id}">Verificar mail</button>` : ''}
                             <button class="btn-secondary" data-revoke-user="${user.id}">Cerrar sesiones</button>
                         </td>
                     </tr>
@@ -1987,6 +2013,15 @@ async function renderUsers() {
     });
     elements.sectionContent.querySelectorAll('[data-reset-user]').forEach((el) => {
         el.onclick = () => openPasswordResetForm(byId(el.dataset.resetUser));
+    });
+    elements.sectionContent.querySelectorAll('[data-verify-user]').forEach((el) => {
+        el.onclick = async () => {
+            const user = byId(el.dataset.verifyUser);
+            if (!window.confirm(`¿Marcar como verificado el mail de ${user.username} (${user.email})? Va a poder ingresar sin abrir el link.`)) return;
+            await adminApi.verifyUserEmail(user.id);
+            await renderSection();
+            showMessage(`Mail de ${user.username} verificado`, 'success');
+        };
     });
     elements.sectionContent.querySelectorAll('[data-revoke-user]').forEach((el) => {
         el.onclick = async () => {
@@ -2119,7 +2154,7 @@ async function showBootstrapWarningIfNeeded() {
         const users = await adminApi.listUsers();
         const pending = users.filter((u) => u.role === 'admin' && u.is_active && u.password_is_bootstrap);
         if (pending.length) {
-            box.textContent = `Atención: ${pending.map((u) => u.username).join(', ')} sigue con la contraseña inicial del .env. `
+            box.querySelector('.feedback-text').textContent = `Atención:${pending.map((u) => u.username).join(', ')} sigue con la contraseña inicial del .env. `
                 + 'Cambiala desde el servidor con make reset-password U=<usuario> y borrá ADMIN_USERNAME / ADMIN_PASSWORD del .env.';
             box.classList.remove('hidden');
         }

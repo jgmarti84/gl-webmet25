@@ -206,6 +206,75 @@ def test_check_unknown_role_is_422(client, make_user):
     assert client.get("/api/v1/auth/check", params={"role": "superuser"}).status_code == 422
 
 
+# /auth/check-token: the light probe of the basemap tile proxies. It trusts the signed JWT alone and never
+# reads the user, so moving the map costs no database connection.
+
+
+def test_check_token_without_session_is_401(client):
+    assert client.get("/api/v1/auth/check-token").status_code == 401
+
+
+def test_check_token_with_session_is_204_without_body(client, make_user):
+    make_user()
+    login(client)
+    response = client.get("/api/v1/auth/check-token")
+    assert response.status_code == 204
+    assert response.content == b""
+
+
+def test_check_token_with_a_tampered_token_is_401(client, make_user):
+    make_user()
+    login(client)
+    token = client.cookies.get(access_cookie_name())
+    # Change one character inside the signature: same shape, wrong signature. Not the last one: its two
+    # lowest bits are base64 padding, so some changes there decode to the very same signature.
+    tampered = token[:-5] + ("A" if token[-5] != "A" else "B") + token[-4:]
+    # Clear first: the login cookie carries the server's domain, so set() alone would add a second
+    # cookie with the same name and the request would still send the good one.
+    client.cookies.clear()
+    client.cookies.set(access_cookie_name(), tampered)
+    assert client.get("/api/v1/auth/check-token").status_code == 401
+
+
+def test_check_token_with_an_expired_token_is_401(client, make_user):
+    from datetime import datetime, timedelta, timezone
+
+    from api.app.auth.security import create_access_token
+
+    user = make_user()
+    two_hours_ago = datetime.now(timezone.utc) - timedelta(hours=2)
+    client.cookies.set(access_cookie_name(), create_access_token(user.id, user.role, user.token_version, two_hours_ago))
+    assert client.get("/api/v1/auth/check-token").status_code == 401
+
+
+def test_check_token_never_opens_a_database_session(client, make_user):
+    from radar_db import get_db
+
+    make_user()
+    login(client)
+
+    def no_database():
+        raise AssertionError("/auth/check-token must not ask for a database session")
+        yield  # never reached: makes this a generator, like get_db
+
+    client.app.dependency_overrides[get_db] = no_database
+    assert client.get("/api/v1/auth/check-token").status_code == 204
+
+
+def test_check_token_keeps_a_deactivated_user_until_the_token_expires(client, make_user, test_db_session):
+    """Accepted trade-off: the light probe does not see a deactivation; the full probe does, at once.
+
+    The light probe only guards public basemap tiles, and the access token lives 30 minutes at most.
+    """
+    user = make_user()
+    login(client)
+    user.is_active = False
+    user.token_version += 1
+    test_db_session.flush()
+    assert client.get("/api/v1/auth/check-token").status_code == 204
+    assert client.get("/api/v1/auth/check").status_code == 401
+
+
 def test_login_with_the_e_mail(client, make_user):
     make_user(email="ana@ejemplo.com.ar")
     response = client.post("/api/v1/auth/login", json={"username": "ana@ejemplo.com.ar", "password": TEST_PASSWORD})
