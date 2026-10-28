@@ -1,11 +1,15 @@
 # database/radar_db/models.py
 from sqlalchemy import (
     Column, Integer, String, Text, Float, Boolean, DateTime, 
-    ForeignKey, Numeric, Table, UniqueConstraint, Index, Enum as SQLEnum
+    ForeignKey, Numeric, Table, UniqueConstraint, Index, Enum as SQLEnum,
+    CheckConstraint,
 )
 from sqlalchemy.orm import relationship, declarative_base
+from sqlalchemy import text
 from sqlalchemy.sql import func
 from geoalchemy2 import Geometry
+from sqlalchemy.dialects.postgresql import UUID
+import uuid
 from decimal import Decimal
 from datetime import datetime
 import enum
@@ -406,3 +410,125 @@ class NCCube(Base):
 
     def __repr__(self):
         return f"<NCCube(id={self.id}, radar='{self.radar_code}', file='{self.file_name}')>"
+
+
+USER_ROLES = ("admin", "viewer")
+
+
+class User(Base):
+    """Application user (admin panel and, later, private endpoints)."""
+    __tablename__ = 'users'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String(32), nullable=False, unique=True, index=True)
+    full_name = Column(String(128))
+    email = Column(String(254))
+    password_hash = Column(String(255), nullable=False)
+    role = Column(String(16), nullable=False, default='viewer', server_default='viewer')
+    is_active = Column(Boolean, nullable=False, default=True, server_default='true')
+    # Copied into each access token at login and compared on every request. Adding 1 makes all
+    # the user's older tokens invalid at once (role change, deactivation, admin "revoke sessions").
+    token_version = Column(Integer, nullable=False, default=0, server_default='0')
+    # True while the password is still the initial one from ADMIN_PASSWORD (.env). Set on the first
+    # admin; set_password turns it off. The admin panel warns while it is true.
+    password_is_bootstrap = Column(Boolean, nullable=False, default=False, server_default='false')
+    failed_login_count = Column(Integer, nullable=False, default=0, server_default='0')
+    locked_until = Column(DateTime(timezone=True))
+    last_login_at = Column(DateTime(timezone=True))
+    # NULL = self-registered and still unverified: the account cannot log in. Accounts created by an
+    # admin or by the server CLI are verified when they are created.
+    email_verified_at = Column(DateTime(timezone=True))
+    # When the person accepted the terms and privacy policy at sign-up (proof of consent).
+    terms_accepted_at = Column(DateTime(timezone=True))
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
+    email_tokens = relationship(
+        "EmailToken", back_populates="user", cascade="all, delete-orphan", passive_deletes=True
+    )
+
+    __table_args__ = (
+        CheckConstraint("role IN ('admin', 'viewer')", name='ck_users_role'),
+        # The mail is unique among the accounts that have one (stored normalized: lower case, no spaces).
+        # Partial index: many accounts may have no mail at all.
+        Index('uq_users_email', 'email', unique=True, postgresql_where=text("email IS NOT NULL")),
+    )
+
+    def __repr__(self):
+        return f"<User(id={self.id}, username='{self.username}', role='{self.role}')>"
+
+
+class UserSession(Base):
+    """One row per login (rotated in place on every refresh)."""
+    __tablename__ = 'user_sessions'
+
+    # Id of the login. It travels inside the refresh token ("<id>.<secret>"): presenting an old token
+    # of this login (stolen and already rotated) closes the login (stolen token detection).
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    # SHA-256 of the current refresh token; the token itself only lives in the cookie.
+    token_hash = Column(String(64), nullable=False, unique=True)
+    # Hash of the token before the last rotation, accepted for 10 s (two tabs refreshing at once).
+    previous_token_hash = Column(String(64))
+    rotated_at = Column(DateTime(timezone=True))
+    refresh_count = Column(Integer, nullable=False, default=0, server_default='0')
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    absolute_expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked_at = Column(DateTime(timezone=True))
+    # Why the login was closed: logout | reuse | admin | inactive_user | password_reset | migration
+    revoke_reason = Column(String(20))
+    # Login time and the client that logged in (refreshes do not overwrite them).
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    last_used_at = Column(DateTime(timezone=True))
+    user_agent = Column(String(256))
+    ip = Column(String(45))
+
+    user = relationship("User", back_populates="sessions")
+
+    def __repr__(self):
+        return f"<UserSession(id={self.id}, user_id={self.user_id}, revoked={self.revoked_at is not None})>"
+
+
+EMAIL_TOKEN_PURPOSES = ("verify_email", "reset_password", "account_exists")
+
+
+class EmailToken(Base):
+    """Single-use e-mail link (verify the address / reset the password) and the log of mails sent.
+
+    Rows with purpose "account_exists" are not redeemable tokens: they are born expired, with a random
+    hash, and only count toward the per-account sending caps.
+
+    Why they exist (privacy): signing up with a mail that already has an account gets the same neutral
+    answer as a new mail, so nobody can find out who has an account. The owner of that mail gets an
+    "you already have an account" mail instead. That mail has no token, so this row is its only trace
+    and lets the caps stop someone from flooding the owner's inbox.
+    """
+    __tablename__ = 'email_tokens'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    # verify_email | reset_password | account_exists (a log entry, not a token; see the class docstring)
+    purpose = Column(String(32), nullable=False)
+    # SHA-256 of the token; the token itself only travels in the mail.
+    token_hash = Column(String(64), nullable=False, unique=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used_at = Column(DateTime(timezone=True))
+
+    user = relationship("User", back_populates="email_tokens")
+
+    __table_args__ = (
+        CheckConstraint(
+            "purpose IN ('verify_email', 'reset_password', 'account_exists')", name='ck_email_tokens_purpose'
+        ),
+        # Lets the sending caps count a user's recent mails without scanning the whole table.
+        Index('ix_email_tokens_user_created', 'user_id', 'created_at'),
+        # Lets the global caps count the mails of the whole site in the last hour / day (no user in the filter,
+        # so the index above cannot be used for it).
+        Index('ix_email_tokens_created_at', 'created_at'),
+    )
+
+    def __repr__(self):
+        return f"<EmailToken(user_id={self.user_id}, purpose='{self.purpose}', used={self.used_at is not None})>"

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visualización de Radar - WebMet25</title>
+    <link rel="icon" type="image/png" href="/assets/images/logos/OHMC@3x.png">
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -50,6 +51,11 @@
         <!-- Gear – Settings -->
         <button id="btn-settings" class="icon-btn" title="Configuración" aria-label="Abrir configuración">
             <span class="icon-glyph">⚙</span>
+        </button>
+
+        <!-- Account – current user's initials; filled and shown by js/shared/session-box.js -->
+        <button id="btn-account" class="icon-btn account-btn" title="Cuenta" aria-label="Cuenta" hidden>
+            <span id="account-initials" class="account-initials"></span>
         </button>
     </div>
 
@@ -348,12 +354,36 @@
                     </div>
                 </details>
             </div>
-            <!-- Admin DB panel: sets a per-tab flag so the admin's "Back" button
-                 can restore this map exactly as left (via browser bfcache). -->
-            <a id="admin-link" href="/admin" class="nav-link" style="margin-top:10px;"
-               onclick="sessionStorage.setItem('webmet25_admin_from_main','1')">⚙ Panel de Administración →</a>
             <!-- COG Browser link: hidden by default; reveal with Ctrl+Shift+D -->
             <a id="cog-browser-link" href="cog-browser.html" class="nav-link" style="display:none; margin-top:10px;">Ir al Navegador COG →</a>
+        </div>
+    </div>
+
+    <!-- ===== ACCOUNT – current user, logout and (admins only) the admin panel ===== -->
+    <div id="panel-account" class="floating-panel" style="display:none;">
+        <div class="panel-header">
+            <span>Cuenta</span>
+            <button class="panel-close" data-close="panel-account" aria-label="Cerrar cuenta">✕</button>
+        </div>
+        <div class="panel-body account-panel">
+            <div class="account-identity">
+                <div id="account-avatar" class="account-avatar" aria-hidden="true"></div>
+                <div class="account-meta">
+                    <div id="account-name" class="account-name"></div>
+                    <span id="account-role" class="account-role"></span>
+                </div>
+            </div>
+            <nav class="account-actions">
+                <!-- Admin DB panel (admins only): sets a per-tab flag so the admin's "Back" button
+                     can restore this map exactly as left (via browser bfcache). -->
+                <a id="admin-link" href="/admin" class="account-action" hidden
+                   onclick="sessionStorage.setItem('webmet25_admin_from_main','1')">
+                    <span>Panel de administración</span><span class="account-action-arrow">→</span>
+                </a>
+                <button id="session-box-logout" type="button" class="account-action account-action-logout">
+                    <span>Cerrar sesión</span>
+                </button>
+            </nav>
         </div>
     </div>
 

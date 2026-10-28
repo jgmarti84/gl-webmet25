@@ -1,6 +1,6 @@
 # tests/e2e/test_admin_panel.py
 """
-End-to-end tests for the admin panel (served at /admin behind Basic Auth).
+End-to-end tests for the admin panel (served at /admin, login required).
 
 Covers, per the e2e rules: page loads, key elements visible, user
 interaction (filtering, sorting, the colormap creator), and API integration
@@ -10,9 +10,16 @@ Requires the full stack running + a v2 frontend. See docs/E2E_TESTING.md.
 """
 import os
 
+import pytest
 from playwright.sync_api import Page, expect
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://frontend-v2:80")
+
+
+@pytest.fixture
+def browser_context_args(browser_context_args, admin_storage_state):
+    """Start every admin test already logged in (one shared login, see conftest)."""
+    return {**browser_context_args, "storage_state": admin_storage_state}
 
 
 def _open_radars(page: Page):

@@ -15,6 +15,7 @@
  *   layer.showFrame(frame, prevFrame, holdRadarCodes);  // synchronous, from animation loop
  */
 
+import { authFetch } from '../auth-api.js';
 import {
     cogTimeSpan,
     collectDisplayedCogs,
@@ -157,7 +158,7 @@ export class TopsCoresLayer {
             });
             radarCodes.forEach(code => params.append('radar_codes', code));
 
-            const metaResp = await fetch(`${API_BASE}/tops-cores?${params}`, { signal });
+            const metaResp = await authFetch(`${API_BASE}/tops-cores?${params}`, { signal });
             if (!metaResp.ok) {
                 console.warn(`[TopsCoresLayer] loadForFrames metadata failed: ${metaResp.status}`);
                 return;
@@ -168,7 +169,7 @@ export class TopsCoresLayer {
             // Step 2: fetch GeoJSON features for the wanted records concurrently
             const results = await Promise.all(
                 records.map(rec =>
-                    fetch(`${API_BASE}/tops-cores/${rec.id}/features`, { signal })
+                    authFetch(`${API_BASE}/tops-cores/${rec.id}/features`, { signal })
                         .then(r => r.ok ? r.json() : null)
                         .catch(err => {
                             if (err.name !== 'AbortError') {

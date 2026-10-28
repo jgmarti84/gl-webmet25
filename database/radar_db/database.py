@@ -1,5 +1,5 @@
 # database/radar_db/database.py
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import QueuePool
 from contextlib import contextmanager
@@ -12,6 +12,30 @@ from radar_db.config import settings
 from radar_db.models import Base
 
 logger = logging.getLogger(__name__)
+
+
+def _is_versioned(engine) -> bool:
+    """True when the database already has an Alembic version row."""
+    if "alembic_version" not in inspect(engine).get_table_names():
+        return False
+    with engine.connect() as conn:
+        return conn.execute(text("SELECT COUNT(*) FROM alembic_version")).scalar() > 0
+
+
+def sync_alembic_version(engine, alembic_cfg) -> str:
+    """Bring Alembic in line with the schema create_all just built.
+
+    * A database that already has a version row: apply the pending migrations (create_all never adds
+      columns to existing tables). A failure propagates: stamping over it would hide a half-applied schema.
+    * A database without a version (fresh, or created before Alembic): stamp it at head.
+
+    Returns "upgraded" or "stamped".
+    """
+    if _is_versioned(engine):
+        command.upgrade(alembic_cfg, "head")
+        return "upgraded"
+    command.stamp(alembic_cfg, "head")
+    return "stamped"
 
 
 class DatabaseManager:
@@ -64,10 +88,9 @@ class DatabaseManager:
         Base.metadata.create_all(bind=self._engine)
         logger.info("All database tables created")
         
-        # Stamp Alembic to head so future migrations run correctly
-        alembic_cfg = Config("alembic.ini")  # ← adjust path if needed
-        command.stamp(alembic_cfg, "head")
-        logger.info("Alembic stamped to head")
+        # Apply pending migrations on an existing database; only a database without a version is stamped.
+        outcome = sync_alembic_version(self._engine, Config("alembic.ini"))
+        logger.info("Alembic %s to head", outcome)
 
     def drop_all_tables(self):
         Base.metadata.drop_all(bind=self._engine)

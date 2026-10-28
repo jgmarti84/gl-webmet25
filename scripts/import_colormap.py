@@ -77,9 +77,9 @@ def parse_args() -> argparse.Namespace:
                          help="Distancia RGB [0-√3] para detectar discontinuidades "
                               "(default: 0.30 ; 0 = todos suaves)")
     grp_api.add_argument("--username", default=None, metavar="USER",
-                         help="Usuario para HTTP Basic Auth (requerido via nginx/:80 o Caddy)")
+                         help="Usuario admin de WebMet25 (login en /api/v1/auth/login)")
     grp_api.add_argument("--password", default=None, metavar="PASS",
-                         help="Contraseña para HTTP Basic Auth")
+                         help="Contraseña del usuario admin")
     grp_api.add_argument("--overwrite", action="store_true",
                          help="Eliminar el mapa existente con ese nombre antes de importar")
     grp_api.add_argument("--dry-run", action="store_true",
@@ -256,9 +256,15 @@ def main() -> None:
     api = args.api.rstrip("/")
     session = requests.Session()
     if args.username:
-        session.auth = (args.username, args.password)
+        login = session.post(
+            f"{api}/api/v1/auth/login",
+            json={"username": args.username, "password": args.password or ""},
+            timeout=10,
+        )
+        if login.status_code != 200:
+            sys.exit(f"Login fallido ({login.status_code}): {login.text}")
 
-    print(f"\nAPI base: {api}  (auth: {'Basic' if args.username else 'ninguna'})")
+    print(f"\nAPI base: {api}  (auth: {'sesión' if args.username else 'ninguna'})")
     existing = session.get(f"{api}/api/v1/admin/colormap-stops/{args.name}", timeout=10)
     if existing.status_code == 200:
         if not args.overwrite:

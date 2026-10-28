@@ -218,11 +218,85 @@ curl http://localhost/api/v1/health
 # View frame/tile cache statistics (L1 LRU + L2 Redis)
 curl http://localhost/api/v1/tiles/cache/stats
 
-# Flush the colormap in-process cache (after editing colormaps in the admin panel)
-curl -X POST http://localhost/api/v1/colormap/cache/invalidate
+# Flush the colormap in-process cache. Requires an admin session (the admin panel and
+# scripts/import_colormap.py already do this for you); with curl, log in first:
+curl -c cj.txt -X POST http://localhost/api/v1/auth/login -H "Content-Type: application/json" -d '{"username":"<admin>","password":"<password>"}'
+curl -b cj.txt -X POST http://localhost/api/v1/colormap/cache/invalidate
 ```
+
+## 8. User Management
+
+Run these from the repo root (`gl-webmet25`). They use the `db-init` image, so no extra setup is needed.
+
+```bash
+# Create an admin (prompts for the password twice, nothing is echoed)
+make create-admin U=maria
+
+# Set a new password for any user and close all their sessions
+make reset-password U=maria
+```
+
+- The **first admin** is created automatically by `db-init` from `ADMIN_USERNAME` / `ADMIN_PASSWORD` when there are no users. After the first start, run `make reset-password U=<that user>` and remove both variables from `.env`.
+- An admin **cannot reset their own password from the panel**; use `make reset-password` on the server.
+- Nobody can use the site without an account. The admin creates accounts from the panel; people can also create their own when public sign-up is on (see [§9](#9-public-registration-and-e-mail)). A mail entered by an admin counts as verified.
+- Other users are managed from the admin panel (**Usuarios**): create, change role, activate/deactivate, reset password, close sessions. Users are never deleted, only deactivated.
+- If a user is locked out after 5 failed logins, they can try again after 15 minutes, or an admin can reset their password.
+- Session lifetimes and the lockout are set from `.env` (`ACCESS_TOKEN_TTL_MINUTES`, `SESSION_IDLE_TTL_HOURS`, `SESSION_ABSOLUTE_TTL_DAYS`, `LOGIN_MAX_FAILED_ATTEMPTS`, `LOGIN_LOCKOUT_MINUTES`; defaults in [`DATA_FLOW.md`](DATA_FLOW.md)). Recreate the API afterwards with `make api`. Sessions already issued keep the lifetime they were created with.
+- If the API starts with no active admin it logs a warning with the command to create one.
+
+## 9. Public Registration and E-mail
+
+**What it does.** Anyone can create a `viewer` account at `/register` (username, mail, password, acceptance of the terms). The account cannot log in until the person opens the one-time link sent to the mail (valid 24 h). People log in with their username or their mail, and recover a forgotten password at `/forgot` (link valid 60 min; resetting closes every open session and lifts a lockout). It is **off by default**.
+
+### 9.1 Settings
+
+All go in `.env` (commented in `.env.example`); docker compose passes them to the API with these defaults. Recreate the API afterwards with `make api`.
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `REGISTRATION_ENABLED` | `false` | Master switch of the sign-up |
+| `PUBLIC_BASE_URL` | empty | Public address of the site, used in the links of the mails (no trailing slash) |
+| `MAIL_HOST` | empty | SMTP server |
+| `MAIL_PORT` | `587` | SMTP port (usually 587 with STARTTLS, 465 with SSL) |
+| `MAIL_USER` / `MAIL_PASSWORD` | empty | SMTP login; leave `MAIL_USER` empty for a server that needs none |
+| `MAIL_FROM` | empty | Sender address |
+| `MAIL_STARTTLS` | `true` | Encrypt the connection by upgrading it (port 587). Ignored when `MAIL_USE_SSL` is on |
+| `MAIL_USE_SSL` | `false` | Encrypted from the first byte (port 465) |
+| `TERMS_REQUIRED` | `false` | Ask the person to accept the terms and the privacy policy in the sign-up (checkbox and links). Off by default: the form shows neither. Turn it on before opening the sign-up to the public (see §9.3) |
+| `TERMS_URL` / `PRIVACY_URL` | empty | Links shown in the sign-up form when `TERMS_REQUIRED=true`; the texts are provided by the observatory |
+| `EMAIL_VERIFY_TTL_HOURS` | `24` | Life of the verification link. A pending account can only be replaced by a new sign-up after this time |
+| `PASSWORD_RESET_TTL_MINUTES` | `60` | Life of the reset link |
+| `MAIL_MAX_PER_HOUR` | `3` | Mails one account may receive per hour (all kinds count) |
+| `MAIL_MIN_INTERVAL_SECONDS` | `60` | Minimum time between two mails to one account |
+| `MAIL_MAX_GLOBAL_PER_HOUR` | `200` | Mails of the whole site per hour; past it only password recovery goes out |
+| `MAIL_MAX_GLOBAL_PER_DAY` | `1500` | Mails of the whole site per day; keep it under the SMTP provider's daily limit (Gmail Workspace: about 2,000) |
+
+When a cap stops a mail, the API sends nothing and answers exactly as if it had, so the answer never reveals whether an account exists.
+
+### 9.2 When it is available
+
+- **Sign-up** needs `REGISTRATION_ENABLED=true` **and** `MAIL_HOST`, `MAIL_FROM` and `PUBLIC_BASE_URL`; only with `TERMS_REQUIRED=true` it also needs `TERMS_URL` and `PRIVACY_URL`.
+- **Verification and password recovery** only need the mail settings (`MAIL_HOST`, `MAIL_FROM`, `PUBLIC_BASE_URL`).
+- If `REGISTRATION_ENABLED=true` but something is missing, the API says what in its log at startup and the sign-up stays off (the endpoint answers 503 and the login does not offer "Crear cuenta").
+
+### 9.3 Turning it on in production
+
+1. If a proxy sits in front of nginx, configure `set_real_ip_from` / `real_ip_header` first. The limits of these endpoints (10 requests/minute per IP) are per client IP: without the real IP every visitor shares the proxy's and the quota runs out for everybody.
+2. Set SPF and DKIM for the sender domain, or the mails land in spam.
+3. Gmail / Workspace: use an app password (not the account password) and mind the daily caps (about 500 and 2,000 mails).
+4. Get the terms and the privacy policy (the texts come from the observatory, ideally reviewed by its legal area), put their addresses in `TERMS_URL` and `PRIVACY_URL` and set `TERMS_REQUIRED=true`. It is off by default so the sign-up can be tried before the texts exist, but **before opening it to the public** the people must be shown them: it is the information and consent notice that the data protection law (Ley 25.326) expects when personal data is collected. While it is off the API warns about it in its log at startup, and no acceptance is recorded (`terms_accepted_at` stays empty).
+5. Fill `MAIL_*`, `PUBLIC_BASE_URL` and set `REGISTRATION_ENABLED=true`, then deploy with `make up` (or `make db-init` and `make api`). `db-init` applies the pending database migration; it fails with a clear message, listing them, if two users have the same mail. Fix those rows and run it again.
+6. To turn it off at once: `REGISTRATION_ENABLED=false` and `make api`. Accounts already created keep working.
+
+### 9.4 Development
+
+The development stack has a local mailbox, **Mailpit**: `http://localhost:8025` (reachable from this machine only). The main API of that stack already has sign-up on and sends there, so nothing leaves your computer. The black-box and end-to-end tests use their own API (`api-e2e`) with the same mailbox; see [`E2E_TESTING.md`](E2E_TESTING.md).
+
+### 9.5 Known gap
+
+There is **no automatic cleanup** of unverified accounts or of expired rows in `email_tokens`. An unverified account is replaced when someone signs up again with its username or mail after its link expired (24 h), and until then it keeps that username. Expired tokens pile up until a cleanup job is written. (Old logins in `user_sessions` are purged on each login of that user; see §8.)
 
 ---
 
-**Document Version:** 1.1.0  
-**Last Updated:** September 7, 2026
+**Document Version:** 1.3.0  
+**Last Updated:** October 27, 2026

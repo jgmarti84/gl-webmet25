@@ -10,7 +10,8 @@ The v2 frontend is a modular vanilla ES6 application served by Nginx. It renders
 |------|-----|-------------|
 | `public/index.html` | `/` | Multi-radar animated map (v2 production) |
 | `public/radar.html` | `/radar.html?code=XXX` | One-radar multi-layer detail page |
-| `public/admin.html` | `/admin` | Admin CRUD SPA (nginx Basic Auth) |
+| `public/login.html` | `/login` | Login page |
+| `public/admin.html` | `/admin` | Admin CRUD SPA (login required, `admin` role) |
 | `public/cog-browser.html` | `/cog-browser.html` | Alternative COG file browser |
 
 ---
@@ -95,10 +96,10 @@ URL: `/radar.html?code=AR5[&field=DBZHo]`
 
 ## Admin Panel (`admin.html` + `admin.js`)
 
-URL: `/admin` (nginx HTTP Basic Auth — credentials set via `ADMIN_USERNAME`/`ADMIN_PASSWORD` env vars)
+URL: `/admin` (login required: without a session it redirects to `/login`; the API enforces the `admin` role. The session is renewed transparently through `js/auth-api.js` when the access token expires.)
 
 Sections (hash-routed via `history.replaceState`):
-`dashboard`, `radars`, `products`, `references`, `cogs`, `tops-cores`, `estrategias`, `volumenes`, `colormaps`, `colormap-options`
+`dashboard`, `radars`, `products`, `references`, `cogs`, `tops-cores`, `estrategias`, `volumenes`, `colormaps`, `colormap-options`, `users`
 
 Key behaviors:
 - Django-admin-style filter bars: global search + per-column facets (text/select/boolean), live count, sortable columns
@@ -128,8 +129,9 @@ Key behaviors:
 
 ## Nginx Configuration Highlights
 
-- `/admin` and `/admin/*` — Basic Auth + serve `admin.html`
-- `/api/v1/admin/*` — Basic Auth + proxy to `api:8000`
+- `/admin` and `/admin/*` — serve `admin.html` (static; the API enforces login)
+- `/login` — serve `login.html`
+- `/api/v1/auth/login` — rate limit 10 req/min per IP (429) + proxy to `api:8000`
 - `/api/*` — proxy to `api:8000` (with `proxy_buffering off` for SSE support)
 - `/osm-tiles/*` — proxy + 30-day cache to `tile.openstreetmap.org`
 - `/ign-tiles/*` — proxy + 7-day cache to `wms.ign.gob.ar`

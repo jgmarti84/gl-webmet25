@@ -329,6 +329,7 @@ button:active { transform: translateY(1px); }
     border: 1px solid var(--border);
     background: #fff;
     text-transform: capitalize;
+    white-space: nowrap;
 }
 
 /* ── Tables ──────────────────────────────────────────────── */
@@ -644,4 +645,16 @@ th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
     .main-content { padding: 18px; }
     .logout-hint { display: none; }
     .table-wrap { max-height: none; }
+}
+
+/* ── Session box in the admin header ───────────────────────── */
+.session-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.session-user {
+    font-size: 0.9rem;
+    opacity: 0.85;
 }

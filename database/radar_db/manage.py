@@ -10,11 +10,15 @@ Usage:
     python -m radar_db.manage reset         # Reset database (DESTRUCTIVE)
     python -m radar_db.manage info          # Show database info
     python -m radar_db.manage migrate       # Run Alembic migrations
+    python -m radar_db.manage init-admin    # First admin from ADMIN_USERNAME / ADMIN_PASSWORD
+    python -m radar_db.manage create-admin --username X
+    python -m radar_db.manage reset-password --username X
 """
 import argparse
 import logging
 import sys
 import os
+import getpass
 from radar_db.config import settings
 
 logging.basicConfig(
@@ -310,6 +314,100 @@ def cmd_shell(args):
     return 0
 
 
+def _prompt_new_password() -> str:
+    first = getpass.getpass("Contraseña nueva: ")
+    second = getpass.getpass("Repetir contraseña: ")
+    if first != second:
+        raise ValueError("Las contraseñas no coinciden")
+    return first
+
+
+def cmd_init_admin(args: argparse.Namespace) -> int:
+    """Create the first admin from ADMIN_USERNAME / ADMIN_PASSWORD if there are no users."""
+    from radar_db.accounts import AccountError, bootstrap_admin
+    from radar_db.database import check_db_connection, db_manager
+    from radar_db.passwords import PasswordPolicyError
+
+    username = os.getenv("ADMIN_USERNAME", "").strip()
+    password = os.getenv("ADMIN_PASSWORD", "")
+    if not username or not password:
+        logger.info("ADMIN_USERNAME / ADMIN_PASSWORD no definidas: no se crea ningún admin.")
+        return 0
+    if not check_db_connection():
+        logger.error("Cannot connect to database.")
+        return 1
+    try:
+        with db_manager.get_session() as session:
+            user = bootstrap_admin(session, username, password)
+            created = user.username if user else None
+    except PasswordPolicyError as exc:
+        logger.error(
+            f"init-admin: ADMIN_PASSWORD no cumple la política de contraseñas ({exc}). "
+            "No se creó el admin y db-init se detiene: corregí ADMIN_PASSWORD en el .env y volvé a levantarlo."
+        )
+        return 1
+    except AccountError as exc:
+        logger.error(
+            f"init-admin: ADMIN_USERNAME no es válido ({exc}). "
+            "No se creó el admin y db-init se detiene: corregí ADMIN_USERNAME en el .env y volvé a levantarlo."
+        )
+        return 1
+    if created is None:
+        logger.info("Ya existen usuarios: init-admin no hace nada.")
+        return 0
+    logger.warning(
+        f"Admin inicial '{created}' creado desde ADMIN_USERNAME / ADMIN_PASSWORD. "
+        f"Cambiá su contraseña con 'make reset-password U={created}' y "
+        "borrá ADMIN_USERNAME / ADMIN_PASSWORD del .env."
+    )
+    return 0
+
+
+def cmd_create_admin(args: argparse.Namespace) -> int:
+    """Create an admin, prompting for the password."""
+    from radar_db.accounts import AccountError, create_user
+    from radar_db.database import check_db_connection, db_manager
+    from radar_db.passwords import PasswordPolicyError
+
+    if not check_db_connection():
+        logger.error("Cannot connect to database.")
+        return 1
+    try:
+        password = _prompt_new_password()
+        with db_manager.get_session() as session:
+            user = create_user(session, username=args.username, password=password, role="admin")
+            created = user.username
+    except (AccountError, PasswordPolicyError, ValueError) as exc:
+        logger.error(f"create-admin: {exc}")
+        return 1
+    logger.info(f"Admin '{created}' creado.")
+    return 0
+
+
+def cmd_reset_password(args: argparse.Namespace) -> int:
+    """Set a new password for a user, prompting for it, and close all sessions."""
+    from radar_db.accounts import get_user_by_username, set_password
+    from radar_db.database import check_db_connection, db_manager
+    from radar_db.passwords import PasswordPolicyError
+
+    if not check_db_connection():
+        logger.error("Cannot connect to database.")
+        return 1
+    try:
+        password = _prompt_new_password()
+        with db_manager.get_session() as session:
+            user = get_user_by_username(session, args.username)
+            if user is None:
+                logger.error(f"reset-password: el usuario '{args.username}' no existe")
+                return 1
+            set_password(session, user, password)
+    except (PasswordPolicyError, ValueError) as exc:
+        logger.error(f"reset-password: {exc}")
+        return 1
+    logger.info(f"Contraseña de '{args.username}' actualizada; sesiones cerradas.")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Radar COG Database Management',
@@ -406,6 +504,22 @@ Examples:
     shell_parser = subparsers.add_parser('shell', help='Open interactive shell')
     shell_parser.set_defaults(func=cmd_shell)
     
+    # user commands
+    init_admin_parser = subparsers.add_parser(
+        'init-admin', help='Create the first admin from ADMIN_USERNAME / ADMIN_PASSWORD if there are no users'
+    )
+    init_admin_parser.set_defaults(func=cmd_init_admin)
+
+    create_admin_parser = subparsers.add_parser('create-admin', help='Create an admin (prompts for password)')
+    create_admin_parser.add_argument('--username', required=True)
+    create_admin_parser.set_defaults(func=cmd_create_admin)
+
+    reset_parser_pw = subparsers.add_parser(
+        'reset-password', help='Set a new password for a user (prompts) and close all sessions'
+    )
+    reset_parser_pw.add_argument('--username', required=True)
+    reset_parser_pw.set_defaults(func=cmd_reset_password)
+
     # Parse arguments
     args = parser.parse_args()
     

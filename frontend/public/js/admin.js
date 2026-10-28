@@ -1,6 +1,7 @@
 import { adminApi, EXPIRED_SESSION_MESSAGE } from './admin-api.js';
+import { authApi, redirectToLogin } from './auth-api.js';
 
-const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'colormaps', 'colormap-options'];
+const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'colormaps', 'colormap-options', 'users'];
 const STATUS_OPTIONS = ['available', 'missing', 'error', 'pending', 'processing', 'archived'];
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
@@ -11,6 +12,7 @@ const ICON_TRASH = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="cur
 
 const state = {
     section: 'dashboard',
+    me: null,
     message: null,
     sortBy: {
         radars: 'code',
@@ -20,6 +22,7 @@ const state = {
         volumenes: 'id',
         colormaps: 'cmap_name',
         'colormap-options': 'product_key',
+        users: 'username',
     },
     sortDir: {
         radars: 'asc',
@@ -29,6 +32,7 @@ const state = {
         volumenes: 'asc',
         colormaps: 'asc',
         'colormap-options': 'asc',
+        users: 'asc',
     },
     cogs: {
         page: 1,
@@ -95,6 +99,13 @@ const FILTER_CONFIG = {
         facets: [
             { field: 'product_key', label: 'Producto', type: 'select' },
             { field: 'cmap_name', label: 'Mapa de colores', type: 'select' },
+        ],
+    },
+    users: {
+        facets: [
+            { field: 'username', label: 'Usuario', type: 'text' },
+            { field: 'role', label: 'Rol', type: 'select' },
+            { field: 'is_active', label: 'Activo', type: 'boolean' },
         ],
     },
 };
@@ -1687,7 +1698,7 @@ function openColormapCreator(products, existing = null) {
                 await adminApi.createColormapFromHex({ cmap_name: cmapName, stops, product_keys: productKeys });
             }
             // Invalidate the in-process cache so the API picks up the change.
-            await fetch('/api/v1/colormap/cache/invalidate', { method: 'POST' });
+            await adminApi.invalidateColormapCache();
             modal.classList.add('hidden');
             showMessage(`Mapa de colores "${cmapName}" ${isEdit ? 'actualizado' : 'creado'}`, 'success');
             renderSection();
@@ -1914,6 +1925,135 @@ async function renderColormapOptions() {
     });
 }
 
+const ROLE_LABELS = { admin: 'Administrador', viewer: 'Lector' };
+
+async function renderUsers() {
+    const users = sortItems(await adminApi.listUsers(), 'users');
+    const meId = state.me?.id;
+    elements.sectionContent.innerHTML = `
+        <div class="toolbar"><button class="btn" id="users-add">+ Agregar usuario</button></div>
+        ${renderFilterBar('users', users)}
+        <div class="table-wrap">
+        <table>
+            <thead><tr>
+                <th><button data-sort="username">Usuario</button></th>
+                <th><button data-sort="full_name">Nombre</button></th>
+                <th><button data-sort="role">Rol</button></th>
+                <th><button data-sort="is_active">Activo</button></th>
+                <th><button data-sort="last_login_at">Último ingreso</button></th>
+                <th>Acciones</th>
+            </tr></thead>
+            <tbody>
+                ${users.map((user) => `
+                    <tr${rowFacetAttr('users', user)}>
+                        <td>${safeText(user.username)}${user.password_is_bootstrap ? ' <span class="status-pill">contraseña inicial</span>' : ''}</td>
+                        <td>${safeText(user.full_name)}</td>
+                        <td>${ROLE_LABELS[user.role] || safeText(user.role)}</td>
+                        <td>${user.is_active ? 'Sí' : 'No'}</td>
+                        <td>${user.last_login_at ? fmtDate(user.last_login_at) : '—'}</td>
+                        <td class="table-actions">
+                            <button class="btn-secondary" data-edit-user="${user.id}" title="Editar">${ICON_EDIT}</button>
+                            ${user.id === meId ? '' : `
+                                <button class="btn-secondary" data-toggle-user="${user.id}">${user.is_active ? 'Desactivar' : 'Activar'}</button>
+                                <button class="btn-secondary" data-reset-user="${user.id}">Resetear contraseña</button>
+                            `}
+                            <button class="btn-secondary" data-revoke-user="${user.id}">Cerrar sesiones</button>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+        </div>
+    `;
+
+    wireFilterBar('users');
+    wireSortHeaders('users');
+    const byId = (id) => users.find((u) => String(u.id) === String(id));
+
+    document.getElementById('users-add').onclick = () => openUserForm();
+    elements.sectionContent.querySelectorAll('[data-edit-user]').forEach((el) => {
+        el.onclick = () => openUserForm(byId(el.dataset.editUser));
+    });
+    elements.sectionContent.querySelectorAll('[data-toggle-user]').forEach((el) => {
+        el.onclick = async () => {
+            const user = byId(el.dataset.toggleUser);
+            const action = user.is_active ? 'desactivar' : 'activar';
+            if (!window.confirm(`¿Confirma ${action} a ${user.username}?`)) return;
+            const wasActive = user.is_active;
+            await adminApi.patchUser(user.id, { is_active: !wasActive });
+            await renderSection();
+            showMessage(`Usuario ${user.username} ${wasActive ? 'desactivado' : 'activado'}`, 'success');
+        };
+    });
+    elements.sectionContent.querySelectorAll('[data-reset-user]').forEach((el) => {
+        el.onclick = () => openPasswordResetForm(byId(el.dataset.resetUser));
+    });
+    elements.sectionContent.querySelectorAll('[data-revoke-user]').forEach((el) => {
+        el.onclick = async () => {
+            const user = byId(el.dataset.revokeUser);
+            const self = user.id === meId ? ' (incluida la tuya: vas a tener que volver a entrar)' : '';
+            if (!window.confirm(`¿Cerrar todas las sesiones de ${user.username}${self}?`)) return;
+            await adminApi.revokeUserSessions(user.id);
+            await renderSection();
+            showMessage(`Sesiones de ${user.username} cerradas`, 'success');
+        };
+    });
+}
+
+function openUserForm(user = null) {
+    const isEdit = Boolean(user);
+    const isSelf = isEdit && user.id === state.me?.id;
+    const roleOptions = Object.entries(ROLE_LABELS)
+        .map(([value, label]) => `<option value="${value}"${(user?.role || 'viewer') === value ? ' selected' : ''}>${label}</option>`)
+        .join('');
+    openFormModal(
+        isEdit ? `Editar usuario ${user.username}` : 'Agregar usuario',
+        `
+            ${isEdit ? '' : '<label>Usuario <input name="username" type="text" minlength="3" maxlength="32" pattern="[a-zA-Z0-9._-]+" required></label>'}
+            <label>Nombre <input name="full_name" type="text" maxlength="128" value="${safeText(user?.full_name)}"></label>
+            <label>Email <input name="email" type="email" maxlength="254" value="${safeText(user?.email)}"></label>
+            <label>Rol <select name="role"${isSelf ? ' disabled' : ''}>${roleOptions}</select></label>
+            ${isEdit ? '' : '<label>Contraseña inicial <input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required></label>'}
+            <div class="form-actions"><button class="btn" type="submit">${isEdit ? 'Guardar' : 'Crear'}</button></div>
+        `,
+        async (formData) => {
+            const payload = {
+                full_name: formData.get('full_name') || null,
+                email: formData.get('email') || null,
+            };
+            if (!isSelf) payload.role = formData.get('role');
+            let message;
+            if (isEdit) {
+                await adminApi.patchUser(user.id, payload);
+                message = `Usuario ${user.username} actualizado`;
+            } else {
+                payload.username = formData.get('username');
+                payload.password = formData.get('password');
+                await adminApi.createUser(payload);
+                message = `Usuario ${payload.username.toLowerCase()} creado`;
+            }
+            await renderSection();
+            showMessage(message, 'success');
+        },
+    );
+}
+
+function openPasswordResetForm(user) {
+    openFormModal(
+        `Resetear contraseña de ${user.username}`,
+        `
+            <label>Contraseña nueva <input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required></label>
+            <p class="toolbar-note">Se cierran todas las sesiones de ${safeText(user.username)}.</p>
+            <div class="form-actions"><button class="btn" type="submit">Guardar</button></div>
+        `,
+        async (formData) => {
+            await adminApi.resetUserPassword(user.id, formData.get('password'));
+            await renderSection();
+            showMessage(`Contraseña de ${user.username} actualizada`, 'success');
+        },
+    );
+}
+
 async function renderSection() {
     hideMessage();
     state.section = parseHashSection();
@@ -1930,6 +2070,7 @@ async function renderSection() {
         'tops-cores': 'Tops & Cores',
         colormaps: 'Mapas de colores',
         'colormap-options': 'Opciones de mapa de colores',
+        users: 'Usuarios',
     };
     elements.sectionTitle.textContent = titleBySection[state.section] || 'Panel';
 
@@ -1944,6 +2085,7 @@ async function renderSection() {
         if (state.section === 'tops-cores') await renderTopsCores();
         if (state.section === 'colormaps') await renderColormaps();
         if (state.section === 'colormap-options') await renderColormapOptions();
+        if (state.section === 'users') await renderUsers();
         decorateSortHeaders(state.section);
     } catch (error) {
         if ((error.message || '').includes(EXPIRED_SESSION_MESSAGE)) {
@@ -1954,7 +2096,54 @@ async function renderSection() {
     }
 }
 
-function init() {
+async function logout() {
+    await authApi.logout();
+    window.location.assign('/login');
+}
+
+function renderNoPermission() {
+    document.getElementById('sidebar-nav').classList.add('hidden');
+    elements.sectionTitle.textContent = 'Sin permisos';
+    elements.sectionContent.innerHTML = `
+        <div class="empty-state">
+            <p>No tenés permisos de administración.</p>
+            <button class="btn" id="no-permission-back" type="button">Volver al mapa</button>
+        </div>
+    `;
+    document.getElementById('no-permission-back').onclick = goBackToMap;
+}
+
+async function showBootstrapWarningIfNeeded() {
+    const box = document.getElementById('bootstrap-warning');
+    try {
+        const users = await adminApi.listUsers();
+        const pending = users.filter((u) => u.role === 'admin' && u.is_active && u.password_is_bootstrap);
+        if (pending.length) {
+            box.textContent = `Atención: ${pending.map((u) => u.username).join(', ')} sigue con la contraseña inicial del .env. `
+                + 'Cambiala desde el servidor con make reset-password U=<usuario> y borrá ADMIN_USERNAME / ADMIN_PASSWORD del .env.';
+            box.classList.remove('hidden');
+        }
+    } catch (error) {
+        // Non-blocking: the panel works without the warning.
+    }
+}
+
+async function init() {
+    const me = await authApi.me();
+    if (!me) {
+        redirectToLogin();
+        return;
+    }
+    state.me = me;
+    document.getElementById('session-user').textContent = me.full_name || me.username;
+    document.getElementById('logout-btn').onclick = logout;
+    document.getElementById('back-to-map').onclick = goBackToMap;
+    document.getElementById('sidebar-back-map').onclick = goBackToMap;
+    if (me.role !== 'admin') {
+        renderNoPermission();
+        return;
+    }
+
     elements.closeFormModal.onclick = closeFormModal;
     elements.formModal.addEventListener('click', (event) => {
         if (event.target === elements.formModal) {
@@ -1988,6 +2177,7 @@ function init() {
 
     history.replaceState(null, '', `#${parseHashSection()}`);
     renderSection();
+    showBootstrapWarningIfNeeded();
 }
 
 init();

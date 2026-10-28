@@ -7,9 +7,16 @@ tests require the v2 frontend. See docs/E2E_TESTING.md.
 """
 import os
 
+import pytest
 from playwright.sync_api import Page, expect
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://frontend-v2:80")
+
+
+@pytest.fixture
+def browser_context_args(browser_context_args, admin_storage_state):
+    """The map requires a session (spec A): start already logged in (one shared login, see conftest)."""
+    return {**browser_context_args, "storage_state": admin_storage_state}
 
 
 def _open_custom_range(page: Page):

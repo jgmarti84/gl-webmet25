@@ -27,15 +27,15 @@ services:
     image: postgis/postgis:15-3.5
     container_name: radar_db-gl
     environment: 
-      POSTGRES_DB: radar_prod_db
-      POSTGRES_USER: radar
+      POSTGRES_DB: ${DB_NAME:-radar_prod_db}
+      POSTGRES_USER: ${DB_USER:-radar}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env (see .env.example)}
     volumes:
       - ../radar_db_data:/var/lib/postgresql/data
     ports:
       - "5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U radar -d radar_prod_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-radar} -d ${DB_NAME:-radar_prod_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -52,9 +52,11 @@ services:
     environment:
       DB_HOST: radar_db
       DB_PORT: 5432
-      DB_NAME: radar_prod_db
-      DB_USER: radar
+      DB_NAME: ${DB_NAME:-radar_prod_db}
+      DB_USER: ${DB_USER:-radar}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env (see .env.example)}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     depends_on:
       radar_db:
         condition: service_healthy
@@ -63,6 +65,7 @@ services:
         echo 'Waiting for database...' &&
         python -m radar_db.manage init &&
         python -m radar_db.manage seed &&
+        python -m radar_db.manage init-admin &&
         echo 'Database initialized!'
       "
     restart: "no"
@@ -78,8 +81,8 @@ services:
     environment:
       DB_HOST: radar_db
       DB_PORT: 5432
-      DB_NAME: radar_prod_db
-      DB_USER: radar
+      DB_NAME: ${DB_NAME:-radar_prod_db}
+      DB_USER: ${DB_USER:-radar}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env (see .env.example)}
       WATCH_PATH: /product_output
       SCAN_INTERVAL: 30
@@ -116,9 +119,9 @@ services:
     environment:
       DB_HOST: radar_db
       DB_PORT: 5432
-      DB_NAME: radar_prod_db
-      DB_USER: radar
-      DB_PASSWORD: radarpass
+      DB_NAME: ${DB_NAME:-radar_prod_db}
+      DB_USER: ${DB_USER:-radar}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env (see .env.example)}
       NCCUBE_DIR: /nccube
     volumes:
       # Read-only: the sidecar consumes cubes, radarlib owns their lifecycle.
@@ -150,24 +153,56 @@ services:
       --workers ${UVICORN_WORKERS:-4}
       --loop uvloop
       --http httptools
+      --proxy-headers
+      --forwarded-allow-ips '*'
     container_name: radar_api
     environment:
       DB_HOST: radar_db
       DB_PORT: 5432
-      DB_NAME: radar_prod_db
-      DB_USER: radar
+      DB_NAME: ${DB_NAME:-radar_prod_db}
+      DB_USER: ${DB_USER:-radar}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env (see .env.example)}
       COG_BASE_PATH: /product_output
       TOPS_AND_CORES_DIR: /tops_and_cores
-      CORS_ORIGINS: "*"
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (see .env.example)}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      # Session and lockout settings: same defaults as api/app/config.py (change them in .env)
+      ACCESS_TOKEN_TTL_MINUTES: ${ACCESS_TOKEN_TTL_MINUTES:-30}
+      SESSION_IDLE_TTL_HOURS: ${SESSION_IDLE_TTL_HOURS:-48}
+      SESSION_ABSOLUTE_TTL_DAYS: ${SESSION_ABSOLUTE_TTL_DAYS:-7}
+      SESSION_RETENTION_DAYS: ${SESSION_RETENTION_DAYS:-90}
+      LOGIN_MAX_FAILED_ATTEMPTS: ${LOGIN_MAX_FAILED_ATTEMPTS:-5}
+      LOGIN_LOCKOUT_MINUTES: ${LOGIN_LOCKOUT_MINUTES:-15}
+      # Public registration and e-mail (spec B): same defaults as api/app/config.py
+      REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-false}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      MAIL_STARTTLS: ${MAIL_STARTTLS:-true}
+      MAIL_USE_SSL: ${MAIL_USE_SSL:-false}
+      TERMS_REQUIRED: ${TERMS_REQUIRED:-false}
+      TERMS_URL: ${TERMS_URL:-}
+      PRIVACY_URL: ${PRIVACY_URL:-}
+      EMAIL_VERIFY_TTL_HOURS: ${EMAIL_VERIFY_TTL_HOURS:-24}
+      PASSWORD_RESET_TTL_MINUTES: ${PASSWORD_RESET_TTL_MINUTES:-60}
+      MAIL_MAX_PER_HOUR: ${MAIL_MAX_PER_HOUR:-3}
+      MAIL_MIN_INTERVAL_SECONDS: ${MAIL_MIN_INTERVAL_SECONDS:-60}
+      MAIL_MAX_GLOBAL_PER_HOUR: ${MAIL_MAX_GLOBAL_PER_HOUR:-200}
+      MAIL_MAX_GLOBAL_PER_DAY: ${MAIL_MAX_GLOBAL_PER_DAY:-1500}
     volumes:
       - ../product_output:/product_output:ro
       - ../tops_and_cores:/tops_and_cores:ro
       # Read-only so the API can serve cube availability; the tracking sidecar
       # that actually reads these arrives in the next phase.
       - ../nccube:/nccube:ro
+    # Only reachable from the host itself (local dev, SSH); public traffic goes through nginx.
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       radar_db:
         condition: service_healthy
@@ -193,9 +228,6 @@ services:
       args:
         FE_VERSION: ${FE_VERSION:-v2}
     container_name: radar_frontend
-    environment:
-      ADMIN_USERNAME: ${ADMIN_USERNAME:?ADMIN_USERNAME must be set in .env (on stage it must equal the Caddy login)}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set in .env (on stage it must equal the Caddy login)}
     ports:
       - "${FRONTEND_PORT:-80}:80"
     depends_on:

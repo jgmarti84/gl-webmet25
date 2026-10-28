@@ -39,7 +39,7 @@
 
 ### Infraestructura
 - **Docker:** stack de compose multi-servicio
-- **Nginx:** 1.25+ — reverse proxy, Basic Auth para admin, caché local de tiles OSM/IGN
+- **Nginx:** 1.25+ — reverse proxy, límite de intentos de login, caché local de tiles OSM/IGN
 - **Redis:** 7.2 — desalojo LRU, sin persistencia, caché L2 de frames/tiles
 - **PostgreSQL:** 15 + PostGIS 3.5
 
@@ -93,7 +93,6 @@ webmet25/
 │       └── manage.py             # CLI: init, seed, sync, check, info, reset, migrate, shell
 ├── frontend/
 │   ├── Dockerfile
-│   ├── docker-entrypoint.sh      # Generates admin.htpasswd at startup
 │   ├── nginx.conf
 │   └── public/
 │       ├── index.html            # Multi-radar map SPA shell
@@ -374,7 +373,7 @@ Consultar [`docs/OPERATIONS.md`](OPERATIONS.md) para más información.
 | GET | `/api/v1/tops-cores` | Consultar metadatos (requerido: `radar_codes[]`, `time_from`, `time_to`) |
 | GET | `/api/v1/tops-cores/{id}/features` | FeatureCollection GeoJSON en bruto |
 
-### 5.2 Endpoints de Administración (`/api/v1/admin/*`, Basic Auth nginx)
+### 5.2 Endpoints de Administración (`/api/v1/admin/*`, requiere rol `admin`)
 
 | Recurso | Operaciones |
 |----------|-----------|
@@ -468,8 +467,10 @@ Consultar [`docs/OPERATIONS.md`](OPERATIONS.md) para más información.
 `frontend/nginx.conf` (comportamientos clave):
 
 - `GET /` → sirve `index.html` (fallback SPA mediante `try_files`)
-- `GET /admin` y `GET /admin/*` → HTTP Basic Auth (`admin.htpasswd`), sirve `admin.html`
-- `POST,GET /api/v1/admin/*` → Basic Auth + `proxy_pass http://api:8000`
+- `GET /admin` y `GET /admin/*` → sirve `admin.html` (estático; la API exige login y rol)
+- `GET /login` → sirve `login.html`
+- `POST /api/v1/auth/login` → `limit_req` 10/min por IP (ráfaga 5, 429) + `proxy_pass http://api:8000`
+- `/api/v1/admin/*` → lo atiende `/api/*` (`proxy_pass`); la API verifica la sesión
 - `GET /api/*` → `proxy_pass http://api:8000`, `proxy_buffering off` (soporte SSE/streaming)
 - `GET /osm-tiles/*` → proxy a `tile.openstreetmap.org`, caché local de 30 días (zona máx. 1 GB)
 - `GET /ign-tiles/*` → proxy a `wms.ign.gob.ar`, caché local de 7 días (misma zona)

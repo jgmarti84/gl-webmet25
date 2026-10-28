@@ -1,0 +1,498 @@
+/* Login and "service unavailable" pages.
+   Self-contained: does not depend on admin.css or any external resource. */
+
+.login-page {
+    --login-navy: #0b1b3d;
+    --login-navy-btn: #12306b;
+    --login-navy-btn-hover: #0d2556;
+    --login-blue: #1f5fbf;
+    --login-text: #1e293b;
+    --login-muted: #475569;
+    --login-faint: #5b6b82;
+    --login-border: #7c8ba3;
+    --login-divider: #e2e8f0;
+    --login-hero-text: #c3d1ec;
+    --login-error-bg: #fef2f2;
+    --login-error-border: #fca5a5;
+    --login-error-text: #991b1b;
+
+    margin: 0;
+    min-height: 100vh;
+    font-family: 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color: var(--login-text);
+    background: #ffffff;
+    -webkit-font-smoothing: antialiased;
+}
+
+.login-page *,
+.login-page *::before,
+.login-page *::after {
+    box-sizing: border-box;
+}
+
+.login-layout {
+    min-height: 100vh;
+    display: flex;
+    flex-wrap: wrap;
+}
+
+/* ── Left column: institutional panel ───────────────────────── */
+.login-hero {
+    flex: 0.8 1 480px;
+    min-width: 0;
+    min-height: 520px;
+    padding: 56px 64px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background: var(--login-navy);
+    color: #ffffff;
+}
+
+.login-hero-logo {
+    display: block;
+    width: 250px;
+    max-width: 100%;
+    height: auto;
+    /* The official logo is navy on transparent: render it white on the dark panel. */
+    filter: brightness(0) invert(1);
+}
+
+.login-hero-body {
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.login-eyebrow {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #a9bbdc;
+}
+
+.login-hero .login-hero-title {
+    margin: 0;
+    font-size: clamp(26px, 2.2vw, 34px);
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.005em;
+    text-wrap: balance;
+    color: #ffffff;
+}
+
+.login-hero p:not(.login-hero-title) {
+    margin: 0;
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--login-hero-text);
+    text-wrap: pretty;
+}
+
+.login-hero hr {
+    width: 100%;
+    height: 1px;
+    margin: 12px 0 0;
+    border: 0;
+    background: rgba(195, 209, 236, 0.22);
+}
+
+.login-gov-hero {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--login-hero-text);
+}
+
+/* ── Right column: form ─────────────────────────────────────── */
+.login-panel {
+    flex: 1 1 560px;
+    min-width: 0;
+    padding: 48px clamp(24px, 5vw, 56px) 32px;
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+}
+
+.login-panel-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.login-form-wrap {
+    width: 100%;
+    max-width: 380px;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.login-logo-mobile {
+    display: none;
+    width: 220px;
+    max-width: 100%;
+    height: auto;
+}
+
+.login-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.login-heading h1 {
+    margin: 0;
+    font-size: 30px;
+    font-weight: 600;
+    line-height: 1.15;
+    color: var(--login-navy);
+}
+
+.login-heading p {
+    margin: 0;
+    font-size: 16px;
+    line-height: 1.5;
+    color: var(--login-muted);
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.login-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.login-field label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--login-text);
+}
+
+.login-input-wrap {
+    position: relative;
+}
+
+.login-input {
+    display: block;
+    width: 100%;
+    height: 46px;
+    padding: 0 14px;
+    font: inherit;
+    font-size: 16px;
+    color: #0f172a;
+    background: #ffffff;
+    border: 1px solid var(--login-border);
+    border-radius: 6px;
+}
+
+.login-input.has-toggle {
+    padding-right: 50px;
+}
+
+.login-input:hover {
+    border-color: #5b6b82;
+}
+
+.login-input:focus {
+    outline: none;
+    border-color: var(--login-blue);
+    box-shadow: 0 0 0 3px rgba(31, 95, 191, 0.22);
+}
+
+.login-pw-toggle {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+}
+
+.login-pw-toggle:hover {
+    background: #eef2f7;
+}
+
+.login-pw-toggle:focus-visible {
+    outline: 2px solid var(--login-blue);
+}
+
+.login-pw-toggle .icon-eye-off { display: none; }
+.login-pw-toggle.is-visible .icon-eye { display: none; }
+.login-pw-toggle.is-visible .icon-eye-off { display: block; }
+
+.login-error {
+    padding: 12px 14px;
+    border-radius: 6px;
+    background: var(--login-error-bg);
+    border: 1px solid var(--login-error-border);
+    color: var(--login-error-text);
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+/* login.js toggles this class on the error box. */
+.login-error.hidden {
+    display: none;
+}
+
+.login-submit {
+    display: block;
+    width: 100%;
+    height: 46px;
+    margin-top: 4px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: var(--login-navy-btn);
+    color: #ffffff;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.login-submit:hover {
+    background: var(--login-navy-btn-hover);
+}
+
+.login-submit:focus-visible {
+    outline: 3px solid rgba(31, 95, 191, 0.45);
+    outline-offset: 2px;
+}
+
+.login-submit:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+/* ── Footer ─────────────────────────────────────────────────── */
+.login-footer {
+    align-self: center;
+    width: 100%;
+    max-width: 380px;
+    margin-top: 32px;
+    padding-top: 20px;
+    border-top: 1px solid var(--login-divider);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--login-faint);
+}
+
+.login-footer a {
+    color: var(--login-blue);
+    font-weight: 500;
+}
+
+.login-gov-mobile {
+    display: none;
+    font-weight: 600;
+    color: #334155;
+}
+
+/* Service-unavailable page text */
+.login-message {
+    margin: 0;
+    font-size: 16px;
+    line-height: 1.5;
+    color: var(--login-muted);
+}
+
+/* ── Narrow screens: drop the institutional panel ───────────── */
+@media (max-width: 1039px) {
+    .login-hero { display: none; }
+    .login-logo-mobile { display: block; }
+    .login-gov-mobile { display: block; }
+}
+
+@media (max-width: 480px) {
+    .login-heading h1 { font-size: 26px; }
+    .login-panel { padding-top: 32px; }
+}
+
+/* ── Links, hints and secondary controls (sign-up and recovery pages) ───── */
+/* The elements of these pages start with the "hidden" attribute and a script shows them; this keeps the
+   attribute stronger than any display rule below. */
+.login-page [hidden] {
+    display: none !important;
+}
+
+.login-link {
+    align-self: flex-start;
+    margin-top: -8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--login-blue);
+}
+
+.login-link:hover {
+    text-decoration: underline;
+}
+
+.login-hint {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--login-faint);
+}
+
+.login-info,
+.login-success {
+    padding: 12px 14px;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.login-info {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e3a8a;
+}
+
+.login-success {
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    color: #166534;
+}
+
+/* Outlined button for the secondary action next to the main (filled) one. */
+.login-secondary {
+    display: block;
+    width: 100%;
+    height: 44px;
+    padding: 0;
+    border: 1px solid var(--login-border);
+    border-radius: 6px;
+    background: #ffffff;
+    color: var(--login-navy-btn);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.login-secondary:hover {
+    background: #f1f5f9;
+}
+
+.login-secondary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.login-switch {
+    margin: 0;
+    font-size: 14px;
+    text-align: center;
+    color: var(--login-muted);
+}
+
+.login-switch a {
+    color: var(--login-blue);
+    font-weight: 600;
+}
+
+.login-checkbox {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--login-text);
+}
+
+.login-checkbox input {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    margin-top: 2px;
+    accent-color: var(--login-navy-btn);
+}
+
+.login-checkbox a {
+    color: var(--login-blue);
+}
+
+/* Decoy field: people never see it, bots fill it. Moved off screen instead of display:none, because simple
+   bots skip fields they can tell are hidden. */
+.login-honeypot {
+    position: absolute;
+    left: -10000px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}
+
+/* Final screens ("Revisá tu mail", "Mail verificado"...) that replace the form. */
+.login-done {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* h1 on the verify and reset screens takes the look of the page heading (.login-heading h1). */
+.login-done h1 {
+    margin: 0;
+    font-size: 30px;
+    font-weight: 600;
+    line-height: 1.15;
+    color: var(--login-navy);
+}
+
+/* After the rule above on purpose: with equal specificity the later one wins. */
+@media (max-width: 480px) {
+    .login-done h1 { font-size: 26px; }
+}
+
+.login-done h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--login-navy);
+}
+
+.login-done p {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--login-muted);
+}
+
+/* A link that looks like the main submit button. */
+.login-button-link {
+    display: block;
+    width: 100%;
+    height: 46px;
+    line-height: 46px;
+    border-radius: 6px;
+    background: var(--login-navy-btn);
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+    text-decoration: none;
+}
+
+.login-button-link:hover {
+    background: var(--login-navy-btn-hover);
+}
