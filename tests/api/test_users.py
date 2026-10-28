@@ -483,3 +483,33 @@ def test_revoke_sessions_without_session_returns_401():
     with httpx.Client(base_url=API_BASE_URL) as client:
         response = client.post(f"{PREFIX}/{UNKNOWN_ID}/revoke-sessions")
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/admin/users/{id}/verify-email   (200: error paths only)
+# ---------------------------------------------------------------------------
+
+
+@needs_admin
+def test_verify_email_unknown_id_returns_404():
+    """Verifying the mail of an unknown user must return 404."""
+    with _admin_client() as client:
+        response = client.post(f"{PREFIX}/{UNKNOWN_ID}/verify-email")
+    assert response.status_code == 404
+    assert response.headers["content-type"].startswith("application/json")
+    assert "detail" in response.json()
+
+
+@needs_admin
+def test_verify_email_foreign_origin_returns_403():
+    """Verifying a mail from a foreign Origin must be rejected (the id is unknown on purpose)."""
+    with _admin_client() as client:
+        response = client.post(f"{PREFIX}/{UNKNOWN_ID}/verify-email", headers=FOREIGN_ORIGIN)
+    assert response.status_code == 403
+
+
+def test_verify_email_without_session_returns_401():
+    """Verifying a mail without a session must return 401 (the id is unknown on purpose)."""
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.post(f"{PREFIX}/{UNKNOWN_ID}/verify-email")
+    assert response.status_code == 401

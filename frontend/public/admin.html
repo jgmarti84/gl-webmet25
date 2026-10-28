@@ -51,8 +51,16 @@
                 </div>
             </header>
 
-            <div id="feedback-message" class="feedback-message hidden"></div>
-            <div id="bootstrap-warning" class="feedback-message error hidden"></div>
+            <!-- Notices at the top of the panel. Each has its text and a close button (×); admin.js fills the
+                 text, closes the notice on click, and also closes the green ones by itself after a few seconds. -->
+            <div id="feedback-message" class="feedback-message hidden" role="status">
+                <span class="feedback-text"></span>
+                <button type="button" class="feedback-close" aria-label="Cerrar aviso">×</button>
+            </div>
+            <div id="bootstrap-warning" class="feedback-message error hidden" role="alert">
+                <span class="feedback-text"></span>
+                <button type="button" class="feedback-close" aria-label="Cerrar aviso">×</button>
+            </div>
             <section id="section-content"></section>
         </main>
     </div>

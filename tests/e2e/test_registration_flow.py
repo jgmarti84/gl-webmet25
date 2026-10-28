@@ -80,7 +80,6 @@ def test_sign_up_verify_and_log_in_with_the_mail(page: Page, account):
     _verify(page, email)
     _log_in(page, email, PASSWORD)
     page.wait_for_selector("#radar-list", state="attached")
-    page.click("#btn-account")
     expect(page.locator("#account-role")).to_have_text("Lector")
     # The optional full name typed at sign-up is what the account panel shows.
     expect(page.locator("#account-name")).to_have_text("Ana Pérez E2E")

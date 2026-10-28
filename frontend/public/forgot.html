@@ -2,29 +2,52 @@
 <html lang="es-AR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- viewport-fit=cover lets the page use the whole screen of phones with a notch; css/login.css keeps the
+         content out of the notch with env(safe-area-inset-*). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="referrer" content="no-referrer">
     <title>WebMet25 — Recuperar contraseña</title>
     <link rel="icon" type="image/png" href="/assets/images/logos/OHMC@3x.png">
     <link rel="stylesheet" href="/css/login.css">
 </head>
-<body class="login-page">
+<!-- login-page--radar turns on the radar look (see css/login.css), the same as the login page. -->
+<body class="login-page login-page--radar">
     <div class="login-layout">
         <aside class="login-hero">
+            <!-- Decorative radar, drawn live by js/login-radar.js. The data-* attributes set where the radar sits in
+                 the panel (center as a fraction of its size), its radius, the turns per minute of the beam and how
+                 many cells of rain the generated field has. -->
+            <canvas class="login-radar" id="login-radar" data-cx="0.76" data-cy="0.52" data-radius="0.5" data-rpm="3" data-cells="110" aria-hidden="true"></canvas>
+
             <img class="login-hero-logo" src="/assets/images/logos/OHMC@3x.png" alt="Observatorio Hidro-Meteorológico de la Provincia de Córdoba">
+
             <div class="login-hero-body">
-                <span class="login-eyebrow">WebMet25</span>
                 <p class="login-hero-title">Sistema de visualización de la Red de Radares Meteorológicos de Argentina</p>
                 <p>Plataforma del Observatorio Hidro-Meteorológico de la Provincia de Córdoba para el monitoreo en tiempo real de productos de radar y la evolución de sistemas convectivos.</p>
-                <hr>
-                <span class="login-gov-hero">Gobierno de la Provincia de Córdoba</span>
+            </div>
+
+            <div class="login-hero-foot">
+                <!-- Reflectivity scale: the same colors the radar above is painted with. -->
+                <div class="login-dbz">
+                    <span class="login-dbz-label">Reflectividad Z (dBZ)</span>
+                    <div class="login-dbz-bar" role="img" aria-label="Escala de reflectividad de 10 a 60 dBZ"></div>
+                    <div class="login-dbz-ticks" aria-hidden="true">
+                        <span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>60</span>
+                    </div>
+                </div>
+
+                <div class="login-status">
+                    <span>Producto <b>PPI Z — 0.5°</b></span>
+                    <span>Alcance <b>240 km</b></span>
+                    <!-- js/login-clock.js fills the time (the visitor's local time) and keeps it ticking. -->
+                    <span><span class="login-dot" aria-hidden="true"></span>Hora local <b id="login-clock">--:--:--</b></span>
+                </div>
             </div>
         </aside>
 
         <main class="login-panel">
             <div class="login-panel-main">
                 <div class="login-form-wrap">
-                    <img class="login-logo-mobile" src="/assets/images/logos/OHMC@3x.png" alt="Observatorio Hidro-Meteorológico de la Provincia de Córdoba">
                     <div class="login-heading">
                         <h1>Recuperar contraseña</h1>
                         <p>Ingresá el mail de tu cuenta y te mandamos un link para elegir una contraseña nueva.</p>
@@ -62,5 +85,8 @@
     </div>
     <script type="module" src="/js/login-ui.js"></script>
     <script type="module" src="/js/forgot.js"></script>
+    <script type="module" src="/js/login-clock.js"></script>
+    <!-- Plain script that draws the radar on the canvas of the hero. Absolute path, like the other assets. -->
+    <script src="/js/login-radar.js"></script>
 </body>
 </html>

@@ -16,6 +16,26 @@
     <div id="logo-container">
         <img src="/assets/images/logos/OHMC@3x.png" alt="OHMC Radar Meteorology System">
     </div>
+    <!-- Account chip (bottom-left, under the color legend): who is signed in, always visible, plus the admin shortcut and logout button.
+         Hidden until js/shared/session-box.js fills it with the current user. -->
+    <div id="account-chip" class="account-chip" hidden>
+        <div id="account-avatar" class="account-avatar" aria-hidden="true"></div>
+        <div class="account-meta">
+            <div id="account-name" class="account-name"></div>
+            <!-- Shown for admins only (session-box.js); the text is always filled. -->
+            <span id="account-role" class="account-role"></span>
+        </div>
+        <!-- Shortcut to the admin panel (admins only; session-box.js un-hides it). Same per-tab flag as the
+             link in the settings panel, so the admin's "Back" button can restore this map. -->
+        <a id="admin-chip-link" href="/admin" class="account-chip-btn" hidden title="Panel de administración" aria-label="Panel de administración"
+           onclick="sessionStorage.setItem('webmet25_admin_from_main','1')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 21v-2a4 4 0 0 1 4-4h2"/><path d="M22 16c0 4-2.5 6-3.5 6s-3.5-2-3.5-6c1 0 2.5-.5 3.5-1.5 1 1 2.5 1.5 3.5 1.5z"/><path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0-8 0"/></svg>
+        </a>
+        <button id="session-box-logout" type="button" class="account-chip-btn account-logout" title="Cerrar sesión" aria-label="Cerrar sesión">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+        </button>
+    </div>
+
     <!-- Map Container -->
     <div id="map">
         <div id="field-loading-badge">Loading field…</div>
@@ -51,11 +71,6 @@
         <!-- Gear – Settings -->
         <button id="btn-settings" class="icon-btn" title="Configuración" aria-label="Abrir configuración">
             <span class="icon-glyph">⚙</span>
-        </button>
-
-        <!-- Account – current user's initials; filled and shown by js/shared/session-box.js -->
-        <button id="btn-account" class="icon-btn account-btn" title="Cuenta" aria-label="Cuenta" hidden>
-            <span id="account-initials" class="account-initials"></span>
         </button>
     </div>
 
@@ -354,36 +369,14 @@
                     </div>
                 </details>
             </div>
+            <!-- Admin DB panel (admins only; session-box.js un-hides it). Sets a per-tab flag so the admin's
+                 "Back" button can restore this map exactly as left (via browser bfcache). -->
+            <a id="admin-link" href="/admin" class="account-action" hidden
+               onclick="sessionStorage.setItem('webmet25_admin_from_main','1')">
+                <span>Panel de administración</span><span class="account-action-arrow">→</span>
+            </a>
             <!-- COG Browser link: hidden by default; reveal with Ctrl+Shift+D -->
             <a id="cog-browser-link" href="cog-browser.html" class="nav-link" style="display:none; margin-top:10px;">Ir al Navegador COG →</a>
-        </div>
-    </div>
-
-    <!-- ===== ACCOUNT – current user, logout and (admins only) the admin panel ===== -->
-    <div id="panel-account" class="floating-panel" style="display:none;">
-        <div class="panel-header">
-            <span>Cuenta</span>
-            <button class="panel-close" data-close="panel-account" aria-label="Cerrar cuenta">✕</button>
-        </div>
-        <div class="panel-body account-panel">
-            <div class="account-identity">
-                <div id="account-avatar" class="account-avatar" aria-hidden="true"></div>
-                <div class="account-meta">
-                    <div id="account-name" class="account-name"></div>
-                    <span id="account-role" class="account-role"></span>
-                </div>
-            </div>
-            <nav class="account-actions">
-                <!-- Admin DB panel (admins only): sets a per-tab flag so the admin's "Back" button
-                     can restore this map exactly as left (via browser bfcache). -->
-                <a id="admin-link" href="/admin" class="account-action" hidden
-                   onclick="sessionStorage.setItem('webmet25_admin_from_main','1')">
-                    <span>Panel de administración</span><span class="account-action-arrow">→</span>
-                </a>
-                <button id="session-box-logout" type="button" class="account-action account-action-logout">
-                    <span>Cerrar sesión</span>
-                </button>
-            </nav>
         </div>
     </div>
 

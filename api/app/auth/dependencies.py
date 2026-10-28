@@ -11,7 +11,7 @@ from radar_db.models import User
 
 from ..config import settings
 from .cookies import access_cookie_name
-from .security import InvalidAccessToken, decode_access_token
+from .security import AccessClaims, InvalidAccessToken, decode_access_token
 from .service import load_active_user
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
@@ -46,6 +46,25 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
 
 def get_optional_user(request: Request, db: Session = Depends(get_db)) -> Optional[User]:
     return _user_from_request(request, db)
+
+
+# async on purpose, though it awaits nothing: FastAPI runs a plain "def" dependency in its thread pool
+# (40 threads per worker, shared with every sync endpoint). Checking a signature takes microseconds,
+# so running it on the event loop is cheaper than waiting for a free thread during a burst of tiles.
+async def require_valid_token(request: Request) -> AccessClaims:
+    """Session check WITHOUT the database: trusts the signed access token alone.
+
+    Only for public, cheap resources (the basemap tile proxies): it uses no database connection, but a
+    deactivated user or a stolen token keeps passing until the access token expires (30 min at most).
+    Everything else must use get_current_user, which reads the user on every request (decision D11).
+    """
+    token = request.cookies.get(access_cookie_name())
+    if not token:
+        raise HTTPException(status_code=401, detail="No autenticado")
+    try:
+        return decode_access_token(token)
+    except InvalidAccessToken:
+        raise HTTPException(status_code=401, detail="No autenticado") from None
 
 
 def require_role(role: str) -> Callable[..., User]:

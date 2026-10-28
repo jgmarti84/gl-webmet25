@@ -169,3 +169,48 @@ def test_the_list_shows_whether_the_mail_is_verified(client, make_user):
     by_name = {u["username"]: u for u in client.get(BASE).json()}
     assert by_name["boss"]["email_verified"] is True
     assert by_name["pend"]["email_verified"] is False
+
+
+# ---------------------------------------------------------------------------
+# POST /admin/users/{id}/verify-email: the admin vouches for a mail that was never confirmed
+# ---------------------------------------------------------------------------
+
+
+def test_admin_verifies_a_pending_mail_and_the_person_can_log_in(client, make_user):
+    _as_admin(client, make_user)
+    pending = make_user(username="pend", email="pend@ejemplo.com.ar", email_verified=False)
+    response = client.post(f"{BASE}/{pending.id}/verify-email")
+    assert response.status_code == 200
+    assert response.json()["email_verified"] is True
+    assert pending.email_verified_at is not None
+    # Until now this login was refused: the mail was not verified.
+    assert login(client, "pend").status_code == 200
+
+
+def test_verify_email_twice_keeps_the_first_date(client, make_user):
+    _as_admin(client, make_user)
+    pending = make_user(username="pend", email="pend@ejemplo.com.ar", email_verified=False)
+    assert client.post(f"{BASE}/{pending.id}/verify-email").status_code == 200
+    first = pending.email_verified_at
+    assert client.post(f"{BASE}/{pending.id}/verify-email").status_code == 200
+    assert pending.email_verified_at == first
+
+
+def test_verify_email_of_an_account_without_mail_409(client, make_user):
+    _as_admin(client, make_user)
+    other = make_user(username="carla")
+    response = client.post(f"{BASE}/{other.id}/verify-email")
+    assert response.status_code == 409
+    assert "mail" in response.json()["detail"]
+
+
+def test_verify_email_unknown_user_404(client, make_user):
+    _as_admin(client, make_user)
+    assert client.post(f"{BASE}/999999/verify-email").status_code == 404
+
+
+def test_verify_email_needs_an_admin(client, make_user):
+    assert client.post(f"{BASE}/1/verify-email").status_code == 401
+    make_user(username="vic", role="viewer")
+    login(client, "vic")
+    assert client.post(f"{BASE}/1/verify-email").status_code == 403
