@@ -129,6 +129,11 @@ services:
       DB_NAME: ${DB_NAME:-radar_prod_db}
       DB_USER: ${DB_USER:-radar}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env (see .env.example)}
+      # Extra database connections each worker may open during a peak, on top of its 10 fixed ones
+      # (radar_db's pool). Postgres accepts 100 connections in total, and the indexer and psql need a few:
+      # keep UVICORN_WORKERS x (10 + DB_MAX_OVERFLOW) under about 90. With 4 workers and 12: 88.
+      # Past that sum Postgres refuses new connections and those requests fail; under it they wait in the pool.
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-12}
       COG_BASE_PATH: /product_output
       TOPS_AND_CORES_DIR: /tops_and_cores
       CORS_ORIGINS: ${CORS_ORIGINS:-}
