@@ -1,5 +1,10 @@
 # webmet25 — Copilot Instructions
 
+> **Start with [`AGENTS.md`](../AGENTS.md)** (repo root): the working rules for every
+> agent and human (branches, secrets, tests, PRs). This file is the detailed code
+> reference; if the two disagree, `AGENTS.md` wins.
+
+
 ## 🧠 Context & Knowledge Base
 > **CRITICAL:** You are operating in a multi-root workspace alongside the `radarlib` repository. 
 > Before writing code, route your knowledge by reading the appropriate documentation:
