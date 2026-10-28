@@ -131,7 +131,7 @@ export class AnimationController {
         this._lastFrameTime   = 0;       // DOMHighResTimeStamp
 
         // Callbacks
-        this._onFrameChange   = null;    // (frameIndex, frameObj) => void
+        this._onFrameChange   = null;    // (frameIndex, frameObj, holdCodes, prevFrame) => void
         this._onLockChange    = null;    // (lockedToLatest: bool) => void
 
         // DOM elements — populated by initControls()
@@ -417,7 +417,7 @@ export class AnimationController {
         const frame = this._frames[i];
         if (!frame) return;
 
-        const holdCodes = computeHoldRadarCodes(this._frames, i);
+        const { prevFrame, holdCodes } = this.getFrameContext(i);
         const radarCodes = [
             ...Object.keys(frame.cogsByRadar || {}),
             ...holdCodes,
@@ -425,8 +425,25 @@ export class AnimationController {
         this._mapManager.showFrame(i, radarCodes, this._productKey, holdCodes);
 
         if (this._onFrameChange) {
-            this._onFrameChange(i, frame, holdCodes);
+            this._onFrameChange(i, frame, holdCodes, prevFrame);
         }
+    }
+
+    /**
+     * Frame objects needed to resolve what a frame actually displays: the
+     * previous frame (source of held images) and the radar codes held from it.
+     *
+     * @param {number} [index]  defaults to the current frame
+     * @returns {{frame: object, prevFrame: object|null, holdCodes: string[]}|null}
+     */
+    getFrameContext(index = this._currentFrame) {
+        const frame = this._frames[index];
+        if (!frame) return null;
+        return {
+            frame,
+            prevFrame: index > 0 ? this._frames[index - 1] : null,
+            holdCodes: computeHoldRadarCodes(this._frames, index),
+        };
     }
 
     _updatePlayPauseButton() {

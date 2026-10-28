@@ -41,7 +41,7 @@ services:
     environment:
       POSTGRES_DB: radar_test_db
       POSTGRES_USER: radar
-      POSTGRES_PASSWORD: radarpass
+      POSTGRES_PASSWORD: radar_test_only
     ports:
       - "5434:5432"
     healthcheck:
@@ -63,7 +63,7 @@ services:
       DB_PORT: 5432
       DB_NAME: radar_test_db
       DB_USER: radar
-      DB_PASSWORD: radarpass
+      DB_PASSWORD: radar_test_only
     depends_on:
       radar_db_test:
         condition: service_healthy    # ← this was missing
@@ -97,13 +97,13 @@ services:
       DB_PORT: 5432
       DB_NAME: radar_prod_db
       DB_USER: radar
-      DB_PASSWORD: radarpass
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env (see .env.example)}
       # Test database (used by registrar and watcher tests)
       TEST_DB_HOST: radar_db_test
       TEST_DB_PORT: 5432
       TEST_DB_NAME: radar_test_db
       TEST_DB_USER: radar
-      TEST_DB_PASSWORD: radarpass
+      TEST_DB_PASSWORD: radar_test_only
       PYTHONPATH: /app
     volumes:
       - ./tests:/app/tests

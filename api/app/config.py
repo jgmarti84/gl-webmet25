@@ -12,7 +12,7 @@ class APISettings(BaseSettings):
     db_port: int = Field(default=5432, alias="DB_PORT")
     db_name: str = Field(default="radar_db", alias="DB_NAME")
     db_user: str = Field(default="radar", alias="DB_USER")
-    db_password: str = Field(default="radarpass", alias="DB_PASSWORD")
+    db_password: str = Field(default="", alias="DB_PASSWORD")
     
     # COG files location
     cog_base_path: str = Field(default="/product_output", alias="COG_BASE_PATH")

@@ -40,4 +40,14 @@ tests/e2e/screenshots/
 # /run skill screenshot driver output
 webmet-shots/
 
-.claude/
+# Agent config is personal, except the shared procedures (skills)
+.claude/*
+!.claude/skills/
+# Local artifacts that must never be committed (prod logs, state DBs, dumps)
+*.db
+*.log.txt
+*.zip
+*.npz
+# Runtime evidence (logs, DB copies) and personal scratch: never commit
+ops-data/
+local/
