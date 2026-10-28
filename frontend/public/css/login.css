@@ -498,185 +498,406 @@
 }
 
 /* ── Radar look of the login page ──────────────────────────────────────────
-   Everything below is scoped to ".login-page--radar", a class only login.html has, so the sign-up and recovery
-   pages that share this file are not affected. Left: a radar screen with a reflectivity scale and a live clock.
-   Right: the same form with a lighter, more technical finish. */
+   Design by the institutional designer (animated radar on the left, form on the right). Every rule here is
+   scoped under .login-page--radar, a class that only login.html puts on the body. The sign-up and recovery
+   pages load this same file but do not carry it, so they keep the plain look above.
+   Each rule has one more class than the base rule it overrides, so it wins without !important. */
+
 .login-page--radar {
-    --radar-mono: ui-monospace, 'SFMono-Regular', 'JetBrains Mono', Consolas, 'Liberation Mono', monospace;
+    /* Palette */
+    --nvy-800: #0a1a33;
+    --nvy-700: #102a4d;
+    --nvy-600: #16386a;
+    --cyan-600: #14708b;
+    --ink: #121c2b;
+    --ink-70: #44536b;
+    --ink-50: #697a94;
+    --line: #c3cdda;
+    --line-soft: #e3e9f1;
+    --surface: #ffffff;
+    --surface-sunk: #f4f7fb;
+    --danger-bg: #fdf2f2;
+    --danger-line: #e8a9a9;
+    --danger-ink: #8c1d1d;
+    --info-bg: #eef5fb;
+    --info-line: #b9d6ea;
+    --info-ink: #16456b;
+    /* Type: the designer used Archivo / IBM Plex from Google Fonts. This site loads no external fonts, so the
+       system stacks below are what is shown (they were already the designer's fallbacks). */
+    --f-display: 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --f-body: 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --f-mono: ui-monospace, 'Cascadia Mono', Consolas, Menlo, monospace;
+
+    color-scheme: light;
+    font-family: var(--f-body);
+    color: var(--ink);
 }
 
-/* Left panel: the SVG picture is the background; three blocks (logo, text, data) are spread from top to bottom. */
+/* Two columns: 58 % radar, 42 % form. minmax(0, …) lets a column shrink below its content. */
+.login-page--radar .login-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 58fr) minmax(0, 42fr);
+}
+
+/* ── Left column: the radar panel ── */
 .login-page--radar .login-hero {
-    /* A share of the width (51 % / 49 %) rather than fixed pixels: two fixed bases can add up to more than the
-       container (the scrollbar takes some) and the flex row would wrap, leaving the form below the picture. */
-    flex: 51 1 0;
     position: relative;
+    /* isolation + negative z-index children: the canvas and the shade stay behind the text without
+       leaving the panel. overflow hides the part of the radar that falls outside. */
     isolation: isolate;
-    background: #071226 url('/img/login-radar.svg') center / cover no-repeat;
-    padding: 56px 60px 44px;
+    overflow: hidden;
+    min-height: 560px;
+    padding-block: 52px 40px;
+    padding-left: max(60px, env(safe-area-inset-left, 0px));
+    padding-right: 56px;
+    gap: 40px;
+    background: var(--nvy-800);
 }
 
-.login-page--radar .login-panel {
-    flex: 49 1 0;
+/* The canvas covers the whole panel, behind everything. */
+.login-page--radar .login-radar {
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    width: 100%;
+    height: 100%;
+    display: block;
 }
 
-.login-page--radar .login-hero-logo {
-    width: 270px;
+/* Dark gradient over the radar, strongest under the text, so the text keeps its contrast. */
+.login-page--radar .login-hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+        linear-gradient(103deg, rgba(6, 15, 31, 0.94) 0%, rgba(6, 15, 31, 0.76) 34%, rgba(6, 15, 31, 0.3) 66%, rgba(6, 15, 31, 0.14) 100%),
+        linear-gradient(to top, rgba(6, 15, 31, 0.62) 0%, rgba(6, 15, 31, 0) 46%);
 }
 
-.login-page--radar .login-hero-body {
-    max-width: 440px;
-    gap: 18px;
-}
+.login-page--radar .login-hero-logo { width: 268px; }
+
+.login-page--radar .login-hero-body { max-width: 30rem; gap: 18px; }
 
 .login-page--radar .login-hero .login-hero-title {
-    font-size: clamp(26px, 2.35vw, 31px);
-    font-weight: 700;
-    line-height: 1.17;
-    letter-spacing: -0.012em;
+    font-family: var(--f-display);
+    font-size: clamp(28px, 2.4vw, 38px);
+    line-height: 1.1;
+    letter-spacing: -0.015em;
 }
 
 .login-page--radar .login-hero p:not(.login-hero-title) {
+    max-width: 44ch;
     font-size: 15.5px;
     line-height: 1.65;
-    color: #b9c8e4;
+    color: #c0d0e4;
 }
 
-/* Reflectivity scale. The colors follow the usual weather radar order: weak (green) to strong (red). */
-.login-hero-data {
+/* Bottom of the panel: the dBZ scale and the status line. */
+.login-page--radar .login-hero-foot {
     display: flex;
     flex-direction: column;
-    gap: 26px;
+    gap: 22px;
 }
 
-.login-legend {
-    width: 300px;
-    max-width: 100%;
+.login-page--radar .login-dbz {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
 }
 
-.login-legend-title,
-.login-hero-meta dt {
-    font-family: var(--radar-mono);
-    font-size: 11px;
-    letter-spacing: 0.1em;
+.login-page--radar .login-dbz-label {
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: #8da2c4;
+    color: #7f9ab8;
 }
 
-.login-legend-title {
-    display: block;
-    margin-bottom: 8px;
+/* Same colors the canvas paints the rain with (reflectivity, green = weak, dark red = severe). */
+.login-page--radar .login-dbz-bar {
+    width: clamp(180px, 60%, 300px);
+    max-width: 100%;
+    height: 7px;
+    border-radius: 2px;
+    background: linear-gradient(90deg,
+        #a7dd9e 0%, #4cb856 20%, #bad43e 40%, #f2e73b 50%, #f0a030 64%, #d93b2b 80%, #8e1a12 100%);
 }
 
-.login-legend-bar {
-    height: 8px;
-    border-radius: 1px;
-    background: linear-gradient(90deg, #86d56a 0%, #3cb95a 22%, #e6d63a 48%, #f0902a 72%, #c62d2d 90%, #9b1c1c 100%);
-}
-
-.login-legend-ticks {
-    margin-top: 6px;
+.login-page--radar .login-dbz-ticks {
     display: flex;
     justify-content: space-between;
-    font-family: var(--radar-mono);
-    font-size: 10.5px;
-    color: #6f86ab;
-}
-
-/* Product, range and clock in one line; they wrap onto more lines on a narrow panel. */
-.login-hero-meta {
-    margin: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px 28px;
-}
-
-.login-hero-meta > div {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-}
-
-.login-hero-meta dt {
-    margin: 0;
-}
-
-.login-hero-meta dd {
-    margin: 0;
-    font-family: var(--radar-mono);
-    font-size: 12.5px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    color: #ffffff;
-    /* Every digit the same width, so the clock does not wobble as the seconds change. */
+    width: clamp(180px, 60%, 300px);
+    max-width: 100%;
+    font-family: var(--f-mono);
+    font-size: 10px;
+    color: #7f9ab8;
     font-variant-numeric: tabular-nums;
 }
 
-/* The small dot before "HORA LOCAL": a live indicator. */
-.login-meta-live dt::before {
-    content: '';
+/* Status line: product, range and the visitor's local time. */
+.login-page--radar .login-status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 22px;
+    font-family: var(--f-mono);
+    font-size: 11px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: #7f9ab8;
+    /* Equal-width digits so the clock does not jitter every second. */
+    font-variant-numeric: tabular-nums;
+}
+
+.login-page--radar .login-status b {
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    color: #d6e3f2;
+}
+
+/* Blinking dot next to the clock. */
+.login-page--radar .login-dot {
     display: inline-block;
     width: 7px;
     height: 7px;
-    margin-right: 8px;
+    margin-right: 7px;
     border-radius: 50%;
-    background: #35b7c9;
-    box-shadow: 0 0 0 3px rgba(53, 183, 201, 0.2);
-    vertical-align: 1px;
+    background: #38b6d8;
+    box-shadow: 0 0 0 3px rgba(56, 182, 216, 0.18);
+    animation: login-pulse 2.6s ease-in-out infinite;
 }
 
-/* Right panel: heading, labels, fields and button. */
-.login-page--radar .login-form-wrap {
-    max-width: 384px;
+@keyframes login-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .35; }
 }
+
+/* ── Right column: the form ── */
+.login-page--radar .login-panel {
+    padding-block: 48px 28px;
+    padding-left: 40px;
+    padding-right: max(40px, env(safe-area-inset-right, 0px));
+    background: var(--surface);
+}
+
+.login-page--radar .login-form-wrap { max-width: 384px; gap: 30px; }
+
+.login-page--radar .login-heading { gap: 7px; }
 
 .login-page--radar .login-heading h1 {
-    font-weight: 700;
-    letter-spacing: -0.022em;
+    font-family: var(--f-display);
+    font-size: 31px;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--nvy-800);
 }
 
 .login-page--radar .login-heading p {
-    font-size: 15px;
-    color: #5a6f86;
+    font-size: 15.5px;
+    line-height: 1.55;
+    color: var(--ink-70);
 }
+
+.login-page--radar .login-form { gap: 18px; }
+.login-page--radar .login-field { gap: 7px; }
 
 .login-page--radar .login-field label {
     font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.11em;
+    letter-spacing: 0.09em;
     text-transform: uppercase;
-    color: #475569;
+    color: var(--ink-70);
 }
 
 .login-page--radar .login-input {
-    background: #f3f6fa;
-    border: 1px solid #cdd6e2;
+    height: 48px;
+    color: var(--ink);
+    background: var(--surface-sunk);
+    border: 1px solid var(--line);
     border-radius: 4px;
+    transition: border-color .14s ease, box-shadow .14s ease, background-color .14s ease;
 }
 
-.login-page--radar .login-input:hover {
-    border-color: #aab7c9;
-}
+.login-page--radar .login-input.has-toggle { padding-right: 52px; }
+.login-page--radar .login-input:hover { border-color: #9fadbf; }
 
 .login-page--radar .login-input:focus {
-    background: #ffffff;
-    border-color: var(--login-blue);
+    background: var(--surface);
+    border-color: var(--cyan-600);
+    box-shadow: 0 0 0 3px rgba(29, 159, 196, 0.2);
+}
+
+.login-page--radar .login-pw-toggle {
+    width: 46px;
+    height: 46px;
+    border-radius: 3px;
+    color: var(--ink-50);
+}
+
+.login-page--radar .login-pw-toggle:hover { color: var(--nvy-700); background: rgba(16, 42, 77, 0.06); }
+.login-page--radar .login-pw-toggle:focus-visible { outline: 2px solid var(--cyan-600); outline-offset: -2px; }
+
+.login-page--radar .login-link { margin-top: -4px; color: var(--cyan-600); text-underline-offset: 3px; }
+
+.login-page--radar .login-error {
+    padding: 11px 13px;
+    border-radius: 4px;
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-line);
+    border-left: 3px solid var(--danger-ink);
+    color: var(--danger-ink);
+}
+
+.login-page--radar .login-info {
+    padding: 11px 13px;
+    border-radius: 4px;
+    background: var(--info-bg);
+    border: 1px solid var(--info-line);
+    color: var(--info-ink);
 }
 
 .login-page--radar .login-submit {
+    height: 48px;
+    margin-top: 2px;
     border-radius: 4px;
-    font-weight: 700;
+    background: var(--nvy-600);
+    font-family: var(--f-display);
     letter-spacing: 0.01em;
+    transition: background-color .14s ease;
 }
+
+.login-page--radar .login-submit:hover { background: var(--nvy-700); }
+.login-page--radar .login-submit:active { background: var(--nvy-800); }
+.login-page--radar .login-submit:focus-visible { outline: 2px solid var(--cyan-600); outline-offset: 2px; }
+
+.login-page--radar .login-secondary {
+    height: 46px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    color: var(--nvy-600);
+}
+
+.login-page--radar .login-secondary:hover { background: var(--surface-sunk); }
+
+.login-page--radar .login-switch { color: var(--ink-70); }
+.login-page--radar .login-switch a { color: var(--cyan-600); }
 
 .login-page--radar .login-footer {
     max-width: 384px;
-    font-size: 12px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line-soft);
+    font-size: 12.5px;
+    color: var(--ink-50);
 }
 
-.login-page--radar .login-footer a {
-    color: #0e6f8f;
-    text-decoration: underline;
+.login-page--radar .login-footer a { color: var(--cyan-600); }
+.login-page--radar .login-gov-mobile { color: var(--ink-70); }
+
+/* ── Elements of the sign-up and recovery pages (they share this look with the login) ── */
+.login-page--radar .login-hint { color: var(--ink-50); }
+
+.login-page--radar .login-success {
+    padding: 11px 13px;
+    border-radius: 4px;
+    background: #f0faf3;
+    border: 1px solid #9fd9b1;
+    color: #15603a;
 }
 
-/* Below 1040 px the whole left panel is hidden (see above), so phones need nothing more. */
+.login-page--radar .login-checkbox { color: var(--ink); }
+.login-page--radar .login-checkbox input { accent-color: var(--nvy-600); }
+.login-page--radar .login-checkbox a { color: var(--cyan-600); }
+
+/* Final screens ("Revisá tu mail", "Mail verificado"…) that replace the form. */
+.login-page--radar .login-done { gap: 14px; }
+
+.login-page--radar .login-done h1 {
+    font-family: var(--f-display);
+    font-size: 31px;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--nvy-800);
+}
+
+.login-page--radar .login-done h2 {
+    font-family: var(--f-display);
+    color: var(--nvy-800);
+}
+
+.login-page--radar .login-done p,
+.login-page--radar .login-message {
+    font-size: 15.5px;
+    line-height: 1.55;
+    color: var(--ink-70);
+}
+
+/* A link that looks like the main submit button. */
+.login-page--radar .login-button-link {
+    height: 48px;
+    line-height: 48px;
+    border-radius: 4px;
+    background: var(--nvy-600);
+    font-family: var(--f-display);
+}
+
+.login-page--radar .login-button-link:hover { background: var(--nvy-700); }
+
+/* The form column is only 42 % wide: between 1040 and 1199 px the side padding shrinks so the fields
+   are not squeezed. */
+@media (min-width: 1040px) and (max-width: 1199px) {
+    .login-page--radar .login-panel {
+        padding-left: 26px;
+        padding-right: max(26px, env(safe-area-inset-right, 0px));
+    }
+
+    .login-page--radar .login-heading h1,
+    .login-page--radar .login-done h1 { font-size: 28px; }
+}
+
+/* ── Narrow screens: the radar panel becomes a strip above the form ── */
+@media (max-width: 1039px) {
+    .login-page--radar .login-layout { grid-template-columns: minmax(0, 1fr); }
+
+    /* The base stylesheet hides .login-hero here (display: none); this rule has more specificity and
+       turns it back on, so the panel stays as a strip. */
+    .login-page--radar .login-hero {
+        display: flex;
+        min-height: 0;
+        padding-block: 26px 22px;
+        padding-left: max(24px, env(safe-area-inset-left, 0px));
+        padding-right: max(24px, env(safe-area-inset-right, 0px));
+        gap: 14px;
+        justify-content: flex-start;
+    }
+
+    .login-page--radar .login-hero::after {
+        background: linear-gradient(100deg, rgba(6, 15, 31, 0.92) 0%, rgba(6, 15, 31, 0.6) 45%, rgba(6, 15, 31, 0.05) 100%);
+    }
+
+    .login-page--radar .login-hero-logo { width: 208px; }
+    .login-page--radar .login-status { font-size: 10px; letter-spacing: 0.1em; gap: 6px 16px; }
+
+    /* Only the logo and the status line stay in the strip. */
+    .login-page--radar .login-hero .login-hero-title,
+    .login-page--radar .login-hero p:not(.login-hero-title),
+    .login-page--radar .login-dbz { display: none; }
+
+    .login-page--radar .login-panel {
+        padding-block: 36px 24px;
+        padding-left: max(24px, env(safe-area-inset-left, 0px));
+        padding-right: max(24px, env(safe-area-inset-right, 0px));
+    }
+}
+
+@media (max-width: 480px) {
+    .login-page--radar .login-heading h1,
+    .login-page--radar .login-done h1 { font-size: 26px; }
+    .login-page--radar .login-hero-logo { width: 184px; }
+    .login-page--radar .login-panel { padding-block: 30px 22px; }
+}
+
+/* People who ask their system for less motion get a still page (the script draws one frame). */
+@media (prefers-reduced-motion: reduce) {
+    .login-page--radar * { transition-duration: .01ms !important; animation: none !important; }
+}
