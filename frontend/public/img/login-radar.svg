@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 540" preserveAspectRatio="xMidYMid slice" role="img" aria-label="">
+    <!--
+      Background of the login page hero (see the "radar look" section of css/login.css): a stylized radar screen.
+      (No double hyphens inside this comment: they are not allowed in XML and the browser would drop the picture.)
+      Everything is drawn here, so the page needs no image download and no external service:
+        1. dark navy base,
+        2. blurred patches of green and yellow "echoes", like reflectivity on a PPI scan,
+        3. range rings, a crosshair and the antenna sweep line,
+        4. a fade from the left, so the text on top stays readable.
+      The radar is centered on (490, 270); with "slice" the picture fills the panel at any size.
+    -->
+    <defs>
+        <linearGradient id="base" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#0b1a36"/>
+            <stop offset="1" stop-color="#071226"/>
+        </linearGradient>
+
+        <!-- Soft edges for the echo patches: the bigger the blur, the weaker and wider the rain it stands for. -->
+        <filter id="blur-lg" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="20"/></filter>
+        <filter id="blur-md" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="11"/></filter>
+        <filter id="blur-sm" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+
+        <!-- The sweep: a bright line that fades out away from the center, and the wedge it just crossed. -->
+        <linearGradient id="sweep-line" gradientUnits="userSpaceOnUse" x1="490" y1="270" x2="600" y2="-40">
+            <stop offset="0" stop-color="#cfe6ff" stop-opacity="0.05"/>
+            <stop offset="0.6" stop-color="#cfe6ff" stop-opacity="0.55"/>
+            <stop offset="1" stop-color="#cfe6ff" stop-opacity="0.8"/>
+        </linearGradient>
+        <linearGradient id="sweep-wedge" gradientUnits="userSpaceOnUse" x1="490" y1="270" x2="560" y2="0">
+            <stop offset="0" stop-color="#7fb8ff" stop-opacity="0"/>
+            <stop offset="1" stop-color="#7fb8ff" stop-opacity="0.16"/>
+        </linearGradient>
+
+        <!-- Left to right: opaque where the text is, transparent where the echoes are. -->
+        <linearGradient id="fade" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#071226" stop-opacity="0.95"/>
+            <stop offset="0.5" stop-color="#071226" stop-opacity="0.6"/>
+            <stop offset="0.8" stop-color="#071226" stop-opacity="0.1"/>
+            <stop offset="1" stop-color="#071226" stop-opacity="0"/>
+        </linearGradient>
+    </defs>
+
+    <rect width="640" height="540" fill="url(#base)"/>
+
+    <!-- Echoes, top right: a storm cell, from weak (teal) to strong (green, then yellow). -->
+    <g filter="url(#blur-lg)">
+        <ellipse cx="560" cy="40" rx="125" ry="85" fill="#1d7c63" opacity="0.7"/>
+        <ellipse cx="615" cy="125" rx="85" ry="52" transform="rotate(-20 615 125)" fill="#1f6f58" opacity="0.6"/>
+        <ellipse cx="470" cy="20" rx="70" ry="40" transform="rotate(15 470 20)" fill="#1a6a60" opacity="0.45"/>
+    </g>
+    <g filter="url(#blur-md)">
+        <ellipse cx="540" cy="50" rx="62" ry="40" transform="rotate(-15 540 50)" fill="#43b56b" opacity="0.85"/>
+        <ellipse cx="598" cy="92" rx="36" ry="24" transform="rotate(30 598 92)" fill="#3aa860" opacity="0.7"/>
+        <ellipse cx="495" cy="30" rx="26" ry="16" transform="rotate(20 495 30)" fill="#39a867" opacity="0.6"/>
+    </g>
+    <g filter="url(#blur-sm)">
+        <ellipse cx="520" cy="62" rx="27" ry="17" transform="rotate(-25 520 62)" fill="#d9cf4a" opacity="0.9"/>
+        <ellipse cx="557" cy="26" rx="17" ry="10" fill="#ecd548" opacity="0.8"/>
+        <ellipse cx="582" cy="70" rx="9" ry="6" fill="#f0a23a" opacity="0.7"/>
+    </g>
+
+    <!-- A weak patch on the right edge, half way down. -->
+    <g filter="url(#blur-lg)">
+        <ellipse cx="640" cy="260" rx="70" ry="50" fill="#1d6f63" opacity="0.4"/>
+    </g>
+
+    <!-- Echoes, bottom right: broad, weaker rain with a few stronger cores. -->
+    <g filter="url(#blur-lg)">
+        <ellipse cx="550" cy="482" rx="165" ry="100" fill="#3c6e3d" opacity="0.7"/>
+        <ellipse cx="430" cy="528" rx="125" ry="60" transform="rotate(10 430 528)" fill="#2c5b45" opacity="0.65"/>
+    </g>
+    <g filter="url(#blur-md)">
+        <ellipse cx="588" cy="440" rx="82" ry="50" transform="rotate(-15 588 440)" fill="#6a9a3f" opacity="0.65"/>
+        <ellipse cx="520" cy="505" rx="50" ry="30" fill="#4f8a45" opacity="0.6"/>
+    </g>
+    <g filter="url(#blur-sm)">
+        <ellipse cx="592" cy="430" rx="27" ry="15" fill="#b8b33f" opacity="0.6"/>
+    </g>
+
+    <!-- Range rings and crosshair. -->
+    <g fill="none" stroke="#8fb6e6" stroke-width="1" opacity="0.14">
+        <circle cx="490" cy="270" r="70"/>
+        <circle cx="490" cy="270" r="140"/>
+        <circle cx="490" cy="270" r="210"/>
+        <circle cx="490" cy="270" r="280"/>
+        <circle cx="490" cy="270" r="350"/>
+        <line x1="490" y1="-100" x2="490" y2="640"/>
+        <line x1="-100" y1="270" x2="760" y2="270"/>
+        <line x1="240" y1="20" x2="740" y2="520"/>
+        <line x1="740" y1="20" x2="240" y2="520"/>
+    </g>
+
+    <!-- Antenna sweep. -->
+    <polygon points="490,270 560,-40 600,-30" fill="url(#sweep-wedge)"/>
+    <line x1="490" y1="270" x2="600" y2="-40" stroke="url(#sweep-line)" stroke-width="1.4"/>
+    <circle cx="490" cy="270" r="3" fill="#cfe6ff" opacity="0.55"/>
+
+    <rect width="640" height="540" fill="url(#fade)"/>
+</svg>

@@ -7,16 +7,31 @@
     <link rel="icon" type="image/png" href="/assets/images/logos/OHMC@3x.png">
     <link rel="stylesheet" href="/css/login.css">
 </head>
-<body class="login-page">
+<!-- The class "login-page" plus the radar modifier on the body turns on the radar look of this page
+     (see css/login.css). The sign-up and recovery pages share the same stylesheet but do not carry the modifier,
+     so they keep the plain look. -->
+<body class="login-page login-page--radar">
     <div class="login-layout">
+        <!-- The background (a radar screen) is drawn by css/login.css from /img/login-radar.svg. -->
         <aside class="login-hero">
             <img class="login-hero-logo" src="/assets/images/logos/OHMC@3x.png" alt="Observatorio Hidro-Meteorológico de la Provincia de Córdoba">
             <div class="login-hero-body">
-                <span class="login-eyebrow">WebMet25</span>
                 <p class="login-hero-title">Sistema de visualización de la Red de Radares Meteorológicos de Argentina</p>
                 <p>Plataforma del Observatorio Hidro-Meteorológico de la Provincia de Córdoba para el monitoreo en tiempo real de productos de radar y la evolución de sistemas convectivos.</p>
-                <hr>
-                <span class="login-gov-hero">Gobierno de la Provincia de Córdoba</span>
+            </div>
+            <div class="login-hero-data" aria-hidden="true">
+                <!-- Reflectivity scale, as in the map legend. Decorative: hidden from screen readers. -->
+                <div class="login-legend">
+                    <span class="login-legend-title">Reflectividad Z (dBZ)</span>
+                    <div class="login-legend-bar"></div>
+                    <div class="login-legend-ticks"><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>60</span></div>
+                </div>
+                <dl class="login-hero-meta">
+                    <div><dt>Producto</dt><dd>PPI Z — 0.5°</dd></div>
+                    <div><dt>Alcance</dt><dd>240 km</dd></div>
+                    <!-- js/login-clock.js fills the time and keeps it ticking. -->
+                    <div class="login-meta-live"><dt>Hora local</dt><dd id="login-clock">--:--:--</dd></div>
+                </dl>
             </div>
         </aside>
 
@@ -68,5 +83,6 @@
     </div>
     <script type="module" src="/js/login.js"></script>
     <script type="module" src="/js/login-ui.js"></script>
+    <script type="module" src="/js/login-clock.js"></script>
 </body>
 </html>

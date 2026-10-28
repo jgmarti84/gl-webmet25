@@ -496,3 +496,187 @@
 .login-button-link:hover {
     background: var(--login-navy-btn-hover);
 }
+
+/* ── Radar look of the login page ──────────────────────────────────────────
+   Everything below is scoped to ".login-page--radar", a class only login.html has, so the sign-up and recovery
+   pages that share this file are not affected. Left: a radar screen with a reflectivity scale and a live clock.
+   Right: the same form with a lighter, more technical finish. */
+.login-page--radar {
+    --radar-mono: ui-monospace, 'SFMono-Regular', 'JetBrains Mono', Consolas, 'Liberation Mono', monospace;
+}
+
+/* Left panel: the SVG picture is the background; three blocks (logo, text, data) are spread from top to bottom. */
+.login-page--radar .login-hero {
+    /* A share of the width (51 % / 49 %) rather than fixed pixels: two fixed bases can add up to more than the
+       container (the scrollbar takes some) and the flex row would wrap, leaving the form below the picture. */
+    flex: 51 1 0;
+    position: relative;
+    isolation: isolate;
+    background: #071226 url('/img/login-radar.svg') center / cover no-repeat;
+    padding: 56px 60px 44px;
+}
+
+.login-page--radar .login-panel {
+    flex: 49 1 0;
+}
+
+.login-page--radar .login-hero-logo {
+    width: 270px;
+}
+
+.login-page--radar .login-hero-body {
+    max-width: 440px;
+    gap: 18px;
+}
+
+.login-page--radar .login-hero .login-hero-title {
+    font-size: clamp(26px, 2.35vw, 31px);
+    font-weight: 700;
+    line-height: 1.17;
+    letter-spacing: -0.012em;
+}
+
+.login-page--radar .login-hero p:not(.login-hero-title) {
+    font-size: 15.5px;
+    line-height: 1.65;
+    color: #b9c8e4;
+}
+
+/* Reflectivity scale. The colors follow the usual weather radar order: weak (green) to strong (red). */
+.login-hero-data {
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+}
+
+.login-legend {
+    width: 300px;
+    max-width: 100%;
+}
+
+.login-legend-title,
+.login-hero-meta dt {
+    font-family: var(--radar-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #8da2c4;
+}
+
+.login-legend-title {
+    display: block;
+    margin-bottom: 8px;
+}
+
+.login-legend-bar {
+    height: 8px;
+    border-radius: 1px;
+    background: linear-gradient(90deg, #86d56a 0%, #3cb95a 22%, #e6d63a 48%, #f0902a 72%, #c62d2d 90%, #9b1c1c 100%);
+}
+
+.login-legend-ticks {
+    margin-top: 6px;
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--radar-mono);
+    font-size: 10.5px;
+    color: #6f86ab;
+}
+
+/* Product, range and clock in one line; they wrap onto more lines on a narrow panel. */
+.login-hero-meta {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 28px;
+}
+
+.login-hero-meta > div {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.login-hero-meta dt {
+    margin: 0;
+}
+
+.login-hero-meta dd {
+    margin: 0;
+    font-family: var(--radar-mono);
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #ffffff;
+    /* Every digit the same width, so the clock does not wobble as the seconds change. */
+    font-variant-numeric: tabular-nums;
+}
+
+/* The small dot before "HORA LOCAL": a live indicator. */
+.login-meta-live dt::before {
+    content: '';
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 8px;
+    border-radius: 50%;
+    background: #35b7c9;
+    box-shadow: 0 0 0 3px rgba(53, 183, 201, 0.2);
+    vertical-align: 1px;
+}
+
+/* Right panel: heading, labels, fields and button. */
+.login-page--radar .login-form-wrap {
+    max-width: 384px;
+}
+
+.login-page--radar .login-heading h1 {
+    font-weight: 700;
+    letter-spacing: -0.022em;
+}
+
+.login-page--radar .login-heading p {
+    font-size: 15px;
+    color: #5a6f86;
+}
+
+.login-page--radar .login-field label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: #475569;
+}
+
+.login-page--radar .login-input {
+    background: #f3f6fa;
+    border: 1px solid #cdd6e2;
+    border-radius: 4px;
+}
+
+.login-page--radar .login-input:hover {
+    border-color: #aab7c9;
+}
+
+.login-page--radar .login-input:focus {
+    background: #ffffff;
+    border-color: var(--login-blue);
+}
+
+.login-page--radar .login-submit {
+    border-radius: 4px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.login-page--radar .login-footer {
+    max-width: 384px;
+    font-size: 12px;
+}
+
+.login-page--radar .login-footer a {
+    color: #0e6f8f;
+    text-decoration: underline;
+}
+
+/* Below 1040 px the whole left panel is hidden (see above), so phones need nothing more. */
