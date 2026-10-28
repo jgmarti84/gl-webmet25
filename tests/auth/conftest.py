@@ -1,5 +1,6 @@
 # tests/auth/conftest.py
 import re
+from concurrent.futures import Future
 
 import pytest
 
@@ -74,11 +75,27 @@ def app_client(test_db_session, mailer):
 TEST_EMAIL_DOMAIN = "ejemplo.com.ar"
 
 
+class _InlineExecutor:
+    """Runs each queued send right away, so a test sees the mail as soon as the request returns.
+
+    The API sends from its own mail threads (api/app/mail/service.py); here that would race with the assertions.
+    The tests of the mail threads themselves (test_mail.py) use the real pool.
+    """
+
+    def submit(self, fn, *args):
+        future = Future()
+        fn(*args)
+        future.set_result(None)
+        return future
+
+
 @pytest.fixture
-def mailer():
-    """Collects the mails the API would send."""
+def mailer(monkeypatch):
+    """Collects the mails the API would send (sent at once, in the request's own thread)."""
+    from api.app.mail import service
     from api.app.mail.service import FakeMailer
 
+    monkeypatch.setattr(service, "_mail_executor", _InlineExecutor())
     return FakeMailer()
 
 

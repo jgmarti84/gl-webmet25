@@ -1,11 +1,14 @@
 # tests/auth/test_mail.py
 import logging
+import threading
+import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
 from api.app.config import settings
+from api.app.mail import service as mail_service
 from api.app.mail import templates
 from api.app.mail.service import FakeMailer, MailError, OutgoingMail, SmtpMailer, build_message, mask_email, send_safely
 
@@ -137,3 +140,48 @@ def test_values_are_escaped_in_the_html(smtp_settings):
     mail = templates.verification_mail(user, "T" * 43)
     assert "<script>" not in mail.html
     assert "&lt;script&gt;" in mail.html
+
+
+# --- own thread pool for sending ---------------------------------------------------
+
+
+class _SlowMailer:
+    """A mail server that hangs until the test lets it go (release), like a stuck SMTP server."""
+
+    def __init__(self):
+        self.release = threading.Event()
+        self.sent = []
+
+    def send(self, mail):
+        self.release.wait(5)
+        self.sent.append(mail)
+
+
+def test_queueing_a_mail_does_not_wait_for_the_smtp_server():
+    # The send runs in the mail threads: whoever queues it (a request of the API) is free at once, even while the
+    # mail server hangs, so a slow SMTP never holds the threads that serve radars, login or /auth/check.
+    slow = _SlowMailer()
+    start = time.monotonic()
+    assert mail_service.queue_mail(slow, MAIL) is True
+    assert time.monotonic() - start < 0.5
+    assert slow.sent == []  # still waiting for the server
+    slow.release.set()
+    for _ in range(100):  # the mail still goes out once the server answers
+        if slow.sent:
+            break
+        time.sleep(0.05)
+    assert slow.sent == [MAIL]
+
+
+def test_a_full_queue_drops_the_mail_and_warns(monkeypatch, caplog):
+    # With the server down for long, mails must not pile up in memory: past the limit they are dropped (the person
+    # can ask again) and the log says so, with the address masked.
+    monkeypatch.setattr(mail_service, "MAIL_QUEUE_LIMIT", 1)
+    slow = _SlowMailer()
+    try:
+        with caplog.at_level(logging.WARNING, logger=mail_service.logger.name):
+            assert mail_service.queue_mail(slow, MAIL) is True
+            assert mail_service.queue_mail(slow, MAIL) is False
+        assert "a***@ejemplo.com.ar" in caplog.text and "ana@ejemplo.com.ar" not in caplog.text
+    finally:
+        slow.release.set()

@@ -13,6 +13,7 @@ from rasterio.env import Env
 
 from .auth.dependencies import require_user
 from .config import settings
+from .mail.service import shutdown_mail_executor
 from .routers import (
     admin_router,
     auth_router,
@@ -119,6 +120,9 @@ async def lifespan(app: FastAPI):
         logger.info("Redis connection closed.")
         _tile_render_executor.shutdown(wait=False)
         logger.info("Tile render executor shut down.")
+        # Own threads of the mail sends (see api/app/mail/service.py).
+        shutdown_mail_executor()
+        logger.info("Mail executor shut down.")
         # Note: per-thread rasterio DatasetReader caches (threading.local) cannot
         # be enumerated or closed globally.  Dataset cleanup happens naturally as
         # executor threads exit — the OS reclaims all underlying file handles.

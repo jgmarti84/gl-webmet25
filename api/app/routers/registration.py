@@ -20,7 +20,7 @@ from ..auth import registration
 from ..auth.dependencies import check_origin
 from ..auth.email_tokens import InvalidEmailToken
 from ..config import settings
-from ..mail.service import Mailer, OutgoingMail, get_mailer, send_safely
+from ..mail.service import Mailer, OutgoingMail, get_mailer, queue_mail
 from ..schemas.registration import (
     ForgotPasswordRequest,
     IdentifierRequest,
@@ -45,9 +45,13 @@ def _require_mail() -> None:
 
 
 def _send_later(background: BackgroundTasks, mailer: Mailer, mails: List[OutgoingMail]) -> None:
-    """Queue the mails to go out after the response; a failure is logged and never reaches the client."""
+    """After the response, hand the mails to the mail threads; a failure is logged and never reaches the client.
+
+    queue_mail only queues (instant): the SMTP send itself runs in the mail module's own threads, so a slow mail
+    server never holds the threads that serve the rest of the API.
+    """
     for mail in mails:
-        background.add_task(send_safely, mailer, mail)
+        background.add_task(queue_mail, mailer, mail)
 
 
 @router.get("/options", response_model=OptionsResponse)

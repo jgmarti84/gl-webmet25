@@ -4,6 +4,8 @@
 import logging
 import smtplib
 import ssl
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from email.message import EmailMessage
 from typing import List, Protocol
@@ -94,6 +96,45 @@ class FakeMailer:
 
     def send(self, mail: OutgoingMail) -> None:
         self.sent.append(mail)
+
+
+# Own small pool of threads for the SMTP sends (per API worker). The API serves its plain "def" endpoints (radars,
+# products, cogs, login, /auth/check...) from one shared pool of about 40 threads; a send that waits for a slow
+# mail server (up to SMTP_TIMEOUT_SECONDS) must never take one of those, or a hung SMTP could slow the whole API.
+MAIL_SEND_THREADS = 2
+# Mails waiting or being sent, per worker. With the mail server down for long, more would pile up in memory: past
+# this many a new mail is dropped (logged; the person can ask for it again).
+MAIL_QUEUE_LIMIT = 200
+
+_mail_executor = ThreadPoolExecutor(max_workers=MAIL_SEND_THREADS, thread_name_prefix="mail")
+_pending = 0
+_pending_lock = threading.Lock()
+
+
+def _sent_or_failed(_future) -> None:
+    """Called by the pool when a send finishes (sent or failed): it no longer counts toward the limit."""
+    global _pending
+    with _pending_lock:
+        _pending -= 1
+
+
+def queue_mail(mailer: Mailer, mail: OutgoingMail) -> bool:
+    """Hand the mail to the mail threads and return at once. False when the queue is full (the mail is dropped)."""
+    global _pending
+    with _pending_lock:
+        if _pending >= MAIL_QUEUE_LIMIT:
+            logger.warning(
+                "Cola de mails llena (%s pendientes): no se envía un mail a %s", _pending, mask_email(mail.to)
+            )
+            return False
+        _pending += 1
+    _mail_executor.submit(send_safely, mailer, mail).add_done_callback(_sent_or_failed)
+    return True
+
+
+def shutdown_mail_executor() -> None:
+    """At API shutdown: stop taking mails; the ones being sent finish on their own (wait=False, like the tile pool)."""
+    _mail_executor.shutdown(wait=False)
 
 
 def send_safely(mailer: Mailer, mail: OutgoingMail) -> None:
