@@ -501,7 +501,7 @@ settings), and animation controls (bottom-center).
 
 ## Admin Panel
 
-> A standalone single-page admin app for CRUD over every database table, plus a visual colormap creator/editor. Independent from the v1/v2 visualization frontend. **Auth:** login at `/login` (`login.html` + `js/login.js`, shared client `js/auth-api.js`). The panel loads the current user from `/api/v1/auth/me`, retries once through `/api/v1/auth/refresh` on a 401, and redirects to `/login` when the session is gone. The **Users** section manages accounts (create, change role, activate/deactivate, reset password, close sessions).
+> A standalone single-page admin app for CRUD over every database table, plus a visual colormap creator/editor. Independent from the v1/v2 visualization frontend. **Auth:** login at `/login` (`login.html` + `js/login.js`, shared client `js/auth-api.js`). The panel loads the current user from `/api/v1/auth/me`, retries once through `/api/v1/auth/refresh` on a 401, and redirects to `/login` when the session is gone. The **Users** section manages accounts (create, change role, activate/deactivate, reset password, close sessions, and "Verificar mail" for an account whose mail was never confirmed; such rows carry a "mail sin verificar" tag).
 
 ### A. **admin.js** — Admin Orchestrator
 

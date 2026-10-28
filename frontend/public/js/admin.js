@@ -336,6 +336,12 @@ document.addEventListener('click', (event) => {
     else box.classList.add('hidden');
 });
 
+// An account with a mail that was never confirmed: it shows "Activo: Sí" but cannot log in until the owner opens the
+// link of the mail, or an admin vouches for it ("Verificar mail"). Accounts without a mail have nothing to verify.
+function needsMailVerification(user) {
+    return Boolean(user.email) && !user.email_verified;
+}
+
 function safeText(value) {
     const raw = value === null || value === undefined ? '' : String(value);
     return raw
@@ -1965,7 +1971,7 @@ async function renderUsers() {
             <tbody>
                 ${users.map((user) => `
                     <tr${rowFacetAttr('users', user)}>
-                        <td>${safeText(user.username)}${user.password_is_bootstrap ? ' <span class="status-pill">contraseña inicial</span>' : ''}</td>
+                        <td>${safeText(user.username)}${user.password_is_bootstrap ? ' <span class="status-pill">contraseña inicial</span>' : ''}${needsMailVerification(user) ? ' <span class="status-pill">mail sin verificar</span>' : ''}</td>
                         <td>${safeText(user.full_name)}</td>
                         <td>${ROLE_LABELS[user.role] || safeText(user.role)}</td>
                         <td>${user.is_active ? 'Sí' : 'No'}</td>
@@ -1976,6 +1982,7 @@ async function renderUsers() {
                                 <button class="btn-secondary" data-toggle-user="${user.id}">${user.is_active ? 'Desactivar' : 'Activar'}</button>
                                 <button class="btn-secondary" data-reset-user="${user.id}">Resetear contraseña</button>
                             `}
+                            ${needsMailVerification(user) ? `<button class="btn-secondary" data-verify-user="${user.id}">Verificar mail</button>` : ''}
                             <button class="btn-secondary" data-revoke-user="${user.id}">Cerrar sesiones</button>
                         </td>
                     </tr>
@@ -2006,6 +2013,15 @@ async function renderUsers() {
     });
     elements.sectionContent.querySelectorAll('[data-reset-user]').forEach((el) => {
         el.onclick = () => openPasswordResetForm(byId(el.dataset.resetUser));
+    });
+    elements.sectionContent.querySelectorAll('[data-verify-user]').forEach((el) => {
+        el.onclick = async () => {
+            const user = byId(el.dataset.verifyUser);
+            if (!window.confirm(`¿Marcar como verificado el mail de ${user.username} (${user.email})? Va a poder ingresar sin abrir el link.`)) return;
+            await adminApi.verifyUserEmail(user.id);
+            await renderSection();
+            showMessage(`Mail de ${user.username} verificado`, 'success');
+        };
     });
     elements.sectionContent.querySelectorAll('[data-revoke-user]').forEach((el) => {
         el.onclick = async () => {

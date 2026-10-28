@@ -93,3 +93,17 @@ def reset_password(db: Session, actor: User, user: User, new_password: str) -> N
         set_password(db, user, new_password)
     except PasswordPolicyError as exc:
         raise UserRuleError(422, str(exc)) from exc
+
+
+def verify_email(db: Session, user: User) -> User:
+    """The admin vouches for the mail of an account whose owner never opened the verification link.
+
+    Same effect as opening the link: the account can log in from now on. Safe to repeat: a mail that is already
+    verified keeps its original date. An account with no mail has nothing to verify.
+    """
+    if user.email is None:
+        raise UserRuleError(409, "La cuenta no tiene un mail para verificar")
+    if user.email_verified_at is None:
+        user.email_verified_at = datetime.now(timezone.utc)
+        db.flush()
+    return user

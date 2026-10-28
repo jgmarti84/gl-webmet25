@@ -484,7 +484,7 @@ Pipeline de composición en canvas:
 
 ## Panel de administración
 
-> Una aplicación de administración de página única independiente para CRUD sobre cada tabla de la base de datos, más un creador/editor visual de colormap. Independiente del frontend de visualización v1/v2. **Autenticación:** login en `/login` (`login.html` + `js/login.js`, cliente compartido `js/auth-api.js`). El panel carga el usuario actual desde `/api/v1/auth/me`, reintenta una vez por `/api/v1/auth/refresh` ante un 401 y redirige a `/login` cuando la sesión se perdió. La sección **Usuarios** gestiona cuentas (crear, cambiar rol, activar/desactivar, resetear contraseña, cerrar sesiones).
+> Una aplicación de administración de página única independiente para CRUD sobre cada tabla de la base de datos, más un creador/editor visual de colormap. Independiente del frontend de visualización v1/v2. **Autenticación:** login en `/login` (`login.html` + `js/login.js`, cliente compartido `js/auth-api.js`). El panel carga el usuario actual desde `/api/v1/auth/me`, reintenta una vez por `/api/v1/auth/refresh` ante un 401 y redirige a `/login` cuando la sesión se perdió. La sección **Usuarios** gestiona cuentas (crear, cambiar rol, activar/desactivar, resetear contraseña, cerrar sesiones y "Verificar mail" para una cuenta cuyo mail nunca se confirmó; esas filas llevan la etiqueta "mail sin verificar").
 
 ### A. **admin.js** — Orquestador de administración
 

@@ -100,3 +100,16 @@ def revoke_sessions(user_id: int, db: Session = Depends(get_db), actor: User = D
     revoke_all_sessions(db, user)
     db.commit()
     return Response(status_code=204)
+
+
+@router.post("/{user_id}/verify-email", response_model=UserResponse)
+def verify_email(user_id: int, db: Session = Depends(get_db), actor: User = Depends(require_admin)) -> UserResponse:
+    """Mark the mail of an account as verified without the person opening the link (admin only)."""
+    user = _get_or_404(db, user_id)
+    try:
+        user_admin.verify_email(db, user)
+    except user_admin.UserRuleError as exc:
+        raise _rule(exc)
+    db.commit()
+    db.refresh(user)
+    return _response(user)
