@@ -36,12 +36,24 @@
             </div>
 
             <div class="control-group">
-                <label for="start-input">Desde (UTC)</label>
-                <input type="datetime-local" id="start-input" step="60">
+                <label for="window-select">Ventana</label>
+                <select id="window-select">
+                    <option value="1.5" selected>Últimas 1,5 h (en vivo)</option>
+                    <option value="3">Últimas 3 h (en vivo)</option>
+                    <option value="6">Últimas 6 h (en vivo)</option>
+                    <option value="custom">Rango personalizado</option>
+                </select>
             </div>
-            <div class="control-group">
-                <label for="end-input">Hasta (UTC)</label>
-                <input type="datetime-local" id="end-input" step="60">
+
+            <div id="custom-range" class="hidden">
+                <div class="control-group">
+                    <label for="start-input">Desde (UTC)</label>
+                    <input type="datetime-local" id="start-input" step="60">
+                </div>
+                <div class="control-group">
+                    <label for="end-input">Hasta (UTC)</label>
+                    <input type="datetime-local" id="end-input" step="60">
+                </div>
             </div>
 
             <div class="control-group toggle-row">
@@ -85,20 +97,41 @@
         </div>
     </div>
 
-    <!-- ===== FRAME CONTROLS ===== -->
-    <div id="frame-controls" class="hidden">
-        <div class="frame-info">
-            <span id="frame-time">—</span>
+    <!-- ===== ANIMATION CONTROLS (same panel as the single-radar view; styles in styles.css) ===== -->
+    <div id="animation-controls" class="hidden">
+        <div class="animation-info-row">
+            <span id="time-window-label" class="time-window-label">—</span>
+            <span id="live-indicator" class="live-indicator live-off" title="Estado del modo en vivo">○ En vivo</span>
+            <span id="time-display" class="frame-time-display">—</span>
+            <button id="btn-collapse-controls" class="collapse-controls-btn" title="Minimizar controles" aria-label="Minimizar controles">⌃</button>
+        </div>
+        <div class="tracking-frame-info">
             <span id="frame-verdict" class="verdict"></span>
             <span id="frame-counts"></span>
         </div>
-        <input type="range" id="frame-slider" min="0" max="0" value="0" step="1">
-        <div class="frame-buttons">
-            <button id="btn-first" title="Primero">⏮</button>
-            <button id="btn-prev" title="Anterior">◀</button>
-            <button id="btn-play" title="Reproducir">▶</button>
-            <button id="btn-next" title="Siguiente">▶|</button>
-            <button id="btn-last" title="Último">⏭</button>
+        <div class="animation-slider-container">
+            <input type="range" id="animation-slider" min="0" max="0" value="0" step="1">
+        </div>
+        <div class="animation-buttons">
+            <button id="btn-first"  title="Primer cuadro"    aria-label="Primer cuadro">⏮</button>
+            <button id="btn-prev"   title="Cuadro anterior"  aria-label="Cuadro anterior">◀</button>
+            <button id="btn-play-pause" title="Reproducir" aria-label="Reproducir/Pausar">
+                <svg class="play-pause-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+                    <path class="icon-play" d="M8 5v14l11-7z"></path>
+                    <g class="icon-pause">
+                        <rect x="6" y="5" width="4" height="14" rx="1"></rect>
+                        <rect x="14" y="5" width="4" height="14" rx="1"></rect>
+                    </g>
+                </svg>
+            </button>
+            <button id="btn-next"   title="Cuadro siguiente" aria-label="Cuadro siguiente">▶</button>
+            <button id="btn-latest" title="Ir al último cuadro" aria-label="Ir al último cuadro">⏭</button>
+            <button id="btn-cog-refresh-now" title="Buscar los últimos datos ahora" aria-label="Buscar los últimos datos ahora" disabled>↻</button>
+            <div class="speed-control" title="Velocidad de la animación">
+                <span class="speed-label">Velocidad</span>
+                <input type="range" id="speed-slider" min="0.5" max="2" step="0.1" value="1">
+                <span id="speed-value">1.0x</span>
+            </div>
             <span id="frame-counter">— / —</span>
         </div>
     </div>

@@ -74,35 +74,24 @@
 #config-table td { padding: 2px 0; vertical-align: top; }
 #config-table td:first-child { opacity: 0.65; padding-right: 8px; }
 
-/* ---- frame controls ---- */
+/* ---- animation controls ----
+   The panel itself (#animation-controls) is styled by styles.css, exactly as in
+   the single-radar view. Only the tracking-specific line is added here. */
 
-#frame-controls {
-    position: absolute;
-    bottom: 18px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1000;
-    width: min(620px, calc(100vw - 40px));
-    padding: 10px 14px;
-    border-radius: 8px;
-    background: rgba(20, 20, 24, 0.86);
-    backdrop-filter: blur(6px);
-    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
-}
+#animation-controls.hidden,
+#custom-range.hidden { display: none; }
 
-#frame-controls.hidden { display: none; }
-
-.frame-info {
+.tracking-frame-info {
     display: flex;
     align-items: center;
     gap: 10px;
-    font-size: 0.8rem;
-    margin-bottom: 6px;
+    font-size: 0.78rem;
+    margin: 2px 0 4px;
     flex-wrap: wrap;
+    min-height: 1em;
 }
 
-#frame-time { font-weight: 600; }
-#frame-counts { opacity: 0.7; }
+#frame-counts { opacity: 0.75; }
 
 .verdict {
     color: #ffb300;
@@ -111,34 +100,15 @@
     letter-spacing: 0.03em;
 }
 
-#frame-slider { width: 100%; }
-
-.frame-buttons {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 6px;
-}
-
-.frame-buttons button {
-    background: rgba(255, 255, 255, 0.08);
-    border: none;
-    color: inherit;
-    border-radius: 4px;
-    padding: 4px 9px;
-    cursor: pointer;
-    font-size: 0.85rem;
-}
-
-.frame-buttons button:hover { background: rgba(255, 255, 255, 0.16); }
-#frame-counter { margin-left: auto; opacity: 0.7; font-size: 0.78rem; }
+#animation-controls.collapsed .tracking-frame-info { display: none; }
 
 /* ---- legend ---- */
 
 #tracking-legend {
+    /* bottom-left: bottom-right is taken by #animation-controls (styles.css) */
     position: absolute;
     bottom: 18px;
-    right: 12px;
+    left: 12px;
     z-index: 1000;
     padding: 8px 10px;
     border-radius: 6px;
