@@ -18,7 +18,7 @@ class TrackingSettings(BaseSettings):
     db_port: int = Field(default=5432, alias="DB_PORT")
     db_name: str = Field(default="radar_db", alias="DB_NAME")
     db_user: str = Field(default="radar", alias="DB_USER")
-    db_password: str = Field(default="radarpass", alias="DB_PASSWORD")
+    db_password: str = Field(default="", alias="DB_PASSWORD")
 
     # Where the NC cubes are mounted (read-only). Paths stored in the nccubes
     # table are absolute as seen by the indexer; this is here so the service can

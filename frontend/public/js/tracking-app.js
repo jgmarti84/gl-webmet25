@@ -8,6 +8,7 @@
  */
 
 import { TrackingLayer } from './shared/tracking.js';
+import { authFetch } from './auth-api.js';
 
 const API_V1 = '/api/v1';
 
@@ -204,7 +205,7 @@ async function loadColmax(radar, start, end) {
             radar_codes: radar, product: 'COLMAX',
             time_from: start, time_to: end, limit: '500',
         });
-        const res = await fetch(`${API_V1}/cogs?${params}`);
+        const res = await authFetch(`${API_V1}/cogs?${params}`);
         if (!res.ok) return;
         const cogs = (await res.json()).cogs || [];
         for (const cog of cogs) {

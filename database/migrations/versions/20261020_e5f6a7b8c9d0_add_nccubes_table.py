@@ -24,6 +24,10 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Guard: `manage init` runs create_all *before* applying migrations, so on a database that
+    # was not yet at this revision the table may already exist (built from the models).
+    if "nccubes" in sa.inspect(op.get_bind()).get_table_names():
+        return
     op.create_table(
         'nccubes',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
