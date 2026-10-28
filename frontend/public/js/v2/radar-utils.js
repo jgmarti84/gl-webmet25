@@ -211,6 +211,60 @@ export function updateLiveIndicator(liveHours, lockedToLatest = false) {
     if (cogRefreshBtn) cogRefreshBtn.disabled = liveHours === null;
 }
 
+/**
+ * Wire the #animation-controls panel chrome shared by every page that shows
+ * it (single-radar view, storm tracking): the collapse button and dragging the
+ * panel by its info row. Playback itself is AnimationController's job.
+ */
+export function wireAnimationPanel() {
+    const btnCollapse = document.getElementById('btn-collapse-controls');
+    const animPanel   = document.getElementById('animation-controls');
+    if (btnCollapse && animPanel) {
+        btnCollapse.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            animPanel.classList.toggle('collapsed');
+        });
+    }
+
+    const animHandle = animPanel?.querySelector('.animation-info-row');
+    if (animPanel && animHandle) {
+        let dragging = false;
+        let offsetX  = 0;
+        let offsetY  = 0;
+
+        animHandle.addEventListener('mousedown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+            const rect = animPanel.getBoundingClientRect();
+            animPanel.style.right  = 'auto';
+            animPanel.style.bottom = 'auto';
+            animPanel.style.left   = `${rect.left}px`;
+            animPanel.style.top    = `${rect.top}px`;
+            dragging = true;
+            offsetX  = e.clientX - rect.left;
+            offsetY  = e.clientY - rect.top;
+            animHandle.classList.add('dragging');
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!dragging) return;
+            const maxX = window.innerWidth  - animPanel.offsetWidth;
+            const maxY = window.innerHeight - animPanel.offsetHeight;
+            animPanel.style.left = `${Math.max(0, Math.min(e.clientX - offsetX, maxX))}px`;
+            animPanel.style.top  = `${Math.max(0, Math.min(e.clientY - offsetY, maxY))}px`;
+        });
+
+        const endDrag = () => {
+            if (!dragging) return;
+            dragging = false;
+            animHandle.classList.remove('dragging');
+        };
+        document.addEventListener('mouseup',    endDrag);
+        document.addEventListener('mouseleave', endDrag);
+    }
+}
+
 export function _hideFieldLoadingBadge() {
     const badge = document.getElementById('field-loading-badge');
     if (badge) badge.classList.remove('visible');

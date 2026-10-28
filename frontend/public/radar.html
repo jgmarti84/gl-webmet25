@@ -213,7 +213,7 @@
     <div id="animation-controls">
         <div class="animation-info-row">
             <span id="time-window-label" class="time-window-label">—</span>
-            <span id="live-indicator" class="live-indicator live-off" title="Live mode status">○ Live</span>
+            <span id="live-indicator" class="live-indicator live-off" title="Estado del modo en vivo">○ En vivo</span>
             <span id="time-display" class="frame-time-display">—</span>
             <button id="btn-collapse-controls" class="collapse-controls-btn" title="Minimizar controles" aria-label="Minimizar controles">⌃</button>
         </div>
@@ -221,8 +221,8 @@
             <input type="range" id="animation-slider" min="0" max="0" value="0" step="1">
         </div>
         <div class="animation-buttons">
-            <button id="btn-first"  title="First frame"      aria-label="First frame">⏮</button>
-            <button id="btn-prev"   title="Previous frame"   aria-label="Previous frame">◀</button>
+            <button id="btn-first"  title="Primer cuadro"    aria-label="Primer cuadro">⏮</button>
+            <button id="btn-prev"   title="Cuadro anterior"  aria-label="Cuadro anterior">◀</button>
             <button id="btn-play-pause" title="Reproducir" aria-label="Reproducir/Pausar">
                 <svg class="play-pause-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
                     <path class="icon-play" d="M8 5v14l11-7z"></path>
@@ -232,11 +232,11 @@
                     </g>
                 </svg>
             </button>
-            <button id="btn-next"   title="Next frame"       aria-label="Next frame">▶</button>
-            <button id="btn-latest" title="Go to latest frame" aria-label="Go to latest frame">⏭</button>
-            <button id="btn-cog-refresh-now" title="Fetch latest COGs now" aria-label="Fetch latest COGs now" disabled>↻</button>
-            <div class="speed-control" title="Animation speed">
-                <span class="speed-label">Speed</span>
+            <button id="btn-next"   title="Cuadro siguiente" aria-label="Cuadro siguiente">▶</button>
+            <button id="btn-latest" title="Ir al último cuadro" aria-label="Ir al último cuadro">⏭</button>
+            <button id="btn-cog-refresh-now" title="Buscar los últimos datos ahora" aria-label="Buscar los últimos datos ahora" disabled>↻</button>
+            <div class="speed-control" title="Velocidad de la animación">
+                <span class="speed-label">Velocidad</span>
                 <input type="range" id="speed-slider" min="0.5" max="2" step="0.1" value="1">
                 <span id="speed-value">1.0x</span>
             </div>

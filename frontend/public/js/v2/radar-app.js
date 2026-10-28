@@ -9,7 +9,9 @@ import {
     updateRadarHeader,
     fitMapToRadar,
     buildGridFrames,
-    buildCogsByFrameMap
+    buildCogsByFrameMap,
+    updateLiveIndicator,
+    wireAnimationPanel
 }      from './radar-utils.js';
 
 import {
@@ -920,11 +922,7 @@ function startLiveRefresh(hours) {
         refreshLiveWindow();
     }, LIVE_REFRESH_INTERVAL_MS);
 
-    const indicator = document.getElementById('live-indicator');
-    if (indicator) {
-        indicator.className   = 'live-indicator live-on';
-        indicator.textContent = '● Live';
-    }
+    updateLiveIndicator(hours, state.animator?.isLockedToLatest() ?? true);
 }
 
 function stopLiveRefresh() {
@@ -933,11 +931,7 @@ function stopLiveRefresh() {
         state.liveRefreshTimer = null;
     }
     state.liveHours = null;
-    const indicator = document.getElementById('live-indicator');
-    if (indicator) {
-        indicator.className   = 'live-indicator live-off';
-        indicator.textContent = '○ Live';
-    }
+    updateLiveIndicator(null);
 }
 
 /**
@@ -1177,54 +1171,8 @@ function initPanelControls() {
         btnSnapshot.addEventListener('click', () => captureMapSnapshot());
     }
 
-    // ── Animation controls: collapse toggle ──
-    const btnCollapse = document.getElementById('btn-collapse-controls');
-    const animPanel   = document.getElementById('animation-controls');
-    if (btnCollapse && animPanel) {
-        btnCollapse.addEventListener('mousedown', (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            animPanel.classList.toggle('collapsed');
-        });
-    }
-
-    // ── Animation controls: draggable ──
-    const animHandle = animPanel?.querySelector('.animation-info-row');
-    if (animPanel && animHandle) {
-        let dragging = false;
-        let offsetX  = 0;
-        let offsetY  = 0;
-
-        animHandle.addEventListener('mousedown', (e) => {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
-            const rect = animPanel.getBoundingClientRect();
-            animPanel.style.right  = 'auto';
-            animPanel.style.bottom = 'auto';
-            animPanel.style.left   = `${rect.left}px`;
-            animPanel.style.top    = `${rect.top}px`;
-            dragging = true;
-            offsetX  = e.clientX - rect.left;
-            offsetY  = e.clientY - rect.top;
-            animHandle.classList.add('dragging');
-            e.preventDefault();
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            if (!dragging) return;
-            const maxX = window.innerWidth  - animPanel.offsetWidth;
-            const maxY = window.innerHeight - animPanel.offsetHeight;
-            animPanel.style.left = `${Math.max(0, Math.min(e.clientX - offsetX, maxX))}px`;
-            animPanel.style.top  = `${Math.max(0, Math.min(e.clientY - offsetY, maxY))}px`;
-        });
-
-        const endDrag = () => {
-            if (!dragging) return;
-            dragging = false;
-            animHandle.classList.remove('dragging');
-        };
-        document.addEventListener('mouseup',    endDrag);
-        document.addEventListener('mouseleave', endDrag);
-    }
+    // ── Animation controls: collapse toggle + drag (shared with the tracking page) ──
+    wireAnimationPanel();
 
     // ── Section-add-field: collapsible dropdown with checkbox list ──
     const sectionAddField = document.getElementById('section-add-field');
@@ -1576,6 +1524,13 @@ const app = {
             };
 
             state.animator.initControls(state.ui);
+            // Live indicator follows the "locked to latest" state, and the
+            // refresh button fetches the newest COGs now (same as the main map).
+            state.animator.setOnLockChange(locked => {
+                if (state.liveHours !== null) updateLiveIndicator(state.liveHours, locked);
+            });
+            document.getElementById('btn-cog-refresh-now')
+                ?.addEventListener('click', () => refreshLiveWindow());
 
             state.ui.enableAnimationControls(false);
             state.ui.enableNavButtons(false);
