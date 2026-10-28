@@ -13,8 +13,8 @@ from radar_db.models import User
 
 from ..auth import service
 from ..auth.cookies import access_cookie_name, clear_auth_cookies, refresh_cookie_name, set_auth_cookies
-from ..auth.dependencies import check_origin, get_current_user
-from ..auth.security import create_access_token, decode_access_token
+from ..auth.dependencies import check_origin, get_current_user, require_valid_token
+from ..auth.security import AccessClaims, create_access_token, decode_access_token
 from ..config import settings
 from ..schemas.auth import LoginRequest, MeResponse
 
@@ -117,4 +117,14 @@ def check(role: Optional[Literal["admin"]] = None, user: User = Depends(get_curr
     """Session probe for nginx auth_request: 204 ok, 401 no session, 403 wrong role. Never has a body."""
     if role is not None and user.role != role:
         raise HTTPException(status_code=403, detail="No tenés permisos para esta acción")
+    return Response(status_code=204)
+
+
+@router.get("/check-token", status_code=204)
+async def check_token(claims: AccessClaims = Depends(require_valid_token)) -> Response:
+    """Light session probe for the basemap tile proxies: 204 ok, 401 no valid access token. Never has a body.
+
+    Unlike /check it does not read the user (no database connection), so panning the map, which asks for
+    dozens of tiles at once, does not use up the database pool. See require_valid_token for the trade-off.
+    """
     return Response(status_code=204)
