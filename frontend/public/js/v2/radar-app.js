@@ -1142,7 +1142,6 @@ function initPanelControls() {
         'btn-module-b': 'panel-module-b',
         'btn-module-c': 'panel-module-c',
         'btn-settings': 'settings-panel',
-        'btn-account':  'panel-account',
     };
 
     Object.entries(panelMap).forEach(([btnId, panelId]) => {

@@ -87,9 +87,8 @@ def test_logout_from_the_map_shows_the_login(browser, admin_storage_state):
     try:
         page = context.new_page()
         page.goto(f"{FRONTEND_URL}/", wait_until="networkidle")
-        expect(page.locator("#btn-account")).to_be_visible()
-        page.click("#btn-account")  # the account panel holds the logout button
-        page.locator("#session-box-logout").click()
+        expect(page.locator("#account-chip")).to_be_visible()
+        page.locator("#session-box-logout").click()  # the chip carries the logout button
         expect(page.locator("#login-form")).to_be_visible()
     finally:
         context.close()
@@ -106,9 +105,10 @@ def test_viewer_is_sent_from_admin_to_the_map(browser, admin_storage_state):
         page.click("#login-submit")
         page.wait_for_url(lambda url: "/login" not in url)
         page.wait_for_load_state("networkidle")
-        expect(page.locator("#btn-account")).to_be_visible()
-        page.click("#btn-account")
+        expect(page.locator("#account-chip")).to_be_visible()
         expect(page.locator("#account-role")).to_have_text("Lector")
+        # The admin panel link lives in the settings panel: open it so "hidden" means the link itself is hidden.
+        page.click("#btn-settings")
         expect(page.locator("#admin-link")).to_be_hidden()
         page.goto(f"{FRONTEND_URL}/admin", wait_until="networkidle")
         assert urlparse(page.url).path == "/"
