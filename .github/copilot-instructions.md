@@ -1,5 +1,10 @@
 # webmet25 — Copilot Instructions
 
+> **Start with [`AGENTS.md`](../AGENTS.md)** (repo root): the working rules for every
+> agent and human (branches, secrets, tests, PRs). This file is the detailed code
+> reference; if the two disagree, `AGENTS.md` wins.
+
+
 ## 🧠 Context & Knowledge Base
 > **CRITICAL:** You are operating in a multi-root workspace alongside the `radarlib` repository. 
 > Before writing code, route your knowledge by reading the appropriate documentation:
@@ -247,9 +252,12 @@ tests/ # Automated tests
 
 A standalone admin SPA for CRUD over the database, served at `/admin` and backed by the `/api/v1/admin/*` routes ([`api/app/routers/admin.py`](../api/app/routers/admin.py)).
 
-### Authentication (temporary)
-- Both `/admin` (and `/admin/`) and `/api/v1/admin/` are protected by **nginx HTTP Basic Auth** (`admin.htpasswd`) — see [`frontend/nginx.conf`](../frontend/nginx.conf).
-- ⚠️ This is a stopgap. The public `/api/v1/*` API remains open. **TODO: replace Basic Auth with JWT before production.** Do not build new auth assumptions on Basic Auth.
+### Authentication
+- `/admin` requires login (`/login`). The API enforces auth with FastAPI dependencies in [`api/app/auth/dependencies.py`](../api/app/auth/dependencies.py): `require_admin` for admin routes, `get_current_user` for any logged-in user, `get_optional_user` for public endpoints that want to know the user. Every data router is registered with `require_user` in `main.py`; only `/health`, `/` and `/auth/login|refresh|logout` are public. nginx protects the HTML pages, the admin panel and the OSM/IGN tile proxies with `auth_request` against `GET /api/v1/auth/check` (frontend/nginx.conf).
+- Sessions: 15-minute JWT access cookie + rotating refresh cookie (48 h idle, 7 days absolute), `HttpOnly`, `SameSite=Strict`. Every authenticated request reads the user from the database (checks `is_active` and `token_version`), so deactivating a user or resetting a password takes effect immediately.
+- State-changing routers also depend on `check_origin` (CSRF defense against `ALLOWED_ORIGINS`).
+- Do **not** add authentication in nginx. nginx only rate-limits `POST /api/v1/auth/login`.
+- Password hashing and account operations live in `database/radar_db` (`passwords.py`, `accounts.py`) so the API and the server CLI (`manage.py create-admin|reset-password|bootstrap-admin`) share one implementation.
 
 ### Admin API endpoints (base `/api/v1/admin`)
 | Resource | Endpoints |
@@ -578,7 +586,7 @@ Updates record status to MISSING in DB if file not found at serve time.
 > touching these areas.
 
 ### Critical
-- ⚠️ PARTIAL: The public `/api/v1/*` API is still completely open. The admin panel/API (`/admin`, `/api/v1/admin/*`) is gated by **temporary nginx HTTP Basic Auth** (`admin.htpasswd`) — must be replaced with proper JWT before production.
+- ✅ Every page and API endpoint require a session (`admin` or `viewer`); only `/health` and login/refresh/logout are public. Self-registration with e-mail verification is still to be built.
 - ❌ No transactions in indexer. Partial failures corrupt DB state.
 - ❌ Missing files cause 500 errors. Must be handled gracefully.
 
@@ -704,7 +712,7 @@ Every endpoint must have ALL of the following tests:
 
 ## Rules for Writing E2E Tests
 > Follow these rules when writing Playwright tests in tests/e2e/
-> **How to run them (Docker + bare-machine + CI) is documented in [`docs/E2E_TESTING.md`](../docs/E2E_TESTING.md).** The e2e suite targets the **v2 frontend** (`FRONTEND_URL`, default `http://frontend-v2:80`) and authenticates to `/admin` with `ADMIN_USERNAME`/`ADMIN_PASSWORD` via Playwright `http_credentials` (a shared `tests/e2e/conftest.py` provides the auth context, JS-error capture, and screenshot-on-failure).
+> **How to run them (Docker + bare-machine + CI) is documented in [`docs/E2E_TESTING.md`](../docs/E2E_TESTING.md).** The e2e suite targets the **v2 frontend** (`FRONTEND_URL`, default `http://frontend-v2:80`) and logs in to `/admin` through the `/login` form with `BOOTSTRAP_ADMIN_USERNAME`/`BOOTSTRAP_ADMIN_PASSWORD` (a shared `tests/e2e/conftest.py` provides the login helper and one shared admin session, because nginx rate-limits login, plus JS-error capture and screenshot-on-failure).
 
 ### Required Setup
 ```python

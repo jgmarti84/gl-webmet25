@@ -1,4 +1,6 @@
 import { api }                 from '../shared/api.js';
+import { initPageSession }      from '../auth-api.js';
+import { renderSessionBox }     from '../shared/session-box.js';
 import { MapManager }          from './map.js';
 import { AnimationController } from './animation.js';
 import { UIControls }          from '../shared/controls.js';
@@ -1140,6 +1142,7 @@ function initPanelControls() {
         'btn-module-b': 'panel-module-b',
         'btn-module-c': 'panel-module-c',
         'btn-settings': 'settings-panel',
+        'btn-account':  'panel-account',
     };
 
     Object.entries(panelMap).forEach(([btnId, panelId]) => {
@@ -1662,6 +1665,9 @@ const app = {
 // START APPLICATION
 // =============================================================================
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    const me = await initPageSession();
+    if (!me) return;
+    renderSessionBox(me);
     app.init();
 });

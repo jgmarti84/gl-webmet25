@@ -1,24 +1,31 @@
 # api/app/main.py
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+import json
 import logging
 import os
 import time
 import rasterio
 from rasterio.env import Env
 
+from .auth.dependencies import require_user
 from .config import settings
+from .mail.service import shutdown_mail_executor
 from .routers import (
     admin_router,
+    auth_router,
     cogs_router,
     colormap_router,
     frames_router,
     products_router,
     radars_router,
+    registration_router,
     tiles_router,
     tops_cores_router,
+    users_router,
 )
 from .schemas import HealthResponse
 from .services.tile_service import _tile_render_executor
@@ -38,6 +45,23 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Radar Visualization API...")
     logger.info(f"Database: {settings.db_host}:{settings.db_port}/{settings.db_name}")
     logger.info(f"COG Base Path: {settings.cog_base_path}")
+
+    try:
+        from radar_db import db_manager
+        from radar_db.accounts import count_active_admins
+        with db_manager.get_session() as session:
+            if count_active_admins(session) == 0:
+                logger.warning(
+                    "No active admin users. Create one with: "
+                    "make create-admin U=<usuario> (or set ADMIN_USERNAME / ADMIN_PASSWORD and restart db-init)"
+                )
+    except Exception as exc:  # DB not ready must not block startup
+        logger.warning(f"Could not check admin users at startup: {exc}")
+
+    # The switch alone does not turn registration on (see Settings.registration_available): say why it is off,
+    # and warn when it is on without the terms.
+    for message in settings.registration_warnings:
+        logger.warning(message)
 
     gdal_env = Env(
         GDAL_CACHEMAX=settings.gdal_cachemax,
@@ -96,6 +120,9 @@ async def lifespan(app: FastAPI):
         logger.info("Redis connection closed.")
         _tile_render_executor.shutdown(wait=False)
         logger.info("Tile render executor shut down.")
+        # Own threads of the mail sends (see api/app/mail/service.py).
+        shutdown_mail_executor()
+        logger.info("Mail executor shut down.")
         # Note: per-thread rasterio DatasetReader caches (threading.local) cannot
         # be enumerated or closed globally.  Dataset cleanup happens naturally as
         # executor threads exit — the OS reclaims all underlying file handles.
@@ -148,6 +175,20 @@ async def add_timing_header(request: Request, call_next):
     return response
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """422 for a body or parameter that fails validation, same shape as FastAPI's default minus two things.
+
+    The default repeats each rejected value ("input") in the answer. That echoes back what was sent (a password
+    typed in a wrong field, for example) and, for a character that is not valid UTF-8, the answer itself could
+    not be encoded and the request ended in a 500. "input" and "ctx" are dropped, and the body is written with
+    ASCII escapes so no character in a message can break it.
+    """
+    errors = [{key: value for key, value in error.items() if key not in ("input", "ctx")} for error in exc.errors()]
+    content = json.dumps({"detail": errors}, ensure_ascii=True, default=str)
+    return Response(content=content, status_code=422, media_type="application/json")
+
+
 # Exception handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -156,14 +197,21 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # Include routers
-app.include_router(radars_router, prefix=settings.api_prefix)
-app.include_router(products_router, prefix=settings.api_prefix)
-app.include_router(cogs_router, prefix=settings.api_prefix)
-app.include_router(tiles_router, prefix=settings.api_prefix)
-app.include_router(colormap_router, prefix=settings.api_prefix)
-app.include_router(frames_router, prefix=settings.api_prefix)
-app.include_router(tops_cores_router, prefix=settings.api_prefix)
+# Every data router needs a session (admin or viewer). admin and users enforce the admin role
+# themselves, and auth handles its own public endpoints (login, refresh, logout).
+_session_required = [Depends(require_user)]
+app.include_router(radars_router, prefix=settings.api_prefix, dependencies=_session_required)
+app.include_router(products_router, prefix=settings.api_prefix, dependencies=_session_required)
+app.include_router(cogs_router, prefix=settings.api_prefix, dependencies=_session_required)
+app.include_router(tiles_router, prefix=settings.api_prefix, dependencies=_session_required)
+app.include_router(colormap_router, prefix=settings.api_prefix, dependencies=_session_required)
+app.include_router(frames_router, prefix=settings.api_prefix, dependencies=_session_required)
+app.include_router(tops_cores_router, prefix=settings.api_prefix, dependencies=_session_required)
 app.include_router(admin_router, prefix=settings.api_prefix)
+app.include_router(auth_router, prefix=settings.api_prefix)
+# Public (no session): sign-up, e-mail verification and password recovery.
+app.include_router(registration_router, prefix=settings.api_prefix)
+app.include_router(users_router, prefix=settings.api_prefix)
 
 
 # Health check endpoints

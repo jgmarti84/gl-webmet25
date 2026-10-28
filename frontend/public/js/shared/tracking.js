@@ -15,6 +15,8 @@
  * radars is tracked twice under different ids.
  */
 
+import { authFetch } from '../auth-api.js';
+
 const TRACKING_BASE = '/api/tracking';
 
 /** Styling by convective verdict. Non-convective systems are detected but
@@ -191,7 +193,7 @@ export class TrackingLayer {
     /** Cube coverage per radar. `min_time` bounds how far back tracking can go. */
     static async availability(radar) {
         const q = radar ? `?radar=${encodeURIComponent(radar)}` : '';
-        const res = await fetch(`${TRACKING_BASE}/availability${q}`);
+        const res = await authFetch(`${TRACKING_BASE}/availability${q}`);
         if (!res.ok) throw new Error(`availability failed: ${res.status}`);
         return (await res.json()).radars || [];
     }
@@ -205,7 +207,7 @@ export class TrackingLayer {
      * @param {function(object):void} onProgress called with each poll payload
      */
     static async run({ radar, start, end, config }, onProgress, pollMs = 1000) {
-        const res = await fetch(`${TRACKING_BASE}/jobs`, {
+        const res = await authFetch(`${TRACKING_BASE}/jobs`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ radar, start, end, config }),
@@ -214,7 +216,7 @@ export class TrackingLayer {
         const job = await res.json();
 
         for (;;) {
-            const poll = await fetch(`${TRACKING_BASE}/jobs/${job.job_id}`);
+            const poll = await authFetch(`${TRACKING_BASE}/jobs/${job.job_id}`);
             if (poll.status === 404) {
                 // In-memory store: a restart loses jobs. Resubmit, don't error.
                 throw new Error('Job disappeared (service restarted). Try again.');

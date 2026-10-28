@@ -2,6 +2,8 @@
 import httpx
 import os
 
+from ._session import session_headers
+
 API_BASE_URL = os.getenv("API_BASE_URL", "http://api:8000")
 
 PREFIX = "/api/v1/cogs"
@@ -13,21 +15,21 @@ PREFIX = "/api/v1/cogs"
 
 def test_cogs_returns_200():
     """GET /cogs must return HTTP 200."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(PREFIX)
     assert response.status_code == 200
 
 
 def test_cogs_returns_json():
     """GET /cogs must return valid JSON with correct content type."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(PREFIX)
     assert "application/json" in response.headers["content-type"]
 
 
 def test_cogs_response_has_required_fields():
     """GET /cogs must return all required pagination contract fields."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(PREFIX)
     data = response.json()
     assert "cogs" in data
@@ -40,7 +42,7 @@ def test_cogs_response_has_required_fields():
 
 def test_cogs_count_matches_list_length():
     """GET /cogs 'count' must equal the length of the 'cogs' list."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(PREFIX)
     data = response.json()
     assert data["count"] == len(data["cogs"])
@@ -48,7 +50,7 @@ def test_cogs_count_matches_list_length():
 
 def test_cogs_items_have_required_fields():
     """Each COG in GET /cogs must have all required contract fields."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(PREFIX)
     data = response.json()
     for cog in data["cogs"]:
@@ -62,7 +64,7 @@ def test_cogs_items_have_required_fields():
 
 def test_cogs_tile_url_contains_cog_id():
     """Each COG tile_url must embed the COG's own id."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(PREFIX)
     data = response.json()
     for cog in data["cogs"]:
@@ -71,7 +73,7 @@ def test_cogs_tile_url_contains_cog_id():
 
 def test_cogs_default_page_is_1():
     """GET /cogs default response must have page == 1."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(PREFIX)
     data = response.json()
     assert data["page"] == 1
@@ -79,7 +81,7 @@ def test_cogs_default_page_is_1():
 
 def test_cogs_default_page_size_is_50():
     """GET /cogs default response must have page_size == 50."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(PREFIX)
     data = response.json()
     assert data["page_size"] == 50
@@ -87,14 +89,14 @@ def test_cogs_default_page_size_is_50():
 
 def test_cogs_filter_by_radar_code_returns_200():
     """GET /cogs?radar_code=X must return HTTP 200."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(PREFIX, params={"radar_code": "RMA1"})
     assert response.status_code == 200
 
 
 def test_cogs_filter_by_radar_code_returns_matching_only():
     """GET /cogs?radar_code=X must return only COGs for that radar."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         # Get a real radar code from the data
         all_cogs = client.get(PREFIX).json()["cogs"]
         if not all_cogs:
@@ -108,7 +110,7 @@ def test_cogs_filter_by_radar_code_returns_matching_only():
 
 def test_cogs_filter_by_unknown_radar_code_returns_empty():
     """GET /cogs?radar_code=UNKNOWN must return an empty list (not an error)."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(PREFIX, params={"radar_code": "UNKNOWN_RADAR_XYZ"})
     assert response.status_code == 200
     data = response.json()
@@ -118,7 +120,7 @@ def test_cogs_filter_by_unknown_radar_code_returns_empty():
 
 def test_cogs_pagination_page_size():
     """GET /cogs?page_size=2 must return at most 2 items."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(PREFIX, params={"page_size": 2})
     data = response.json()
     assert len(data["cogs"]) <= 2
@@ -127,7 +129,7 @@ def test_cogs_pagination_page_size():
 
 def test_cogs_pagination_page_2_returns_200():
     """GET /cogs?page=2 must return HTTP 200."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(PREFIX, params={"page": 2})
     assert response.status_code == 200
 
@@ -138,7 +140,7 @@ def test_cogs_pagination_page_2_returns_200():
 
 def test_cogs_latest_returns_404_for_unknown_radar():
     """GET /cogs/latest must return 404 when no COG found for given radar+product."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(
             f"{PREFIX}/latest",
             params={"radar_code": "UNKNOWN_XYZ", "product_key": "UNKNOWN_XYZ"}
@@ -148,7 +150,7 @@ def test_cogs_latest_returns_404_for_unknown_radar():
 
 def test_cogs_latest_404_has_detail_field():
     """GET /cogs/latest 404 response must include a 'detail' field."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(
             f"{PREFIX}/latest",
             params={"radar_code": "UNKNOWN_XYZ", "product_key": "UNKNOWN_XYZ"}
@@ -163,7 +165,7 @@ def test_cogs_latest_404_has_detail_field():
 
 def test_cog_by_id_returns_200():
     """GET /cogs/{cog_id} must return HTTP 200 for a valid ID."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         cogs = client.get(PREFIX).json()["cogs"]
         assert len(cogs) > 0, "No COGs in database — cannot run test"
         cog_id = cogs[0]["id"]
@@ -173,7 +175,7 @@ def test_cog_by_id_returns_200():
 
 def test_cog_by_id_returns_json():
     """GET /cogs/{cog_id} must return valid JSON with correct content type."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         cogs = client.get(PREFIX).json()["cogs"]
         assert len(cogs) > 0, "No COGs in database — cannot run test"
         cog_id = cogs[0]["id"]
@@ -183,7 +185,7 @@ def test_cog_by_id_returns_json():
 
 def test_cog_by_id_response_has_required_fields():
     """GET /cogs/{cog_id} must return all required contract fields."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         cogs = client.get(PREFIX).json()["cogs"]
         assert len(cogs) > 0, "No COGs in database — cannot run test"
         cog_id = cogs[0]["id"]
@@ -198,7 +200,7 @@ def test_cog_by_id_response_has_required_fields():
 
 def test_cog_by_id_returns_correct_id():
     """GET /cogs/{cog_id} must return the COG matching the requested ID."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         cogs = client.get(PREFIX).json()["cogs"]
         assert len(cogs) > 0, "No COGs in database — cannot run test"
         cog_id = cogs[0]["id"]
@@ -209,14 +211,14 @@ def test_cog_by_id_returns_correct_id():
 
 def test_cog_by_invalid_id_returns_404():
     """GET /cogs/{cog_id} must return HTTP 404 for a non-existent ID."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{PREFIX}/999999999")
     assert response.status_code == 404
 
 
 def test_cog_404_response_has_detail_field():
     """GET /cogs/{invalid_id} 404 response must include a 'detail' field."""
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(f"{PREFIX}/999999999")
     data = response.json()
     assert "detail" in data
@@ -233,7 +235,7 @@ def test_cogs_filtered_product_key_excludes_unfiltered_cogs():
     GET /cogs?product_key=DBZH must not return COGs whose product_key ends in 'o'.
     Selecting a filtered field must never silently return unfiltered COGs.
     """
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(PREFIX, params={"product_key": "DBZH", "page_size": 200})
     assert response.status_code == 200
     cogs = response.json()["cogs"]
@@ -250,7 +252,7 @@ def test_cogs_unfiltered_product_key_excludes_filtered_cogs():
     GET /cogs?product_key=DBZHo must not return COGs without the 'o' suffix.
     Selecting an unfiltered field must never silently return filtered COGs.
     """
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         response = client.get(PREFIX, params={"product_key": "DBZHo", "page_size": 200})
     assert response.status_code == 200
     cogs = response.json()["cogs"]
@@ -268,7 +270,7 @@ def test_cogs_filtered_and_unfiltered_results_are_disjoint():
     COGs returned for 'DBZH' and COGs returned for 'DBZHo' must be completely
     disjoint — no COG id should appear in both result sets.
     """
-    with httpx.Client(base_url=API_BASE_URL) as client:
+    with httpx.Client(base_url=API_BASE_URL, headers=session_headers()) as client:
         filtered = set(
             c["id"] for c in client.get(PREFIX, params={"product_key": "DBZH", "page_size": 200}).json()["cogs"]
         )
@@ -279,3 +281,11 @@ def test_cogs_filtered_and_unfiltered_results_are_disjoint():
     assert overlap == set(), (
         f"COG ids appear in both filtered and unfiltered result sets: {overlap}"
     )
+
+
+def test_cogs_without_session_returns_401():
+    """Every data endpoint requires a session (spec A)."""
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.get(PREFIX)
+    assert response.status_code == 401
+    assert "detail" in response.json()

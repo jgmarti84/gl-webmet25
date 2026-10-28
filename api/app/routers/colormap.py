@@ -20,6 +20,7 @@ from ..utils.colormaps import (
 )
 from ..services.colormap_service import ColormapService
 from radar_db.database import get_db
+from ..auth.dependencies import check_origin, require_admin
 from radar_db.models import RadarProduct
 
 logger = logging.getLogger(__name__)
@@ -75,7 +76,11 @@ async def get_colormap_defaults():
     return result
 
 
-@router.post("/cache/invalidate", status_code=200)
+@router.post(
+    "/cache/invalidate",
+    status_code=200,
+    dependencies=[Depends(require_admin), Depends(check_origin)],
+)
 async def invalidate_colormap_cache():
     """
     Force a full refresh of the in-process colormap cache.

@@ -17,7 +17,8 @@ filtering/sorting, the colormap creator canvas + drag, and the iOS-style time wh
 | `test_admin_panel.py` | Admin panel: load, OHMC logo, back-to-map, per-column filters + global search, text-filter row hiding, sortable columns + ▲/▼ indicator, icon row actions, colormap creator (gradient canvas, draggable ticks, "Cerrar" label) |
 | `test_radar_ordering.py` | Main map: load, radar list ordering rule (RMA before AR, `RMA00` last, active before inactive), admin link present |
 | `test_time_wheel.py` | Custom time range: both wheels render (24h + 60m = 84 items), two columns + selection band, tap-to-select drives the canonical input |
-| `conftest.py` | Shared fixtures: Basic-Auth context, JS-error capture, screenshot-on-failure |
+| `test_registration_flow.py` | Public sign-up: sign up (with the optional full name, which the account panel then shows), verify the mail from its link, log in with the mail; an unverified account cannot log in and can ask for a new mail; password recovery end to end; the form checks the passwords; a registered mail gets the same screen; a garbage verification link. The mails are read from Mailpit (see below) |
+| `conftest.py` | Shared fixtures: login helper + shared admin session, JS-error capture, screenshot-on-failure |
 
 > ⚠️ These tests require the **v2 frontend** — the time wheel is wired only by `js/v2/app.js`. Pointing them at a v1 frontend will fail `test_time_wheel.py`.
 
@@ -33,22 +34,53 @@ The tests are environment-agnostic Python + Playwright. To run them anywhere you
 | **pip packages** | `pytest`, `pytest-asyncio`, `pytest-playwright` (see [`tests/requirements.txt`](../tests/requirements.txt)) |
 | **Playwright Chromium** | `playwright install chromium` + system libs `playwright install-deps chromium` |
 | **A running API** | seeded DB (radars, products, the 8 system colormaps). Reachable at `API_BASE_URL`. |
-| **A running v2 frontend** | nginx serving the v2 build with the admin Basic-Auth htpasswd. Reachable at `FRONTEND_URL`. |
+| **A running v2 frontend** | nginx serving the v2 build. Reachable at `FRONTEND_URL`. |
+| **An admin account** | created by `db-init` from `ADMIN_USERNAME` / `ADMIN_PASSWORD` (see below). |
 | **Network reachability** | the test host must reach `FRONTEND_URL` (the frontend in turn proxies `/api/v1/*` to the API). |
 
 ### Environment variables
 
 | Var | Default (devcontainer) | Meaning |
 |-----|------------------------|---------|
-| `FRONTEND_URL` | `http://frontend-v2:80` | Base URL of the **v2** frontend under test |
-| `API_BASE_URL` | `http://api:8000` | API base (used by the API contract tests, not strictly by e2e) |
-| `ADMIN_USERNAME` | `admin` | HTTP Basic Auth user for `/admin` — **must match** the frontend's htpasswd |
-| `ADMIN_PASSWORD` | `change-me` | HTTP Basic Auth password for `/admin` |
+| `FRONTEND_URL` | `http://frontend-e2e:80` | Base URL of the **v2** frontend under test (code default: `http://frontend-v2:80`) |
+| `API_BASE_URL` | `http://api-e2e:8000` | API base (used by the API contract tests, not strictly by e2e; code default: `http://api:8000`) |
+| `ADMIN_USERNAME` | `admin` | Username of the admin account the tests log in with |
+| `ADMIN_PASSWORD` | *(none)* | Its password — required, tests cannot log in without it |
+| `MAILPIT_URL` | `http://mailpit:8025` | Local mailbox the registration tests read the verification and reset mails from |
 
-The admin panel is behind nginx Basic Auth; the frontend container generates its
-`admin.htpasswd` from `ADMIN_USERNAME`/`ADMIN_PASSWORD` at startup
-([`frontend/docker-entrypoint.sh`](../frontend/docker-entrypoint.sh)). The tests authenticate
-with the same values via Playwright `http_credentials`, so **keep them in sync**.
+**Which database each suite writes to.** `tests/api` and `tests/e2e` are black-box: they go through a running API
+and frontend, and they write (the e2e viewer, the admin's sessions). In the dev stack they run against an isolated
+copy, never against your main database:
+
+| Suites | Target | Database |
+|---|---|---|
+| `tests/auth`, `tests/indexer` | in process | `radar_test_db` (empty; every test rolls back) |
+| `tests/api`, `tests/e2e` | `api-e2e`, `frontend-e2e` | `radar_e2e_db` in its own container `radar_db_e2e` (initialized by `db-init-e2e`, COGs loaded by `indexer-e2e`) |
+| your own use | `api`, `frontend-v2` | `radar_prod_db` (no test touches it) |
+
+`api-e2e` answers to the name `api` inside the private `e2e` network, so `frontend-e2e` runs the normal frontend image
+with its normal `nginx.conf`. The test services publish no ports.
+
+> **Never point `API_BASE_URL` or `FRONTEND_URL` at stage or the operational server:** the suites create the user
+> `e2e-viewer` and admin sessions in whatever database is behind them.
+
+Every page requires a login. The tests sign in through the `/login` form with the account that
+`db-init` creates from the same `ADMIN_USERNAME` / `ADMIN_PASSWORD` variables of your `.env`. The map, radar detail and admin tests
+start already logged in (`browser_context_args` with the shared `admin_storage_state`). One test creates the viewer
+`e2e-viewer` through the admin API (or reactivates it) and deactivates it at the end.
+
+nginx limits `/api/v1/auth/login` to 10 requests/minute per IP, so the admin panel tests **share one
+login**: its browser state is reused by every test and renewed every 10 minutes (the access cookie
+lives 30). Do not re-run the suite more than a few times per minute. Keep `ACCESS_TOKEN_TTL_MINUTES` at 15 or more
+while running the suites: the shared login is reused for up to 10 minutes and `tests/api` logs in once per run.
+
+**Registration tests and the local mailbox.** `api-e2e` has the sign-up on and sends its mails to **Mailpit** (container `mailpit` of the dev stack, the same one the main API uses; screen at `http://localhost:8025`). `test_registration_flow.py` empties the mailbox, reads the mail through Mailpit's HTTP API (`MAILPIT_URL`) and opens its link against `FRONTEND_URL`. Things to know:
+
+- nginx limits the sign-up endpoints (`register`, `verify-email`, `resend-verification`, `forgot-password`, `reset-password`) to 10 requests/minute per IP, burst 5, in a counter of its own. The file makes 13 such requests, so its tests pace themselves (12 s between tests). If a `429` still shows up, wait a minute and re-run the test that failed.
+- `api-e2e` has `TERMS_REQUIRED=true`: the tests tick the terms checkbox. The default (no terms) is covered by `tests/auth` and the JS tests.
+- `api-e2e` uses `MAIL_MIN_INTERVAL_SECONDS=0`: the tests ask for a second mail to the same account right after the first, and with a wait the API answers 202 but sends nothing. The interval itself is covered by `tests/auth`.
+- Every account the tests create (`e2e-reg-*`) is deactivated at the end through the admin API.
+- Mails use the domain `ejemplo.com.ar`: addresses on `.test` or `.local` are rejected by the mail validation.
 
 ---
 
@@ -61,8 +93,8 @@ The dev stack already ships a `tests` service (Playwright + Chromium preinstalle
 # From the repo root. Compose both files (base + devcontainer override).
 DC="docker compose -f docker-compose.yml -f docker-compose.devcontainer.yml"
 
-# 1. Bring up the API, a v2 frontend, the test DB, and the tests container.
-$DC up -d --build radar_db redis db-init api frontend-v2 radar_db_test db-init-test tests
+# 1. Bring up the dev stack, the isolated test stack and the tests container (same as `make dev-up`).
+$DC up -d --build radar_db redis db-init api frontend-v2 radar_db_test db-init-test radar_db_e2e db-init-e2e api-e2e frontend-e2e indexer-e2e tests
 
 # 2. Run the e2e suite inside the tests container.
 docker exec radar_tests pytest tests/e2e/ -v
@@ -71,16 +103,17 @@ docker exec radar_tests pytest tests/e2e/ -v
 docker exec radar_tests pytest tests/e2e/test_admin_panel.py -v
 docker exec radar_tests pytest tests/e2e/test_time_wheel.py::test_time_wheels_render -v
 
-# Tear down when done:
-$DC down            # add -v to also drop volumes
+# Stop when done (keeps containers and the test databases for the next run):
+$DC stop
 ```
 
-**Custom admin credentials:** set them once in a repo-root `.env` (compose reads it):
+**Admin credentials:** set them once in a repo-root `.env` (compose reads it):
 ```dotenv
-ADMIN_USERNAME=observatorio
-ADMIN_PASSWORD=your-strong-password
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your-strong-password   # 12+ characters
 ```
-Both the `frontend-v2` and `tests` services pick these up, so auth stays consistent.
+`db-init` (main stack) and `db-init-e2e` (test stack) create the account from them and the `tests` service reads the
+same values, so they stay consistent.
 
 **Screenshots on failure** are written to `tests/e2e/screenshots/` (git-ignored). To copy them out of the container:
 ```bash
@@ -113,7 +146,7 @@ playwright install-deps chromium      # needs sudo on Debian/Ubuntu
 # 3. Point the tests at your running services + admin creds
 export FRONTEND_URL="http://localhost:8090"   # your v2 frontend
 export ADMIN_USERNAME="admin"
-export ADMIN_PASSWORD="change-me"
+export ADMIN_PASSWORD="your-strong-password"
 
 # 4. Run (PYTHONPATH=tests so the tests can `from conftest import ...`)
 PYTHONPATH=tests pytest tests/e2e/ -v
@@ -129,7 +162,7 @@ PYTHONPATH=tests pytest tests/e2e/ -v
   env:
     FRONTEND_URL: http://localhost:8090
     ADMIN_USERNAME: admin
-    ADMIN_PASSWORD: change-me
+    ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
 ```
 (Start the API + v2 frontend in a prior step / service container, e.g. via
 `docker compose up -d`.)
@@ -148,13 +181,15 @@ PYTHONPATH=tests PWDEBUG=1 pytest tests/e2e/test_admin_panel.py # Playwright Ins
 | Symptom | Cause / fix |
 |---------|-------------|
 | `error while loading shared libraries: libnspr4.so` | Chromium OS libs missing → `playwright install-deps chromium` (sudo). |
-| Admin tests get a 401 / blank page | `ADMIN_USERNAME`/`ADMIN_PASSWORD` don't match the frontend's htpasswd. Sync them (and rebuild/restart the frontend if you changed its env). |
+| Admin tests end up on `/login`, or get 401 / 429 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` don't match an existing admin account, or `/api/v1/auth/login` was rate limited (10/min per IP): wait a minute and re-run. |
 | `test_time_wheels_render` fails with `items=0` | `FRONTEND_URL` points at a **v1** frontend. Point it at the v2 frontend. |
 | `net::ERR_CONNECTION_REFUSED` | `FRONTEND_URL` not reachable from the test host (wrong host/port, or frontend not up). |
 | Radar order / empty radar list | API not seeded. Run `python -m radar_db.manage seed` (the `db-init` container does this automatically). |
 | Tests hang on `networkidle` | Frontend can't reach the API (nginx `/api/v1` proxy target down). Check the API is up. |
+| Registration test: `No llegó un mail a …` | Mailpit is not running or `MAILPIT_URL` is wrong, or the API did not send (a mail cap, or the sign-up is off: `GET /api/v1/auth/options` on `api-e2e` must show `registration: true`). Look at `http://localhost:8025`. |
+| Registration test: a locator is not visible after a request | nginx answered `429` (the sign-up endpoints allow 10 requests/minute per IP). Wait a minute and re-run that test. |
 
 ---
 
-**Document Version:** 1.1.0  
-**Last Updated:** July 8, 2026
+**Document Version:** 1.2.0  
+**Last Updated:** October 27, 2026

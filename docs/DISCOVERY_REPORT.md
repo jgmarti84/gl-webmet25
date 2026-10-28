@@ -37,7 +37,7 @@
 
 ### Infrastructure
 - **Docker:** multi-service compose stack
-- **Nginx:** 1.25+ — reverse proxy, admin Basic Auth, local OSM/IGN tile cache
+- **Nginx:** 1.25+ — reverse proxy, login rate limit, local OSM/IGN tile cache
 - **Redis:** 7.2 — LRU eviction, no persistence, L2 frame/tile cache
 - **PostgreSQL:** 15 + PostGIS 3.5
 
@@ -91,7 +91,6 @@ webmet25/
 │       └── manage.py             # CLI: init, seed, sync, check, info, reset, migrate, shell
 ├── frontend/
 │   ├── Dockerfile
-│   ├── docker-entrypoint.sh      # Generates admin.htpasswd at startup
 │   ├── nginx.conf
 │   └── public/
 │       ├── index.html            # Multi-radar map SPA shell
@@ -372,7 +371,7 @@ See [`docs/OPERATIONS.md`](OPERATIONS.md) for usage.
 | GET | `/api/v1/tops-cores` | Query metadata (required: `radar_codes[]`, `time_from`, `time_to`) |
 | GET | `/api/v1/tops-cores/{id}/features` | Raw GeoJSON FeatureCollection |
 
-### 5.2 Admin Endpoints (`/api/v1/admin/*`, nginx Basic Auth)
+### 5.2 Admin Endpoints (`/api/v1/admin/*`, `admin` role required)
 
 | Resource | Operations |
 |----------|-----------|
@@ -466,8 +465,10 @@ See [`docs/OPERATIONS.md`](OPERATIONS.md) for usage.
 `frontend/nginx.conf` (key behaviors):
 
 - `GET /` → serves `index.html` (SPA fallback via `try_files`)
-- `GET /admin` and `GET /admin/*` → HTTP Basic Auth (`admin.htpasswd`), serves `admin.html`
-- `POST,GET /api/v1/admin/*` → Basic Auth + `proxy_pass http://api:8000`
+- `GET /admin` and `GET /admin/*` → serves `admin.html` (static; the API enforces login and role)
+- `GET /login` → serves `login.html`
+- `POST /api/v1/auth/login` → `limit_req` 10/min per IP (burst 5, 429) + `proxy_pass http://api:8000`
+- `/api/v1/admin/*` → handled by `/api/*` (`proxy_pass`); the API checks the session
 - `GET /api/*` → `proxy_pass http://api:8000`, `proxy_buffering off` (SSE/streaming support)
 - `GET /osm-tiles/*` → proxy to `tile.openstreetmap.org`, 30-day local cache (1 GB max zone)
 - `GET /ign-tiles/*` → proxy to `wms.ign.gob.ar`, 7-day local cache (same zone)
@@ -484,7 +485,7 @@ The local tile proxy means basemap tiles are cached on the server after first re
 
 | # | Issue | Status |
 |---|-------|--------|
-| C1 | Admin auth uses temporary **nginx HTTP Basic Auth** — must be replaced with JWT before production | ❌ Open |
+| C1 | Admin auth replaced by application users with JWT sessions, validated by the API | ✅ Closed |
 | C2 | No transactions in the indexer — partial failures can leave DB in inconsistent state | ❌ Open |
 | C3 | Database credentials in plaintext in `docker-compose.yml` | ❌ Open |
 

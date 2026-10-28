@@ -42,7 +42,8 @@ webmet25 (consumer)
 - **Colormap Management:** DB-backed colormap system; visual creator/editor in the admin panel
 - **Gaussian Smoothing:** Server-side float-data blur before colormap (configurable sigma)
 - **Geolocation:** Browser geolocation → auto-select 3 nearest active radars
-- **Admin Panel:** Full-featured CRUD SPA at `/admin` (nginx Basic Auth) for every database table
+- **Admin Panel:** Full-featured CRUD SPA at `/admin` for every database table (login required, `admin` role)
+- **Users & Authentication:** JWT sessions in HttpOnly cookies, roles (`admin`, `viewer`), user management in the admin panel
 - **Snapshot:** Canvas compositing of basemap + radar overlays + legend + metadata → PNG download
 - **Tile & Frame Cache:** L1 LRU in-process + L2 Redis cache for rendered frames
 
@@ -82,7 +83,7 @@ webmet25 (consumer)
 ### DevOps & Containerization
 - **Docker:** Multi-stage builds per service
 - **Docker Compose:** 3.8+ for orchestration
-- **Nginx:** Reverse proxy, static serving, admin Basic Auth, OSM/IGN tile caching
+- **Nginx:** Reverse proxy, static serving, login rate limiting, OSM/IGN tile caching
 - **Redis:** 7.2 (LRU cache, no persistence)
 - **VSCode Dev Containers:** For local development
 
@@ -104,9 +105,16 @@ webmet25/
 │   └── app/
 │       ├── main.py               # FastAPI app setup, middleware, routers
 │       ├── config.py             # APISettings (env vars, GDAL tuning, Redis config)
+│       ├── auth/
+│       │   ├── security.py       # JWT access tokens + refresh token helpers
+│       │   ├── service.py        # Login, refresh rotation, lockout
+│       │   ├── dependencies.py   # get_current_user, require_admin, check_origin
+│       │   ├── cookies.py        # Auth cookies (HttpOnly, SameSite=Strict)
+│       │   └── user_admin.py     # Admin rules for user management
 │       ├── schemas/
 │       │   ├── responses.py      # Pydantic response models (public API)
-│       │   └── admin.py          # Pydantic models for admin CRUD
+│       │   ├── admin.py          # Pydantic models for admin CRUD
+│       │   └── auth.py           # Pydantic models for auth and users
 │       ├── routers/
 │       │   ├── radars.py         # GET /radars, /radars/{code}
 │       │   ├── products.py       # GET /products, /products/{key}
@@ -115,7 +123,9 @@ webmet25/
 │       │   ├── frames.py         # GET /frames/{id}/image.png (v2 primary)
 │       │   ├── colormap.py       # GET /colormap/names|options|defaults|colors|info + invalidate
 │       │   ├── tops_cores.py     # GET /tops-cores, /tops-cores/{id}/features
-│       │   └── admin.py          # /api/v1/admin/* CRUD for all tables
+│       │   ├── admin.py          # /api/v1/admin/* CRUD for all tables (admin role)
+│       │   ├── auth.py           # /api/v1/auth/* login, refresh, logout, me
+│       │   └── users.py          # /api/v1/admin/users/* user management
 │       ├── services/
 │       │   ├── tile_service.py   # TileService — COG tile rendering with thread pool
 │       │   ├── colormap_service.py # ColormapService — DB-first colormap with 5-min TTL cache
@@ -135,21 +145,24 @@ webmet25/
 │   │   ├── __init__.py
 │   │   ├── config.py             # DatabaseSettings
 │   │   ├── database.py           # DatabaseManager, get_db(), init_db()
-│   │   ├── models.py             # All SQLAlchemy models
+│   │   ├── models.py             # All SQLAlchemy models (incl. User, UserSession)
+│   │   ├── passwords.py          # Argon2id hashing + password policy
+│   │   ├── accounts.py           # Account operations (create user, bootstrap admin, ...)
 │   │   ├── seeds.py              # DataSeeder (seed_all / sync_all)
-│   │   └── manage.py             # CLI: init, seed, sync, check, info, reset, migrate, shell
+│   │   └── manage.py             # CLI: init, seed, sync, check, info, reset, migrate, shell,
+│   │                             #      init-admin, create-admin, reset-password
 │   └── seed_data/
 │       └── initial_data.json     # 21 radars, 20 products, references, colormaps
 │
 ├── frontend/                      # Static web frontend (Nginx)
 │   ├── Dockerfile
-│   ├── docker-entrypoint.sh      # Generates admin.htpasswd at startup
-│   ├── nginx.conf                # Reverse proxy, Basic Auth, OSM/IGN tile cache
+│   ├── nginx.conf                # Reverse proxy, login rate limit, OSM/IGN tile cache
 │   ├── README.md
 │   └── public/
 │       ├── index.html            # Multi-radar map SPA shell
 │       ├── radar.html            # One-radar detail page (radar.html?code=AR5)
 │       ├── admin.html            # Admin panel SPA shell
+│       ├── login.html            # Login page (/login)
 │       ├── cog-browser.html      # Alternative COG file browser
 │       ├── css/
 │       │   ├── styles.css        # Main app dark theme
@@ -157,6 +170,8 @@ webmet25/
 │       └── js/
 │           ├── admin.js          # Admin SPA orchestrator
 │           ├── admin-api.js      # Admin REST client (/api/v1/admin/*)
+│           ├── auth-api.js       # Auth client (login, logout, refresh, me)
+│           ├── login.js          # Login page logic
 │           ├── shared/           # Shared by v1 and v2
 │           │   ├── api.js        # REST API client
 │           │   ├── controls.js   # UI handlers (radar list, time wheel, badges)
@@ -244,6 +259,7 @@ webmet25/
 │ Tables: Radar, RadarProduct, RadarCOG, TopsAndCores            │
 │         Reference, Estrategia, Volumen                          │
 │         colormap_stops, product_colormap_options               │
+│         users, user_sessions                                   │
 └─────────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
@@ -255,7 +271,8 @@ webmet25/
 │  GET /tiles/{id}/{z}/{x}/{y}.png  ← v1 / compatibility        │
 │  GET /colormap/names|options|defaults|colors|info             │
 │  GET /tops-cores  GET /tops-cores/{id}/features               │
-│  /api/v1/admin/*  ← full CRUD (nginx Basic Auth)              │
+│  /api/v1/admin/*  ← full CRUD (admin role)                    │
+│  /api/v1/auth/*   ← login, refresh, logout, me (cookies)      │
 │                                                                   │
 │  Cache: L1 LRU (750 entries) + L2 Redis (frame: prefix)       │
 └─────────────────────────────────────────────────────────────────┘
@@ -269,7 +286,8 @@ webmet25/
 │                                                                   │
 │ • Multi-radar map (index.html + v2/app.js)                     │
 │ • One-radar detail page (radar.html + v2/radar-app.js)         │
-│ • Admin SPA (admin.html + admin.js — Basic Auth)               │
+│ • Admin SPA (admin.html + admin.js — login required)           │
+│ • Login page (login.html + login.js + auth-api.js)             │
 │ • L.imageOverlay — 1 PNG per radar per frame                   │
 │ • requestAnimationFrame animation loop                         │
 │ • SVG coverage mask + per-radar rings                          │
@@ -294,7 +312,8 @@ webmet25/
 git clone <repository-url> webmet25
 cd webmet25
 cp .env.example .env
-# Edit .env: DB credentials, paths, ADMIN_USERNAME/ADMIN_PASSWORD
+# Edit .env: DB_PASSWORD, JWT_SECRET, ALLOWED_ORIGINS, COOKIE_SECURE and ADMIN_USERNAME / ADMIN_PASSWORD (see .env.example)
+# (optional: MAIL_* and REGISTRATION_ENABLED to open the sign-up)
 ```
 
 ### Run with Docker Compose
@@ -314,9 +333,37 @@ docker compose logs -f indexer
 ### Access the Application
 
 - **Frontend map:** `http://localhost`
-- **Admin panel:** `http://localhost/admin` (HTTP Basic Auth — credentials from `.env`)
-- **API docs (Swagger):** `http://localhost:8000/docs`
+- **Admin panel:** `http://localhost/admin` (log in at `/login`; the first admin comes from `ADMIN_USERNAME` / `ADMIN_PASSWORD`)
+- **API docs (Swagger):** `http://localhost:8000/docs` (port 8000 is published on `127.0.0.1` only)
 - **API health:** `http://localhost/api/v1/health`
+
+### Authentication & Users
+
+Every page and every API endpoint require a logged-in user (roles `admin` and `viewer`); only `/health`, `/api/v1/auth/login|refresh|logout` and the sign-up and recovery endpoints listed below are public. The admin panel and `/api/v1/admin/*` require the `admin` role. Sessions are validated **by the API**; nginx asks it (`auth_request` on `GET /api/v1/auth/check`) before serving each page and the OpenStreetMap/IGN tile proxies, and shows the login in place when there is no session.
+
+- **Access token:** short-lived JWT (30 min) in an `HttpOnly`, `SameSite=Strict` cookie.
+- **Refresh token:** opaque (`<login id>.<secret>`), rotated on every use and stored hashed in the database, one row per login. Idle expiry 48 h, absolute limit 7 days. Reusing an old refresh token closes that login and invalidates the user's access tokens. Closed logins are kept 90 days (`SESSION_RETENTION_DAYS`) for auditing.
+- **Instant revocation:** deactivating a user, changing their role or resetting their password invalidates their sessions immediately.
+- **Passwords:** Argon2id, 12–128 characters. An account is locked for 15 min after 5 failed attempts, and nginx limits `/api/v1/auth/login` to 10 requests/minute per IP.
+- **Roles:** `admin` (everything, including user management) and `viewer` (logged in, no admin access yet).
+
+**Public sign-up.** When `REGISTRATION_ENABLED=true` (and the mail settings are filled), anyone can create an account at `/register` with a username, a mail, a password and, optionally, their full name. The account is a `viewer` and cannot log in until the mail is verified through the one-time link sent to it. Users log in with their username or their mail, and recover a forgotten password at `/forgot`. Mails go out through the SMTP server configured in `.env` (`MAIL_*`); in development they land in Mailpit (`http://localhost:8025`). Setup and the production checklist are in [`docs/OPERATIONS.md`](docs/OPERATIONS.md) §9.
+
+| Variable | Required | Description |
+|---|---|---|
+| `JWT_SECRET` | yes | 32+ random characters. The API refuses to start without it |
+| `COOKIE_SECURE` | production: `true` | `false` only for local HTTP development |
+| `ALLOWED_ORIGINS` | yes | Origins allowed to send POST/PUT/PATCH/DELETE (CSRF defense) |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | first start | `db-init` creates this admin only when there are no users |
+
+After the first start, change the bootstrap password from the server and remove `ADMIN_USERNAME` / `ADMIN_PASSWORD` from `.env`:
+
+```bash
+make reset-password U=admin       # prompts for the new password, closes the user's sessions
+make create-admin U=newadmin      # emergency: create another admin
+```
+
+Admins cannot reset their own password from the panel; that always goes through the server.
 
 ### Database Management
 
@@ -351,7 +398,9 @@ http://localhost/api/v1
 ```
 (Proxied through nginx on port 80. Direct API port: 8000.)
 
-### Public Endpoints
+### Endpoints
+
+All endpoints below require a session cookie (log in with `POST /api/v1/auth/login`), except `/health`.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -376,9 +425,26 @@ http://localhost/api/v1
 | GET | `/tops-cores` | Query TopsAndCores metadata (`?radar_codes[]&time_from&time_to`) |
 | GET | `/tops-cores/{id}/features` | Raw GeoJSON FeatureCollection from disk |
 
-### Admin Endpoints (`/api/v1/admin/*`, nginx Basic Auth)
+### Auth Endpoints (`/api/v1/auth/*`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/auth/login` | Username or mail + password → sets the access and refresh cookies (403 `email_not_verified` when the mail was never verified and the password is right) |
+| POST | `/auth/refresh` | Rotates the refresh token and issues a new access token |
+| POST | `/auth/logout` | Revokes the session and clears the cookies |
+| GET | `/auth/me` | Current user (requires a session) |
+| GET | `/auth/options` | Public: whether sign-up and password recovery are on, whether it asks to accept the terms (`TERMS_REQUIRED`, off by default) and, if so, the terms/privacy links |
+| POST | `/auth/register` | Public: create a pending `viewer`, with an optional full name (202 for a new or an already-registered mail alike, 409 username taken, 422 invalid data, 503 sign-up off) |
+| POST | `/auth/verify-email` | Public: redeem the one-time link of the verification mail (204, 400) |
+| POST | `/auth/resend-verification` | Public: new verification mail for a pending account (always 202) |
+| POST | `/auth/forgot-password` | Public: password reset link by mail (always 202) |
+| POST | `/auth/reset-password` | Public: set a new password with the reset link (204, 400, 422); closes every session of the user |
+
+### Admin Endpoints (`/api/v1/admin/*`, `admin` role required)
 
 CRUD for: `radars`, `products`, `references`, `cogs`, `tops-cores`, `estrategias`, `volumenes`, `colormap-stops`, `colormap-from-hex`, `colormap-options`.
+
+User management under `/api/v1/admin/users`: list, create, edit (name, email, role, active), reset password and revoke sessions. There is no delete: users are deactivated. `POST /api/v1/colormap/cache/invalidate` also requires the `admin` role.
 
 See [`docs/DATA_FLOW.md`](docs/DATA_FLOW.md) §4.9 for the full admin endpoint table.
 
@@ -409,10 +475,12 @@ See [`docs/DATA_FLOW.md`](docs/DATA_FLOW.md) §4.9 for the full admin endpoint t
 - Always operates in C+D mode (no VIG toggle)
 - Coverage rings for each active layer's coverage radius
 
-### Admin Panel (`/admin`, Basic Auth)
+### Admin Panel (`/admin`, login required)
 - Django-admin-style filtering and sorting for every table
 - Visual colormap creator/editor with draggable gradient stops and live preview
 - Hash-routed SPA; "← Volver al mapa" restores the main map via browser bfcache
+- **Usuarios** section: create users, change roles, activate/deactivate, reset passwords, close sessions
+- Redirects to `/login` without a session and renews the session transparently when the access token expires
 
 ---
 
@@ -483,10 +551,10 @@ See [`.github/copilot-instructions.md`](.github/copilot-instructions.md) for the
 
 ## Known Gaps & Technical Debt
 
-- ⚠️ Admin panel uses temporary **nginx HTTP Basic Auth** — must be replaced with JWT before production
+- ✅ Every page and API endpoint require a session (`admin` or `viewer`); self-registration with e-mail verification is still to be built
 - ❌ No transactions in the indexer — partial failures can leave DB in inconsistent state
 - ❌ Database credentials in plaintext in `docker-compose.yml`
-- ❌ No rate limiting on the public API
+- ❌ No rate limiting on the public API (only `/api/v1/auth/login` is limited)
 - ❌ No automatic archival/cleanup of old COG records
 - ❌ Pydantic V2 class-based config deprecated in `indexer/config.py` and `radar_db/config.py` — must migrate to `ConfigDict` before Pydantic V3
 

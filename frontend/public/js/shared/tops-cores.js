@@ -1,23 +1,35 @@
 /**
  * tops-cores.js — Leaflet layer for convective cores and storm tops.
  *
- * Data is pre-fetched at load time for all animation frames via loadForFrames(),
- * then displayed synchronously on each frame advance via showFrame().
- * This eliminates the async race between the GeoTIFF layer (synchronous) and
- * the tops/cores markers that existed with the old per-frame fetch approach.
+ * Marker data is pre-fetched for the COGs displayed in the animation frames via
+ * loadForFrames() and cached by COG identity (radar|strategy|vol|observation_time),
+ * then displayed synchronously on each frame advance via showFrame(). Lookups never
+ * depend on frame positions, so changing the frame list (radar toggling, live
+ * refresh) cannot pair a frame with another scan's markers.
  *
  * Usage:
  *   import { TopsCoresLayer } from '../shared/tops-cores.js';
  *   const layer = new TopsCoresLayer(map);
  *   layer.setVisible(true);
  *   layer.loadForFrames(frames);   // fire-and-forget at load time
- *   layer.showFrame(frameIndex);   // synchronous, called from animation loop
+ *   layer.showFrame(frame, prevFrame, holdRadarCodes);  // synchronous, from animation loop
  */
+
+import { authFetch } from '../auth-api.js';
+import {
+    cogTimeSpan,
+    collectDisplayedCogs,
+    markersForFrame,
+    recordKey,
+    selectWantedRecords,
+} from './tops-cores-match.js';
 
 const API_BASE = '/api/v1';
 
-// Time window on each side of a frame timestamp used to match tops/cores records (ms)
-const TIME_WINDOW_MS = 2.5 * 60 * 1000;
+// Margin around the first/last displayed COG time in the metadata query (ms).
+// Records are matched to COGs by exact observation_time; this only guards
+// against sub-second serialisation differences at the range edges.
+const QUERY_MARGIN_MS = 1000;
 
 // SVG icon for core markers
 const ICON_URL = '/img/code-purple.svg';
@@ -50,14 +62,13 @@ export class TopsCoresLayer {
         // Current icon size in pixels (updated by setPointSize)
         this._iconSize = DEFAULT_ICON_SIZE;
 
-        // Pre-loaded marker data indexed by frame index.
-        // Each element is a Map<radarCode, {lat,lon,dbz,alt}[]> so that
-        // per-radar hold-last-frame can look up markers from a different frame.
-        this._frameData = [];
+        // Marker data per tops/cores record, keyed by COG identity
+        // (radar|strategy|vol|observation_time) — independent of frame positions.
+        this._markersByKey = new Map();
 
-        // Last frameIndex passed to showFrame() — used to re-paint when
+        // Frame context of the last showFrame() call — used to re-paint when
         // loadForFrames() completes while the animation is paused.
-        this._lastShownFrameIndex = null;
+        this._lastContext = null;
 
         // Abort controller for any in-flight loadForFrames() call.
         this._loadAbortController = null;
@@ -98,75 +109,67 @@ export class TopsCoresLayer {
     }
 
     /**
-     * Pre-fetch all tops/cores data for a full set of animation frames.
+     * Pre-fetch the tops/cores markers of every COG displayed in the frames.
      *
-     * Issues a single broad metadata query covering the entire time range,
-     * fetches per-record GeoJSON features concurrently, then distributes the
-     * results into per-frame marker-data arrays keyed by frame index.
+     * Only COGs whose markers are not cached yet are requested: one metadata
+     * query spanning them, then the per-record GeoJSON features concurrently.
+     * Results are stored by COG identity, so a result is valid whatever the
+     * frame list looks like when it arrives. The cache is pruned to the COGs
+     * currently displayed.
      *
-     * Call this fire-and-forget from app.js after frames are loaded. When it
-     * completes it will re-paint the last shown frame if the animation is paused.
+     * Call this fire-and-forget from app.js whenever the frame list changes.
+     * When it completes it re-paints the last shown frame.
      *
-     * @param {Array} frames  groupedFrames: [{timestamp, cogsByRadar}, …]
+     * @param {Array} frames  [{cogsByRadar}, …] — the animation frames
      */
     async loadForFrames(frames) {
-        if (!frames || frames.length === 0) {
-            this._frameData = [];
-            return;
-        }
-
-        // Cancel any previous load still in flight
+        // Cancel any previous load still in flight (its COGs are re-requested if still needed)
         if (this._loadAbortController) {
             this._loadAbortController.abort();
         }
         this._loadAbortController = new AbortController();
         const { signal } = this._loadAbortController;
 
-        // Compute a single time range covering all frames ± the window
-        const timestamps = frames.map(f => new Date(f.timestamp || f.observation_time).getTime());
-        const overallStart = new Date(Math.min(...timestamps) - TIME_WINDOW_MS);
-        const overallEnd   = new Date(Math.max(...timestamps) + TIME_WINDOW_MS);
+        const displayed = collectDisplayedCogs(frames);
 
-        // Collect all unique radar codes used across all frames
-        const radarCodesSet = new Set();
-        frames.forEach(f => Object.keys(f.cogsByRadar || {}).forEach(c => radarCodesSet.add(c)));
-        const radarCodes = [...radarCodesSet];
+        // Drop cached markers of COGs no longer displayed
+        for (const key of [...this._markersByKey.keys()]) {
+            if (!displayed.has(key)) this._markersByKey.delete(key);
+        }
 
-        if (radarCodes.length === 0) {
-            this._frameData = frames.map(() => new Map());
+        const missing = new Map([...displayed].filter(([key]) => !this._markersByKey.has(key)));
+        if (missing.size === 0) {
+            this._repaint();
+            return;
+        }
+
+        const span = cogTimeSpan(missing.values());
+        const radarCodes = [...new Set([...missing.values()].map(c => c.radar_code))].filter(Boolean);
+        if (!span || radarCodes.length === 0) {
+            this._repaint();
             return;
         }
 
         try {
-            // Step 1: one metadata query for the full time range
+            // Step 1: one metadata query spanning the missing COGs
             const params = new URLSearchParams({
-                time_from: overallStart.toISOString(),
-                time_to:   overallEnd.toISOString(),
+                time_from: new Date(span.from.getTime() - QUERY_MARGIN_MS).toISOString(),
+                time_to:   new Date(span.to.getTime() + QUERY_MARGIN_MS).toISOString(),
             });
             radarCodes.forEach(code => params.append('radar_codes', code));
 
-            const metaResp = await fetch(`${API_BASE}/tops-cores?${params}`, { signal });
+            const metaResp = await authFetch(`${API_BASE}/tops-cores?${params}`, { signal });
             if (!metaResp.ok) {
                 console.warn(`[TopsCoresLayer] loadForFrames metadata failed: ${metaResp.status}`);
-                this._frameData = frames.map(() => []);
                 return;
             }
-            const records = await metaResp.json();
-
+            const records = selectWantedRecords(await metaResp.json() || [], missing);
             if (signal.aborted) return;
 
-            if (!records || records.length === 0) {
-                this._frameData = frames.map(() => new Map());
-                if (this._visible && this._lastShownFrameIndex !== null) {
-                    this.showFrame(this._lastShownFrameIndex);
-                }
-                return;
-            }
-
-            // Step 2: fetch GeoJSON features for all records concurrently
-            const featureResults = await Promise.all(
+            // Step 2: fetch GeoJSON features for the wanted records concurrently
+            const results = await Promise.all(
                 records.map(rec =>
-                    fetch(`${API_BASE}/tops-cores/${rec.id}/features`, { signal })
+                    authFetch(`${API_BASE}/tops-cores/${rec.id}/features`, { signal })
                         .then(r => r.ok ? r.json() : null)
                         .catch(err => {
                             if (err.name !== 'AbortError') {
@@ -176,77 +179,40 @@ export class TopsCoresLayer {
                         })
                 )
             );
-
             if (signal.aborted) return;
 
-            // Step 3: extract marker-data objects from each record's features
-            const recordMarkerData = featureResults.map(geojson => {
-                if (!geojson || !Array.isArray(geojson.features)) return [];
-                return this._extractMarkerData(geojson.features);
+            // Step 3: cache by COG identity (failed fetches stay uncached and are retried next load)
+            records.forEach((rec, i) => {
+                const geojson = results[i];
+                if (!geojson || !Array.isArray(geojson.features)) return;
+                this._markersByKey.set(
+                    recordKey(rec.radar_code, rec.strategy, rec.vol_nr, rec.observation_time),
+                    this._extractMarkerData(geojson.features)
+                );
             });
 
-            // Step 4: distribute records to frames by ±TIME_WINDOW_MS, grouped by
-            // radar_code so that hold-last-frame can look up per-radar markers.
-            const newFrameData = [];
-            frames.forEach(frame => {
-                const frameMs = new Date(frame.timestamp || frame.observation_time).getTime();
-                const radarMarkers = new Map();
-                records.forEach((rec, i) => {
-                    const recMs = new Date(rec.observation_time).getTime();
-                    if (Math.abs(recMs - frameMs) <= TIME_WINDOW_MS) {
-                        const existing = radarMarkers.get(rec.radar_code) || [];
-                        radarMarkers.set(rec.radar_code, [...existing, ...recordMarkerData[i]]);
-                    }
-                });
-                newFrameData.push(radarMarkers);
-            });
-            this._frameData = newFrameData;
-
-            // Re-paint the paused frame now that data is ready
-            if (this._visible && this._lastShownFrameIndex !== null) {
-                this.showFrame(this._lastShownFrameIndex);
-            }
+            this._repaint();
 
         } catch (err) {
             if (err.name === 'AbortError') return;
             console.warn('[TopsCoresLayer] loadForFrames error:', err);
-            this._frameData = frames.map(() => new Map());
         }
     }
 
     /**
-     * Synchronously display the pre-loaded markers for the given frame index.
+     * Synchronously display the markers of the COGs shown by the given frame.
      * Called on every frame advance from the animation loop — must not block.
      *
-     * @param {number}   frameIndex
-     * @param {string[]} holdRadarCodes  Radar codes whose tops/cores should be
-     *   taken from frameIndex-1 (matching the held COG image). Defaults to [].
+     * @param {{cogsByRadar: object}} frame  the frame being displayed
+     * @param {{cogsByRadar: object}|null} [prevFrame]  previous frame (source of held images)
+     * @param {string[]} [holdRadarCodes]  radars whose image is held from prevFrame
      */
-    showFrame(frameIndex, holdRadarCodes = []) {
-        this._lastShownFrameIndex = frameIndex;
+    showFrame(frame, prevFrame = null, holdRadarCodes = []) {
+        this._lastContext = { frame, prevFrame, holdRadarCodes };
         this._layerGroup.clearLayers();
         if (!this._visible) return;
 
-        const currentMap = this._frameData[frameIndex];
-        if (!currentMap) return;
-
-        // Collect all radar codes: those with real data at this frame plus held ones
-        const heldSet  = holdRadarCodes.length > 0 ? new Set(holdRadarCodes) : null;
-        const prevMap  = (heldSet && frameIndex > 0) ? this._frameData[frameIndex - 1] : null;
-
-        // Union of radar codes to display
-        const radarCodesToShow = new Set([
-            ...currentMap.keys(),
-            ...(heldSet ? [...heldSet] : []),
-        ]);
-
-        const markers = [];
-        radarCodesToShow.forEach(code => {
-            const sourceMap = (heldSet && heldSet.has(code) && prevMap) ? prevMap : currentMap;
-            const radarMarkers = sourceMap.get(code);
-            if (radarMarkers) markers.push(...radarMarkers);
-        });
-
+        const markers = markersForFrame(frame, prevFrame, holdRadarCodes, this._markersByKey);
         if (markers.length === 0) return;
 
         const icon = this._coreIcon(this._iconSize);
@@ -279,6 +245,16 @@ export class TopsCoresLayer {
     // -------------------------------------------------------------------------
     // Internal
     // -------------------------------------------------------------------------
+
+    /**
+     * Re-draw the last shown frame (after data finished loading).
+     */
+    _repaint() {
+        if (this._visible && this._lastContext) {
+            const { frame, prevFrame, holdRadarCodes } = this._lastContext;
+            this.showFrame(frame, prevFrame, holdRadarCodes);
+        }
+    }
 
     /**
      * Build a Leaflet icon for core markers at the given pixel size.
