@@ -123,8 +123,10 @@ services:
     volumes:
       # Read-only: the sidecar consumes cubes, radarlib owns their lifecycle.
       - ../nccube:/nccube:ro
+    # Only reachable from the host itself (e.g. tracking/demo_report.py); browsers go through nginx
+    # (/api/tracking/ -> tracking:8001 on the internal network), never straight to this port.
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     depends_on:
       radar_db:
         condition: service_healthy
