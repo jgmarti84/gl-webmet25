@@ -281,7 +281,7 @@ When a cap stops a mail, the API sends nothing and answers exactly as if it had,
 
 ### 9.3 Turning it on in production
 
-1. If a proxy sits in front of nginx, configure `set_real_ip_from` / `real_ip_header` first. The limits of these endpoints (10 requests/minute per IP) are per client IP: without the real IP every visitor shares the proxy's and the quota runs out for everybody.
+1. Check that nginx sees the real client IP: `docker logs radar_frontend --tail 5` must show different public addresses, not `172.x.x.x`. The limits of these endpoints (10 requests/minute per IP) are per client IP: without the real IP every visitor shares the proxy's and the quota runs out for everybody. nginx already trusts `X-Forwarded-For` from Docker's networks and localhost; the proxy in front must keep it (Caddy: `servers { trusted_proxies static 127.0.0.1/32 ::1/128 }` in the global block, then restart its container, since `admin off` disables `caddy reload`).
 2. Set SPF and DKIM for the sender domain, or the mails land in spam.
 3. Gmail / Workspace: use an app password (not the account password) and mind the daily caps (about 500 and 2,000 mails).
 4. Get the terms and the privacy policy (the texts come from the observatory, ideally reviewed by its legal area), put their addresses in `TERMS_URL` and `PRIVACY_URL` and set `TERMS_REQUIRED=true`. It is off by default so the sign-up can be tried before the texts exist, but **before opening it to the public** the people must be shown them: it is the information and consent notice that the data protection law (Ley 25.326) expects when personal data is collected. While it is off the API warns about it in its log at startup, and no acceptance is recorded (`terms_accepted_at` stays empty).

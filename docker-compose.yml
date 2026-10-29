@@ -197,8 +197,12 @@ services:
       args:
         FE_VERSION: ${FE_VERSION:-v2}
     container_name: radar_frontend
+    # Published on the server's localhost only by default: public traffic arrives through the proxy in front
+    # (Tailscale Funnel -> Caddy on stage). Open on every interface, anyone on the server's network could reach
+    # nginx directly, skipping that proxy. Set FRONTEND_BIND=0.0.0.0 in .env to reach it from other machines
+    # (for example a copy tested over the local network).
     ports:
-      - "${FRONTEND_PORT:-80}:80"
+      - "${FRONTEND_BIND:-127.0.0.1}:${FRONTEND_PORT:-80}:80"
     depends_on:
       - api
     restart: unless-stopped
