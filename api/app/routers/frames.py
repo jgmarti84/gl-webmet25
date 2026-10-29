@@ -40,6 +40,7 @@ from ..services.tile_service import (
     _get_tile_ttl,
     _tile_render_executor,
     CACHE_KEY_FLOAT_PRECISION,
+    render_log_level,
 )
 from ..services.redis_client import get_redis
 from ..services.smoothing import apply_smoothing
@@ -342,12 +343,14 @@ def _render_frame_sync(
             r.setex(redis_key, ttl, png_bytes)
         except Exception as exc:
             logger.warning("FRAME Redis set failed: %s", exc)
-        logger.info(
+        logger.log(
+            render_log_level(elapsed_ms),
             "FRAME RENDER + CACHE cog=%s elapsed=%dms l2_ttl=%ds",
             file_path, elapsed_ms, ttl,
         )
     else:
-        logger.info(
+        logger.log(
+            render_log_level(elapsed_ms),
             "FRAME RENDER + CACHE cog=%s elapsed=%dms l2_ttl=N/A",
             file_path, elapsed_ms,
         )
