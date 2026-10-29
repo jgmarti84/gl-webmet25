@@ -23,6 +23,8 @@
  */
 
 import { api } from '../shared/api.js';
+import { initPageSession } from '../auth-api.js';
+import { renderSessionBox } from '../shared/session-box.js';
 import { MapManager } from './map.js';
 import { AnimationController, formatTimestamp } from './animation.js';
 import { UIControls } from '../shared/controls.js';
@@ -2537,6 +2539,9 @@ const app = {
 // START APPLICATION
 // =============================================================================
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    const me = await initPageSession();
+    if (!me) return;
+    renderSessionBox(me);
     app.init();
 });

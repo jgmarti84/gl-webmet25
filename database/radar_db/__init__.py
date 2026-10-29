@@ -2,7 +2,7 @@
 from .database import db_manager, get_db, init_db, check_db_connection
 from .models import (
     Base, Radar, RadarProduct, Reference, RadarCOG, COGStatus, TopsAndCores,
-    ColormapStop, ProductColormapOption,
+    ColormapStop, ProductColormapOption, User, UserSession, USER_ROLES,
 )
 
 __all__ = [
@@ -19,4 +19,7 @@ __all__ = [
     'TopsAndCores',
     'ColormapStop',
     'ProductColormapOption',
+    'User',
+    'UserSession',
+    'USER_ROLES',
 ]

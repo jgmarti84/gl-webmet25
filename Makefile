@@ -25,7 +25,7 @@ endif
         api indexer frontend db redis db-init shared rebuild \
         logs logs-api logs-indexer logs-frontend logs-db logs-redis \
         psql health stats dev-up dev-down test test-api test-indexer test-e2e \
-        db-check db-seed db-sync db-migrate
+        db-check db-seed db-sync db-migrate create-admin reset-password test-auth
 
 .DEFAULT_GOAL := help
 
@@ -68,12 +68,15 @@ help:
 	@echo   db-seed - Carga datos iniciales - solo inserta lo que falta
 	@echo   db-sync - Sincroniza el seed completo - actualiza existentes
 	@echo   db-migrate - Aplica migraciones pendientes
+	@echo   create-admin U=usuario - Crea un admin, pide la contrasena por consola
+	@echo   reset-password U=usuario - Cambia la contrasena de un usuario y cierra sus sesiones
 	@echo ----------------------------------------
 	@echo Desarrollo y tests, usa docker-compose.devcontainer.yml encima
-	@echo   dev-up - Levanta el stack de desarrollo con base de test y contenedor de tests
+	@echo   dev-up - Levanta el stack de desarrollo, el stack de test aislado y el contenedor de tests
 	@echo   dev-down - Baja ese stack, usalo en vez de down
 	@echo   test - Corre todos los tests dentro del contenedor tests
 	@echo   test-api  test-indexer  test-e2e - Solo una parte de los tests
+	@echo   test-auth - Tests de usuarios y autenticacion
 	@echo   Cualquier objetivo acepta DEV=1, por ejemplo make logs DEV=1
 
 # ---------------------------------------------------------------------------
@@ -171,7 +174,7 @@ stats:
 	docker stats --no-stream
 
 psql:
-	$(COMPOSE) exec radar_db psql -U radar -d radar_prod_db
+	$(COMPOSE) exec radar_db sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
 
 # Abre una shell dentro del contenedor. Ejemplo: make shell-api
 shell-%:
@@ -192,13 +195,22 @@ db-sync:
 db-migrate:
 	$(COMPOSE) run --rm db-init python -m radar_db.manage migrate upgrade
 
+# Comandos de usuarios que se corren en el servidor (piden la contrasena por consola).
+create-admin:
+	$(COMPOSE) run --rm db-init python -m radar_db.manage create-admin --username $(U)
+
+reset-password:
+	$(COMPOSE) run --rm db-init python -m radar_db.manage reset-password --username $(U)
+
 # ---------------------------------------------------------------------------
 # Desarrollo y tests (docker-compose.devcontainer.yml encima del compose normal)
 # ---------------------------------------------------------------------------
 # Lista de servicios tomada de docs/E2E_TESTING.md. Deja afuera indexer y frontend,
 # que en este override quedan dormidos con "tail -f /dev/null".
+# Levanta el stack de desarrollo (api, frontend-v2 sobre radar_prod_db), la base de test de tests/auth y
+# tests/indexer, y el stack aislado de tests/api y tests/e2e (radar_db_e2e, api-e2e, frontend-e2e, indexer-e2e).
 dev-up:
-	$(DEV_COMPOSE) up -d --build radar_db redis db-init api frontend-v2 radar_db_test db-init-test tests
+	$(DEV_COMPOSE) up -d --build radar_db redis db-init api frontend-v2 radar_db_test db-init-test radar_db_e2e db-init-e2e api-e2e frontend-e2e indexer-e2e tests
 
 # Usar este y no "down": los servicios nuevos del override (tests, frontend-v2,
 # radar_db_test) no se bajan sin pasar el archivo devcontainer.
@@ -216,3 +228,6 @@ test-indexer:
 
 test-e2e:
 	$(DEV_COMPOSE) exec tests pytest tests/e2e -v
+
+test-auth:
+	$(DEV_COMPOSE) exec tests pytest tests/auth -v

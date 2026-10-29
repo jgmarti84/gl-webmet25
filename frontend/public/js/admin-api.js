@@ -1,5 +1,7 @@
+import { redirectToLogin, refreshSession } from './auth-api.js';
+
 const ADMIN_API_BASE = '/api/v1/admin';
-const EXPIRED_SESSION_MESSAGE = 'Error de autenticación. Actualice la página y verifique sus credenciales de administrador.';
+const EXPIRED_SESSION_MESSAGE = 'Tu sesión venció. Volvé a iniciar sesión.';
 
 function buildQuery(params = {}) {
     const search = new URLSearchParams();
@@ -13,8 +15,9 @@ function buildQuery(params = {}) {
     return query ? `?${query}` : '';
 }
 
-async function request(path, options = {}) {
-    const response = await fetch(`${ADMIN_API_BASE}${path}`, {
+async function request(path, options = {}, { base = ADMIN_API_BASE, retry = true } = {}) {
+    const response = await fetch(`${base}${path}`, {
+        credentials: 'same-origin',
         headers: {
             'Content-Type': 'application/json',
             ...(options.headers || {}),
@@ -23,6 +26,10 @@ async function request(path, options = {}) {
     });
 
     if (response.status === 401) {
+        if (retry && await refreshSession()) {
+            return request(path, options, { base, retry: false });
+        }
+        redirectToLogin();
         throw new Error(EXPIRED_SESSION_MESSAGE);
     }
 
@@ -144,6 +151,23 @@ export const adminApi = {
     async bulkDelete(resource, filters) {
         const data = await request(`/${resource}${buildQuery(filters)}`, { method: 'DELETE' });
         return data?.deleted_count ?? 0;
+    },
+
+    // Users
+    listUsers() { return request('/users'); },
+    getUser(id) { return request(`/users/${id}`); },
+    createUser(payload) { return request('/users', { method: 'POST', body: JSON.stringify(payload) }); },
+    patchUser(id, payload) { return request(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }); },
+    resetUserPassword(id, password) {
+        return request(`/users/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ password }) });
+    },
+    revokeUserSessions(id) { return request(`/users/${id}/revoke-sessions`, { method: 'POST' }); },
+    // The admin vouches for the mail of an account that never opened its verification link.
+    verifyUserEmail(id) { return request(`/users/${id}/verify-email`, { method: 'POST' }); },
+
+    // Colormap cache (outside /admin, also admin-only)
+    invalidateColormapCache() {
+        return request('/cache/invalidate', { method: 'POST' }, { base: '/api/v1/colormap' });
     },
 };
 

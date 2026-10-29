@@ -51,3 +51,5 @@ webmet-shots/
 # Runtime evidence (logs, DB copies) and personal scratch: never commit
 ops-data/
 local/
+# Documentos de trabajo de Claude (specs y planes), no se versionan
+docs-claude/

@@ -19,6 +19,7 @@ from radar_db import (
     get_db,
 )
 from radar_db.models import Estrategia, Volumen, ColormapStop, ProductColormapOption
+from ..auth.dependencies import check_origin, require_admin
 from ..schemas.admin import (
     AdminBulkDeleteResponse,
     AdminCOGListResponse,
@@ -52,10 +53,11 @@ from ..schemas.admin import (
     AdminVolumenUpdate,
 )
 
-router = APIRouter(prefix="/admin", tags=["Admin"])
-
-
-# TODO: These endpoints currently rely on Nginx-level Basic Auth and need FastAPI auth dependencies before production deployment.
+router = APIRouter(
+    prefix="/admin",
+    tags=["Admin"],
+    dependencies=[Depends(require_admin), Depends(check_origin)],
+)
 
 
 def _coerce_float(value):

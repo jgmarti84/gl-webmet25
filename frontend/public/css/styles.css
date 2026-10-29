@@ -1530,7 +1530,8 @@ code {
     display: none;
     position: fixed;
     bottom: 20px;
-    left: 20px;
+    /* Starts to the right of the account chip, which sits at the bottom-left corner. */
+    left: 340px;
     z-index: 1100;
     background: rgba(30, 30, 60, 0.85);
     color: #a0c4ff;
@@ -2203,4 +2204,202 @@ code {
     min-width: 24px;
     text-align: right;
     font-family: 'Courier New', monospace;
+}
+
+/* Account chip: always-visible "who is signed in" pill, bottom-left under the color legend (the legend ends
+   70 px above the bottom, 80 px on narrow screens, and there is only ever one). It carries the avatar, the
+   name, the role badge (admins only), the admin panel shortcut and the logout button. */
+.account-chip {
+    position: absolute;
+    bottom: 14px;
+    left: 10px;
+    z-index: 1100;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: calc(100vw - 90px);
+    padding: 5px 6px 5px 5px;
+    border-radius: 999px;
+    background: rgba(26, 26, 46, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+/* Without this the display:flex above would win over the hidden attribute. */
+.account-chip[hidden] {
+    display: none;
+}
+
+.account-chip .account-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+}
+
+/* Long names are cut with "…" instead of stretching the pill. */
+.account-chip .account-name {
+    max-width: 170px;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.account-chip .account-meta {
+    gap: 2px;
+}
+
+.account-chip .account-role {
+    font-size: 9px;
+    padding: 1px 7px;
+}
+
+.account-chip .account-role[hidden] {
+    display: none;
+}
+
+/* Round icon buttons at the end of the chip: the admin panel shortcut (a link) and logout (a button). */
+.account-chip-btn {
+    flex-shrink: 0;
+    text-decoration: none;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: none;
+    color: #90a4ae;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+/* Two icon buttons in a row (admins): pull the second one a little closer to the first. */
+.account-chip-btn + .account-chip-btn {
+    margin-left: -4px;
+}
+
+/* Without this the display:flex above would win over the hidden attribute (the link is hidden for viewers). */
+.account-chip-btn[hidden] {
+    display: none;
+}
+
+.account-chip-btn:hover,
+.account-chip-btn:focus-visible {
+    background: rgba(79, 195, 247, 0.15);
+    color: #4fc3f7;
+}
+
+/* Logout turns red instead of blue: it is the one that ends the session. */
+.account-logout:hover,
+.account-logout:focus-visible {
+    background: rgba(239, 83, 80, 0.15);
+    color: #ef9a9a;
+}
+
+/* Narrow screens: only the avatar and the icon buttons stay (name and role are hidden), so the chip is
+   narrower and the field-loading badge can move closer to the corner. */
+@media (max-width: 640px) {
+    .account-chip .account-meta {
+        display: none;
+    }
+
+    #field-loading-badge {
+        left: 150px;
+    }
+}
+
+.account-avatar {
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4fc3f7 0%, #1e6fa8 100%);
+    color: #0d1b2a;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.account-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+}
+
+.account-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #e8eef3;
+    word-break: break-word;
+}
+
+.account-role {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 999px;
+    color: #90caf9;
+    background: rgba(144, 202, 249, 0.12);
+    border: 1px solid rgba(144, 202, 249, 0.3);
+}
+
+.account-role.is-admin {
+    color: #ffcc80;
+    background: rgba(255, 204, 128, 0.12);
+    border-color: rgba(255, 204, 128, 0.35);
+}
+
+/* Link row of the settings panel (admin panel link). */
+.account-action {
+    margin-top: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 8px 6px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: #cfd8dc;
+    font-family: inherit;
+    font-size: 13px;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.account-action:hover {
+    background: rgba(79, 195, 247, 0.12);
+    color: #4fc3f7;
+}
+
+.account-action-arrow {
+    opacity: 0.6;
+}
+
+.account-action[hidden] {
+    display: none;
+}
+
+button.nav-link {
+    width: 100%;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+/* display:block/flex above would otherwise override the hidden attribute */
+.icon-btn[hidden],
+.nav-link[hidden] {
+    display: none;
 }

@@ -254,6 +254,62 @@ cmap_name: str
 # UniqueConstraint: (product_key, cmap_name)
 ```
 
+#### **User** (Application Accounts)
+```python
+id: int (PK)
+username: str (unique, lowercase)     # 3–32 chars: a-z 0-9 . _ -
+full_name: str (nullable)             # optional "Nombre y apellido" (set by an admin or typed at sign-up, up to 128 chars)
+email: str (nullable)                 # stored lower case, no spaces; unique among the accounts that have one
+                                      #   (partial unique index uq_users_email); the login also accepts it
+password_hash: str                    # Argon2id
+role: str                             # 'admin' | 'viewer' (CHECK constraint)
+is_active: bool
+token_version: int                    # +1 invalidates every token of the user
+password_is_bootstrap: bool           # True while the password is ADMIN_PASSWORD
+failed_login_count: int, locked_until: datetime (nullable)
+last_login_at, created_at, updated_at
+email_verified_at: datetime (nullable) # NULL = self-registered, mail not verified yet: the account cannot log in.
+                                      #   Accounts created by an admin or the CLI are verified when created.
+terms_accepted_at: datetime (nullable) # when the person accepted the terms at sign-up (proof of consent)
+```
+
+#### **UserSession** (one row per login)
+```python
+id: UUID (PK)                         # login id; the refresh token is "<id>.<secret>"
+user_id: int (FK → users.id, ON DELETE CASCADE)
+token_hash: str (unique)              # SHA-256 of the current refresh token; the token only lives in the cookie
+previous_token_hash: str | None       # token before the last rotation, accepted for 10 s (two tabs at once)
+rotated_at: datetime | None
+refresh_count: int
+expires_at: datetime                  # idle expiry (last refresh + 48 h, never past absolute)
+absolute_expires_at: datetime         # login + 7 days, never extended
+revoked_at, revoke_reason             # logout | reuse | admin | inactive_user | password_reset | migration
+created_at, ip, user_agent            # the login itself (refreshes do not overwrite them)
+last_used_at
+```
+Every refresh locks the row (`FOR UPDATE`) and rotates it in place. The previous token within 10 s answers
+`refresh_race` without issuing anything. Any other token of the login (an old or invented one) closes it with
+`reuse` and bumps the user's `token_version`, so every access token of that user stops working; their other
+logins renew silently. Closed or expired logins older than `SESSION_RETENTION_DAYS` (90) are deleted when that
+user logs in. Logins, refreshes, logouts and reuse go to the `auth.sessions` log, never with tokens or hashes.
+
+#### **EmailToken** (one-time e-mail links and the log of mails sent)
+```python
+id: UUID (PK)
+user_id: int (FK → users.id, ON DELETE CASCADE)
+purpose: str                          # 'verify_email' | 'reset_password' | 'account_exists' (CHECK constraint)
+token_hash: str (unique)              # SHA-256 of the token; the token itself only travels in the mail (43 URL-safe chars)
+created_at, expires_at: datetime
+used_at: datetime | None              # set when redeemed or replaced by a newer link of the same purpose
+# Index: (user_id, created_at)
+```
+A link works once (`FOR UPDATE` on redemption) and a new one of the same purpose cancels the older ones. Every row,
+whatever its purpose, counts toward the per-account caps (`MAIL_MAX_PER_HOUR`, `MAIL_MIN_INTERVAL_SECONDS`).
+`account_exists` rows are not tokens: they are born expired and used, with a random hash, and only record that the
+"you already have an account" mail went out. That mail is what the owner of a registered address gets when someone
+signs up with it, so the sign-up answer is the same for a new and for a registered mail (nobody can find out which
+mails have an account) while the caps still protect that inbox from flooding.
+
 ### 3.2 Indexes (Performance)
 
 ```sql
@@ -400,7 +456,7 @@ Backed by `ColormapService` — a thread-safe singleton with a 5-minute TTL cach
 **Router:** [`api/app/routers/admin.py`](../api/app/routers/admin.py) — base path `/api/v1/admin`  
 **Frontend:** [`frontend/public/admin.html`](../frontend/public/admin.html) + [`js/admin.js`](../frontend/public/js/admin.js), served at `/admin`
 
-**Authentication (temporary):** Both `/admin` and `/api/v1/admin/` are behind **nginx HTTP Basic Auth** (`admin.htpasswd`). The public `/api/v1/*` API stays open. ⚠️ TODO: replace with JWT before production.
+**Authentication:** every `/api/v1/*` endpoint except `/auth/login`, `/auth/refresh`, `/auth/logout` and the sign-up and recovery endpoints of §4.10 requires a session (role `admin` or `viewer`); `/api/v1/admin/*` and `/api/v1/admin/users/*` require `admin`. Sessions use a 30-minute JWT access cookie and a rotating refresh cookie (48 h idle, 7 days absolute), both `HttpOnly` and `SameSite=Strict`, validated by the API ([`api/app/auth/dependencies.py`](../api/app/auth/dependencies.py)). nginx asks `GET /api/v1/auth/check` (204/401/403) before serving the HTML pages and the admin panel; without a session it serves `/login` in place of the requested page. The basemap tile proxies (`/osm-tiles/`, `/ign-tiles/`) ask the lighter `GET /api/v1/auth/check-token` (204/401) instead: it only verifies the signed access token and never reads the user, so panning the map uses no database connection; a deactivated user keeps receiving those public tiles until the access token expires (30 minutes at most). Static files (`.js`, `.css`, images), `/login`, `/register`, `/verify`, `/forgot`, `/reset` and `/health` stay public. People log in with their username or their mail; an account whose mail was never verified cannot log in (see §4.10). State-changing requests also check the `Origin` header against `ALLOWED_ORIGINS`.
 
 **Endpoint groups:**
 
@@ -420,6 +476,33 @@ Backed by `ColormapService` — a thread-safe singleton with a 5-minute TTL cach
 **Edit pattern (no update endpoint for colormaps):** delete-then-recreate — `DELETE /colormap-stops/{name}` → `POST /colormap-from-hex` with same name → reconcile options → `POST /colormap/cache/invalidate`.
 
 **Panel features:** Django-admin-style filtering (global search + per-column `text`/`select`/`boolean` facets, live count, sortable columns), inline pencil/trash icon row actions, visual colormap creator/editor with draggable gradient stops.
+
+### 4.10 Sign-up, Verification and Password Recovery
+
+**Router:** [`api/app/routers/registration.py`](../api/app/routers/registration.py) — base path `/api/v1/auth`  
+**Rules:** [`api/app/auth/registration.py`](../api/app/auth/registration.py) (what happens), [`api/app/auth/email_tokens.py`](../api/app/auth/email_tokens.py) (one-time links and mail caps), [`api/app/mail/`](../api/app/mail/) (`Mailer` interface, `SmtpMailer`, `FakeMailer` for tests, and the mail templates)  
+**Frontend:** `register.html`, `verify.html`, `forgot.html`, `reset.html` (see COMPONENTS §5)
+
+All endpoints are public and check the `Origin` header like the login. "Neutral" means the answer is the same whether or not the account exists.
+
+| Method | Path | Body | Answers |
+|--------|------|------|---------|
+| GET | `/auth/options` | — | 200 `{registration, password_recovery, terms_required, terms_url, privacy_url}` (the two links are `null` when `terms_required` is false) |
+| POST | `/auth/register` | `username, email, password, website`, optional `full_name`, and `accept_terms` (must be true only when `TERMS_REQUIRED` is on; otherwise it is ignored and `terms_accepted_at` stays `NULL`) | **202** neutral; 409 username taken; 422 invalid data; 503 sign-up off |
+| POST | `/auth/verify-email` | `token` | 204; 400 invalid, expired or used link |
+| POST | `/auth/resend-verification` | `identifier` (mail or username) | **202** neutral |
+| POST | `/auth/forgot-password` | `email` | **202** neutral |
+| POST | `/auth/reset-password` | `token, password` | 204; 400 invalid link; 422 invalid password (the link is not spent) |
+
+- **Sign-up rules, in order:** first the username: one of a verified account, or of *another* pending account whose link is still valid, is a 409 **whatever the mail** (so the answer never tells whether a mail has an account); a mail with a *verified* account gets a "you already have an account" mail instead (neutral answer); a mail with a *pending* account whose link is still valid (under `EMAIL_VERIFY_TTL_HOURS`) keeps that account, which **takes the username, password and name typed now**, and every older link stops working before a new one is sent (so nobody can sign up first with another person's mail and get that account verified with their own password); pending accounts whose link already expired are replaced; then the pending `viewer` is created. The links in the mails carry the token after `#` (`/verify#token=…`), which browsers never send to the server, so it never reaches the nginx access log. `website` is a hidden decoy: with text in it the request is answered 202 and ignored. The password is hashed in every path so the response time says nothing.
+- **Full name:** `full_name` is an optional "Nombre y apellido" in a single field (up to 128 characters). The service strips the ends, collapses runs of white space into one space and drops non-printable characters; if nothing is left it stores `NULL`. It is only used when the new account is created: in every other path (a registered mail, a pending account whose link is still valid) it is ignored like the rest of the fields, so the answer does not change. It is what the admin panel and the account button show.
+- **Login:** accepts the username or the mail (a username can never contain `@`). With the right password and an unverified mail it answers `403 {"code": "email_not_verified"}`; with a wrong password it is the usual generic 401. `load_active_user` and the refresh also refuse an unverified account.
+- **Reset:** sets the new password with the same policy, bumps `token_version`, closes every session with `revoke_reason = "password_reset"`, clears the lockout and verifies the mail if it was not (opening the link proves control of the mailbox).
+- **Mails** go out in the background after the transaction commits, so neither the answer nor its time depends on them. The SMTP send runs in the mail module's own threads (2 per API worker), never in the threads that serve the rest of the API, so a slow mail server cannot slow it down; at most 200 mails wait per worker, and past that a mail is dropped with a WARNING (the person can ask again). A failure is logged with the address masked (`j***@host`); tokens and passwords are never logged.
+- **Caps:** per account, at most `MAIL_MAX_PER_HOUR` mails an hour and `MAIL_MIN_INTERVAL_SECONDS` apart. Global (all accounts together, against someone signing up many different addresses): at most `MAIL_MAX_GLOBAL_PER_HOUR` mails an hour, except password recovery, and `MAIL_MAX_GLOBAL_PER_DAY` a day for every mail (keep it under the SMTP provider's limit). Reaching a global cap logs one WARNING per window. A capped request sends nothing and answers the same (a new account is still created). nginx also limits these endpoints per IP (§8.4).
+- **Validation:** `StrictText` ([`api/app/schemas/text.py`](../api/app/schemas/text.py)) rejects NUL and invalid UTF-8 characters with a 422, and the 422 handler in `main.py` does not repeat the rejected value in its answer.
+
+Admin panel side: a mail typed by an admin is stored normalized and checked for duplicates (409), counts as verified, and the user list shows `email_verified`.
 
 ---
 
@@ -442,7 +525,7 @@ frontend/public/
     ├── admin.js            # Admin SPA orchestrator
     ├── admin-api.js        # Admin REST client (/api/v1/admin/*)
     ├── shared/             # Shared by v1 and v2
-    │   ├── api.js          # REST API client (all public endpoints)
+    │   ├── api.js          # REST API client (session required)
     │   ├── controls.js     # UIControls class (radar list, time wheels, badges)
     │   ├── legend.js       # LegendRenderer class
     │   ├── tops-cores.js   # TopsCoresLayer (L.circleMarker)
@@ -727,7 +810,35 @@ See §2.2 for the full table of `IndexerSettings` env vars.
 | `db_user` | `DB_USER` | `radar` | DB user |
 | `db_password` | `DB_PASSWORD` | `""` (set in `.env`) | DB password |
 | `cog_base_path` | `COG_BASE_PATH` | `/product_output` | Root path to COG files |
-| `cors_origins` | `CORS_ORIGINS` | `*` | Comma-separated allowed origins |
+| `cors_origins` | `CORS_ORIGINS` | *(empty = `ALLOWED_ORIGINS`)* | Comma-separated CORS origins |
+| `jwt_secret` | `JWT_SECRET` | — (required) | 32+ characters; the API does not start without it |
+| `allowed_origins` | `ALLOWED_ORIGINS` | *(empty)* | Origins accepted on POST/PUT/PATCH/DELETE |
+| `cookie_secure` | `COOKIE_SECURE` | `true` | `false` only for local HTTP |
+| `access_token_ttl_minutes` | `ACCESS_TOKEN_TTL_MINUTES` | `30` | Access token lifetime |
+| `session_idle_ttl_hours` | `SESSION_IDLE_TTL_HOURS` | `48` | Session expiry without activity |
+| `session_absolute_ttl_days` | `SESSION_ABSOLUTE_TTL_DAYS` | `7` | Maximum session length |
+| `login_max_failed_attempts` | `LOGIN_MAX_FAILED_ATTEMPTS` | `5` | Failed logins before a lockout |
+| `login_lockout_minutes` | `LOGIN_LOCKOUT_MINUTES` | `15` | Lockout duration |
+| `registration_enabled` | `REGISTRATION_ENABLED` | `false` | Master switch of the public sign-up |
+| `public_base_url` | `PUBLIC_BASE_URL` | *(empty)* | Public address of the site, used in the links of the mails |
+| `mail_host` | `MAIL_HOST` | *(empty)* | SMTP server |
+| `mail_port` | `MAIL_PORT` | `587` | SMTP port |
+| `mail_user` | `MAIL_USER` | *(empty)* | SMTP login (empty = no login) |
+| `mail_password` | `MAIL_PASSWORD` | *(empty)* | SMTP password |
+| `mail_from` | `MAIL_FROM` | *(empty)* | Sender address |
+| `mail_starttls` | `MAIL_STARTTLS` | `true` | Upgrade the connection with STARTTLS (ignored when `MAIL_USE_SSL`) |
+| `mail_use_ssl` | `MAIL_USE_SSL` | `false` | Encrypted from the first byte (port 465) |
+| `terms_required` | `TERMS_REQUIRED` | `false` | Sign-up asks to accept the terms and privacy policy (checkbox and links); off = neither shown nor needed |
+| `terms_url` | `TERMS_URL` | *(empty)* | Terms link of the sign-up form (only with `TERMS_REQUIRED`) |
+| `privacy_url` | `PRIVACY_URL` | *(empty)* | Privacy policy link of the sign-up form |
+| `email_verify_ttl_hours` | `EMAIL_VERIFY_TTL_HOURS` | `24` | Life of the verification link |
+| `password_reset_ttl_minutes` | `PASSWORD_RESET_TTL_MINUTES` | `60` | Life of the reset link |
+| `mail_max_per_hour` | `MAIL_MAX_PER_HOUR` | `3` | Mails per account per hour |
+| `mail_min_interval_seconds` | `MAIL_MIN_INTERVAL_SECONDS` | `60` | Minimum seconds between two mails to one account |
+| `mail_max_global_per_hour` | `MAIL_MAX_GLOBAL_PER_HOUR` | `200` | Mails of the whole site per hour (password recovery is exempt) |
+| `mail_max_global_per_day` | `MAIL_MAX_GLOBAL_PER_DAY` | `1500` | Mails of the whole site per day (every mail) |
+
+Derived: `mail_configured` (needs `MAIL_HOST`, `MAIL_FROM` and `PUBLIC_BASE_URL`; enough for verification and recovery) and `registration_available` (also needs `REGISTRATION_ENABLED` and, only when `TERMS_REQUIRED` is on, both legal links).
 | `tile_render_threads` | `TILE_RENDER_THREADS` | `8` | Thread pool size for tile rendering |
 | `redis_host` | `REDIS_HOST` | `redis` | Redis hostname |
 | `redis_port` | `REDIS_PORT` | `6379` | Redis port |
@@ -745,7 +856,9 @@ Env vars: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
 
 ### 8.4 Frontend / Nginx Configuration
 
-`ADMIN_USERNAME` and `ADMIN_PASSWORD` are read by `docker-entrypoint.sh` at container startup to generate `/etc/nginx/admin.htpasswd`. Changing them requires rebuilding or restarting the frontend container.
+nginx does not authenticate anyone: it only rate-limits `POST /api/v1/auth/login` and, in a separate counter (`auth_mail_limit`), the five sign-up endpoints that write or send mail (`register`, `verify-email`, `resend-verification`, `forgot-password`, `reset-password`); both allow 10 requests/minute per IP with a burst of 5 and answer 429. `/verify` and `/reset` are served with `Cache-Control: no-store` and `Referrer-Policy: no-referrer`, because their address carries a one-time token. If a proxy (Caddy) sits in front, configure `set_real_ip_from` so the limits use the real client IP: it becomes a requirement before turning the sign-up on.
+
+`ADMIN_USERNAME` and `ADMIN_PASSWORD` are read by the `db-init` service (`manage.py init-admin`), which creates that admin only when the `users` table is empty. After the first start, change the password with `make reset-password U=<user>` and remove both variables from `.env`.
 
 Nginx also caches OSM and IGN Argenmap tiles locally (30-day and 7-day TTL respectively) to reduce external requests.
 

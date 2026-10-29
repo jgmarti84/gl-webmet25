@@ -2,6 +2,8 @@
  * API Module - Handles all backend communication
  */
 
+import { authFetch } from '../auth-api.js';
+
 const API_BASE = '/api/v1';
 
 export const api = {
@@ -9,7 +11,7 @@ export const api = {
      * Generic GET request
      */
     async get(endpoint) {
-        const response = await fetch(`${API_BASE}${endpoint}`);
+        const response = await authFetch(`${API_BASE}${endpoint}`);
         if (!response.ok) {
             throw new Error(`API error: ${response.status}`);
         }

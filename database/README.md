@@ -66,7 +66,10 @@ Replace `<service_name>` with your service name from `docker-compose.yml` (e.g.,
 
 ### 1. **init** - Initialize Database Tables
 
-Creates all database tables based on the SQLAlchemy models.
+Creates the missing tables from the SQLAlchemy models and brings Alembic up to date: a database that already has
+a version **applies the pending migrations** (`create_all` never adds columns to existing tables); a database
+without a version is stamped at `head`. If a migration fails, `init` fails too (it never stamps over it).
+`db-init` runs this on every start.
 
 **Inside container:**
 ```bash
@@ -120,6 +123,27 @@ docker exec -it <container_name> python -m radar_db.manage sync
 ```
 
 **When to use:** After schema migrations that add new columns with seed-data values, or when updating seed data values in existing records (e.g. adding `default_cmap` to products, or updating `detail_view_enabled` on radars).
+
+---
+
+### 2c. **init-admin / create-admin / reset-password** - User Accounts
+
+The `users` and `user_sessions` tables are created by `init` like the rest. These commands manage accounts from the server; in the normal flow use the Makefile shortcuts.
+
+```bash
+# Create the first admin from ADMIN_USERNAME / ADMIN_PASSWORD,
+# only if there are no users yet (db-init runs this automatically)
+python -m radar_db.manage init-admin
+
+# Create an admin, prompting for the password (make create-admin U=<user>)
+python -m radar_db.manage create-admin --username maria
+
+# New password for a user, prompting for it; also closes all their sessions
+# (make reset-password U=<user>)
+python -m radar_db.manage reset-password --username maria
+```
+
+Passwords must be 12–128 characters. Admins cannot reset their own password from the admin panel, so `reset-password` is the only way to change it.
 
 ---
 

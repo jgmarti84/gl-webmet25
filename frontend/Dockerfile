@@ -2,38 +2,28 @@
 # Unified frontend container for both v1 and v2.
 #
 # Build arguments:
-#   FE_VERSION — which frontend to serve: v1 (default) or v2
+#   FE_VERSION - which frontend to serve: v2 (default) or v1 (legacy)
 #
 # Usage:
-#   docker compose build --build-arg FE_VERSION=v2 frontend
+#   docker compose build --build-arg FE_VERSION=v1 frontend
 #   docker compose up -d frontend
 #
 # Or via .env file:
-#   FE_VERSION=v2
+#   FE_VERSION=v1
 #   docker compose up -d --build frontend
 
 FROM nginx:alpine
 
-ARG FE_VERSION=v1
-
-# Install htpasswd utility for admin basic auth file generation
-RUN apk add --no-cache apache2-utils
+ARG FE_VERSION=v2
 
 # Copy all static files
 COPY frontend/public/ /usr/share/nginx/html/
 
 # Substitute the entry point script tag in index.html
-RUN sed -i \
-    "s|FE_ENTRY_POINT|js/${FE_VERSION}/app.js|g" \
-    /usr/share/nginx/html/index.html
+RUN sed -i     "s|FE_ENTRY_POINT|js/${FE_VERSION}/app.js|g"     /usr/share/nginx/html/index.html
 
 # Copy unified nginx config
 COPY frontend/nginx.conf /etc/nginx/nginx.conf
 
-# Generate htpasswd at container startup
-COPY frontend/docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
-
 EXPOSE 80
-ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]
