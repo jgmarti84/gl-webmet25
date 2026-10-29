@@ -124,6 +124,8 @@ services:
       DB_NAME: radar_prod_db
       DB_USER: radar
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env (see .env.example)}
+      # INFO (default) logs one access line per tile; DEBUG adds the per-tile/frame details
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       COG_BASE_PATH: /product_output
       TOPS_AND_CORES_DIR: /tops_and_cores
       CORS_ORIGINS: "*"
