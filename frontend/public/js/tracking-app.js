@@ -15,6 +15,7 @@
 
 import { TrackingLayer } from './shared/tracking.js';
 import { authFetch } from './auth-api.js';
+import { api } from './shared/api.js';
 import { indexCogsByMinute, closestCog } from './shared/colmax-match.js';
 import { MapManager } from './v2/map.js';
 import { AnimationController } from './v2/animation.js';
@@ -32,6 +33,8 @@ const state = {
     animator: null,
     layer: null,
     availability: new Map(),
+    radarInfo: new Map(),  // code -> {center_lat, center_long, img_radio, ...}
+    coverageRadar: null,   // radar whose coverage is currently cut out of the shading
     frames: [],
     radar: null,
     windowEnd: null,       // Date of the newest cube in the loaded window
@@ -126,6 +129,46 @@ function onRadarChange() {
     const start = new Date(Math.max(min.getTime(), max.getTime() - 2 * MS_PER_HOUR));
     el('start-input').value = toLocalInput(start);
     el('end-input').value = toLocalInput(max);
+
+    // Light up the radar's full range (no data loaded yet, so no ring) and
+    // centre on it — same as the single-radar view before layers load.
+    showRadarCoverage(info.radar_code, null).then(radius => {
+        const r = state.radarInfo.get(info.radar_code);
+        if (r && radius && !state.frames.length) {
+            state.map.fitBounds(L.latLng(r.center_lat, r.center_long).toBounds(radius * 2));
+        }
+    });
+}
+
+// -------------------------------------------------------------- coverage
+
+/**
+ * Cut the radar's data region out of the map shading (MapManager's coverage
+ * mask), as the single-radar view does. `radiusM` is the coverage of the shown
+ * COLMAX (the largest, if volumes differ); null = the radar's full range. The
+ * ring line is drawn only once data is shown (`withRing`), as in the
+ * single-radar view. Returns the radius used.
+ */
+async function showRadarCoverage(radarCode, radiusM, withRing = false) {
+    if (!state.radarInfo.size) {
+        try {
+            for (const r of await api.getRadars(false)) state.radarInfo.set(r.code, r);
+        } catch (err) {
+            console.warn('Tracking: radar list unavailable, no coverage mask', err);
+            return null;
+        }
+    }
+    const r = state.radarInfo.get(radarCode);
+    if (!r) return null;
+    const radius = radiusM ?? r.img_radio * 1000;
+    if (state.coverageRadar && state.coverageRadar !== radarCode) {
+        state.mapManager.removeRadarCoverage(state.coverageRadar);
+    }
+    state.mapManager.addRadarCoverage(radarCode, r.center_lat, r.center_long, radius);
+    state.mapManager.setRadarCoverageRings(radarCode, r.center_lat, r.center_long,
+        withRing ? [{ radius_m: radius, productKey: COLMAX }] : []);
+    state.coverageRadar = radarCode;
+    return radius;
 }
 
 /** "last N hours" windows are live; the custom range is a fixed window. */
@@ -219,6 +262,12 @@ async function loadWindow(radar, start, end, { fit = false, hours = null } = {})
         } else {
             state.mapManager._clearAllOverlays();
         }
+        // Bright region = the largest coverage among the shown COLMAX volumes
+        // (radar's full range when the COGs don't say).
+        const radii = [...cogsByFrame.values()]
+            .map(m => m.get(radar)?.radar_coverage_m)
+            .filter(v => v != null);
+        await showRadarCoverage(radar, radii.length ? Math.max(...radii) : null, cogsByFrame.size > 0);
 
         state.radar = radar;
         state.frames = frames;

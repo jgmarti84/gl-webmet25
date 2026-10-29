@@ -19,13 +19,26 @@ import { authFetch } from '../auth-api.js';
 
 const TRACKING_BASE = '/api/tracking';
 
-/** Styling by convective verdict. Non-convective systems are detected but
- *  rejected by the filter — worth showing faintly rather than hiding, since
- *  "detected but rejected" and "nothing there" are different states. */
-const STYLE_CONVECTIVE = { color: '#ff3b30', weight: 2, fillColor: '#ff3b30', fillOpacity: 0.18 };
-const STYLE_PLAIN      = { color: '#9e9e9e', weight: 1, fillColor: '#9e9e9e', fillOpacity: 0.08, dashArray: '4,3' };
-const STYLE_FORECAST   = { color: '#4fc3f7', weight: 1, fill: false, dashArray: '3,4', opacity: 0.75 };
-const STYLE_TRACK      = { color: '#ffb300', weight: 2, opacity: 0.9 };
+/**
+ * Styling. Everything is drawn over COLMAX, whose colormap spans greens,
+ * yellows, reds and magentas — so no single line colour is safe. Every line is
+ * drawn twice: a dark halo underneath and a light line on top, which reads on
+ * any background. System interiors use SVG hatch patterns (see _ensurePatterns)
+ * so the reflectivity stays visible between the stripes.
+ *
+ * Non-convective systems are detected but rejected by the filter — shown,
+ * but clearly secondary, since "detected but rejected" and "nothing there" are
+ * different states.
+ */
+const HATCH_CONV  = 'trk-hatch-conv';
+const HATCH_PLAIN = 'trk-hatch-plain';
+const HALO = { color: '#000000', opacity: 0.55, fill: false, dashArray: null, lineCap: 'round', lineJoin: 'round' };
+
+const STYLE_CONVECTIVE = { color: '#ffffff', weight: 2.5, opacity: 1, fillColor: `url(#${HATCH_CONV})`, fillOpacity: 1 };
+const STYLE_PLAIN      = { color: '#d9d9d9', weight: 1.8, opacity: 0.95, dashArray: '6,4', fillColor: `url(#${HATCH_PLAIN})`, fillOpacity: 1 };
+const STYLE_FORECAST   = { color: '#ffd54f', weight: 2, opacity: 1, dashArray: '5,5', fill: false };
+const STYLE_ARROW      = { color: '#ffd54f', weight: 2.5, opacity: 1, fill: false };
+const STYLE_TRACK      = { color: '#4dd0e1', weight: 2.5, opacity: 1, fill: false };
 
 export class TrackingLayer {
     /** @param {L.Map} map */
@@ -40,6 +53,8 @@ export class TrackingLayer {
             map.createPane(this._pane);
             map.getPane(this._pane).style.zIndex = 460;
         }
+        // Own SVG renderer, so the hatch patterns can live in its <defs>.
+        this._renderer = L.svg({ pane: this._pane });
 
         this._systems = L.layerGroup().addTo(map);
         this._forecasts = L.layerGroup().addTo(map);
@@ -69,7 +84,8 @@ export class TrackingLayer {
     get frameCount() { return this._frames.length; }
 
     /**
-     * Centroid trajectory per track id, accumulated across all frames.
+     * Centroid trajectory per track id, accumulated across all frames, with the
+     * frame index of each point so a frame only draws the path up to itself.
      *
      * Track identity is the `name` property: a UUID inherited at each
      * successful match, so systems sharing it across frames are one storm.
@@ -78,14 +94,24 @@ export class TrackingLayer {
      */
     _buildPaths() {
         this._paths = new Map();
-        for (const frame of this._frames) {
+        for (const [frameIndex, frame] of this._frames.entries()) {
+            // A split gives several systems the parent's name in one frame;
+            // keep the one continuing the path so the trail doesn't zig-zag.
+            const byName = new Map();
             for (const feature of frame.features?.features || []) {
                 const props = feature.properties || {};
                 if (props.kind !== 'system') continue;
                 const centre = centroidOf(feature.geometry);
                 if (!centre) continue;
-                if (!this._paths.has(props.name)) this._paths.set(props.name, []);
-                this._paths.get(props.name).push(centre);
+                if (!byName.has(props.name)) byName.set(props.name, []);
+                byName.get(props.name).push(centre);
+            }
+            for (const [name, centres] of byName) {
+                if (!this._paths.has(name)) this._paths.set(name, []);
+                const path = this._paths.get(name);
+                const last = path.length ? path[path.length - 1].latlng : null;
+                const centre = last ? nearest(centres, last) : centres[0];
+                path.push({ frame: frameIndex, latlng: centre });
             }
         }
     }
@@ -102,39 +128,141 @@ export class TrackingLayer {
         const frame = this._frames[index];
         if (!frame) return null;
 
-        const live = new Set();
+        const live = new Map();        // track id -> centroids in this frame (a split shares a name)
+        const forecasts = new Map();   // track id -> forecast features
 
         for (const feature of frame.features?.features || []) {
             const props = feature.properties || {};
-
             if (props.kind === 'system') {
-                live.add(props.name);
-                const convective = props.is_convective === true;
-                L.geoJSON(feature, {
-                    pane: this._pane,
-                    style: convective ? STYLE_CONVECTIVE : STYLE_PLAIN,
-                })
+                if (!live.has(props.name)) live.set(props.name, []);
+                live.get(props.name).push(centroidOf(feature.geometry));
+                const style = props.is_convective === true ? STYLE_CONVECTIVE : STYLE_PLAIN;
+                this._halo(feature, style.weight).addTo(this._systems);
+                L.geoJSON(feature, { pane: this._pane, renderer: this._renderer, style })
                     .bindPopup(() => popupHtml(props))
                     .addTo(this._systems);
-            } else if (props.kind === 'forecast' && this._showForecasts) {
-                L.geoJSON(feature, { pane: this._pane, style: STYLE_FORECAST })
-                    .bindTooltip(`+${props.lead_min} min`, { sticky: true })
-                    .addTo(this._forecasts);
+            } else if (props.kind === 'forecast') {
+                if (!forecasts.has(props.name)) forecasts.set(props.name, []);
+                forecasts.get(props.name).push(feature);
             }
         }
 
-        // Trails for the tracks alive in this frame only — drawing every path
-        // at once turns a busy day into an unreadable tangle.
+        // Trails: the path of each storm alive in this frame, up to this frame
+        // only — drawing every path, or a storm's future positions, turns a busy
+        // animation into an unreadable tangle.
         if (this._showTrails) {
-            for (const name of live) {
-                const path = this._paths.get(name);
-                if (path && path.length > 1) {
-                    L.polyline(path, { pane: this._pane, ...STYLE_TRACK }).addTo(this._tracks);
+            for (const name of live.keys()) {
+                const path = (this._paths.get(name) || []).filter(p => p.frame <= index).map(p => p.latlng);
+                if (path.length < 2) continue;
+                this._line(path, STYLE_TRACK, this._tracks);
+                for (const point of path.slice(0, -1)) {
+                    L.circleMarker(point, { pane: this._pane, renderer: this._renderer, radius: 2.5,
+                        color: '#000', weight: 1, opacity: 0.6, fillColor: STYLE_TRACK.color, fillOpacity: 1 })
+                        .addTo(this._tracks);
                 }
             }
         }
 
+        if (this._showForecasts) {
+            for (const [name, features] of forecasts) {
+                for (const chain of forecastChains(live.get(name) || [], features)) {
+                    this._drawForecast(chain.origin, chain.features);
+                }
+            }
+        }
+
+        this._ensurePatterns();
         return frame;
+    }
+
+    /**
+     * One storm's forecast: the outline of its furthest lead (dashed), and a
+     * motion arrow from the storm through every lead's centroid, with a dot per
+     * lead and a permanent "+N min" label at the tip. Overlapping outlines for
+     * every lead were unreadable; the arrow says "it goes there, this fast".
+     */
+    _drawForecast(origin, features) {
+        const leads = features
+            .map(f => ({ lead: f.properties?.lead_min, centre: centroidOf(f.geometry), feature: f }))
+            .filter(x => x.centre && x.lead != null)
+            .sort((a, b) => a.lead - b.lead);
+        if (!leads.length) return;
+        const last = leads[leads.length - 1];
+
+        this._halo(last.feature, STYLE_FORECAST.weight).addTo(this._forecasts);
+        L.geoJSON(last.feature, { pane: this._pane, renderer: this._renderer, style: STYLE_FORECAST })
+            .bindTooltip(`Pronóstico +${last.lead} min`, { sticky: true })
+            .addTo(this._forecasts);
+
+        const path = (origin ? [origin] : []).concat(leads.map(x => x.centre));
+        if (path.length >= 2) this._line(path, STYLE_ARROW, this._forecasts);
+        for (const x of leads.slice(0, -1)) {
+            L.circleMarker(x.centre, { pane: this._pane, renderer: this._renderer, radius: 3,
+                color: '#000', weight: 1, opacity: 0.6, fillColor: STYLE_ARROW.color, fillOpacity: 1 })
+                .bindTooltip(`+${x.lead} min`)
+                .addTo(this._forecasts);
+        }
+        const from = path.length >= 2 ? path[path.length - 2] : null;
+        L.marker(last.centre, {
+            pane: this._pane,
+            interactive: false,
+            icon: L.divIcon({
+                className: 'trk-arrow-tip',
+                html: `<span class="trk-arrowhead" style="transform:rotate(${from ? bearingDeg(from, last.centre) : 90}deg)"></span>`
+                    + `<span class="trk-lead-label">+${last.lead} min</span>`,
+                iconSize: [0, 0],
+            }),
+        }).addTo(this._forecasts);
+    }
+
+    /** Dark under-stroke for a geometry, so the line on top reads on any colour. */
+    _halo(feature, weight) {
+        return L.geoJSON(feature, {
+            pane: this._pane, renderer: this._renderer, interactive: false,
+            style: { ...HALO, weight: weight + 3 },
+        });
+    }
+
+    /** A polyline with its halo. */
+    _line(latlngs, style, group) {
+        L.polyline(latlngs, { pane: this._pane, renderer: this._renderer, interactive: false,
+            ...HALO, weight: style.weight + 3 }).addTo(group);
+        L.polyline(latlngs, { pane: this._pane, renderer: this._renderer, interactive: false, ...style }).addTo(group);
+    }
+
+    /** Hatch patterns for system interiors, defined once in the layer's SVG. */
+    _ensurePatterns() {
+        const svg = this._renderer._container;
+        if (!svg || svg.querySelector(`#${HATCH_CONV}`)) return;
+        const ns = 'http://www.w3.org/2000/svg';
+        const defs = svg.querySelector('defs') || svg.insertBefore(document.createElementNS(ns, 'defs'), svg.firstChild);
+        const pattern = (id, size, angle, stripe, width, opacity, tint) => {
+            const p = document.createElementNS(ns, 'pattern');
+            p.setAttribute('id', id);
+            p.setAttribute('patternUnits', 'userSpaceOnUse');
+            p.setAttribute('width', size);
+            p.setAttribute('height', size);
+            p.setAttribute('patternTransform', `rotate(${angle})`);
+            if (tint) {
+                const bg = document.createElementNS(ns, 'rect');
+                bg.setAttribute('width', size);
+                bg.setAttribute('height', size);
+                bg.setAttribute('fill', tint);
+                p.appendChild(bg);
+            }
+            const line = document.createElementNS(ns, 'line');
+            line.setAttribute('x1', 0); line.setAttribute('y1', 0);
+            line.setAttribute('x2', 0); line.setAttribute('y2', size);
+            line.setAttribute('stroke', stripe);
+            line.setAttribute('stroke-width', width);
+            line.setAttribute('stroke-opacity', opacity);
+            p.appendChild(line);
+            defs.appendChild(p);
+        };
+        // Convective: dense white stripes over a light dark tint (reads on bright echoes).
+        pattern(HATCH_CONV, 7, 45, '#ffffff', 2.2, 0.8, 'rgba(0,0,0,0.15)');
+        // Non-convective: sparse, thin, opposite angle.
+        pattern(HATCH_PLAIN, 11, -45, '#d9d9d9', 1.2, 0.6, null);
     }
 
     setVisible(visible) {
@@ -172,7 +300,7 @@ export class TrackingLayer {
      */
     bounds() {
         const points = [];
-        for (const path of this._paths.values()) points.push(...path);
+        for (const path of this._paths.values()) points.push(...path.map(p => p.latlng));
         for (const frame of this._frames) {
             for (const feature of frame.features?.features || []) {
                 if (feature.properties?.kind !== 'system') continue;
@@ -232,6 +360,57 @@ export class TrackingLayer {
 }
 
 // -------------------------------------------------------------------- utils
+
+/** The point of `points` closest to `to` (all [lat, lon]). */
+function nearest(points, to) {
+    const d = p => (p[0] - to[0]) ** 2 + ((p[1] - to[1]) * Math.cos(to[0] * Math.PI / 180)) ** 2;
+    return points.reduce((best, p) => (d(p) < d(best) ? p : best));
+}
+
+/**
+ * Split one track name's forecast features into one chain per system. Usually
+ * a name has one system and this is a no-op; after a split, several systems
+ * share the parent's name, and drawing their forecasts as one path would
+ * zig-zag between them. Each lead's polygons are attached to the nearest chain
+ * end (starting from the systems' centroids).
+ */
+function forecastChains(origins, features) {
+    const byLead = new Map();
+    for (const f of features) {
+        const lead = f.properties?.lead_min;
+        const centre = centroidOf(f.geometry);
+        if (lead == null || !centre) continue;
+        if (!byLead.has(lead)) byLead.set(lead, []);
+        byLead.get(lead).push({ feature: f, centre });
+    }
+    const leads = [...byLead.keys()].sort((a, b) => a - b);
+    const chains = origins.filter(Boolean).map(origin => ({ origin, end: origin, features: [] }));
+    if (!chains.length) chains.push({ origin: null, end: null, features: [] });
+    for (const lead of leads) {
+        const free = [...chains];
+        for (const item of byLead.get(lead)) {
+            const pool = free.length ? free : chains;
+            const chain = pool[0].end
+                ? pool.reduce((best, c) => (c.end && dist2(c.end, item.centre) < dist2(best.end, item.centre) ? c : best))
+                : pool[0];
+            chain.features.push(item.feature);
+            chain.end = item.centre;
+            free.splice(free.indexOf(chain), 1);
+        }
+    }
+    return chains.filter(c => c.features.length);
+}
+
+function dist2(a, b) {
+    return (a[0] - b[0]) ** 2 + ((a[1] - b[1]) * Math.cos(a[0] * Math.PI / 180)) ** 2;
+}
+
+/** Screen bearing (degrees clockwise from east) from a to b, for the arrowhead.
+ *  Web Mercator is conformal, so scaling longitude by cos(lat) is enough. */
+function bearingDeg(a, b) {
+    const k = Math.cos(((a[0] + b[0]) / 2) * Math.PI / 180);
+    return Math.atan2(-(b[0] - a[0]), (b[1] - a[1]) * k) * 180 / Math.PI;
+}
 
 /** Area-weighted-ish centroid: mean of the outer ring vertices. Good enough
  *  for a trail; the exact polygon centroid is not worth the arithmetic here. */
