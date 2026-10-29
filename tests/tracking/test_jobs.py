@@ -42,6 +42,11 @@ class TestCacheKey:
         other = dict(CFG, **{field: CFG[field] + 1})
         assert cache_key("RMA1", T0, T1, CFG) != cache_key("RMA1", T0, T1, other)
 
+    def test_differs_by_forecast_growth_switch(self):
+        """Growth on and off give different forecasts: two cache entries."""
+        on, off = dict(CFG, apply_scale=True), dict(CFG, apply_scale=False)
+        assert cache_key("RMA1", T0, T1, on) != cache_key("RMA1", T0, T1, off)
+
 
 class TestJobStore:
     def test_create_assigns_an_id(self):

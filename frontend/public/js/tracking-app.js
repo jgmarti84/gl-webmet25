@@ -41,7 +41,15 @@ const state = {
     liveHours: null,       // number while a live window is active, else null
     liveTimer: null,
     loading: false,
+    runConfig: null,       // parameters of the loaded run; live refreshes reuse them
 };
+
+// Tracking parameters (sidecar TrackingConfig). Defaults = gl-tracker's,
+// calibrated on RMA1.
+const PARAMS_KEY = 'webmet25_tracking_params';
+const PARAM_DEFAULTS = { cappi_height_m: 2500, dbz_threshold: 35, min_area_km2: 50, apply_scale: true };
+const PARAM_INPUTS = { cappi_height_m: 'param-cappi', dbz_threshold: 'param-dbz', min_area_km2: 'param-area' };
+const PARAM_SWITCHES = { apply_scale: 'param-scale' };
 
 // ---------------------------------------------------------------- bootstrap
 
@@ -71,8 +79,14 @@ async function init() {
     el('toggle-forecasts').addEventListener('change', e => state.layer.setShowForecasts(e.target.checked));
     el('toggle-trails').addEventListener('change', e => state.layer.setShowTrails(e.target.checked));
     el('toggle-colmax').addEventListener('change', rerenderCurrentFrame);
+    for (const id of [...Object.values(PARAM_INPUTS), ...Object.values(PARAM_SWITCHES)]) {
+        el(id).addEventListener('input', onParamsChange);
+        el(id).addEventListener('change', onParamsChange);
+    }
+    el('btn-params-reset').addEventListener('click', () => { writeParams(PARAM_DEFAULTS); onParamsChange(); });
     document.addEventListener('keydown', onKey);
 
+    writeParams(restoreParams());
     onWindowChange();
     await loadRadars();
 }
@@ -183,11 +197,65 @@ function onWindowChange() {
     stopLive();
 }
 
+// ------------------------------------------------------------- parameters
+
+/** Saved parameters, each clamped to its input's current min/max; defaults
+ *  for anything missing or unreadable. */
+function restoreParams() {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(PARAMS_KEY)) || {}; } catch { /* defaults */ }
+    const params = { ...PARAM_DEFAULTS };
+    for (const [key, id] of Object.entries(PARAM_INPUTS)) {
+        const v = Number(saved[key]);
+        if (saved[key] != null && Number.isFinite(v)) {
+            params[key] = Math.min(Math.max(v, Number(el(id).min)), Number(el(id).max));
+        }
+    }
+    for (const key of Object.keys(PARAM_SWITCHES)) {
+        if (typeof saved[key] === 'boolean') params[key] = saved[key];
+    }
+    return params;
+}
+
+function writeParams(params) {
+    for (const [key, id] of Object.entries(PARAM_INPUTS)) el(id).value = params[key];
+    for (const [key, id] of Object.entries(PARAM_SWITCHES)) el(id).checked = !!params[key];
+}
+
+/** The parameters in the panel, or null (and the browser's hint shown) if
+ *  one is empty or out of range. */
+function readParams({ report = true } = {}) {
+    const params = {};
+    for (const [key, id] of Object.entries(PARAM_INPUTS)) {
+        const input = el(id);
+        if (input.value === '' || !input.checkValidity()) {
+            if (report) input.reportValidity();
+            return null;
+        }
+        params[key] = input.valueAsNumber;
+    }
+    for (const [key, id] of Object.entries(PARAM_SWITCHES)) params[key] = el(id).checked;
+    return params;
+}
+
+/** Remember valid parameters, and flag the run button when they differ from
+ *  the loaded run's (they apply on the next run, not to the one on screen). */
+function onParamsChange() {
+    const params = readParams({ report: false });
+    if (params) localStorage.setItem(PARAMS_KEY, JSON.stringify(params));
+    const dirty = !!state.runConfig &&
+        (!params || Object.keys(PARAM_DEFAULTS).some(k => params[k] !== state.runConfig[k]));
+    el('btn-run').classList.toggle('dirty', dirty);
+    el('btn-run').textContent = dirty ? 'Aplicar cambios' : 'Activar seguimiento';
+}
+
 // ------------------------------------------------------------------- run
 
 async function run() {
     const radar = el('radar-select').value;
     const hours = selectedHours();
+    const config = readParams();
+    if (!config) { status('Revisá los parámetros marcados en rojo.', true); return; }
     stopLive();
 
     let start, end;
@@ -212,8 +280,11 @@ async function run() {
     el('animation-controls').classList.add('hidden');
 
     el('btn-run').disabled = true;
+    state.runConfig = config;
     const ok = await loadWindow(radar, start, end, { fit: true, hours });
     el('btn-run').disabled = false;
+    if (!ok) state.runConfig = null;
+    onParamsChange();
 
     if (ok && hours !== null) startLive(hours);
 }
@@ -229,7 +300,7 @@ async function loadWindow(radar, start, end, { fit = false, hours = null } = {})
     try {
         status('Enviando…');
         const result = await TrackingLayer.run(
-            { radar, start, end },
+            { radar, start, end, config: state.runConfig ?? PARAM_DEFAULTS },
             s => {
                 const p = s.progress || {};
                 if (s.status === 'running' && p.volumes_total) {
@@ -477,6 +548,8 @@ const CONFIG_LABELS = {
     overlap: 'Solape mínimo',
     max_gap_tracking_min: 'Hueco máximo (min)',
     forecast_intervals: 'Pronósticos (min)',
+    apply_scale: 'Crecimiento en pronósticos',
+    forecast_scale_max: 'Escala máx. del pronóstico (×)',
     solo_c2: 'Sólo criterio C2',
 };
 
@@ -485,11 +558,12 @@ function renderConfig(cfg) {
     table.innerHTML = '';
     if (!cfg) return;
     for (const [key, label] of Object.entries(CONFIG_LABELS)) {
-        if (cfg[key] === undefined) continue;
+        if (cfg[key] === undefined || cfg[key] === null) continue;
         const row = table.insertRow();
         row.insertCell().textContent = label;
         const cell = row.insertCell();
-        cell.textContent = Array.isArray(cfg[key]) ? cfg[key].join(', ') : String(cfg[key]);
+        const v = cfg[key];
+        cell.textContent = Array.isArray(v) ? v.join(', ') : typeof v === 'boolean' ? (v ? 'sí' : 'no') : String(v);
         cell.style.fontWeight = '600';
     }
 }

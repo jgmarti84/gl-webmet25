@@ -40,6 +40,9 @@ const STYLE_FORECAST   = { color: '#ffd54f', weight: 2, opacity: 1, dashArray: '
 const STYLE_ARROW      = { color: '#ffd54f', weight: 2.5, opacity: 1, fill: false };
 const STYLE_TRACK      = { color: '#4dd0e1', weight: 2.5, opacity: 1, fill: false };
 
+/** Forecast leads (min) drawn as outlines, besides the furthest one. */
+const FORECAST_OUTLINE_LEADS = [18, 36];
+
 export class TrackingLayer {
     /** @param {L.Map} map */
     constructor(map) {
@@ -128,23 +131,39 @@ export class TrackingLayer {
         const frame = this._frames[index];
         if (!frame) return null;
 
+        const systems = [];
         const live = new Map();        // track id -> centroids in this frame (a split shares a name)
         const forecasts = new Map();   // track id -> forecast features
 
         for (const feature of frame.features?.features || []) {
             const props = feature.properties || {};
             if (props.kind === 'system') {
+                systems.push(feature);
                 if (!live.has(props.name)) live.set(props.name, []);
                 live.get(props.name).push(centroidOf(feature.geometry));
-                const style = props.is_convective === true ? STYLE_CONVECTIVE : STYLE_PLAIN;
-                this._halo(feature, style.weight).addTo(this._systems);
-                L.geoJSON(feature, { pane: this._pane, renderer: this._renderer, style })
-                    .bindPopup(() => popupHtml(props))
-                    .addTo(this._systems);
             } else if (props.kind === 'forecast') {
                 if (!forecasts.has(props.name)) forecasts.set(props.name, []);
                 forecasts.get(props.name).push(feature);
             }
+        }
+
+        // Drawing order = stacking order in the shared SVG: forecast areas, then
+        // systems, then trails and forecast arrows. A system under a forecast
+        // area still gets its click (popup); the area gets the hover elsewhere.
+        const chains = this._showForecasts
+            ? [...forecasts].flatMap(([name, features]) => forecastChains(live.get(name) || [], features))
+                .map(chain => ({ origin: chain.origin, leads: leadsOf(chain.features) }))
+                .filter(chain => chain.leads.length)
+            : [];
+        for (const chain of chains) this._drawForecastAreas(chain.leads);
+
+        for (const feature of systems) {
+            const props = feature.properties;
+            const style = props.is_convective === true ? STYLE_CONVECTIVE : STYLE_PLAIN;
+            this._halo(feature, style.weight).addTo(this._systems);
+            L.geoJSON(feature, { pane: this._pane, renderer: this._renderer, style })
+                .bindPopup(() => popupHtml(props))
+                .addTo(this._systems);
         }
 
         // Trails: the path of each storm alive in this frame, up to this frame
@@ -163,43 +182,51 @@ export class TrackingLayer {
             }
         }
 
-        if (this._showForecasts) {
-            for (const [name, features] of forecasts) {
-                for (const chain of forecastChains(live.get(name) || [], features)) {
-                    this._drawForecast(chain.origin, chain.features);
-                }
-            }
-        }
+        for (const chain of chains) this._drawForecastArrow(chain.origin, chain.leads);
 
         this._ensurePatterns();
         return frame;
     }
 
     /**
-     * One storm's forecast: the outline of its furthest lead (dashed), and a
-     * motion arrow from the storm through every lead's centroid, with a dot per
-     * lead and a permanent "+N min" label at the tip. Overlapping outlines for
-     * every lead were unreadable; the arrow says "it goes there, this fast".
+     * One storm's forecast areas: the outlines of a few leads
+     * (FORECAST_OUTLINE_LEADS + the furthest), fainter the further ahead.
+     * Every lead's outline at once was unreadable. Lead times show on hover
+     * only, so a busy frame isn't covered in labels.
      */
-    _drawForecast(origin, features) {
-        const leads = features
-            .map(f => ({ lead: f.properties?.lead_min, centre: centroidOf(f.geometry), feature: f }))
-            .filter(x => x.centre && x.lead != null)
-            .sort((a, b) => a.lead - b.lead);
-        if (!leads.length) return;
+    _drawForecastAreas(leads) {
         const last = leads[leads.length - 1];
+        const outlined = leads.filter(x => x === last || FORECAST_OUTLINE_LEADS.includes(x.lead));
+        // Furthest first: nearer outlines end up on top and win the hover.
+        for (let i = outlined.length - 1; i >= 0; i--) {
+            const x = outlined[i];
+            const fade = outlined.length > 1 ? i / (outlined.length - 1) : 0;  // 0 nearest .. 1 furthest
+            const style = {
+                ...STYLE_FORECAST,
+                opacity: 1 - 0.4 * fade,
+                weight: STYLE_FORECAST.weight - 0.6 * fade,
+                // Transparent fill so the whole area (not just the line) takes the hover.
+                fill: true, fillColor: STYLE_FORECAST.color, fillOpacity: 0,
+            };
+            this._halo(x.feature, style.weight).addTo(this._forecasts);
+            const area = L.geoJSON(x.feature, { pane: this._pane, renderer: this._renderer, style })
+                .bindTooltip(`Pronóstico +${x.lead} min`, { sticky: true });
+            area.on('mouseover', () => area.setStyle({ fillOpacity: 0.15 }))
+                .on('mouseout', () => area.setStyle({ fillOpacity: 0 }))
+                .addTo(this._forecasts);
+        }
+    }
 
-        this._halo(last.feature, STYLE_FORECAST.weight).addTo(this._forecasts);
-        L.geoJSON(last.feature, { pane: this._pane, renderer: this._renderer, style: STYLE_FORECAST })
-            .bindTooltip(`Pronóstico +${last.lead} min`, { sticky: true })
-            .addTo(this._forecasts);
-
+    /** The motion arrow: from the storm through every lead's centroid, a dot
+     *  per lead (hover: lead time) and an arrowhead at the furthest. */
+    _drawForecastArrow(origin, leads) {
+        const last = leads[leads.length - 1];
         const path = (origin ? [origin] : []).concat(leads.map(x => x.centre));
         if (path.length >= 2) this._line(path, STYLE_ARROW, this._forecasts);
         for (const x of leads.slice(0, -1)) {
             L.circleMarker(x.centre, { pane: this._pane, renderer: this._renderer, radius: 3,
                 color: '#000', weight: 1, opacity: 0.6, fillColor: STYLE_ARROW.color, fillOpacity: 1 })
-                .bindTooltip(`+${x.lead} min`)
+                .bindTooltip(`Pronóstico +${x.lead} min`)
                 .addTo(this._forecasts);
         }
         const from = path.length >= 2 ? path[path.length - 2] : null;
@@ -208,8 +235,7 @@ export class TrackingLayer {
             interactive: false,
             icon: L.divIcon({
                 className: 'trk-arrow-tip',
-                html: `<span class="trk-arrowhead" style="transform:rotate(${from ? bearingDeg(from, last.centre) : 90}deg)"></span>`
-                    + `<span class="trk-lead-label">+${last.lead} min</span>`,
+                html: `<span class="trk-arrowhead" style="transform:rotate(${from ? bearingDeg(from, last.centre) : 90}deg)"></span>`,
                 iconSize: [0, 0],
             }),
         }).addTo(this._forecasts);
@@ -399,6 +425,14 @@ function forecastChains(origins, features) {
         }
     }
     return chains.filter(c => c.features.length);
+}
+
+/** Forecast features -> [{lead, centre, feature}] sorted by lead, unusable ones dropped. */
+function leadsOf(features) {
+    return features
+        .map(f => ({ lead: f.properties?.lead_min, centre: centroidOf(f.geometry), feature: f }))
+        .filter(x => x.centre && x.lead != null)
+        .sort((a, b) => a.lead - b.lead);
 }
 
 function dist2(a, b) {

@@ -40,7 +40,8 @@ def build_config(tracking_config: TrackingConfig):
 
     The mapping is **not** uniform, and getting it wrong fails silently:
 
-    * ``dbz_threshold`` and ``min_area_km2`` are top-level ``Config`` fields.
+    * ``dbz_threshold``, ``min_area_km2`` and ``apply_scale`` are top-level
+      ``Config`` fields.
     * ``cappi_height_m`` belongs to ``ConvectiveFilterConfig`` and therefore
       goes through ``filter_overrides``.
 
@@ -54,6 +55,7 @@ def build_config(tracking_config: TrackingConfig):
     cfg = gl_config.Config()
     cfg.dbz_threshold = float(tracking_config.dbz_threshold)
     cfg.min_area_km2 = float(tracking_config.min_area_km2)
+    cfg.apply_scale = bool(tracking_config.apply_scale)
     cfg.filter_overrides = {"cappi_height_m": float(tracking_config.cappi_height_m)}
     return cfg
 
@@ -74,6 +76,9 @@ def config_summary(cfg) -> Dict[str, object]:
         "overlap": cfg.overlap,
         "max_gap_tracking_min": cfg.max_gap_tracking_min,
         "forecast_intervals": list(cfg.forecast_intervals),
+        "apply_scale": cfg.apply_scale,
+        # Present once gl-tracker bounds forecast growth; absent on older pins.
+        "forecast_scale_max": getattr(cfg, "forecast_scale_max", None),
         "solo_c2": cfg.solo_c2,
         "echotop_min_above_h0_m": filtro.echotop_min_above_h0_m,
         "rhohv_qc_min": filtro.rhohv_qc_min,
