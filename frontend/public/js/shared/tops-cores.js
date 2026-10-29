@@ -24,7 +24,8 @@ import {
     selectWantedRecords,
 } from './tops-cores-match.js';
 
-const API_BASE = '/api/v1';
+// Relative on purpose: <base href> keeps it inside the base path (see js/shared/base-path.js).
+const API_BASE = 'api/v1';
 
 // Margin around the first/last displayed COG time in the metadata query (ms).
 // Records are matched to COGs by exact observation_time; this only guards

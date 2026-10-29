@@ -2,13 +2,14 @@
 <html lang="es-AR">
 <head>
     <meta charset="UTF-8">
+    <base href="/">
     <!-- viewport-fit=cover lets the page use the whole screen of phones with a notch; css/login.css keeps the
          content out of the notch with env(safe-area-inset-*). -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="referrer" content="no-referrer">
     <title>WebMet25 — Crear cuenta</title>
-    <link rel="icon" type="image/png" href="/assets/images/logos/OHMC@3x.png">
-    <link rel="stylesheet" href="/css/login.css">
+    <link rel="icon" type="image/png" href="assets/images/logos/OHMC@3x.png">
+    <link rel="stylesheet" href="css/login.css">
 </head>
 <!-- login-page--radar turns on the radar look (see css/login.css), the same as the login page. -->
 <body class="login-page login-page--radar">
@@ -19,7 +20,7 @@
                  many cells of rain the generated field has. -->
             <canvas class="login-radar" id="login-radar" data-cx="0.76" data-cy="0.52" data-radius="0.5" data-rpm="3" data-cells="110" aria-hidden="true"></canvas>
 
-            <img class="login-hero-logo" src="/assets/images/logos/OHMC@3x.png" alt="Observatorio Hidro-Meteorológico de la Provincia de Córdoba">
+            <img class="login-hero-logo" src="assets/images/logos/OHMC@3x.png" alt="Observatorio Hidro-Meteorológico de la Provincia de Córdoba">
 
             <div class="login-hero-body">
                 <p class="login-hero-title">Sistema de visualización de la Red de Radares Meteorológicos de Argentina</p>
@@ -121,7 +122,7 @@
                         <button id="register-resend" class="login-secondary" type="button">Reenviar mail</button>
                     </div>
 
-                    <p class="login-switch">¿Ya tenés cuenta? <a href="/login">Iniciar sesión</a></p>
+                    <p class="login-switch">¿Ya tenés cuenta? <a href="login">Iniciar sesión</a></p>
                 </div>
             </div>
 
@@ -131,10 +132,10 @@
             </footer>
         </main>
     </div>
-    <script type="module" src="/js/login-ui.js"></script>
-    <script type="module" src="/js/register.js"></script>
-    <script type="module" src="/js/login-clock.js"></script>
+    <script type="module" src="js/login-ui.js"></script>
+    <script type="module" src="js/register.js"></script>
+    <script type="module" src="js/login-clock.js"></script>
     <!-- Plain script that draws the radar on the canvas of the hero. Absolute path, like the other assets. -->
-    <script src="/js/login-radar.js"></script>
+    <script src="js/login-radar.js"></script>
 </body>
 </html>

@@ -64,4 +64,5 @@ def test_radar_list_ordered_per_rule(page: Page):
 def test_admin_link_present_in_settings(page: Page):
     """The main map links to /admin from the settings panel."""
     page.goto(f"{FRONTEND_URL}/", wait_until="networkidle")
-    assert page.get_attribute("#admin-link", "href") == "/admin"
+    # The attribute is relative ("admin", spec base-path); what matters is where it leads once resolved.
+    assert page.eval_on_selector("#admin-link", "a => new URL(a.href).pathname") == "/admin"

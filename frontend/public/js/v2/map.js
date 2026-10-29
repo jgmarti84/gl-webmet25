@@ -247,7 +247,7 @@ export class MapManager {
      * @returns {string}
      */
     _buildFrameUrl(cogId, productKey, params = {}) {
-        const base = `/api/v1/frames/${cogId}/image.png`;
+        const base = `api/v1/frames/${cogId}/image.png`;
         const qs   = new URLSearchParams();
         if (params.colormap)                            qs.set('colormap', params.colormap);
         if (params.vmin !== undefined && params.vmin !== null) qs.set('vmin', params.vmin);

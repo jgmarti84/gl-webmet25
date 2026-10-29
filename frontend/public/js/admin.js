@@ -382,7 +382,9 @@ function setActiveSidebar(section) {
  */
 function navigateTo(section) {
     const target = SECTIONS.includes(section) ? section : 'dashboard';
-    history.replaceState(null, '', `#${target}`);
+    // Full path, not just "#section": a relative URL resolves against <base href>, which would move the address
+    // bar to the map ("/#users") even though the page stays.
+    history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${target}`);
     renderSection();
 }
 
@@ -398,7 +400,8 @@ function goBackToMap() {
     if (cameFromMain && window.history.length > 1) {
         history.back();
     } else {
-        window.location.href = '/';
+        // "./" is the map inside the base path (<base href>), not the root of the host.
+        window.location.href = './';
     }
 }
 
@@ -1408,7 +1411,7 @@ async function renderTopsCores() {
         featuresLink.className = 'btn-secondary';
         featuresLink.target = '_blank';
         featuresLink.rel = 'noopener noreferrer';
-        featuresLink.href = `/api/v1/tops-cores/${itemId}/features`;
+        featuresLink.href = `api/v1/tops-cores/${itemId}/features`;
         featuresLink.textContent = 'Ver elementos';
         actionsCell.appendChild(featuresLink);
 
@@ -1527,7 +1530,7 @@ function stopsToHexStops(stops) {
 /** Fetch the rendered hex color list for a colormap from the public endpoint. */
 async function fetchColormapColors(name, steps = 64) {
     try {
-        const res = await fetch(`/api/v1/colormap/colors/${encodeURIComponent(name)}?steps=${steps}`);
+        const res = await fetch(`api/v1/colormap/colors/${encodeURIComponent(name)}?steps=${steps}`);
         if (!res.ok) return [];
         const data = await res.json();
         return Array.isArray(data.colors) ? data.colors : [];
@@ -2133,7 +2136,7 @@ async function renderSection() {
 
 async function logout() {
     await authApi.logout();
-    window.location.assign('/login');
+    window.location.assign('login');
 }
 
 function renderNoPermission() {
@@ -2210,7 +2213,8 @@ async function init() {
     // Manual hash edits / external hash changes still re-render.
     window.addEventListener('hashchange', renderSection);
 
-    history.replaceState(null, '', `#${parseHashSection()}`);
+    // Full path for the same reason as navigateTo: "#section" alone would resolve against <base href>.
+    history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${parseHashSection()}`);
     renderSection();
     showBootstrapWarningIfNeeded();
 }
