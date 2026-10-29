@@ -460,7 +460,22 @@ Respaldado por `ColormapService` — un singleton thread-safe con caché de TTL 
 **Router:** [`api/app/routers/admin.py`](../api/app/routers/admin.py) — ruta base `/api/v1/admin`  
 **Frontend:** [`frontend/public/admin.html`](../frontend/public/admin.html) + [`js/admin.js`](../frontend/public/js/admin.js), servido en `/admin`
 
-**Autenticación:** todos los endpoints de `/api/v1/*` salvo `/auth/login`, `/auth/refresh`, `/auth/logout` y los de registro y recupero de §4.10 requieren sesión (rol `admin` o `viewer`); `/api/v1/admin/*` y `/api/v1/admin/users/*` requieren `admin`. Las sesiones usan una cookie JWT de acceso de 30 minutos y una cookie de refresh rotativa (48 h sin actividad, 7 días como máximo), ambas `HttpOnly` y `SameSite=Strict`, validadas por la API ([`api/app/auth/dependencies.py`](../api/app/auth/dependencies.py)). nginx consulta `GET /api/v1/auth/check` (204/401/403) antes de servir las páginas HTML, el panel de administración y los proxies de tiles; sin sesión sirve `/login` en lugar de la página pedida. Los archivos estáticos (`.js`, `.css`, imágenes), `/login`, `/register`, `/verify`, `/forgot`, `/reset` y `/health` siguen siendo públicos. Se entra con el usuario o con el mail; una cuenta cuyo mail nunca se verificó no puede entrar (ver §4.10). Los pedidos que modifican datos además comparan el header `Origin` con `ALLOWED_ORIGINS`.
+**Autenticación:** todos los endpoints de `/api/v1/*` salvo `/auth/login`, `/auth/refresh`, `/auth/logout` y los de registro y recupero de §4.10 requieren sesión (rol `admin` o `viewer`); `/api/v1/admin/*` y `/api/v1/admin/users/*` requieren `admin`. Las sesiones usan una cookie JWT de acceso de 30 minutos y una cookie de refresh rotativa (48 h sin actividad, 7 días como máximo), ambas `HttpOnly` y `SameSite=Strict`, validadas por la API ([`api/app/auth/dependencies.py`](../api/app/auth/dependencies.py)). nginx consulta `GET /api/v1/auth/check` (204/401/403) antes de servir las páginas HTML y el panel de administración; sin sesión sirve `/login` en lugar de la página pedida. Los proxies de tiles (`/osm-tiles/`, `/ign-tiles/`) consultan en cambio `GET /api/v1/auth/check-token` (204/401), más liviano: solo verifica la firma del token de acceso y no lee el usuario, así que mover el mapa no usa conexiones a la base; un usuario desactivado sigue recibiendo esas tiles públicas hasta que vence su token (30 minutos como máximo). Los archivos estáticos (`.js`, `.css`, imágenes), `/login`, `/register`, `/verify`, `/forgot`, `/reset` y `/health` siguen siendo públicos. Se entra con el usuario o con el mail; una cuenta cuyo mail nunca se verificó no puede entrar (ver §4.10). Los pedidos que modifican datos además comparan el header `Origin` con `ALLOWED_ORIGINS`.
+
+**Base path:** un proxy puede servir el sitio bajo un prefijo (`/nacho/`): saca el prefijo y manda
+`X-Forwarded-Prefix: /nacho`. nginx acepta solo un segmento simple (`map` con `^/[A-Za-z0-9_-]+$`; cualquier otra cosa
+cuenta como "en la raíz"), lo escribe en el `<base href>` de cada página (`sub_filter`), lo usa en su única redirección
+(`@to_map`) y le pasa a la API el valor validado (nunca el header crudo), que la API vuelve a validar
+(`request_base_path` en [`api/app/auth/cookies.py`](../api/app/auth/cookies.py)). Dos copias del sitio en un mismo
+hostname comparten las cookies del navegador, así que el prefijo va en los nombres de cookie y en el path del refresh:
+
+| | En la raíz | Bajo `/nacho` |
+|---|---|---|
+| Cookie de acceso (HTTPS) | `__Host-webmet_access`, `Path=/` | `__Host-nacho_webmet_access`, `Path=/` |
+| Cookie de refresh (HTTPS) | `__Secure-webmet_refresh`, `Path=/api/v1/auth` | `__Secure-nacho_webmet_refresh`, `Path=/nacho/api/v1/auth` |
+
+(En HTTP local los nombres no llevan `__Host-`/`__Secure-`.) Las rutas de nginx y de la API no cambian: detrás del
+proxy siguen recibiendo `/api/v1/...`.
 
 **Grupos de endpoints:**
 

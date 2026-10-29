@@ -480,6 +480,25 @@ Pipeline de composición en canvas:
 
 **Scripts cargados:** `js/admin.js` (que importa `js/admin-api.js`). Con estilo de `css/admin.css` (tema moderno claro).
 
+### Base path: toda página tiene que andar bajo un prefijo
+
+La misma imagen se puede servir en la raíz (`https://host/`) o bajo un prefijo que un proxy saca
+(`https://host/nacho/`, ver `docs/OPERATIONS.es.md` §8). nginx escribe el prefijo en el `<base href>` de cada página,
+así que **el frontend nunca escribe URLs que empiecen con `/`**:
+
+- Las URLs de la app en HTML, JS y CSS son relativas: `api/v1/...`, `css/...`, `js/...`, `assets/...`, `login`, `./`
+  (el mapa). `<base href>` las resuelve dentro del prefijo; en la raíz el resultado es el mismo de antes.
+- Toda página nueva lleva `<base href="/">` justo después de `<meta charset>` (nginx reemplaza exactamente ese texto).
+- Para comparar o armar rutas completas del navegador, usar `basePath()` y `appPath()` de `js/shared/base-path.js`
+  (por ejemplo, `login.js` compara `appPath(location.pathname) === '/login'`).
+- `history.pushState/replaceState` con un `#` llevan siempre la ruta completa
+  (`` `${location.pathname}${location.search}#x` ``): un `#x` solo también se resuelve contra `<base>` y lleva la
+  barra de direcciones al mapa.
+- Las URLs externas (CDN de Leaflet, OSM) y los `import` de módulos ES (relativos al archivo que importa) no cambian.
+
+`tests/e2e/test_base_path.py` recorre todas las páginas a través de un proxy que agrega `/pfx/` y falla si el navegador
+pide algo fuera de ese prefijo: una URL absoluta nueva en cualquier lado rompe ese test.
+
 ---
 
 ## Panel de administración

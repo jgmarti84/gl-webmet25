@@ -497,6 +497,25 @@ settings), and animation controls (bottom-center).
 
 **Loaded Scripts:** `js/admin.js` (which imports `js/admin-api.js`). Styled by `css/admin.css` (modern-light theme).
 
+### Base path — every page must work under a prefix
+
+The same image can be served at the root (`https://host/`) or under a prefix that a proxy strips
+(`https://host/nacho/`, see `docs/OPERATIONS.md` §10). nginx writes the prefix into each page's `<base href>`, so
+**the frontend never writes URLs that start with `/`**:
+
+- HTML, JS and CSS URLs of the app are relative: `api/v1/...`, `css/...`, `js/...`, `assets/...`, `login`, `./`
+  (the map). `<base href>` resolves them inside the prefix; at the root the result is the same as before.
+- Every new page carries `<base href="/">` right after `<meta charset>` (nginx replaces exactly that text).
+- To compare or build full browser paths use `basePath()` and `appPath()` from `js/shared/base-path.js`
+  (for example `login.js` checks `appPath(location.pathname) === '/login'`).
+- `history.pushState/replaceState` with a `#` always get the full path
+  (`` `${location.pathname}${location.search}#x` ``): a bare `#x` also resolves against `<base>` and moves the
+  address bar to the map.
+- External URLs (Leaflet CDN, OSM) and ES module imports (relative to the importing file) are not affected.
+
+`tests/e2e/test_base_path.py` browses every page through a proxy that adds `/pfx/` and fails if the browser asks
+for anything outside it, so a new absolute URL anywhere breaks that test.
+
 ---
 
 ## Admin Panel
