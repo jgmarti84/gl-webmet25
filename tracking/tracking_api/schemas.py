@@ -42,7 +42,8 @@ class TrackingConfig(BaseModel):
     correctness and a security problem.
 
     Mapping into ``Config`` is **not** uniform — see `build_config`:
-      * ``dbz_threshold`` / ``min_area_km2`` are top-level ``Config`` fields
+      * ``dbz_threshold`` / ``min_area_km2`` / ``apply_scale`` are top-level
+        ``Config`` fields
       * ``cappi_height_m`` belongs in ``Config.filter_overrides``
     """
 
@@ -57,6 +58,11 @@ class TrackingConfig(BaseModel):
     min_area_km2: float = Field(
         50.0, ge=1.0, le=10000.0,
         description="Minimum area for a detected system to be kept.",
+    )
+    apply_scale: bool = Field(
+        True,
+        description="Grow or shrink forecast polygons with the system's area trend. "
+                    "False = forecasts keep the current size and only move.",
     )
 
 

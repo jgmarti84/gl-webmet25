@@ -56,6 +56,33 @@
                 </div>
             </div>
 
+            <!-- Sent with every run (and its live refreshes); remembered in
+                 localStorage. Ranges match the sidecar's TrackingConfig. -->
+            <details id="params-box" open>
+                <summary>Parámetros del seguimiento</summary>
+                <div class="params-grid">
+                    <label for="param-cappi">CAPPI (m sobre la antena)</label>
+                    <input type="number" id="param-cappi" min="500" max="15000" step="100" value="2500">
+                    <label for="param-dbz">Umbral de detección (dBZ)</label>
+                    <input type="number" id="param-dbz" min="0" max="75" step="0.5" value="35">
+                    <label for="param-area">Área mínima (km²)</label>
+                    <input type="number" id="param-area" min="1" max="10000" step="1" value="50">
+                </div>
+                <div class="control-group toggle-row" title="Apagado: el pronóstico conserva el tamaño actual del sistema y sólo se desplaza">
+                    <label class="toggle-switch-wrapper" for="param-scale">
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="param-scale" checked>
+                            <span class="toggle-slider"></span>
+                        </span>
+                        <span class="toggle-label">Crecimiento en pronósticos</span>
+                    </label>
+                </div>
+                <div class="params-footer">
+                    <span class="hint">CAPPI: se usa el nivel más cercano de la grilla.</span>
+                    <button id="btn-params-reset" type="button" class="link-btn" title="Volver a los valores por defecto">Restablecer</button>
+                </div>
+            </details>
+
             <div class="control-group toggle-row">
                 <label class="toggle-switch-wrapper" for="toggle-colmax">
                     <span class="toggle-switch">
@@ -140,8 +167,9 @@
     <div id="tracking-legend">
         <div><span class="swatch conv"></span> Sistema convectivo</div>
         <div><span class="swatch plain"></span> Detectado, no convectivo</div>
-        <div><span class="swatch fcst"><span class="fcst-dot"></span></span> Pronóstico: desplazamiento previsto (+min)</div>
-        <div><span class="swatch fcst-area"></span> Área pronosticada (último horizonte)</div>
+        <div><span class="swatch fcst"><span class="fcst-dot"></span></span> Pronóstico: desplazamiento previsto</div>
+        <div><span class="swatch fcst-area"></span> Área pronosticada (+18, +36 min y último)</div>
+        <div class="legend-note">Pasá el mouse sobre un área o punto para ver el horizonte.</div>
         <div><span class="swatch trail"></span> Trayectoria recorrida</div>
     </div>
 
