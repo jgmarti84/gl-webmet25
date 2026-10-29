@@ -31,9 +31,10 @@ from .schemas import HealthResponse
 from .services.tile_service import _tile_render_executor
 from .services.redis_client import get_redis, close_redis
 
-# Setup logging
+# Setup logging. LOG_LEVEL=DEBUG shows per-tile/frame lines (default INFO).
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 

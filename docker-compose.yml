@@ -134,6 +134,8 @@ services:
       # keep UVICORN_WORKERS x (10 + DB_MAX_OVERFLOW) under about 90. With 4 workers and 12: 88.
       # Past that sum Postgres refuses new connections and those requests fail; under it they wait in the pool.
       DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-12}
+      # INFO (default) logs one access line per tile; DEBUG adds the per-tile/frame details
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       COG_BASE_PATH: /product_output
       TOPS_AND_CORES_DIR: /tops_and_cores
       CORS_ORIGINS: ${CORS_ORIGINS:-}
