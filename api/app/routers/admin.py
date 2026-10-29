@@ -11,6 +11,7 @@ from sqlalchemy import func
 
 from radar_db import (
     COGStatus,
+    NCCube,
     Radar,
     RadarCOG,
     RadarProduct,
@@ -32,6 +33,8 @@ from ..schemas.admin import (
     AdminEstrategiaCreate,
     AdminEstrategiaResponse,
     AdminEstrategiaUpdate,
+    AdminNCCubeListResponse,
+    AdminNCCubeResponse,
     AdminProductColormapOptionCreate,
     AdminProductColormapOptionResponse,
     AdminRadarCreate,
@@ -139,6 +142,27 @@ def _tops_cores_response(record: TopsAndCores) -> AdminTopsAndCoresResponse:
         feature_count=record.feature_count,
         core_count=record.core_count,
         top_count=record.top_count,
+        status=(
+            record.status.value
+            if hasattr(record.status, "value")
+            else str(record.status)
+        ),
+        strategy=record.strategy,
+        vol_nr=record.vol_nr,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
+
+
+def _nccube_response(record: NCCube) -> AdminNCCubeResponse:
+    return AdminNCCubeResponse(
+        id=record.id,
+        radar_code=record.radar_code,
+        observation_time=record.observation_time,
+        file_path=record.file_path,
+        file_name=record.file_name,
+        file_size_bytes=record.file_size_bytes,
+        file_mtime=record.file_mtime,
         status=(
             record.status.value
             if hasattr(record.status, "value")
@@ -790,6 +814,61 @@ def admin_bulk_delete_tops_cores(
     deleted_count = query.delete(synchronize_session=False)
     db.commit()
     return AdminBulkDeleteResponse(deleted_count=deleted_count)
+
+
+# ── NC cubes ──────────────────────────────────────────────────────────────────
+# Read only on purpose. The indexer creates a row per *_NCCUBE.nc file and
+# deletes it when the file goes; deleting a row here would not touch the file
+# (the indexer would add it back) but would hide that volume from tracking.
+
+
+@router.get("/nccubes", response_model=AdminNCCubeListResponse)
+def admin_list_nccubes(
+    radar_code: Optional[str] = None,
+    strategy: Optional[str] = None,
+    vol_nr: Optional[str] = None,
+    start_time: Optional[datetime] = Query(default=None),
+    end_time: Optional[datetime] = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> AdminNCCubeListResponse:
+    """List NC cube records with filters and pagination, newest first."""
+    query = db.query(NCCube)
+    if radar_code:
+        query = query.filter(NCCube.radar_code == radar_code)
+    if strategy:
+        query = query.filter(NCCube.strategy == strategy)
+    if vol_nr:
+        query = query.filter(NCCube.vol_nr == vol_nr)
+    if start_time:
+        query = query.filter(NCCube.observation_time >= start_time)
+    if end_time:
+        query = query.filter(NCCube.observation_time <= end_time)
+    total = query.count()
+    items = (
+        query.order_by(NCCube.observation_time.desc(), NCCube.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return AdminNCCubeListResponse(
+        page=page,
+        page_size=page_size,
+        total=total,
+        items=[_nccube_response(item) for item in items],
+    )
+
+
+@router.get("/nccubes/{record_id}", response_model=AdminNCCubeResponse)
+def admin_get_nccube(
+    record_id: int, db: Session = Depends(get_db)
+) -> AdminNCCubeResponse:
+    """Get a single NC cube record."""
+    record = db.query(NCCube).filter(NCCube.id == record_id).first()
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"NCCube '{record_id}' not found")
+    return _nccube_response(record)
 
 
 # ── Colormap stops ────────────────────────────────────────────────────────────

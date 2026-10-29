@@ -34,6 +34,7 @@ ADMIN_LIST_PATHS: List[str] = [
     "/colormap-options",
     "/colormap-stops",
     "/estrategias",
+    "/nccubes",
     "/products",
     "/radars",
     "/references",

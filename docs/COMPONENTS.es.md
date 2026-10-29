@@ -519,7 +519,7 @@ Pipeline de composición en canvas:
 
 **Archivo:** [`frontend/public/js/admin-api.js`](../../frontend/public/js/admin-api.js)
 
-**Responsabilidad:** Cliente liviano para `/api/v1/admin/*` (base `ADMIN_API_BASE`). Expone CRUD por recurso (radars, products, references, cogs, estrategias, volumenes, tops-cores), stops/resúmenes de colormap, `createColormapFromHex`, opciones de colormap y `getDashboardCounts()`. Muestra los errores 401 como mensaje de sesión expirada; desenvuelve los errores `{detail}`.
+**Responsabilidad:** Cliente liviano para `/api/v1/admin/*` (base `ADMIN_API_BASE`). Expone CRUD por recurso (radars, products, references, cogs, estrategias, volumenes, tops-cores; nccubes sólo lectura), stops/resúmenes de colormap, `createColormapFromHex`, opciones de colormap y `getDashboardCounts()`. Muestra los errores 401 como mensaje de sesión expirada; desenvuelve los errores `{detail}`.
 
 ### C. **admin.css** — Estilos del panel de administración
 

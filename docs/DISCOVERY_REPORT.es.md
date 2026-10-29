@@ -384,6 +384,7 @@ Consultar [`docs/OPERATIONS.md`](OPERATIONS.md) para más información.
 | `/admin/estrategias` | GET, GET/{code}, POST, PUT/{code}, DELETE/{code} |
 | `/admin/volumenes` | GET, GET/{id}, POST, PUT/{id}, DELETE/{id} |
 | `/admin/tops-cores` | GET (paginado), GET/{id}, PATCH/{id} (estado), DELETE/{id}, DELETE masivo |
+| `/admin/nccubes` | GET (paginado+filtrado), GET/{id}. Sólo lectura: las filas las maneja el indexador |
 | `/admin/colormap-stops` | GET resúmenes, GET/{name}, POST (una fila), DELETE/{name} (→ 403 si es del sistema) |
 | `/admin/colormap-from-hex` | POST (crear desde array de stops + product_keys) → 409 si ya existe el nombre |
 | `/admin/colormap-options` | GET (`?product_key`), POST, DELETE/{id} |

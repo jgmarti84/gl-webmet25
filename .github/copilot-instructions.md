@@ -269,6 +269,7 @@ A standalone admin SPA for CRUD over the database, served at `/admin` and backed
 | Estrategias | `GET /estrategias`, `GET/POST/PUT/DELETE /estrategias[/{code}]` |
 | Volumenes | `GET /volumenes`, `GET/POST/PUT/DELETE /volumenes[/{id}]` |
 | Tops & Cores | `GET /tops-cores` (paginated), `GET /tops-cores/{id}`, `PATCH /tops-cores/{id}` (status), `DELETE /tops-cores/{id}`, `DELETE /tops-cores?...` (bulk) |
+| NC cubes | `GET /nccubes` (paginated; filters `radar_code`, `strategy`, `vol_nr`, `start_time`, `end_time`), `GET /nccubes/{id}`. Read only: the indexer owns these rows |
 | Colormap stops | `GET /colormap-stops` (summaries: name, stop_count, is_system), `GET /colormap-stops/{cmap_name}`, `POST /colormap-stops` (single row), `DELETE /colormap-stops/{cmap_name}` (non-system only → 403) |
 | Colormap (hex) | `POST /colormap-from-hex` — create from `{cmap_name, stops:[{position,color}], product_keys[]}`; **409 if name exists** (no upsert) |
 | Colormap options | `GET /colormap-options[?product_key=]`, `POST /colormap-options`, `DELETE /colormap-options/{id}` |
@@ -276,7 +277,7 @@ A standalone admin SPA for CRUD over the database, served at `/admin` and backed
 > There is **no colormap update endpoint**. The frontend edits a colormap by **delete-then-recreate** (`DELETE /colormap-stops/{name}` → `POST /colormap-from-hex`) and reconciles product options afterward.
 
 ### Admin frontend ([`frontend/public/admin.html`](../frontend/public/admin.html), [`js/admin.js`](../frontend/public/js/admin.js), [`js/admin-api.js`](../frontend/public/js/admin-api.js), [`css/admin.css`](../frontend/public/css/admin.css))
-- Hash-routed SPA (sections: `dashboard`, `radars`, `products`, `references`, `cogs`, `tops-cores`, `estrategias`, `volumenes`, `colormaps`, `colormap-options`). Section nav uses `history.replaceState` so browsing the admin never pushes browser history.
+- Hash-routed SPA (sections: `dashboard`, `radars`, `products`, `references`, `cogs`, `tops-cores`, `nccubes`, `estrategias`, `volumenes`, `colormaps`, `colormap-options`). Section nav uses `history.replaceState` so browsing the admin never pushes browser history.
 - **Modern-light theme** (`admin.css`), distinct from the dark main app. OHMC logo in the sidebar.
 - **Entry / return:** the main map links to `/admin` from the **Settings panel** (`#admin-link`), setting a per-tab `sessionStorage` flag `webmet25_admin_from_main`. The admin's **← Volver al mapa** button calls `history.back()` when that flag is set (browser bfcache restores the map exactly as left — selections, frame, zoom), else navigates to `/`.
 - **Filtering/sorting (Django-admin style):** every client-loaded table gets a config-driven filter bar (`FILTER_CONFIG`) = global search + per-column facets (`text` substring / `select` / `boolean`) + live result count, applied as pure DOM row show/hide (no refetch, no focus loss). All meaningful columns are sortable headers (▲/▼). COGs/Tops keep server-side filters + a quick page-search.

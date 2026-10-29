@@ -1,7 +1,7 @@
 import { adminApi, EXPIRED_SESSION_MESSAGE } from './admin-api.js';
 import { authApi, redirectToLogin } from './auth-api.js';
 
-const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'colormaps', 'colormap-options', 'users'];
+const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'nccubes', 'colormaps', 'colormap-options', 'users'];
 const STATUS_OPTIONS = ['available', 'missing', 'error', 'pending', 'processing', 'archived'];
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
@@ -46,6 +46,12 @@ const state = {
         page_size: DEFAULT_PAGE_SIZE,
         total: 0,
         selected: new Set(),
+        search: '',
+    },
+    nccubes: {
+        page: 1,
+        page_size: DEFAULT_PAGE_SIZE,
+        total: 0,
         search: '',
     },
     // Per-section client-side filter state: { search, facets: { field: value } }
@@ -362,6 +368,12 @@ function fmtDate(value) {
     return new Date(value).toLocaleString();
 }
 
+function fmtBytes(value) {
+    if (value === null || value === undefined) return '';
+    const mb = Number(value) / (1024 * 1024);
+    return mb >= 1 ? `${mb.toFixed(1)} MB` : `${(Number(value) / 1024).toFixed(0)} KB`;
+}
+
 function parseHashSection() {
     const hash = window.location.hash.replace('#', '').trim();
     if (!hash || !SECTIONS.includes(hash)) {
@@ -531,6 +543,11 @@ async function renderDashboard() {
                 <h3>Tops &amp; Cores</h3>
                 <div class="card-stat"><span class="num">${counts.topsTotal}</span><span class="sub">${counts.topsAvailable} disponibles · ${counts.topsMissing} faltantes</span></div>
                 <a href="#tops-cores" data-section="tops-cores">Abrir sección →</a>
+            </div>
+            <div class="card">
+                <h3>Cubos NetCDF</h3>
+                <div class="card-stat"><span class="num">${counts.nccubesTotal}</span><span class="sub">${counts.nccubesNewest ? `último: ${safeText(fmtDate(counts.nccubesNewest))}` : 'sin cubos indexados'}</span></div>
+                <a href="#nccubes" data-section="nccubes">Abrir sección →</a>
             </div>
         </div>
     `;
@@ -1499,6 +1516,114 @@ async function renderTopsCores() {
     };
 }
 
+// ── NC cubes (read only) ──────────────────────────────────────────────────────
+
+function getNCCubeFilterValues() {
+    return {
+        radar_code: document.getElementById('nccubes-filter-radar')?.value || '',
+        strategy: document.getElementById('nccubes-filter-strategy')?.value || '',
+        vol_nr: document.getElementById('nccubes-filter-vol')?.value || '',
+        start_time: document.getElementById('nccubes-filter-start')?.value || '',
+        end_time: document.getElementById('nccubes-filter-end')?.value || '',
+    };
+}
+
+/**
+ * Read-only on purpose: the indexer creates a row per *_NCCUBE.nc file and
+ * deletes it when retention removes the file. Deleting a row here would not
+ * touch the file, only hide that volume from storm tracking until re-indexed.
+ */
+async function renderNCCubes() {
+    const radars = await adminApi.listRadars();
+    const filters = getNCCubeFilterValues();
+    const response = await adminApi.listNCCubes({
+        ...filters,
+        page: state.nccubes.page,
+        page_size: state.nccubes.page_size,
+    });
+    state.nccubes.total = response.total;
+
+    elements.sectionContent.innerHTML = `
+        <p class="section-note">Volúmenes 3D que usa el seguimiento de tormentas. Sólo lectura: el indexador agrega y quita las filas según los archivos en disco.</p>
+        <div class="filter-bar">
+            <label class="filter-field"><span>Radar</span><select id="nccubes-filter-radar"><option value="">Todos</option></select></label>
+            <label class="filter-field"><span>Estrategia</span><input id="nccubes-filter-strategy" placeholder="strategy" style="width:110px"></label>
+            <label class="filter-field"><span>Vol</span><input id="nccubes-filter-vol" placeholder="vol_nr" style="width:90px"></label>
+            <label class="filter-field"><span>Desde</span><input id="nccubes-filter-start" type="datetime-local"></label>
+            <label class="filter-field"><span>Hasta</span><input id="nccubes-filter-end" type="datetime-local"></label>
+            <button class="btn" id="nccubes-apply-filters">Aplicar</button>
+            <div class="filter-spacer"></div>
+            <div class="filter-field filter-search"><span>Buscar en página</span><input type="search" id="nccubes-search" placeholder="Filtrar filas cargadas…" value="${safeText(state.nccubes.search)}"></div>
+        </div>
+        <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th><th>Radar</th><th>Estrategia</th><th>Vol</th><th>Observación</th>
+                    <th>Tamaño</th><th>Estado</th><th>Archivo</th><th>Modificado</th><th>Indexado</th>
+                </tr>
+            </thead>
+            <tbody id="nccubes-table-body"></tbody>
+        </table>
+        </div>
+        ${renderPagination(response.page, response.page_size, response.total, 'nccubes')}
+    `;
+
+    const radarSelect = document.getElementById('nccubes-filter-radar');
+    radars.forEach((item) => {
+        const option = document.createElement('option');
+        option.value = item.code || '';
+        option.textContent = item.code || '';
+        radarSelect.appendChild(option);
+    });
+    radarSelect.value = filters.radar_code || '';
+    document.getElementById('nccubes-filter-strategy').value = filters.strategy || '';
+    document.getElementById('nccubes-filter-vol').value = filters.vol_nr || '';
+    document.getElementById('nccubes-filter-start').value = filters.start_time || '';
+    document.getElementById('nccubes-filter-end').value = filters.end_time || '';
+
+    const tableBody = document.getElementById('nccubes-table-body');
+    response.items.forEach((item) => {
+        const row = document.createElement('tr');
+        [
+            item.id,
+            item.radar_code,
+            item.strategy,
+            item.vol_nr,
+            fmtDate(item.observation_time),
+            fmtBytes(item.file_size_bytes),
+            item.status,
+            item.file_name,
+            fmtDate(item.file_mtime),
+            fmtDate(item.created_at),
+        ].forEach((value) => {
+            const cell = document.createElement('td');
+            cell.textContent = value === null || value === undefined ? '' : String(value);
+            row.appendChild(cell);
+        });
+        // Full path on hover: it is where the tracking sidecar reads the cube from.
+        row.cells[7].title = item.file_path || '';
+        tableBody.appendChild(row);
+    });
+
+    document.getElementById('nccubes-apply-filters').onclick = () => { state.nccubes.page = 1; renderSection(); };
+
+    const search = document.getElementById('nccubes-search');
+    const applySearch = () => {
+        const term = (state.nccubes.search || '').trim().toLowerCase();
+        [...tableBody.rows].forEach((row) => {
+            row.hidden = term ? !row.textContent.toLowerCase().includes(term) : false;
+        });
+    };
+    search.oninput = () => { state.nccubes.search = search.value; applySearch(); };
+    applySearch();
+    document.getElementById('nccubes-prev').onclick = () => { if (state.nccubes.page > 1) { state.nccubes.page -= 1; renderSection(); } };
+    document.getElementById('nccubes-next').onclick = () => {
+        const maxPage = Math.max(1, Math.ceil(state.nccubes.total / state.nccubes.page_size));
+        if (state.nccubes.page < maxPage) { state.nccubes.page += 1; renderSection(); }
+    };
+}
+
 // ── Colormap creator ──────────────────────────────────────────────────────────
 
 /** Convert three [0,1] channel floats to #RRGGBB. */
@@ -2103,6 +2228,7 @@ async function renderSection() {
         estrategias: 'Estrategias',
         volumenes: 'Volúmenes',
         'tops-cores': 'Tops & Cores',
+        nccubes: 'Cubos NetCDF',
         colormaps: 'Mapas de colores',
         'colormap-options': 'Opciones de mapa de colores',
         users: 'Usuarios',
@@ -2118,6 +2244,7 @@ async function renderSection() {
         if (state.section === 'estrategias') await renderEstrategias();
         if (state.section === 'volumenes') await renderVolumenes();
         if (state.section === 'tops-cores') await renderTopsCores();
+        if (state.section === 'nccubes') await renderNCCubes();
         if (state.section === 'colormaps') await renderColormaps();
         if (state.section === 'colormap-options') await renderColormapOptions();
         if (state.section === 'users') await renderUsers();
