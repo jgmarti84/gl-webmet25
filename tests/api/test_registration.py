@@ -134,3 +134,34 @@ def test_a_validation_error_does_not_echo_the_value_sent():
         response = client.post(f"{PREFIX}/register", json=body)
     assert response.status_code == 422
     assert secret not in response.text
+
+
+# ---------------------------------------------------------------------------
+# Sign in with Google: only error paths (a real Google token cannot be made here)
+# ---------------------------------------------------------------------------
+
+
+def test_options_has_the_google_client_id():
+    value = _options()["google_client_id"]
+    assert value is None or (isinstance(value, str) and value)
+
+
+def test_google_login_with_an_invalid_token_is_refused():
+    # 503 where Google is not set up, 401 where it is: never a session and never a 500.
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.post(f"{PREFIX}/google", json={"credential": "not-a-real-token"})
+    assert response.status_code in (401, 503)
+    assert "detail" in response.json()
+    assert not response.cookies
+
+
+def test_google_login_with_an_empty_credential_returns_422():
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.post(f"{PREFIX}/google", json={"credential": ""})
+    assert response.status_code == 422
+
+
+def test_google_login_foreign_origin_returns_403():
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.post(f"{PREFIX}/google", json={"credential": "x"}, headers=FOREIGN_ORIGIN)
+    assert response.status_code == 403

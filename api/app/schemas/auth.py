@@ -13,6 +13,11 @@ class LoginRequest(StrictText):
     password: str = Field(..., min_length=1, max_length=128)
 
 
+class GoogleLoginRequest(StrictText):
+    # The ID token Google gives the browser (a signed text of about 1 to 2 KB). Anything this long is abuse.
+    credential: str = Field(..., min_length=1, max_length=4096)
+
+
 class MeResponse(BaseModel):
     id: int
     username: str

@@ -296,6 +296,16 @@ The development stack has a local mailbox, **Mailpit**: `http://localhost:8025` 
 
 There is **no automatic cleanup** of unverified accounts or of expired rows in `email_tokens`. An unverified account is replaced when someone signs up again with its username or mail after its link expired (24 h), and until then it keeps that username. Expired tokens pile up until a cleanup job is written. (Old logins in `user_sessions` are purged on each login of that user; see §8.)
 
+### 9.6 Sign in with Google
+
+**What it does.** The login page shows a "Continuar con Google" button when `GOOGLE_CLIENT_ID` is set. Anyone with a Google account can enter: if there is a user with that mail (or already linked to that Google account) they enter; otherwise a `viewer` account is created for them, with the mail already verified (Google confirmed it) and no form. It is **not** tied to `REGISTRATION_ENABLED`: with the client ID set it is always on, so the site is open to every Google account. Administrators never enter this way (they use user and password), deactivated accounts do not either, and a mail already linked to another Google account is refused.
+
+- **Setting:** `GOOGLE_CLIENT_ID` in `.env` (public, not a secret; no client secret is used). Recreate the API with `make api`. Empty = off: the button is not shown and `POST /auth/google` answers 503.
+- **Google Cloud console:** create a project, set up the consent screen (type **External**, then **publish** the app: in "Testing" only the listed test users can enter), and create an OAuth client ID of type **Web application** with the site addresses as "Authorized JavaScript origins" (the same as `ALLOWED_ORIGINS`; add the public domain when the site has one). No redirect URIs are needed.
+- **Account linking:** the first time, an existing account with the same mail is linked to the Google account (`users.google_sub`) and its mail is marked verified. If that account was never verified (someone signed up with the mail and chose a password), its password is dropped and its sessions closed, since the person who set it never owned the mailbox. Later logins find the account by the Google id, even if the mail changed.
+- **Network:** the API downloads Google's public keys over HTTPS (`https://www.googleapis.com/oauth2/v3/certs`) to check each token's signature; they are kept in memory for an hour. The visitor's browser must be able to reach `accounts.google.com`.
+- **Legal:** a Google sign-up records no acceptance of the terms (`terms_accepted_at` stays empty). Before opening the site to the public, see §9.3 point 4.
+
 ---
 
 **Document Version:** 1.3.0  

@@ -6,17 +6,20 @@ from typing import Literal, Optional, Tuple, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from radar_db import get_db
 from radar_db.models import User
 
+from ..auth import google_login as google_login_service
 from ..auth import service
+from ..auth.google import GoogleIdentity, GoogleTokenError, GoogleVerifier, get_google_verifier
 from ..auth.cookies import access_cookie_name, clear_auth_cookies, refresh_cookie_name, set_auth_cookies
 from ..auth.dependencies import check_origin, get_current_user, require_valid_token
 from ..auth.security import AccessClaims, create_access_token, decode_access_token
 from ..config import settings
-from ..schemas.auth import LoginRequest, MeResponse
+from ..schemas.auth import GoogleLoginRequest, LoginRequest, MeResponse
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -69,6 +72,45 @@ def login(
     access_token = create_access_token(user.id, user.role, user.token_version)
     set_auth_cookies(response, access_token, refresh_token, session.expires_at)
     return _me(user, _full_access_lifetime())
+
+
+@router.post("/google", response_model=MeResponse, dependencies=[Depends(check_origin)])
+def google_login(
+    payload: GoogleLoginRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    verifier: GoogleVerifier = Depends(get_google_verifier),
+) -> Union[MeResponse, JSONResponse]:
+    """Sign in (or sign up) with the ID token Google gave the browser. Same session cookies as /login."""
+    if not settings.google_login_available:
+        raise HTTPException(status_code=503, detail="Iniciar sesión con Google no está disponible por ahora")
+    try:
+        identity = verifier.verify(payload.credential)
+    except GoogleTokenError:
+        raise HTTPException(status_code=401, detail="No pudimos verificar tu cuenta de Google")
+
+    try:
+        user = _google_sign_in(db, identity)
+    except google_login_service.GoogleLoginError as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail, "code": exc.code})
+
+    user_agent, ip = _client_info(request)
+    session, refresh_token = service.create_session(db, user, user_agent=user_agent, ip=ip)
+    db.commit()
+    access_token = create_access_token(user.id, user.role, user.token_version)
+    set_auth_cookies(response, access_token, refresh_token, session.expires_at)
+    return _me(user, _full_access_lifetime())
+
+
+def _google_sign_in(db: Session, identity: GoogleIdentity) -> User:
+    """sign_in, retried once when two first logins of the same person race and one hits the unique constraints."""
+    try:
+        with db.begin_nested():
+            return google_login_service.sign_in(db, identity)
+    except IntegrityError:
+        # The other request created the account a moment ago: now it is found instead of created.
+        return google_login_service.sign_in(db, identity)
 
 
 @router.post("/refresh", response_model=MeResponse, dependencies=[Depends(check_origin)])

@@ -17,6 +17,7 @@ PUBLIC_ROUTES = {
     ("get", "/health"),
     ("get", "/"),
     ("post", "/api/v1/auth/login"),
+    ("post", "/api/v1/auth/google"),
     ("post", "/api/v1/auth/refresh"),
     ("post", "/api/v1/auth/logout"),
     ("get", "/api/v1/auth/options"),

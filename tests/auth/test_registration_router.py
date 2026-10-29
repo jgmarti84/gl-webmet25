@@ -29,6 +29,7 @@ def test_options_when_everything_is_configured(client):
         "terms_required": True,
         "terms_url": "https://webmet.test/terminos",
         "privacy_url": "https://webmet.test/privacidad",
+        "google_client_id": None,
     }
 
 
@@ -57,6 +58,7 @@ def test_options_without_the_terms(client, monkeypatch):
         "terms_required": False,
         "terms_url": None,
         "privacy_url": None,
+        "google_client_id": None,
     }
 
 

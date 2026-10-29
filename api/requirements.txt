@@ -31,7 +31,8 @@ cachetools>=5.0.0
 redis>=5.0.0
 
 # Auth (usuarios con JWT)
-PyJWT>=2.8.0
+# [crypto]: RS256, needed to check the signature of the ID tokens Google issues ("Sign in with Google")
+PyJWT[crypto]>=2.8.0
 pwdlib[argon2]>=0.2.1
 # Public registration: mail validation (EmailStr)
 email-validator>=2.1.0

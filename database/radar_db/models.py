@@ -377,6 +377,9 @@ class User(Base):
     email_verified_at = Column(DateTime(timezone=True))
     # When the person accepted the terms and privacy policy at sign-up (proof of consent).
     terms_accepted_at = Column(DateTime(timezone=True))
+    # The fixed identifier ("sub") of the Google account linked to this user; NULL while none is linked. The mail of
+    # a Google account can change or be reused, the sub never does, so it is what identifies the person once linked.
+    google_sub = Column(String(255))
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -391,6 +394,8 @@ class User(Base):
         # The mail is unique among the accounts that have one (stored normalized: lower case, no spaces).
         # Partial index: many accounts may have no mail at all.
         Index('uq_users_email', 'email', unique=True, postgresql_where=text("email IS NOT NULL")),
+        # Same for the Google identifier: one Google account links to at most one user.
+        Index('uq_users_google_sub', 'google_sub', unique=True, postgresql_where=text("google_sub IS NOT NULL")),
     )
 
     def __repr__(self):

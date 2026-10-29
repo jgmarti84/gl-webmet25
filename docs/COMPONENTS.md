@@ -485,6 +485,8 @@ settings), and animation controls (bottom-center).
 
 `login.html` also changed: the field is "Usuario o mail", it shows "¿Olvidaste tu contraseña?" and "Crear cuenta" only when `options()` allows them, and when the login answers `email_not_verified` it shows a notice and a "Reenviar mail de verificación" button (`#login-resend`).
 
+**Sign in with Google.** When `options().google_client_id` is set, `login.js` calls `setupGoogleSignIn()` (`js/login-google.js`): it loads Google's script (`accounts.google.com/gsi/client`), draws the "Continuar con Google" button in `#login-google-button` and, when the person picks an account, sends the ID token to `POST /auth/google` (`authApi.google()`); on success it goes to the same destination as the password login. If Google's script cannot load, nothing is shown and the normal login stays. See [OPERATIONS §9.6](OPERATIONS.md#96-sign-in-with-google).
+
 **Loaded scripts:** each page loads `css/login.css`, `js/login-ui.js` (the show/hide password buttons point at their input with `data-target`) and its own script.
 
 ---
