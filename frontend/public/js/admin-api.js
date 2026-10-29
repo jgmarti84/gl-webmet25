@@ -55,7 +55,7 @@ async function request(path, options = {}, { base = ADMIN_API_BASE, retry = true
 
 export const adminApi = {
     async getDashboardCounts() {
-        const [radars, products, references, estrategias, volumenes, cogTotals, cogAvailable, cogMissing, cogError, topsTotals, topsAvailable, topsMissing] = await Promise.all([
+        const [radars, products, references, estrategias, volumenes, cogTotals, cogAvailable, cogMissing, cogError, topsTotals, topsAvailable, topsMissing, nccubesNewest] = await Promise.all([
             this.listRadars(),
             this.listProducts(),
             this.listReferences(),
@@ -68,6 +68,7 @@ export const adminApi = {
             this.listTopsCores({ page: 1, page_size: 1 }),
             this.listTopsCores({ page: 1, page_size: 1, status: 'available' }),
             this.listTopsCores({ page: 1, page_size: 1, status: 'missing' }),
+            this.listNCCubes({ page: 1, page_size: 1 }),
         ]);
 
         return {
@@ -85,6 +86,8 @@ export const adminApi = {
             topsTotal: topsTotals.total,
             topsAvailable: topsAvailable.total,
             topsMissing: topsMissing.total,
+            nccubesTotal: nccubesNewest.total,
+            nccubesNewest: nccubesNewest.items[0]?.observation_time || null,
         };
     },
 
@@ -130,6 +133,10 @@ export const adminApi = {
     getTopsCores(id) { return request(`/tops-cores/${id}`); },
     patchTopsCoresStatus(id, status) { return request(`/tops-cores/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }); },
     deleteTopsCores(id) { return request(`/tops-cores/${id}`, { method: 'DELETE' }); },
+
+    // NC cubes: read only (the indexer owns these rows)
+    listNCCubes(params = {}) { return request(`/nccubes${buildQuery(params)}`); },
+    getNCCube(id) { return request(`/nccubes/${id}`); },
 
     // Colormap stops
     listColormapSummaries() { return request('/colormap-stops'); },

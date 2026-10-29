@@ -345,6 +345,37 @@ class AdminTopsAndCoresListResponse(AdminPaginatedResponse):
     items: List[AdminTopsAndCoresResponse] = Field(description="Current page records")
 
 
+class AdminNCCubeResponse(BaseModel):
+    """NC cube admin response (read only: the indexer owns these rows)."""
+
+    id: int = Field(description="Record ID")
+    radar_code: str = Field(description="Radar code")
+    observation_time: datetime = Field(description="Observation timestamp")
+    file_path: str = Field(description="Absolute file path")
+    file_name: str = Field(description="File name")
+    file_size_bytes: Optional[int] = Field(
+        default=None, description="File size in bytes"
+    )
+    file_mtime: Optional[datetime] = Field(
+        default=None, description="File modification time"
+    )
+    status: str = Field(description="Record status")
+    strategy: Optional[str] = Field(default=None, description="Strategy code")
+    vol_nr: Optional[str] = Field(default=None, description="Volume number")
+    created_at: Optional[datetime] = Field(
+        default=None, description="Record creation time"
+    )
+    updated_at: Optional[datetime] = Field(
+        default=None, description="Record update time"
+    )
+
+
+class AdminNCCubeListResponse(AdminPaginatedResponse):
+    """Paginated NC cube list response."""
+
+    items: List[AdminNCCubeResponse] = Field(description="Current page records")
+
+
 # ── Colormap admin schemas ─────────────────────────────────────────────────
 
 
