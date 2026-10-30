@@ -2104,7 +2104,7 @@ async function openViewsForm(user) {
     openFormModal(
         `Vistas de radar de ${user.username}`,
         `
-            <label class="checkbox-row"><input type="checkbox" name="all"${hasAll ? ' checked' : ''}> Todas, incluidas las de radares futuros</label>
+            <label class="checkbox-row"><input type="checkbox" name="all"${hasAll ? ' checked' : ''}> Todas</label>
             <fieldset class="views-radars"><legend>O elegir radares</legend>${radarRows}</fieldset>
             <p class="toolbar-note">Solo se listan los radares con la vista de detalle habilitada.</p>
             <div class="form-actions"><button class="btn" type="submit">Guardar</button></div>

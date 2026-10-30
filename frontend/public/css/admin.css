@@ -686,5 +686,8 @@ th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
 }
 
 /* One-radar view picker (users > Vistas): one checkbox per line, grouped in a light frame. */
-.checkbox-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+/* Under .form-grid on purpose: ".form-grid label" turns every label into a grid (field above its input) and has more
+   weight than ".checkbox-row" alone, which would leave the checkbox above the text. */
+.form-grid .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 14px; font-weight: 400; color: var(--text); }
+.checkbox-row input { flex-shrink: 0; margin: 0; }
 .views-radars { border: 1px solid var(--border, #ccc); border-radius: 6px; padding: 8px 12px; margin: 8px 0; max-height: 240px; overflow-y: auto; }
