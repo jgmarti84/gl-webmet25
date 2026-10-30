@@ -1,6 +1,6 @@
 # api/app/schemas/auth.py
 from datetime import datetime
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -11,6 +11,11 @@ class LoginRequest(StrictText):
     # Username or e-mail (an e-mail can be up to 254 characters).
     username: str = Field(..., min_length=1, max_length=254)
     password: str = Field(..., min_length=1, max_length=128)
+
+
+class GoogleLoginRequest(StrictText):
+    # The ID token Google gives the browser (a signed text of about 1 to 2 KB). Anything this long is abuse.
+    credential: str = Field(..., min_length=1, max_length=4096)
 
 
 class MeResponse(BaseModel):
@@ -61,3 +66,5 @@ class UserResponse(BaseModel):
     last_login_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    # The user's own list of one-radar detail views as saved: radar codes, or ["*"] for every radar (spec C).
+    radar_detail_views: List[str] = []

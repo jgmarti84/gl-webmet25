@@ -10,9 +10,10 @@ from radar_db import get_db
 from radar_db.accounts import revoke_all_sessions
 from radar_db.models import User
 
-from ..auth import user_admin
+from ..auth import permissions, user_admin
 from ..auth.dependencies import check_origin, require_admin
 from ..schemas.auth import PasswordReset, UserCreate, UserResponse, UserUpdate
+from ..schemas.permissions import RadarViewsUpdate
 
 router = APIRouter(prefix="/admin/users", tags=["Admin users"], dependencies=[Depends(check_origin)])
 
@@ -30,6 +31,7 @@ def _response(user: User) -> UserResponse:
         last_login_at=user.last_login_at,
         created_at=user.created_at,
         updated_at=user.updated_at,
+        radar_detail_views=permissions.stored_radar_views(user),
     )
 
 
@@ -110,6 +112,21 @@ def verify_email(user_id: int, db: Session = Depends(get_db), actor: User = Depe
         user_admin.verify_email(db, user)
     except user_admin.UserRuleError as exc:
         raise _rule(exc)
+    db.commit()
+    db.refresh(user)
+    return _response(user)
+
+
+@router.put("/{user_id}/permissions", response_model=UserResponse)
+def set_user_permissions(
+    user_id: int, payload: RadarViewsUpdate, db: Session = Depends(get_db), actor: User = Depends(require_admin)
+) -> UserResponse:
+    """Replace the user's whole list of one-radar detail views (all or nothing, in one transaction)."""
+    user = _get_or_404(db, user_id)
+    try:
+        permissions.replace_user_radar_views(db, user, payload.radar_detail_view, actor)
+    except permissions.PermissionRuleError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
     db.commit()
     db.refresh(user)
     return _response(user)

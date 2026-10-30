@@ -75,3 +75,5 @@ class OptionsResponse(BaseModel):
     terms_required: bool
     terms_url: Optional[str] = None
     privacy_url: Optional[str] = None
+    # The Google OAuth client ID the login page needs to draw "Sign in with Google"; null when it is not set up.
+    google_client_id: Optional[str] = None

@@ -3,6 +3,7 @@
  */
 
 import { TimeWheel } from './time-wheel.js';
+import { canOpenDetailView } from './radar-views.js';
 
 // Fix 3: message queue constants
 const MSG_AUTO_CLEAR_MS  = 4000; // non-error messages auto-clear after 4 s
@@ -331,7 +332,14 @@ export class UIControls {
         });
     }
 
-    populateRadarCheckboxes(radars, showInactive = false) {
+    /**
+     * Populate radar checkboxes
+     * @param {Array} radars - Array of radar objects (must include is_active field)
+     * @param {boolean} showInactive - If true, inactive radars are visible but dimmed
+     * @param {string[]} detailViews - Codes whose one-radar view the user may open (GET /permissions/me);
+     *                                 the › button is drawn only for those
+     */
+    populateRadarCheckboxes(radars, showInactive = false, detailViews = []) {
         const container = document.getElementById('radar-list');
         if (!container) return;
 
@@ -373,7 +381,10 @@ export class UIControls {
             item.appendChild(checkbox);
             item.appendChild(dot);
             item.appendChild(label);
-            item.appendChild(drillBtn);
+            // Only radars the user may open get the › button; radar.html checks again on load.
+            if (canOpenDetailView(radar.code, detailViews)) {
+                item.appendChild(drillBtn);
+            }
             container.appendChild(item);
         });
     }

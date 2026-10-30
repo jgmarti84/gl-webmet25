@@ -4,7 +4,8 @@
 
 import { authFetch } from '../auth-api.js';
 
-const API_BASE = '/api/v1';
+// Relative on purpose: <base href> keeps it inside the base path (see js/shared/base-path.js).
+const API_BASE = 'api/v1';
 
 export const api = {
     /**
@@ -25,6 +26,14 @@ export const api = {
     async getRadars(activeOnly = true) {
         const data = await this.get(`/radars?active_only=${activeOnly}`);
         return data.radars || [];
+    },
+
+    /**
+     * One-radar detail views the logged-in user may open (already resolved by the API).
+     * @returns {Promise<{radar_detail_views: string[]}>}
+     */
+    async getMyPermissions() {
+        return this.get('/permissions/me');
     },
 
     // Internal: fetch products for a single (volNrs, strategy) clause

@@ -71,6 +71,8 @@ import {
 
 const state = {
     radars: [],
+    // Codes whose one-radar view (radar.html) this user may open: GET /permissions/me, read once at start.
+    radarDetailViews: [],
     products: [],
     cogs: [],
     selectedRadars: [],
@@ -368,8 +370,15 @@ const app = {
     },
 
     async loadInitialData() {
-        state.radars = await api.getRadars(!state.showInactiveRadars);
-        state.ui.populateRadarCheckboxes(state.radars, state.showInactiveRadars);
+        // Permissions only decide which radars get the › button. If they cannot be read, the map still works
+        // without that button.
+        const [radars, permissions] = await Promise.all([
+            api.getRadars(!state.showInactiveRadars),
+            api.getMyPermissions().catch(() => ({ radar_detail_views: [] })),
+        ]);
+        state.radars = radars;
+        state.radarDetailViews = permissions.radar_detail_views;
+        state.ui.populateRadarCheckboxes(state.radars, state.showInactiveRadars, state.radarDetailViews);
         this.updateActiveOnlyToggle();
 
         // Restore coverage mode from localStorage before fetching products so
@@ -408,7 +417,7 @@ const app = {
         try {
             const prevSelected = new Set(state.ui.getSelectedRadars());
             state.radars = await api.getRadars(!state.showInactiveRadars);
-            state.ui.populateRadarCheckboxes(state.radars, state.showInactiveRadars);
+            state.ui.populateRadarCheckboxes(state.radars, state.showInactiveRadars, state.radarDetailViews);
             prevSelected.forEach(code => {
                 const cb = document.getElementById(`radar-${code}`);
                 if (cb) cb.checked = true;

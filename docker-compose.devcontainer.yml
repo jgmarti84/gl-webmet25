@@ -197,8 +197,9 @@ services:
       TOPS_AND_CORES_DIR: /tops_and_cores
       CORS_ORIGINS: ""
       # Browser requests of the e2e tests carry Origin http://frontend-e2e; httpx and Playwright's request
-      # context send no Origin, which check_origin lets through.
-      ALLOWED_ORIGINS: "http://frontend-e2e"
+      # context send no Origin, which check_origin lets through. The login through the base path proxy
+      # (prefix-proxy-e2e, tests/e2e/test_base_path.py) arrives with that proxy's Origin.
+      ALLOWED_ORIGINS: "http://frontend-e2e,http://prefix-proxy-e2e"
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (see .env.example)}
       COOKIE_SECURE: "false"   # the tests use plain HTTP inside Docker
       REDIS_HOST: redis
@@ -264,6 +265,19 @@ services:
         condition: service_healthy   # nginx resolves "api" when it starts
     restart: "no"
 
+  # Caddy in front of frontend-e2e that adds the /pfx/ base path, like stage's Caddy does for a copy of the site
+  # (spec base-path). Only reachable inside the e2e network; tests/e2e/test_base_path.py browses through it.
+  prefix-proxy-e2e:
+    image: caddy:2.10.2
+    container_name: radar_prefix_proxy_e2e
+    volumes:
+      - ./tests/e2e/prefix-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+    networks:
+      - e2e
+    depends_on:
+      - frontend-e2e
+    restart: "no"
+
   # Same indexer as the main stack, loading the COGs of ../product_output into radar_e2e_db (read only mounts).
   indexer-e2e:
     build:
@@ -307,6 +321,8 @@ services:
       API_BASE_URL: http://api-e2e:8000
       # E2E target: the v2 frontend of the test stack (the time wheel is only wired by v2).
       FRONTEND_URL: http://frontend-e2e:80
+      # The same e2e frontend behind a /pfx/ base path (tests/e2e/test_base_path.py).
+      PREFIX_FRONTEND_URL: http://prefix-proxy-e2e/pfx
       # Local mailbox of the stack: the e2e registration tests read the verification mails from it.
       MAILPIT_URL: http://mailpit:8025
       # Admin account created by db-init-e2e from ADMIN_USERNAME / ADMIN_PASSWORD (see .env)

@@ -198,7 +198,7 @@ Mode is persisted to `localStorage` key `webmet25_coverage_mode`. COG queries pa
 **Responsibility:** Manages all UI control panels, buttons, and status displays. Populates/updates selectors (radar checkboxes, product dropdown, time window buttons), updates status notifications, and enables/disables buttons based on app state.
 
 **Key Methods:**
-- `populateRadarCheckboxes(radars)` — Build radar multi-select panel (order via `sortRadarsForDisplay`)
+- `populateRadarCheckboxes(radars, showInactive, detailViews)` — Build radar multi-select panel (order via `sortRadarsForDisplay`). The › button that opens the one-radar page (`radar.html`) is drawn only for the codes in `detailViews`, the list the user may open from `GET /permissions/me` (helpers in `js/shared/radar-views.js`); `radar-app.js` checks the same list on load and shows "No tenés acceso a la vista de este radar" otherwise
 - `sortRadarsForDisplay(radars)` — Order: active before inactive; RMA group before AR group; numeric ascending within a group with `RMA00` (number 0) sorted **last** (`RMA1…RMA17, RMA00, AR5…`)
 - `populateProductSelect(products)` — Build product dropdown
 - `setTimeRangeValues(start, end)` / `getTimeRangeValues()` — Read/write the canonical `#start-date`/`#end-date` `datetime-local` inputs (also syncs the date input + TimeWheel)
@@ -485,6 +485,8 @@ settings), and animation controls (bottom-center).
 
 `login.html` also changed: the field is "Usuario o mail", it shows "¿Olvidaste tu contraseña?" and "Crear cuenta" only when `options()` allows them, and when the login answers `email_not_verified` it shows a notice and a "Reenviar mail de verificación" button (`#login-resend`).
 
+**Sign in with Google.** When `options().google_client_id` is set, `login.js` calls `setupGoogleSignIn()` (`js/login-google.js`): it loads Google's script (`accounts.google.com/gsi/client`), draws the "Continuar con Google" button in `#login-google-button` and, when the person picks an account, sends the ID token to `POST /auth/google` (`authApi.google()`); on success it goes to the same destination as the password login. If Google's script cannot load, nothing is shown and the normal login stays. See [OPERATIONS §9.6](OPERATIONS.md#96-sign-in-with-google).
+
 **Loaded scripts:** each page loads `css/login.css`, `js/login-ui.js` (the show/hide password buttons point at their input with `data-target`) and its own script.
 
 ---
@@ -496,6 +498,25 @@ settings), and animation controls (bottom-center).
 **Responsibility:** DOM skeleton for the admin panel — sidebar (OHMC logo + grouped section nav + "← Volver al mapa"), header with back button, a generic form modal, and the colormap creator modal. Served at `/admin` as a static page; login and the `admin` role are enforced by the API (without a session the page redirects to `/login`).
 
 **Loaded Scripts:** `js/admin.js` (which imports `js/admin-api.js`). Styled by `css/admin.css` (modern-light theme).
+
+### Base path — every page must work under a prefix
+
+The same image can be served at the root (`https://host/`) or under a prefix that a proxy strips
+(`https://host/nacho/`, see `docs/OPERATIONS.md` §10). nginx writes the prefix into each page's `<base href>`, so
+**the frontend never writes URLs that start with `/`**:
+
+- HTML, JS and CSS URLs of the app are relative: `api/v1/...`, `css/...`, `js/...`, `assets/...`, `login`, `./`
+  (the map). `<base href>` resolves them inside the prefix; at the root the result is the same as before.
+- Every new page carries `<base href="/">` right after `<meta charset>` (nginx replaces exactly that text).
+- To compare or build full browser paths use `basePath()` and `appPath()` from `js/shared/base-path.js`
+  (for example `login.js` checks `appPath(location.pathname) === '/login'`).
+- `history.pushState/replaceState` with a `#` always get the full path
+  (`` `${location.pathname}${location.search}#x` ``): a bare `#x` also resolves against `<base>` and moves the
+  address bar to the map.
+- External URLs (Leaflet CDN, OSM) and ES module imports (relative to the importing file) are not affected.
+
+`tests/e2e/test_base_path.py` browses every page through a proxy that adds `/pfx/` and fails if the browser asks
+for anything outside it, so a new absolute URL anywhere breaks that test.
 
 ---
 

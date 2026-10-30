@@ -433,6 +433,7 @@ All endpoints below require a session cookie (log in with `POST /api/v1/auth/log
 | POST | `/auth/refresh` | Rotates the refresh token and issues a new access token |
 | POST | `/auth/logout` | Revokes the session and clears the cookies |
 | GET | `/auth/me` | Current user (requires a session) |
+| POST | `/auth/google` | Public: sign in or sign up with the ID token Google gave the browser (`credential`); sets the same cookies as the login (200, 401, 403, 503) |
 | GET | `/auth/options` | Public: whether sign-up and password recovery are on, whether it asks to accept the terms (`TERMS_REQUIRED`, off by default) and, if so, the terms/privacy links |
 | POST | `/auth/register` | Public: create a pending `viewer`, with an optional full name (202 for a new or an already-registered mail alike, 409 username taken, 422 invalid data, 503 sign-up off) |
 | POST | `/auth/verify-email` | Public: redeem the one-time link of the verification mail (204, 400) |

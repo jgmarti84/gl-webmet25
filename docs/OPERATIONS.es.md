@@ -258,5 +258,60 @@ El stack de desarrollo tiene un buzón local, **Mailpit**: `http://localhost:802
 
 ---
 
+## 8. Servir una copia bajo un prefijo (base path)
+
+Cuando dos copias del sitio tienen que compartir un hostname (por ejemplo en stage, la de Javi en `/` y la de Nacho en
+`/nacho/`), el proxy de adelante decide por prefijo y lo **saca**. La imagen no cambia: la copia se entera de su
+prefijo por el header `X-Forwarded-Prefix` (ver `docs/DATA_FLOW.es.md`, "Base path").
+
+Caddyfile del proxy (en stage: `webmet_caddy`, bloque `:8080`):
+
+```
+:8080 {
+  bind 127.0.0.1
+  encode zstd gzip
+
+  # La copia bajo /nacho/: saca el prefijo y le avisa a su nginx.
+  redir /nacho /nacho/
+  handle_path /nacho/* {
+    reverse_proxy 127.0.0.1:8081 {
+      header_up X-Forwarded-Prefix /nacho
+    }
+  }
+
+  # Todo lo demás: la copia en la raíz. Un cliente no puede inventar un prefijo acá.
+  handle {
+    request_header -X-Forwarded-Prefix
+    reverse_proxy 127.0.0.1:80
+  }
+}
+```
+
+Con `admin off`, se aplica con `docker restart <contenedor de caddy>` (`caddy reload` necesita la API de admin).
+
+En el `.env` de la copia bajo el prefijo:
+
+- `FRONTEND_PORT` = el puerto al que apunta el Caddyfile (`8081` arriba).
+- `PUBLIC_BASE_URL=https://<host>/nacho`, para que los links de los mails lleven el prefijo.
+- `ALLOWED_ORIGINS` = el mismo origen público que la otra copia (`https://<host>`): el origen no tiene path.
+
+Cada copia mantiene sus propias sesiones (los nombres de cookie llevan el prefijo), así que un mismo navegador puede
+estar logueado en las dos.
+
+## 9. Vistas de radar único por usuario
+
+El mapa muestra todos los radares a todos los usuarios con sesión, pero la **página de un radar** (`radar.html`, a la que se llega con el botón › junto a cada radar) necesita un permiso. El admin ve siempre todos los radares con `detail_view_enabled` encendido; cualquier otra persona ve solo los radares que el admin le asignó.
+
+- **Asignarlas:** panel de admin, **Usuarios**, botón **Vistas** en la fila del usuario. Se tilda "Todas" (todos los radares, también los que se agreguen después) o se eligen radares. Solo se listan los radares con la vista de detalle habilitada. Al guardar se reemplaza la lista entera.
+- **Qué ve la persona:** el botón › aparece solo junto a los radares que puede abrir. Si abre `radar.html?code=...` a mano, ve "No tenés acceso a la vista de este radar" y vuelve al mapa a los 5 segundos.
+- **Qué no cubre:** el permiso abre solo la página. Los endpoints de datos son los mismos que usa el mapa, así que todos siguen viendo todos los radares en el mapa principal.
+- **Apagar una vista** (`detail_view_enabled`) la oculta para todos, también para el admin, sin tocar la lista de nadie.
+- **Borrar un radar** borra los permisos que lo nombran.
+- **Las cuentas nuevas no tienen vistas.** Eso incluye las cuentas creadas por el registro y por "Continuar con Google". Las personas que ya existían antes de esta versión también empiezan sin ninguna.
+
+**Nota de despliegue:** después de aplicar esta versión, **nadie salvo el admin puede abrir la vista de un radar** hasta que el admin se la asigne. Conviene asignar las vistas antes de anunciar el cambio, o avisar a los usuarios. La migración (`c4d5e6f7a8b9`, tabla `permissions`) la aplica `db-init` en el próximo `docker compose up -d --build`; no necesita ninguna clave nueva en el `.env`.
+
+---
+
 **Versión del Documento:** 1.2.0  
 **Última Actualización:** 27 de octubre de 2026

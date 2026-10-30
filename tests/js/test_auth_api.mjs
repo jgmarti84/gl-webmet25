@@ -51,7 +51,8 @@ console.log('T2: 401 → refresh → retry');
     queue.push(res(401), res(200, { access_expires_in: 1800 }), res(200));
     const r = await authFetch('/api/v1/radars');
     assert(r.status === 200, 'retried request succeeds');
-    assert(calls[1] === '/api/v1/auth/refresh' && calls[2] === '/api/v1/radars', 'refresh then retry');
+    // Relative URL: the page's <base href> keeps it inside the base path (spec base-path).
+    assert(calls[1] === 'api/v1/auth/refresh' && calls[2] === '/api/v1/radars', 'refresh then retry');
     assert(reloads === 0, 'no reload');
 }
 
@@ -87,7 +88,8 @@ console.log('T6: no reload loop when the page keeps loading without a session');
     assert(reloads === 1 && assigned.length === 0, 'first failure reloads (nginx should serve the login)');
     await authFetch('/api/v1/radars');
     assert(reloads === 1, 'second failure within seconds does not reload again');
-    assert(assigned.length === 1 && assigned[0].startsWith('/login?next='), 'it goes to /login instead');
+    // Relative "login": resolved against <base href>, so it stays inside the base path.
+    assert(assigned.length === 1 && assigned[0].startsWith('login?next='), 'it goes to the login instead');
     assert(decodeURIComponent(assigned[0]).includes('/radar.html?code=X'), 'and remembers where to come back');
 }
 

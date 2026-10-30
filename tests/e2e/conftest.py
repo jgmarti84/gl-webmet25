@@ -87,6 +87,10 @@ def _is_ignored_console(msg) -> bool:
         url = (msg.location or {}).get("url", "")
     except Exception:
         url = ""
+    # A protected page without a session is answered with the login served in place and status 401 (by design),
+    # and the browser logs that 401 of the page itself. A 401 of a data endpoint (/api/) still fails the test.
+    if "status of 401" in text and "/api/" not in url:
+        return True
     return any(s in text or s in url for s in _IGNORED_CONSOLE_SUBSTRINGS)
 
 

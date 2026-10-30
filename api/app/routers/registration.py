@@ -64,6 +64,7 @@ def options() -> OptionsResponse:
         # The links are only handed out when the terms are required: otherwise the pages must not show them.
         terms_url=(settings.terms_url or None) if settings.terms_required else None,
         privacy_url=(settings.privacy_url or None) if settings.terms_required else None,
+        google_client_id=settings.google_client_id.strip() if settings.google_login_available else None,
     )
 
 
