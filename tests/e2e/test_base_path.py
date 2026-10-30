@@ -93,3 +93,24 @@ def test_a_viewer_sent_from_admin_lands_on_the_prefixed_map(browser, admin_stora
         context.close()
         deactivate_user(admin.request, viewer_id)
         admin.close()
+
+
+def test_the_company_panel_stays_inside_the_prefix(browser, admin_storage_state):
+    """/empresa (spec C, plan C-2) behind the prefix: the probe, the page, its scripts and its API calls."""
+    from .test_empresa import ORG_ADMIN, ORG_ADMIN_PASSWORD, _ensure_company, _ensure_org_admin
+
+    admin = browser.new_context(storage_state=admin_storage_state, ignore_https_errors=True)
+    org_admin_id = _ensure_org_admin(admin.request, _ensure_company(admin.request))
+    context = browser.new_context(ignore_https_errors=True)
+    page = context.new_page()
+    urls = _track(page)
+    try:
+        _login(page, ORG_ADMIN, ORG_ADMIN_PASSWORD)
+        page.goto(f"{PREFIX_URL}/empresa", wait_until="networkidle")
+        assert urlsplit(page.url).path == f"{PREFIX}/empresa"
+        expect(page.locator("#empresa-name")).to_be_visible()
+        assert _escaped(urls) == [], _escaped(urls)
+    finally:
+        context.close()
+        deactivate_user(admin.request, org_admin_id)
+        admin.close()

@@ -691,3 +691,7 @@ th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
 .form-grid .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 14px; font-weight: 400; color: var(--text); }
 .checkbox-row input { flex-shrink: 0; margin: 0; }
 .views-radars { border: 1px solid var(--border, #ccc); border-radius: 6px; padding: 8px 12px; margin: 8px 0; max-height: 240px; overflow-y: auto; }
+
+/* Company admin panel (/empresa): the admin layout without the sidebar, centered and not too wide. */
+.empresa-layout { grid-template-columns: 1fr; }
+.empresa-layout .main-content { width: 100%; max-width: 1180px; margin: 0 auto; }

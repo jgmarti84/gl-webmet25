@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+    <meta charset="UTF-8">
+    <!-- Base path rule: right after the charset; nginx rewrites it to <base href="/nacho/"> behind a prefix. -->
+    <base href="/">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebMet25 · Mi empresa</title>
+    <link rel="icon" type="image/png" href="assets/images/logos/OHMC@3x.png">
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+    <!-- Company admin panel (spec C). nginx serves it only to company admins (probe /_auth_org). It reuses the
+         layout and the look of the admin panel (css/admin.css), without the sidebar. -->
+    <div class="admin-layout empresa-layout">
+        <main class="main-content">
+            <header class="page-header">
+                <div class="page-header-left">
+                    <a id="empresa-back" class="btn btn-ghost btn-back" href="./" title="Volver al mapa">←</a>
+                    <h1 id="empresa-name">Mi empresa</h1>
+                    <span id="empresa-seats" class="status-pill"></span>
+                </div>
+                <div class="session-box">
+                    <span id="session-user" class="session-user"></span>
+                    <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Cerrar sesión</button>
+                </div>
+            </header>
+
+            <!-- Same notice as the admin panel: a close button, and success notices close by themselves. -->
+            <div id="empresa-message" class="feedback-message hidden" role="status">
+                <span class="feedback-text"></span>
+                <button type="button" class="feedback-close" aria-label="Cerrar aviso">×</button>
+            </div>
+
+            <p class="toolbar-note">Vistas de radar de la empresa: <strong id="empresa-views"></strong></p>
+            <div class="toolbar"><button class="btn" id="empresa-add" type="button">+ Agregar usuario</button></div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr>
+                        <th>Usuario</th><th>Nombre</th><th>Rol</th><th>Activo</th><th>Vistas de radar</th><th>Acciones</th>
+                    </tr></thead>
+                    <tbody id="empresa-users"></tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <!-- Same modal markup as admin.html (classes that exist in css/admin.css). -->
+    <div id="form-modal" class="modal hidden" role="dialog" aria-modal="true">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2 id="form-modal-title">Editar</h2>
+                <button id="close-form-modal" class="btn btn-secondary btn-sm" type="button">Cerrar</button>
+            </div>
+            <form id="form-modal-body" class="form-grid"></form>
+        </div>
+    </div>
+
+    <script type="module" src="js/empresa.js"></script>
+</body>
+</html>

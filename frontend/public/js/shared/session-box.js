@@ -5,7 +5,7 @@
  */
 import { authApi } from '../auth-api.js';
 
-const ROLE_LABELS = { admin: 'Administrador', viewer: 'Lector' };
+export const ROLE_LABELS = { admin: 'Administrador', org_admin: 'Admin de empresa', viewer: 'Lector' };
 
 /** Up to two letters: initials of the first two words, or the first two characters of one word. */
 export function initialsOf(name) {
@@ -22,6 +22,9 @@ export function renderSessionBox(me) {
     if (adminLink) adminLink.hidden = me.role !== 'admin';
     const chipAdminLink = document.getElementById('admin-chip-link');
     if (chipAdminLink) chipAdminLink.hidden = me.role !== 'admin';
+    // Company admins get a shortcut to their own panel (spec C).
+    const chipEmpresaLink = document.getElementById('empresa-chip-link');
+    if (chipEmpresaLink) chipEmpresaLink.hidden = me.role !== 'org_admin';
 
     const chip = document.getElementById('account-chip');
     if (!chip) return;
@@ -34,7 +37,7 @@ export function renderSessionBox(me) {
     role.textContent = ROLE_LABELS[me.role] || me.role;
     role.classList.toggle('is-admin', me.role === 'admin');
     // The role badge is only worth the space when it is not the everyday case.
-    role.hidden = me.role !== 'admin';
+    role.hidden = me.role === 'viewer';
     document.getElementById('session-box-logout').addEventListener('click', async () => {
         await authApi.logout();
         window.location.reload();  // nginx serves the login in place
