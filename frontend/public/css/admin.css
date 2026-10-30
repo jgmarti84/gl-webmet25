@@ -684,3 +684,7 @@ th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
     font-size: 0.9rem;
     opacity: 0.85;
 }
+
+/* One-radar view picker (users > Vistas): one checkbox per line, grouped in a light frame. */
+.checkbox-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.views-radars { border: 1px solid var(--border, #ccc); border-radius: 6px; padding: 8px 12px; margin: 8px 0; max-height: 240px; overflow-y: auto; }

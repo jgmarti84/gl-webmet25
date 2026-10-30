@@ -165,6 +165,10 @@ export const adminApi = {
     revokeUserSessions(id) { return request(`/users/${id}/revoke-sessions`, { method: 'POST' }); },
     // The admin vouches for the mail of an account that never opened its verification link.
     verifyUserEmail(id) { return request(`/users/${id}/verify-email`, { method: 'POST' }); },
+    // Replace the user's whole list of one-radar detail views: radar codes, ['*'] for all, [] for none.
+    setUserRadarViews(id, views) {
+        return request(`/users/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ radar_detail_view: views }) });
+    },
 
     // Colormap cache (outside /admin, also admin-only)
     invalidateColormapCache() {
