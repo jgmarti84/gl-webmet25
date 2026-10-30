@@ -211,7 +211,7 @@ getCurrentFrameIndex() — Obtiene la posición actual
 **Métodos principales:**
 
 ```text
-populateRadarCheckboxes(radars) — Construye el panel de selección de radares
+populateRadarCheckboxes(radars, showInactive, detailViews) — Construye el panel de selección de radares. El botón › que abre la página de un radar (`radar.html`) se dibuja solo para los códigos de `detailViews`, la lista que el usuario puede abrir según `GET /permissions/me` (helpers en `js/shared/radar-views.js`); `radar-app.js` revisa la misma lista al cargar y, si no hay permiso, muestra "No tenés acceso a la vista de este radar"
 sortRadarsForDisplay(radars) — Ordena activos→inactivos, RMA→AR, numérico ascendente
 populateProductSelect(products) — Construye el desplegable de productos
 setTimeRangeValues(start, end) / getTimeRangeValues() — Sincroniza fecha/hora canónica
