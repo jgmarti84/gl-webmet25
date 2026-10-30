@@ -783,6 +783,39 @@
 .login-page--radar .login-switch { color: var(--ink-70); }
 .login-page--radar .login-switch a { color: var(--cyan-600); }
 
+/* "Continuar con Google": a divider with an "o" in the middle, then the button Google draws (its look is Google's;
+   only the width and the centering are ours). */
+.login-page--radar .login-google {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.login-page--radar .login-or {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-50);
+}
+
+/* The two lines at each side of the "o". */
+.login-page--radar .login-or::before,
+.login-page--radar .login-or::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--line-soft);
+}
+
+.login-page--radar .login-google-button {
+    display: flex;
+    justify-content: center;
+    min-height: 44px;
+}
+
 .login-page--radar .login-footer {
     max-width: 384px;
     padding-top: 18px;

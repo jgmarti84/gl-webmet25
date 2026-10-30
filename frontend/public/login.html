@@ -81,6 +81,13 @@
                         <button id="login-submit" class="login-submit" type="submit">Ingresar</button>
                     </form>
 
+                    <!-- "Continuar con Google": hidden until js/login-google.js has Google's button ready (only when the
+                         server has a Google client ID). Google draws the button inside the empty div. -->
+                    <div id="login-google" class="login-google" hidden>
+                        <div class="login-or" aria-hidden="true"><span>o</span></div>
+                        <div id="login-google-button" class="login-google-button"></div>
+                    </div>
+
                     <p id="login-signup" class="login-switch" hidden>¿No tenés cuenta? <a href="register">Crear cuenta</a></p>
                 </div>
             </div>

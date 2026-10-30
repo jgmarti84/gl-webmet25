@@ -1,5 +1,6 @@
 import { authApi, safeNextPath } from './auth-api.js';
 import { startCooldown, statusMessage } from './auth-pages.js';
+import { setupGoogleSignIn } from './login-google.js';
 import { appPath } from './shared/base-path.js';
 
 const form = document.getElementById('login-form');
@@ -44,10 +45,18 @@ function clearMessages() {
     resendButton.hidden = true;
 }
 
-// Offer only what the server has turned on: the "forgot" and "create account" links.
+// Offer only what the server has turned on: the "forgot" and "create account" links, and the Google button
+// (only when the server gave a Google client ID).
 authApi.options().then((options) => {
     document.getElementById('login-forgot').hidden = !options.password_recovery;
     document.getElementById('login-signup').hidden = !options.registration;
+    setupGoogleSignIn({
+        clientId: options.google_client_id,
+        wrapper: document.getElementById('login-google'),
+        container: document.getElementById('login-google-button'),
+        onSuccess: () => window.location.replace(next),
+        onError: showError,
+    });
 });
 
 // Already logged in (or the refresh cookie is still valid): go straight to the destination.

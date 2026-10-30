@@ -149,6 +149,8 @@ services:
       SESSION_RETENTION_DAYS: ${SESSION_RETENTION_DAYS:-90}
       LOGIN_MAX_FAILED_ATTEMPTS: ${LOGIN_MAX_FAILED_ATTEMPTS:-5}
       LOGIN_LOCKOUT_MINUTES: ${LOGIN_LOCKOUT_MINUTES:-15}
+      # "Sign in with Google": OAuth client ID from the Google Cloud console (public, not a secret). Empty = off.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       # Public registration and e-mail (spec B): same defaults as api/app/config.py
       REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-false}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}

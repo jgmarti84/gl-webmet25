@@ -11,6 +11,7 @@ const DEFAULT_OPTIONS = {
     terms_required: false,
     terms_url: null,
     privacy_url: null,
+    google_client_id: null,
 };
 
 /** POST a JSON body to a public endpoint. Resolves { ok, status, data }; `data` is {} for an empty (204) answer. */
@@ -207,6 +208,8 @@ export const authApi = {
         }
     },
 
+    // Sign in (or sign up) with the ID token Google gave the browser; the API checks it and opens the session.
+    google: (credential) => postJson('/google', { credential }),
     register: (payload) => postJson('/register', payload),
     verifyEmail: (token) => postJson('/verify-email', { token }),
     resendVerification: (identifier) => postJson('/resend-verification', { identifier }),

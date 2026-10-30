@@ -502,7 +502,8 @@ All endpoints are public and check the `Origin` header like the login. "Neutral"
 
 | Method | Path | Body | Answers |
 |--------|------|------|---------|
-| GET | `/auth/options` | — | 200 `{registration, password_recovery, terms_required, terms_url, privacy_url}` (the two links are `null` when `terms_required` is false) |
+| GET | `/auth/options` | — | 200 `{registration, password_recovery, terms_required, terms_url, privacy_url, google_client_id}` (the two links are `null` when `terms_required` is false; `google_client_id` is `null` when Sign in with Google is not set up) |
+| POST | `/auth/google` | `credential` (the Google ID token) | 200 + session cookies (an account is created on the first sign-in); 401 invalid token; 403 `admin_no_google` / `account_disabled` / `google_account_mismatch` / `google_email_unverified`; 503 not set up. Rate-limited like the login |
 | POST | `/auth/register` | `username, email, password, website`, optional `full_name`, and `accept_terms` (must be true only when `TERMS_REQUIRED` is on; otherwise it is ignored and `terms_accepted_at` stays `NULL`) | **202** neutral; 409 username taken; 422 invalid data; 503 sign-up off |
 | POST | `/auth/verify-email` | `token` | 204; 400 invalid, expired or used link |
 | POST | `/auth/resend-verification` | `identifier` (mail or username) | **202** neutral |

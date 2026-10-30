@@ -96,6 +96,7 @@ def create_user(
     email_verified: bool = True,
     terms_accepted: bool = False,
     password_hash: Optional[str] = None,
+    google_sub: Optional[str] = None,
 ) -> User:
     """Create an account. `password_hash` lets a caller that already hashed the password reuse it.
 
@@ -124,6 +125,7 @@ def create_user(
         failed_login_count=0,
         email_verified_at=now if email_verified else None,
         terms_accepted_at=now if terms_accepted else None,
+        google_sub=google_sub,
     )
     db.add(user)
     db.flush()
