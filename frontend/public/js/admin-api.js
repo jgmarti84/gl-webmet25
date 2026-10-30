@@ -1,6 +1,7 @@
 import { redirectToLogin, refreshSession } from './auth-api.js';
 
-const ADMIN_API_BASE = '/api/v1/admin';
+// Relative on purpose: <base href> keeps it inside the base path (see js/shared/base-path.js).
+const ADMIN_API_BASE = 'api/v1/admin';
 const EXPIRED_SESSION_MESSAGE = 'Tu sesión venció. Volvé a iniciar sesión.';
 
 function buildQuery(params = {}) {
@@ -167,7 +168,7 @@ export const adminApi = {
 
     // Colormap cache (outside /admin, also admin-only)
     invalidateColormapCache() {
-        return request('/cache/invalidate', { method: 'POST' }, { base: '/api/v1/colormap' });
+        return request('/cache/invalidate', { method: 'POST' }, { base: 'api/v1/colormap' });
     },
 };
 

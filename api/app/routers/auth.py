@@ -12,7 +12,13 @@ from radar_db import get_db
 from radar_db.models import User
 
 from ..auth import service
-from ..auth.cookies import access_cookie_name, clear_auth_cookies, refresh_cookie_name, set_auth_cookies
+from ..auth.cookies import (
+    access_cookie_name,
+    clear_auth_cookies,
+    refresh_cookie_name,
+    request_base_path,
+    set_auth_cookies,
+)
 from ..auth.dependencies import check_origin, get_current_user, require_valid_token
 from ..auth.security import AccessClaims, create_access_token, decode_access_token
 from ..config import settings
@@ -41,12 +47,12 @@ def _client_info(request: Request) -> Tuple[Optional[str], Optional[str]]:
     return request.headers.get("user-agent"), ip
 
 
-def _unauthorized(detail: str, code: Optional[str] = None) -> JSONResponse:
+def _unauthorized(detail: str, code: Optional[str] = None, base_path: str = "") -> JSONResponse:
     content = {"detail": detail}
     if code:
         content["code"] = code
     response = JSONResponse(status_code=401, content=content)
-    clear_auth_cookies(response)
+    clear_auth_cookies(response, base_path)
     return response
 
 
@@ -67,15 +73,17 @@ def login(
     session, refresh_token = service.create_session(db, user, user_agent=user_agent, ip=ip)
     db.commit()
     access_token = create_access_token(user.id, user.role, user.token_version)
-    set_auth_cookies(response, access_token, refresh_token, session.expires_at)
+    set_auth_cookies(response, access_token, refresh_token, session.expires_at, base_path=request_base_path(request))
     return _me(user, _full_access_lifetime())
 
 
 @router.post("/refresh", response_model=MeResponse, dependencies=[Depends(check_origin)])
 def refresh(request: Request, response: Response, db: Session = Depends(get_db)) -> Union[MeResponse, JSONResponse]:
-    token = request.cookies.get(refresh_cookie_name())
+    # Cookie names and the refresh path depend on the base path the request came through (spec base-path).
+    base_path = request_base_path(request)
+    token = request.cookies.get(refresh_cookie_name(base_path))
     if not token:
-        return _unauthorized("No autenticado")
+        return _unauthorized("No autenticado", base_path=base_path)
 
     user_agent, ip = _client_info(request)
     try:
@@ -85,29 +93,30 @@ def refresh(request: Request, response: Response, db: Session = Depends(get_db))
         return JSONResponse(status_code=401, content={"detail": "Refresh en curso", "code": "refresh_race"})
     except service.AuthError as exc:
         db.commit()  # persist a login closed on reuse (and the bumped token_version), if any
-        return _unauthorized(str(exc))
+        return _unauthorized(str(exc), base_path=base_path)
 
     db.commit()
     access_token = create_access_token(user.id, user.role, user.token_version)
-    set_auth_cookies(response, access_token, new_token, session.expires_at)
+    set_auth_cookies(response, access_token, new_token, session.expires_at, base_path=base_path)
     return _me(user, _full_access_lifetime())
 
 
 @router.post("/logout", status_code=204, dependencies=[Depends(check_origin)])
 def logout(request: Request, db: Session = Depends(get_db)) -> Response:
-    token = request.cookies.get(refresh_cookie_name())
+    base_path = request_base_path(request)
+    token = request.cookies.get(refresh_cookie_name(base_path))
     if token:
         service.revoke_session_by_token(db, token)
         db.commit()
     response = Response(status_code=204)
-    clear_auth_cookies(response)
+    clear_auth_cookies(response, base_path)
     return response
 
 
 @router.get("/me", response_model=MeResponse)
 def me(request: Request, user: User = Depends(get_current_user)) -> MeResponse:
     # get_current_user already validated this cookie, so decoding cannot fail here.
-    claims = decode_access_token(request.cookies[access_cookie_name()])
+    claims = decode_access_token(request.cookies[access_cookie_name(request_base_path(request))])
     remaining = int((claims.expires_at - datetime.now(timezone.utc)).total_seconds())
     return _me(user, max(0, remaining))
 

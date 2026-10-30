@@ -10,7 +10,7 @@ from radar_db import get_db
 from radar_db.models import User
 
 from ..config import settings
-from .cookies import access_cookie_name
+from .cookies import access_cookie_name, request_base_path
 from .security import AccessClaims, InvalidAccessToken, decode_access_token
 from .service import load_active_user
 
@@ -27,7 +27,8 @@ def check_origin(request: Request) -> None:
 
 
 def _user_from_request(request: Request, db: Session) -> Optional[User]:
-    token = request.cookies.get(access_cookie_name())
+    # The cookie name depends on the base path the request came through (spec base-path).
+    token = request.cookies.get(access_cookie_name(request_base_path(request)))
     if not token:
         return None
     try:
@@ -58,7 +59,7 @@ async def require_valid_token(request: Request) -> AccessClaims:
     deactivated user or a stolen token keeps passing until the access token expires (30 min at most).
     Everything else must use get_current_user, which reads the user on every request (decision D11).
     """
-    token = request.cookies.get(access_cookie_name())
+    token = request.cookies.get(access_cookie_name(request_base_path(request)))
     if not token:
         raise HTTPException(status_code=401, detail="No autenticado")
     try:
