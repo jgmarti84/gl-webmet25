@@ -1966,7 +1966,7 @@ async function renderUsers() {
     const meId = state.me?.id;
     elements.sectionContent.innerHTML = `
         <div class="toolbar"><button class="btn" id="users-add">+ Agregar usuario</button></div>
-        ${orgFilter ? `<p class="toolbar-note">Usuarios de ${safeText(orgFilterName)} · <a href="#users" id="users-clear-org">ver todos</a></p>` : ''}
+        ${orgFilter ? `<p class="toolbar-note">Usuarios de ${safeText(orgFilterName)} · <a href="admin#users" id="users-clear-org">ver todos</a></p>` : ''}
         ${renderFilterBar('users', users)}
         <div class="table-wrap">
         <table>
@@ -2180,7 +2180,7 @@ async function renderOrganizations() {
                         <td class="table-actions">
                             <button class="btn-secondary" data-edit-org="${org.id}" title="Editar">${ICON_EDIT}</button>
                             <button class="btn-secondary" data-views-org="${org.id}">Vistas</button>
-                            <a class="btn-secondary" href="#users" data-users-of-org="${org.id}">Usuarios</a>
+                            <a class="btn-secondary" href="admin#users" data-section="users" data-users-of-org="${org.id}">Usuarios</a>
                         </td>
                     </tr>
                 `).join('')}
@@ -2205,7 +2205,9 @@ async function renderOrganizations() {
         });
     });
     elements.sectionContent.querySelectorAll('[data-users-of-org]').forEach((el) => {
-        // Opens the users section filtered by this company (see renderUsers): the hash change redraws the page.
+        // Opens the users section filtered by this company (see renderUsers). Sets the filter here; the delegated
+        // [data-section] handler then does the navigation. The link's own address is the full "admin#users": a bare
+        // "#users" would resolve against <base href> and leave the panel for the map.
         el.onclick = () => { state.usersOrgFilter = Number(el.dataset.usersOfOrg); };
     });
 }
