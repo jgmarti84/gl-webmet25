@@ -3,7 +3,7 @@ from .database import db_manager, get_db, init_db, check_db_connection
 from .models import (
     Base, Radar, RadarProduct, Reference, RadarCOG, COGStatus, TopsAndCores,
     ColormapStop, ProductColormapOption, User, UserSession, USER_ROLES,
-    Permission, PERMISSION_ACTIONS, PERMISSION_ALL,
+    Permission, PERMISSION_ACTIONS, PERMISSION_ALL, Organization,
 )
 
 __all__ = [
@@ -26,4 +26,5 @@ __all__ = [
     'Permission',
     'PERMISSION_ACTIONS',
     'PERMISSION_ALL',
+    'Organization',
 ]
