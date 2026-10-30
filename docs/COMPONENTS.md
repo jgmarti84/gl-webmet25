@@ -19,6 +19,7 @@ frontend/public/
 ├── forgot.html                # "Forgot my password" page (/forgot, public)
 ├── reset.html                 # New password page (/reset#token=…, public)
 ├── admin.html                 # Admin panel SPA (served at /admin, login required)
+├── empresa.html               # Company admin panel (/empresa, company admins only)
 ├── cog-browser.html          # Alternative detailed COG browser view
 ├── css/
 │   ├── styles.css            # Main app UI styling (dark theme)
@@ -31,6 +32,7 @@ frontend/public/
     ├── register.js, verify.js, forgot.js, reset.js   # One script per public page
     ├── admin.js              # Admin panel orchestrator (CRUD, filters, colormap creator)
     ├── admin-api.js          # Admin REST client (/api/v1/admin/*)
+    ├── empresa.js, empresa-api.js  # Company admin panel (/empresa) and its REST client (/api/v1/org)
     ├── shared/               # Shared by v1 and v2
     │   ├── api.js            # REST API client
     │   ├── controls.js       # UI control handlers (+ radar ordering, time-wheel wiring)

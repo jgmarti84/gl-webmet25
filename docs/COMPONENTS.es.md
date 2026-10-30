@@ -21,6 +21,7 @@ frontend/public/
 ├── forgot.html                # Página "Olvidé mi contraseña" (/forgot, pública)
 ├── reset.html                 # Página de contraseña nueva (/reset#token=…, pública)
 ├── admin.html                 # Admin panel SPA (served at /admin, login required)
+├── empresa.html               # Panel del admin de empresa (/empresa, solo admins de empresa)
 ├── css/
 │   ├── styles.css            # Main app UI styling (dark theme)
 │   ├── admin.css             # Admin panel styling (modern-light theme)
@@ -32,6 +33,7 @@ frontend/public/
     ├── register.js, verify.js, forgot.js, reset.js   # Un script por página pública
     ├── admin.js              # Admin panel orchestrator (CRUD, filters, colormap creator)
     ├── admin-api.js          # Admin REST client (/api/v1/admin/*)
+    ├── empresa.js, empresa-api.js  # Company admin panel (/empresa) and its REST client (/api/v1/org)
     ├── shared/               # Shared by v1 and v2
     │   ├── api.js            # REST API client
     │   ├── controls.js       # UI control handlers (+ radar ordering, time-wheel wiring)

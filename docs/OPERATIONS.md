@@ -360,6 +360,21 @@ The map shows every radar to every logged-in user, but the **one-radar page** (`
 
 **Deployment note:** after this version is applied, **nobody but the admin can open a one-radar view** until the admin assigns them. Assign the views before announcing the change, or tell the users. The migration (`c4d5e6f7a8b9`, table `permissions`) is applied by `db-init` on the next `docker compose up -d --build`; it needs no new `.env` key.
 
+## 12. Company Accounts
+
+A **company** (for example EPEC) is a group of users with a **seat limit** and its own list of one-radar detail views. The general admin creates it; a **company admin** (role `org_admin`) then manages the company's users from `/empresa`, a panel of its own.
+
+- **Create a company:** Admin panel, **Empresas**, "Agregar empresa": name, seat limit (active users, company admins included) and whether it is active. The **Vistas** button sets the company's list of radar views; **Usuarios** opens the users section filtered by that company.
+- **Name its admin:** Admin panel, **Usuarios**, "Agregar usuario", pick the company and the role "Admin de empresa". Only the general admin can create or change company admins. A user's company is fixed when the account is created.
+- **What a company admin can do** (from the map's account chip, button "Mi empresa", or `/empresa`): create users (they enter as viewers of the company with an initial password, and start with the company's views), edit their name and mail, reset passwords, close sessions, activate or deactivate them, and narrow the radar views of each one, always within the company's list. It cannot touch other company admins, other companies or `/admin`.
+- **Seats:** creating or reactivating a company user needs a free seat (409 otherwise). Deactivating frees it. Lowering the limit below the active users deactivates nobody: it only blocks new users.
+- **Views of a company member** = its own list intersected with the company's list, computed on every read: when the general admin removes a radar from the company, every member loses it at once. A company admin sees the company's list.
+- **A deactivated company** blocks all its users: they cannot log in (password or Google) and their open sessions stop working.
+- **Google sign-in:** a company admin may use it (only the general admin may not).
+- **Not covered:** like the per-user views, the company list only decides which one-radar pages open. The data endpoints are the same for everybody.
+
+**Deployment note:** the migration (`d5e6f7a8b9c0`: tables `organizations`, `users.organization_id`, the `org_admin` role and company-owned rows in `permissions`) is applied by `db-init` on the next `docker compose up -d --build`. No new `.env` keys. Nobody belongs to a company until the general admin creates one, so nothing changes for the existing users.
+
 ---
 
 **Document Version:** 1.3.0  

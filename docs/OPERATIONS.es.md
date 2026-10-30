@@ -311,6 +311,21 @@ El mapa muestra todos los radares a todos los usuarios con sesión, pero la **p�
 
 **Nota de despliegue:** después de aplicar esta versión, **nadie salvo el admin puede abrir la vista de un radar** hasta que el admin se la asigne. Conviene asignar las vistas antes de anunciar el cambio, o avisar a los usuarios. La migración (`c4d5e6f7a8b9`, tabla `permissions`) la aplica `db-init` en el próximo `docker compose up -d --build`; no necesita ninguna clave nueva en el `.env`.
 
+## 10. Cuentas de empresa
+
+Una **empresa** (por ejemplo EPEC) es un grupo de usuarios con un **tope de lugares** y su propia lista de vistas de radar único. La crea el admin general; después un **admin de empresa** (rol `org_admin`) administra a los usuarios de la empresa desde `/empresa`, un panel propio.
+
+- **Crear una empresa:** panel de admin, **Empresas**, "Agregar empresa": nombre, tope de lugares (usuarios activos, admins de empresa incluidos) y si está activa. El botón **Vistas** define la lista de vistas de radar de la empresa; **Usuarios** abre la sección de usuarios filtrada por esa empresa.
+- **Nombrar a su admin:** panel de admin, **Usuarios**, "Agregar usuario", elegir la empresa y el rol "Admin de empresa". Solo el admin general crea o cambia admins de empresa. La empresa de un usuario se fija al crear la cuenta.
+- **Qué puede hacer un admin de empresa** (desde el botón "Mi empresa" de la franja de cuenta del mapa, o en `/empresa`): crear usuarios (entran como lectores de la empresa, con una contraseña inicial, y empiezan con las vistas de la empresa), editar nombre y mail, resetear contraseñas, cerrar sesiones, activar o desactivar, y achicar las vistas de radar de cada uno, siempre dentro de la lista de la empresa. No puede tocar a otros admins de empresa, a otras empresas ni entrar a `/admin`.
+- **Lugares:** crear o reactivar un usuario de la empresa necesita un lugar libre (409 si no). Desactivar lo libera. Bajar el tope por debajo de los usuarios activos no desactiva a nadie: solo bloquea los usuarios nuevos.
+- **Vistas de un miembro de la empresa** = su propia lista intersectada con la de la empresa, calculado en cada lectura: si el admin general le quita un radar a la empresa, todos sus miembros lo pierden al instante. Un admin de empresa ve la lista de la empresa.
+- **Una empresa desactivada** bloquea a todos sus usuarios: no pueden entrar (con contraseña ni con Google) y sus sesiones abiertas dejan de funcionar.
+- **Entrar con Google:** un admin de empresa puede usarlo (solo el admin general no).
+- **Qué no cubre:** igual que las vistas por usuario, la lista de la empresa solo decide qué páginas de radar único se abren. Los endpoints de datos son los mismos para todos.
+
+**Nota de despliegue:** la migración (`d5e6f7a8b9c0`: tablas `organizations`, `users.organization_id`, el rol `org_admin` y las filas de `permissions` que pertenecen a una empresa) la aplica `db-init` en el próximo `docker compose up -d --build`. No hay claves nuevas en el `.env`. Nadie pertenece a una empresa hasta que el admin general cree una, así que para los usuarios existentes no cambia nada.
+
 ---
 
 **Versión del Documento:** 1.2.0  
