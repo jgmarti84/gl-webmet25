@@ -56,7 +56,7 @@ def authenticate(db: Session, username: str, password: str, now: Optional[dateti
     # `username` may be a username or an e-mail (usernames can never contain "@", so there is no ambiguity).
     user = find_by_identifier(db, username)
 
-    if user is None or not user.is_active or (user.locked_until and user.locked_until > now):
+    if user is None or not user.can_sign_in or (user.locked_until and user.locked_until > now):
         verify_password(password, DUMMY_HASH)  # same cost as a real check
         raise AuthError(GENERIC_LOGIN_ERROR)
 
@@ -182,7 +182,7 @@ def rotate_refresh(
     if _hash_matches(token_hash, session.token_hash):
         user = db.get(User, session.user_id)
         # An unverified account is treated like an inactive one (defense in depth: it should have no login).
-        if user is None or not user.is_active or user.email_verified_at is None:
+        if user is None or not user.can_sign_in or user.email_verified_at is None:
             _close(session, REVOKE_INACTIVE_USER, now)
             db.flush()
             raise AuthError("Sesión inválida")
@@ -232,8 +232,8 @@ def revoke_session_by_token(db: Session, token: str, now: Optional[datetime] = N
 
 
 def load_active_user(db: Session, user_id: int, token_version: int) -> Optional[User]:
-    """Decision D11 (see spec): every authenticated request reads the user."""
+    """Decision D11 (see spec): every authenticated request reads the user (and its company: spec C)."""
     user = db.get(User, user_id)
-    if user is None or not user.is_active or user.email_verified_at is None or user.token_version != token_version:
+    if user is None or not user.can_sign_in or user.email_verified_at is None or user.token_version != token_version:
         return None
     return user

@@ -44,6 +44,8 @@ USER_FIELDS = {
     "created_at",
     "updated_at",
     "radar_detail_views",
+    "organization_id",
+    "organization_name",
 }
 SENSITIVE_FIELDS = {"password_hash", "token_version", "failed_login_count", "locked_until"}
 UNKNOWN_ID = 999999999
@@ -132,7 +134,10 @@ def test_list_users_item_field_types():
         assert isinstance(user["username"], str)
         assert user["full_name"] is None or isinstance(user["full_name"], str)
         assert user["email"] is None or isinstance(user["email"], str)
-        assert user["role"] in ("admin", "viewer")
+        assert user["role"] in ("admin", "org_admin", "viewer")
+        assert user["organization_id"] is None or isinstance(user["organization_id"], int)
+        assert user["organization_name"] is None or isinstance(user["organization_name"], str)
+        assert isinstance(user["radar_detail_views"], list)
         assert isinstance(user["is_active"], bool)
         assert isinstance(user["password_is_bootstrap"], bool)
         assert user["last_login_at"] is None or isinstance(user["last_login_at"], str)

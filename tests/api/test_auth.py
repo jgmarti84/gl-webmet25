@@ -456,3 +456,11 @@ def test_check_token_with_session_returns_204():
         response = client.get(f"{PREFIX}/check-token")
     assert response.status_code == 204
     assert response.content == b""
+
+
+@needs_admin
+def test_check_org_admin_role_returns_403_for_the_admin():
+    """?role=org_admin is not the bootstrap admin's role."""
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        _login(client)
+        assert client.get(f"{PREFIX}/check", params={"role": "org_admin"}).status_code == 403

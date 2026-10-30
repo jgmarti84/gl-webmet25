@@ -165,7 +165,7 @@ def me(request: Request, user: User = Depends(get_current_user)) -> MeResponse:
 
 
 @router.get("/check", status_code=204)
-def check(role: Optional[Literal["admin"]] = None, user: User = Depends(get_current_user)) -> Response:
+def check(role: Optional[Literal["admin", "org_admin"]] = None, user: User = Depends(get_current_user)) -> Response:
     """Session probe for nginx auth_request: 204 ok, 401 no session, 403 wrong role. Never has a body."""
     if role is not None and user.role != role:
         raise HTTPException(status_code=403, detail="No tenés permisos para esta acción")

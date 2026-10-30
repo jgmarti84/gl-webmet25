@@ -20,6 +20,8 @@ from radar_db.accounts import (
 from radar_db.models import User
 from radar_db.passwords import PasswordPolicyError
 
+from . import organizations, permissions
+
 
 class UserRuleError(Exception):
     def __init__(self, status_code: int, detail: str) -> None:
@@ -30,7 +32,12 @@ class UserRuleError(Exception):
 
 def list_users(db: Session) -> List[User]:
     # selectinload: one extra query for every user's permissions, instead of one per user in the response.
-    return db.query(User).options(selectinload(User.permissions)).order_by(User.username).all()
+    return (
+        db.query(User)
+        .options(selectinload(User.permissions), selectinload(User.organization))
+        .order_by(User.username)
+        .all()
+    )
 
 
 def create(db: Session, data: dict) -> User:
@@ -46,6 +53,18 @@ def update_user(db: Session, actor: User, user: User, changes: dict) -> User:
     new_role = changes.get("role")
     deactivating = changes.get("is_active") is False
     demoting = new_role is not None and new_role != "admin" and user.role == "admin"
+
+    # Company rules (spec C): roles must match the company link, and reactivating takes a seat.
+    if new_role == "org_admin" and user.organization_id is None:
+        raise UserRuleError(422, "Solo un usuario de una empresa puede ser admin de empresa")
+    if new_role == "admin" and user.organization_id is not None:
+        raise UserRuleError(422, "Un usuario de una empresa no puede ser administrador general")
+    reactivating = changes.get("is_active") is True and not user.is_active
+    if reactivating and user.organization_id is not None:
+        try:
+            organizations.reserve_seat(db, user.organization_id)
+        except organizations.OrgRuleError as exc:
+            raise UserRuleError(exc.status_code, exc.detail) from exc
 
     if user.id == actor.id and deactivating:
         raise UserRuleError(403, "No podés desactivar tu propia cuenta")
@@ -70,8 +89,13 @@ def update_user(db: Session, actor: User, user: User, changes: dict) -> User:
 
     must_revoke = False
     if new_role is not None and new_role != user.role:
+        demoted_company_admin = user.role == "org_admin" and new_role == "viewer"
         user.role = new_role
         must_revoke = True
+        if demoted_company_admin:
+            # Its own list was ignored while it was a company admin and may be stale: start again from the
+            # company's list (spec §5).
+            permissions.copy_company_views_to(db, user, actor)
     if "is_active" in changes and changes["is_active"] is not None:
         if changes["is_active"] != user.is_active:
             user.is_active = changes["is_active"]
