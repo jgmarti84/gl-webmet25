@@ -1,5 +1,6 @@
 import { adminApi, EXPIRED_SESSION_MESSAGE } from './admin-api.js';
 import { authApi, redirectToLogin } from './auth-api.js';
+import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
 
 const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'colormaps', 'colormap-options', 'users'];
 const STATUS_OPTIONS = ['available', 'missing', 'error', 'pending', 'processing', 'archived'];
@@ -1967,6 +1968,7 @@ async function renderUsers() {
                 <th><button data-sort="username">Usuario</button></th>
                 <th><button data-sort="full_name">Nombre</button></th>
                 <th><button data-sort="role">Rol</button></th>
+                <th>Vistas de radar</th>
                 <th><button data-sort="is_active">Activo</button></th>
                 <th><button data-sort="last_login_at">Último ingreso</button></th>
                 <th>Acciones</th>
@@ -1977,6 +1979,7 @@ async function renderUsers() {
                         <td>${safeText(user.username)}${user.password_is_bootstrap ? ' <span class="status-pill">contraseña inicial</span>' : ''}${needsMailVerification(user) ? ' <span class="status-pill">mail sin verificar</span>' : ''}</td>
                         <td>${safeText(user.full_name)}</td>
                         <td>${ROLE_LABELS[user.role] || safeText(user.role)}</td>
+                        <td>${user.role === 'admin' ? 'Todas (admin)' : safeText(viewsSummary(user.radar_detail_views))}</td>
                         <td>${user.is_active ? 'Sí' : 'No'}</td>
                         <td>${user.last_login_at ? fmtDate(user.last_login_at) : '—'}</td>
                         <td class="table-actions">
@@ -1985,6 +1988,7 @@ async function renderUsers() {
                                 <button class="btn-secondary" data-toggle-user="${user.id}">${user.is_active ? 'Desactivar' : 'Activar'}</button>
                                 <button class="btn-secondary" data-reset-user="${user.id}">Resetear contraseña</button>
                             `}
+                            ${user.role === 'admin' ? '' : `<button class="btn-secondary" data-views-user="${user.id}">Vistas</button>`}
                             ${needsMailVerification(user) ? `<button class="btn-secondary" data-verify-user="${user.id}">Verificar mail</button>` : ''}
                             <button class="btn-secondary" data-revoke-user="${user.id}">Cerrar sesiones</button>
                         </td>
@@ -2016,6 +2020,9 @@ async function renderUsers() {
     });
     elements.sectionContent.querySelectorAll('[data-reset-user]').forEach((el) => {
         el.onclick = () => openPasswordResetForm(byId(el.dataset.resetUser));
+    });
+    elements.sectionContent.querySelectorAll('[data-views-user]').forEach((el) => {
+        el.onclick = () => openViewsForm(byId(el.dataset.viewsUser));
     });
     elements.sectionContent.querySelectorAll('[data-verify-user]').forEach((el) => {
         el.onclick = async () => {
@@ -2072,6 +2079,41 @@ function openUserForm(user = null) {
             }
             await renderSection();
             showMessage(message, 'success');
+        },
+    );
+}
+
+/**
+ * Modal to choose which one-radar detail views a user may open (spec C).
+ * Only radars with the view enabled are listed. Codes the user already has on radars whose view is now off are
+ * kept as they are (sent back unchanged), so switching a view off for maintenance does not lose anybody's access.
+ */
+async function openViewsForm(user) {
+    const radars = (await adminApi.listRadars()).filter((radar) => radar.detail_view_enabled);
+    const stored = user.radar_detail_views || [];
+    const hasAll = stored.includes(ALL_RADARS);
+    const listedCodes = new Set(radars.map((radar) => radar.code));
+    const keptHidden = stored.filter((code) => code !== ALL_RADARS && !listedCodes.has(code));
+    const radarRows = radars.length
+        ? radars.map((radar) => `
+            <label class="checkbox-row">
+                <input type="checkbox" name="radar" value="${safeText(radar.code)}"${!hasAll && stored.includes(radar.code) ? ' checked' : ''}>
+                ${safeText(radar.code)} - ${safeText(radar.title)}
+            </label>`).join('')
+        : '<p class="toolbar-note">Ningún radar tiene la vista de detalle habilitada.</p>';
+    openFormModal(
+        `Vistas de radar de ${user.username}`,
+        `
+            <label class="checkbox-row"><input type="checkbox" name="all"${hasAll ? ' checked' : ''}> Todas</label>
+            <fieldset class="views-radars"><legend>O elegir radares</legend>${radarRows}</fieldset>
+            <p class="toolbar-note">Solo se listan los radares con la vista de detalle habilitada.</p>
+            <div class="form-actions"><button class="btn" type="submit">Guardar</button></div>
+        `,
+        async (formData) => {
+            const views = formData.get('all') ? [ALL_RADARS] : [...formData.getAll('radar'), ...keptHidden];
+            await adminApi.setUserRadarViews(user.id, views);
+            await renderSection();
+            showMessage(`Vistas de ${user.username} actualizadas`, 'success');
         },
     );
 }

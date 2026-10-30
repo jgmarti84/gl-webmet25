@@ -347,6 +347,19 @@ In the `.env` of the copy under the prefix:
 
 Each copy keeps its own sessions (cookie names carry the prefix), so one browser can be logged in to both.
 
+## 11. One-Radar Detail Views per User
+
+The map shows every radar to every logged-in user, but the **one-radar page** (`radar.html`, reached with the › button next to a radar) needs a permission. An admin always sees every radar whose `detail_view_enabled` is on; anybody else sees only the radars the admin assigned to them.
+
+- **Assign them:** Admin panel, **Usuarios**, button **Vistas** on the user's row. Tick "Todas" (every radar, including the ones added later) or pick radars. Only radars with the detail view enabled are listed. Saving replaces the whole list.
+- **What the person sees:** the › button appears only next to the radars they may open. Opening `radar.html?code=...` by hand shows "No tenés acceso a la vista de este radar" and goes back to the map after 5 seconds.
+- **Not covered:** the permission opens the page only. The data endpoints are the same ones the map uses, so every user still sees every radar on the main map.
+- **Switching a view off** (`detail_view_enabled`) hides it for everybody, including the admin, without touching anyone's list.
+- **Deleting a radar** deletes the permissions that name it.
+- **New accounts have no views.** That includes the accounts created by sign-up and by "Continuar con Google". The people who existed before this version also start with none.
+
+**Deployment note:** after this version is applied, **nobody but the admin can open a one-radar view** until the admin assigns them. Assign the views before announcing the change, or tell the users. The migration (`c4d5e6f7a8b9`, table `permissions`) is applied by `db-init` on the next `docker compose up -d --build`; it needs no new `.env` key.
+
 ---
 
 **Document Version:** 1.3.0  

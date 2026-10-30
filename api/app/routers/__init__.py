@@ -10,6 +10,7 @@ from .admin import router as admin_router
 from .auth import router as auth_router
 from .registration import router as registration_router
 from .users import router as users_router
+from .permissions import router as permissions_router
 
 __all__ = [
     "radars_router",
@@ -23,4 +24,5 @@ __all__ = [
     "auth_router",
     "registration_router",
     "users_router",
+    "permissions_router",
 ]

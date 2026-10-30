@@ -198,7 +198,7 @@ Mode is persisted to `localStorage` key `webmet25_coverage_mode`. COG queries pa
 **Responsibility:** Manages all UI control panels, buttons, and status displays. Populates/updates selectors (radar checkboxes, product dropdown, time window buttons), updates status notifications, and enables/disables buttons based on app state.
 
 **Key Methods:**
-- `populateRadarCheckboxes(radars)` — Build radar multi-select panel (order via `sortRadarsForDisplay`)
+- `populateRadarCheckboxes(radars, showInactive, detailViews)` — Build radar multi-select panel (order via `sortRadarsForDisplay`). The › button that opens the one-radar page (`radar.html`) is drawn only for the codes in `detailViews`, the list the user may open from `GET /permissions/me` (helpers in `js/shared/radar-views.js`); `radar-app.js` checks the same list on load and shows "No tenés acceso a la vista de este radar" otherwise
 - `sortRadarsForDisplay(radars)` — Order: active before inactive; RMA group before AR group; numeric ascending within a group with `RMA00` (number 0) sorted **last** (`RMA1…RMA17, RMA00, AR5…`)
 - `populateProductSelect(products)` — Build product dropdown
 - `setTimeRangeValues(start, end)` / `getTimeRangeValues()` — Read/write the canonical `#start-date`/`#end-date` `datetime-local` inputs (also syncs the date input + TimeWheel)

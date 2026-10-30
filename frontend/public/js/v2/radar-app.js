@@ -4,6 +4,7 @@ import { renderSessionBox }     from '../shared/session-box.js';
 import { MapManager }          from './map.js';
 import { AnimationController } from './animation.js';
 import { UIControls }          from '../shared/controls.js';
+import { canOpenDetailView }   from '../shared/radar-views.js';
 import {
     waitForLeaflet,
     updateRadarHeader,
@@ -1584,16 +1585,27 @@ const app = {
             initSettingsPanel();
             initTimeWindowControls();
 
-            const [radars, products] = await Promise.all([
+            const [radars, products, permissions] = await Promise.all([
                 api.getRadars(false),
                 // Always fetch cd-mode (Conventional + Doppler) products only
                 api.getProducts(CD_MODE.include),
+                // If permissions cannot be read, treat it as "no access" (the safe side).
+                api.getMyPermissions().catch(() => ({ radar_detail_views: [] })),
             ]);
 
             state.radar    = radars.find(r => r.code === RADAR_CODE) || null;
             state.products = products;
 
-            if (!state.radar || !state.radar.detail_view_enabled) {
+            const viewReady = Boolean(state.radar && state.radar.detail_view_enabled);
+            const allowed   = canOpenDetailView(RADAR_CODE, permissions.radar_detail_views);
+            if (!viewReady || !allowed) {
+                // Same overlay and countdown as before; only the wording changes when the view exists but this
+                // user was not given access to it.
+                if (viewReady && !allowed) {
+                    document.getElementById('radar-unavailable-title').textContent = 'Sin acceso a esta vista';
+                    document.getElementById('radar-unavailable-text').textContent =
+                        'No tenés acceso a la vista de este radar.';
+                }
                 const overlay = document.getElementById('radar-unavailable');
                 const counter = document.getElementById('redirect-countdown');
                 overlay.style.display = 'flex';

@@ -1,6 +1,6 @@
 # api/app/schemas/auth.py
 from datetime import datetime
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -66,3 +66,5 @@ class UserResponse(BaseModel):
     last_login_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    # The user's own list of one-radar detail views as saved: radar codes, or ["*"] for every radar (spec C).
+    radar_detail_views: List[str] = []

@@ -43,6 +43,7 @@ USER_FIELDS = {
     "last_login_at",
     "created_at",
     "updated_at",
+    "radar_detail_views",
 }
 SENSITIVE_FIELDS = {"password_hash", "token_version", "failed_login_count", "locked_until"}
 UNKNOWN_ID = 999999999
@@ -513,3 +514,39 @@ def test_verify_email_without_session_returns_401():
     with httpx.Client(base_url=API_BASE_URL) as client:
         response = client.post(f"{PREFIX}/{UNKNOWN_ID}/verify-email")
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# PUT /api/v1/admin/users/{id}/permissions   (error paths only: they never change data)
+# ---------------------------------------------------------------------------
+
+
+def test_set_permissions_without_session_returns_401():
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.put(f"{PREFIX}/{UNKNOWN_ID}/permissions", json={"radar_detail_view": []})
+    assert response.status_code == 401
+
+
+@needs_admin
+def test_set_permissions_unknown_user_returns_404():
+    with _admin_client() as client:
+        response = client.put(f"{PREFIX}/{UNKNOWN_ID}/permissions", json={"radar_detail_view": []})
+    assert response.status_code == 404
+    assert response.headers["content-type"].startswith("application/json")
+
+
+@needs_admin
+def test_set_permissions_invalid_body_returns_422():
+    with _admin_client() as client:
+        response = client.put(f"{PREFIX}/{UNKNOWN_ID}/permissions", json={"radar_detail_view": ["no spaces!"]})
+    assert response.status_code == 422
+
+
+@needs_admin
+def test_set_permissions_foreign_origin_returns_403():
+    """A change from a foreign Origin must be rejected (the id is unknown on purpose)."""
+    with _admin_client() as client:
+        response = client.put(
+            f"{PREFIX}/{UNKNOWN_ID}/permissions", json={"radar_detail_view": []}, headers=FOREIGN_ORIGIN
+        )
+    assert response.status_code == 403
