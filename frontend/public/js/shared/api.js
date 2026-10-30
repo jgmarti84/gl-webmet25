@@ -28,6 +28,14 @@ export const api = {
         return data.radars || [];
     },
 
+    /**
+     * One-radar detail views the logged-in user may open (already resolved by the API).
+     * @returns {Promise<{radar_detail_views: string[]}>}
+     */
+    async getMyPermissions() {
+        return this.get('/permissions/me');
+    },
+
     // Internal: fetch products for a single (volNrs, strategy) clause
     async _getProductsForClause(volNrs, strategy) {
         const params = new URLSearchParams();
