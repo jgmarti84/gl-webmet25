@@ -25,6 +25,14 @@ from ..utils.colormaps import colormap_for_field, colormap_to_rio_tiler, get_col
 
 logger = logging.getLogger(__name__)
 
+# Renders at or above this are logged at INFO; faster ones at DEBUG (one tile = one line otherwise)
+SLOW_RENDER_MS = 1000
+
+
+def render_log_level(elapsed_ms: int) -> int:
+    """INFO for slow renders, DEBUG for the rest."""
+    return logging.INFO if elapsed_ms >= SLOW_RENDER_MS else logging.DEBUG
+
 # ---------------------------------------------------------------------------
 # Cache tuning constants
 # ---------------------------------------------------------------------------
@@ -544,12 +552,14 @@ class TileService:
                     r.setex(redis_key, ttl, result)
                 except Exception as e:
                     logger.warning("Redis set failed: %s", e)
-                logger.info(
+                logger.log(
+                    render_log_level(elapsed_ms),
                     "TILE RENDER + CACHE cog=%s z=%d x=%d y=%d elapsed=%dms l2_ttl=%ds",
                     file_path, z, x, y, elapsed_ms, ttl,
                 )
             else:
-                logger.info(
+                logger.log(
+                    render_log_level(elapsed_ms),
                     "TILE RENDER + CACHE cog=%s z=%d x=%d y=%d elapsed=%dms l2_ttl=N/A",
                     file_path, z, x, y, elapsed_ms,
                 )
@@ -717,7 +727,7 @@ class TileService:
         # Convert to rio-tiler format
         colormap_dict = colormap_to_rio_tiler(cmap, vmin, vmax)
         
-        logger.info(f"Built colormap '{cmap_name}' for product '{product_key}' (range: {vmin} to {vmax})")
+        logger.debug(f"Built colormap '{cmap_name}' for product '{product_key}' (range: {vmin} to {vmax})")
         
         return colormap_dict
     
