@@ -22,11 +22,28 @@ def make_user(test_db_session):
 
 
 @pytest.fixture
-def client(test_db_session, mailer):
-    """FastAPI app with the auth routers, using the test database session and a fake mailer."""
+def google_verifier():
+    """Stands in for Google: the test sets `.identity` (what a valid token carries) or `.fail = True`."""
+    from api.app.auth.google import FakeGoogleVerifier
+
+    return FakeGoogleVerifier()
+
+
+@pytest.fixture
+def google_on(monkeypatch):
+    """ "Sign in with Google" configured (an OAuth client ID is set)."""
+    from api.app.config import settings
+
+    monkeypatch.setattr(settings, "google_client_id", "123-test.apps.googleusercontent.com")
+
+
+@pytest.fixture
+def client(test_db_session, mailer, google_verifier):
+    """FastAPI app with the auth routers, using the test database session, a fake mailer and a fake Google."""
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
+    from api.app.auth.google import get_google_verifier
     from api.app.mail.service import get_mailer
     from api.app.routers.admin import router as admin_router
     from api.app.routers.auth import router as auth_router
@@ -39,6 +56,7 @@ def client(test_db_session, mailer):
         app.include_router(router, prefix="/api/v1")
     app.dependency_overrides[get_db] = lambda: test_db_session
     app.dependency_overrides[get_mailer] = lambda: mailer
+    app.dependency_overrides[get_google_verifier] = lambda: google_verifier
     with TestClient(app, base_url="http://testserver") as test_client:
         yield test_client
 
@@ -50,24 +68,28 @@ def login(client, username="alice", password=TEST_PASSWORD):
 
 
 @pytest.fixture
-def app_client(test_db_session, mailer):
+def app_client(test_db_session, mailer, google_verifier):
     """The real application (every router, as wired in main.py), using the test database session.
 
     The lifespan (Redis, GDAL, admin check) does not run: the client is not used as a context manager.
+    Google is the fake verifier of the `google_verifier` fixture, never the real one.
     """
     from fastapi.testclient import TestClient
 
+    from api.app.auth.google import get_google_verifier
     from api.app.mail.service import get_mailer
     from api.app.main import app
     from radar_db import get_db
 
     app.dependency_overrides[get_db] = lambda: test_db_session
     app.dependency_overrides[get_mailer] = lambda: mailer
+    app.dependency_overrides[get_google_verifier] = lambda: google_verifier
     try:
         yield TestClient(app, base_url="http://testserver")
     finally:
         app.dependency_overrides.pop(get_db, None)
         app.dependency_overrides.pop(get_mailer, None)
+        app.dependency_overrides.pop(get_google_verifier, None)
 
 
 # --- public registration (spec B) ----------------------------------------------

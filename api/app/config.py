@@ -72,6 +72,11 @@ class APISettings(BaseSettings):
     login_max_failed_attempts: int = Field(default=5, alias="LOGIN_MAX_FAILED_ATTEMPTS")
     login_lockout_minutes: int = Field(default=15, alias="LOGIN_LOCKOUT_MINUTES")
 
+    # "Sign in with Google": the OAuth client ID created in the Google Cloud console (Web application). It is public
+    # (the login page needs it to draw the button), not a secret. Empty = the button is not offered and
+    # POST /auth/google answers 503.
+    google_client_id: str = Field(default="", alias="GOOGLE_CLIENT_ID")
+
     # Public registration and e-mail. Registration stays off until everything it needs is set.
     registration_enabled: bool = Field(default=False, alias="REGISTRATION_ENABLED")
     # Public address of the site, used to build the links inside the mails.
@@ -127,6 +132,10 @@ class APISettings(BaseSettings):
         # bare "postgresql://" URL from psycopg2 to psycopg (v3).
         return f"postgresql+psycopg2://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
     
+    @property
+    def google_login_available(self) -> bool:
+        return bool(self.google_client_id.strip())
+
     @property
     def mail_configured(self) -> bool:
         # Enough to send a mail with a working link. Also what password recovery needs.

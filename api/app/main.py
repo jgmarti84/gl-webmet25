@@ -20,6 +20,7 @@ from .routers import (
     cogs_router,
     colormap_router,
     frames_router,
+    permissions_router,
     products_router,
     radars_router,
     registration_router,
@@ -31,9 +32,10 @@ from .schemas import HealthResponse
 from .services.tile_service import _tile_render_executor
 from .services.redis_client import get_redis, close_redis
 
-# Setup logging
+# Setup logging. LOG_LEVEL=DEBUG shows per-tile/frame lines (default INFO).
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -212,6 +214,8 @@ app.include_router(auth_router, prefix=settings.api_prefix)
 # Public (no session): sign-up, e-mail verification and password recovery.
 app.include_router(registration_router, prefix=settings.api_prefix)
 app.include_router(users_router, prefix=settings.api_prefix)
+# The user's own permissions; the route itself requires a session (get_current_user).
+app.include_router(permissions_router, prefix=settings.api_prefix)
 
 
 # Health check endpoints

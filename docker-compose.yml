@@ -167,6 +167,8 @@ services:
       # keep UVICORN_WORKERS x (10 + DB_MAX_OVERFLOW) under about 90. With 4 workers and 12: 88.
       # Past that sum Postgres refuses new connections and those requests fail; under it they wait in the pool.
       DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-12}
+      # INFO (default) logs one access line per tile; DEBUG adds the per-tile/frame details
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       COG_BASE_PATH: /product_output
       TOPS_AND_CORES_DIR: /tops_and_cores
       CORS_ORIGINS: ${CORS_ORIGINS:-}
@@ -180,6 +182,8 @@ services:
       SESSION_RETENTION_DAYS: ${SESSION_RETENTION_DAYS:-90}
       LOGIN_MAX_FAILED_ATTEMPTS: ${LOGIN_MAX_FAILED_ATTEMPTS:-5}
       LOGIN_LOCKOUT_MINUTES: ${LOGIN_LOCKOUT_MINUTES:-15}
+      # "Sign in with Google": OAuth client ID from the Google Cloud console (public, not a secret). Empty = off.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       # Public registration and e-mail (spec B): same defaults as api/app/config.py
       REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-false}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}

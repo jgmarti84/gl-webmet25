@@ -210,7 +210,7 @@ reset-password:
 # Levanta el stack de desarrollo (api, frontend-v2 sobre radar_prod_db), la base de test de tests/auth y
 # tests/indexer, y el stack aislado de tests/api y tests/e2e (radar_db_e2e, api-e2e, frontend-e2e, indexer-e2e).
 dev-up:
-	$(DEV_COMPOSE) up -d --build radar_db redis db-init api frontend-v2 radar_db_test db-init-test radar_db_e2e db-init-e2e api-e2e frontend-e2e indexer-e2e tests
+	$(DEV_COMPOSE) up -d --build radar_db redis db-init api frontend-v2 radar_db_test db-init-test radar_db_e2e db-init-e2e api-e2e frontend-e2e prefix-proxy-e2e indexer-e2e tests
 
 # Usar este y no "down": los servicios nuevos del override (tests, frontend-v2,
 # radar_db_test) no se bajan sin pasar el archivo devcontainer.

@@ -296,6 +296,70 @@ The development stack has a local mailbox, **Mailpit**: `http://localhost:8025` 
 
 There is **no automatic cleanup** of unverified accounts or of expired rows in `email_tokens`. An unverified account is replaced when someone signs up again with its username or mail after its link expired (24 h), and until then it keeps that username. Expired tokens pile up until a cleanup job is written. (Old logins in `user_sessions` are purged on each login of that user; see §8.)
 
+### 9.6 Sign in with Google
+
+**What it does.** The login page shows a "Continuar con Google" button when `GOOGLE_CLIENT_ID` is set. Anyone with a Google account can enter: if there is a user with that mail (or already linked to that Google account) they enter; otherwise a `viewer` account is created for them, with the mail already verified (Google confirmed it) and no form. It is **not** tied to `REGISTRATION_ENABLED`: with the client ID set it is always on, so the site is open to every Google account. Administrators never enter this way (they use user and password), deactivated accounts do not either, and a mail already linked to another Google account is refused.
+
+- **Setting:** `GOOGLE_CLIENT_ID` in `.env` (public, not a secret; no client secret is used). Recreate the API with `make api`. Empty = off: the button is not shown and `POST /auth/google` answers 503.
+- **Google Cloud console:** create a project, set up the consent screen (type **External**, then **publish** the app: in "Testing" only the listed test users can enter), and create an OAuth client ID of type **Web application** with the site addresses as "Authorized JavaScript origins" (the same as `ALLOWED_ORIGINS`; add the public domain when the site has one). No redirect URIs are needed.
+- **Account linking:** the first time, an existing account with the same mail is linked to the Google account (`users.google_sub`) and its mail is marked verified. If that account was never verified (someone signed up with the mail and chose a password), its password is dropped and its sessions closed, since the person who set it never owned the mailbox. Later logins find the account by the Google id, even if the mail changed.
+- **Network:** the API downloads Google's public keys over HTTPS (`https://www.googleapis.com/oauth2/v3/certs`) to check each token's signature; they are kept in memory for an hour. The visitor's browser must be able to reach `accounts.google.com`.
+- **Legal:** a Google sign-up records no acceptance of the terms (`terms_accepted_at` stays empty). Before opening the site to the public, see §9.3 point 4.
+
+---
+
+## 10. Serving a Copy Under a Base Path
+
+When two copies of the site must share one hostname (for example on stage, Javi's copy at `/` and Nacho's at
+`/nacho/`), the proxy in front routes by prefix and **strips** it. Nothing in the image changes; the copy learns its
+prefix from the `X-Forwarded-Prefix` header (see `docs/DATA_FLOW.md`, "Base path").
+
+Caddyfile of the proxy (stage: `webmet_caddy`, block `:8080`):
+
+```
+:8080 {
+  bind 127.0.0.1
+  encode zstd gzip
+
+  # The copy under /nacho/: strip the prefix and tell its nginx about it.
+  redir /nacho /nacho/
+  handle_path /nacho/* {
+    reverse_proxy 127.0.0.1:8081 {
+      header_up X-Forwarded-Prefix /nacho
+    }
+  }
+
+  # Everything else: the copy at the root. A client cannot fake a prefix here.
+  handle {
+    request_header -X-Forwarded-Prefix
+    reverse_proxy 127.0.0.1:80
+  }
+}
+```
+
+With `admin off`, apply it with `docker restart <caddy container>` (`caddy reload` needs the admin API).
+
+In the `.env` of the copy under the prefix:
+
+- `FRONTEND_PORT` = the port the Caddyfile points at (`8081` above).
+- `PUBLIC_BASE_URL=https://<host>/nacho`, so the links in the mails carry the prefix.
+- `ALLOWED_ORIGINS` = the same public origin as the other copy (`https://<host>`): the origin has no path.
+
+Each copy keeps its own sessions (cookie names carry the prefix), so one browser can be logged in to both.
+
+## 11. One-Radar Detail Views per User
+
+The map shows every radar to every logged-in user, but the **one-radar page** (`radar.html`, reached with the › button next to a radar) needs a permission. An admin always sees every radar whose `detail_view_enabled` is on; anybody else sees only the radars the admin assigned to them.
+
+- **Assign them:** Admin panel, **Usuarios**, button **Vistas** on the user's row. Tick "Todas" (every radar, including the ones added later) or pick radars. Only radars with the detail view enabled are listed. Saving replaces the whole list.
+- **What the person sees:** the › button appears only next to the radars they may open. Opening `radar.html?code=...` by hand shows "No tenés acceso a la vista de este radar" and goes back to the map after 5 seconds.
+- **Not covered:** the permission opens the page only. The data endpoints are the same ones the map uses, so every user still sees every radar on the main map.
+- **Switching a view off** (`detail_view_enabled`) hides it for everybody, including the admin, without touching anyone's list.
+- **Deleting a radar** deletes the permissions that name it.
+- **New accounts have no views.** That includes the accounts created by sign-up and by "Continuar con Google". The people who existed before this version also start with none.
+
+**Deployment note:** after this version is applied, **nobody but the admin can open a one-radar view** until the admin assigns them. Assign the views before announcing the change, or tell the users. The migration (`c4d5e6f7a8b9`, table `permissions`) is applied by `db-init` on the next `docker compose up -d --build`; it needs no new `.env` key.
+
 ---
 
 **Document Version:** 1.3.0  

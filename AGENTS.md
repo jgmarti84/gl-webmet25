@@ -27,9 +27,11 @@ output contract.
 4. **Run tests in a container, not on your host** (see Testing). Static checks
    (`docker compose config`, linters) are fine on the host.
 5. **Don't delete files to tidy up.** Move them into the gitignored `local/` folder.
-6. **Every PR description says:** what changed and why; where it was tested; any
-   deployment notes, in order (especially new `.env` keys that must exist before
-   pulling); and whether it touches the **radarlib output contract**.
+6. **PR descriptions.** Agents always cover: what changed and why; where it was tested;
+   deployment notes, in order; new `.env` keys; and whether it touches the **radarlib
+   output contract**. For PRs written by people these are recommended, not required;
+   the ones worth never skipping are new `.env` keys (they must exist before pulling)
+   and output-contract changes.
 
 ## Read before you touch (route, don't duplicate)
 - **Running / driving / testing the app** → `.claude/skills/run-webmet25/SKILL.md`

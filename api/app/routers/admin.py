@@ -21,6 +21,7 @@ from radar_db import (
 )
 from radar_db.models import Estrategia, Volumen, ColormapStop, ProductColormapOption
 from ..auth.dependencies import check_origin, require_admin
+from ..auth.permissions import delete_radar_permissions
 from ..schemas.admin import (
     AdminBulkDeleteResponse,
     AdminCOGListResponse,
@@ -304,6 +305,8 @@ def admin_delete_radar(code: str, db: Session = Depends(get_db)):
     radar = db.query(Radar).filter(Radar.code == code).first()
     if radar is None:
         raise HTTPException(status_code=404, detail=f"Radar '{code}' not found")
+    # Permissions name the radar by code (no foreign key): remove them in this same transaction.
+    delete_radar_permissions(db, code)
     db.delete(radar)
     _commit_or_conflict(db, f"Radar '{code}' could not be deleted")
 
