@@ -6,7 +6,8 @@
 import { authFetch } from '../auth-api.js';
 
 // Same origin as the page: the session cookie does not travel to another host or port.
-const API_BASE = '/api/v1';
+// Relative on purpose: <base href> keeps it inside the base path (see js/shared/base-path.js).
+const API_BASE = 'api/v1';
 
 export const cogBrowserApi = {
     /**

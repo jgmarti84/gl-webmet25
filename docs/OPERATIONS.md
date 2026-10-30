@@ -308,5 +308,46 @@ There is **no automatic cleanup** of unverified accounts or of expired rows in `
 
 ---
 
+## 10. Serving a Copy Under a Base Path
+
+When two copies of the site must share one hostname (for example on stage, Javi's copy at `/` and Nacho's at
+`/nacho/`), the proxy in front routes by prefix and **strips** it. Nothing in the image changes; the copy learns its
+prefix from the `X-Forwarded-Prefix` header (see `docs/DATA_FLOW.md`, "Base path").
+
+Caddyfile of the proxy (stage: `webmet_caddy`, block `:8080`):
+
+```
+:8080 {
+  bind 127.0.0.1
+  encode zstd gzip
+
+  # The copy under /nacho/: strip the prefix and tell its nginx about it.
+  redir /nacho /nacho/
+  handle_path /nacho/* {
+    reverse_proxy 127.0.0.1:8081 {
+      header_up X-Forwarded-Prefix /nacho
+    }
+  }
+
+  # Everything else: the copy at the root. A client cannot fake a prefix here.
+  handle {
+    request_header -X-Forwarded-Prefix
+    reverse_proxy 127.0.0.1:80
+  }
+}
+```
+
+With `admin off`, apply it with `docker restart <caddy container>` (`caddy reload` needs the admin API).
+
+In the `.env` of the copy under the prefix:
+
+- `FRONTEND_PORT` = the port the Caddyfile points at (`8081` above).
+- `PUBLIC_BASE_URL=https://<host>/nacho`, so the links in the mails carry the prefix.
+- `ALLOWED_ORIGINS` = the same public origin as the other copy (`https://<host>`): the origin has no path.
+
+Each copy keeps its own sessions (cookie names carry the prefix), so one browser can be logged in to both.
+
+---
+
 **Document Version:** 1.3.0  
 **Last Updated:** October 27, 2026

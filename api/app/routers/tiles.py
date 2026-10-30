@@ -232,7 +232,7 @@ async def get_tile(
     if not cog:
         raise HTTPException(status_code=404, detail=f"COG with ID {cog_id} not found")
 
-    logger.info(f"Requesting tile for COG {cog_id}: {cog.file_path}")
+    logger.debug(f"Requesting tile for COG {cog_id}: {cog.file_path}")
 
     product_key = cog.polarimetric_var or cog.product_key
     cog_data_type = cog.cog_data_type  # may be None for legacy records
@@ -277,7 +277,7 @@ async def get_tile(
     colormap_dict = None
     if product_key:
         colormap_dict = tile_service.build_colormap_for_product(product_key, override_cmap=effective_cmap)
-        logger.info(f"Built colormap '{effective_cmap}' for product '{product_key}' (COG {cog_id})")
+        logger.debug(f"Built colormap '{effective_cmap}' for product '{product_key}' (COG {cog_id})")
     else:
         logger.warning(f"No product key found for COG {cog_id}. Using default colormap.")
         colormap_dict = tile_service._get_default_radar_colormap()

@@ -4,7 +4,8 @@
 
 import { authFetch } from '../auth-api.js';
 
-const API_BASE = '/api/v1';
+// Relative on purpose: <base href> keeps it inside the base path (see js/shared/base-path.js).
+const API_BASE = 'api/v1';
 
 export const api = {
     /**

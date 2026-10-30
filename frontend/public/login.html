@@ -2,12 +2,13 @@
 <html lang="es-AR">
 <head>
     <meta charset="UTF-8">
+    <base href="/">
     <!-- viewport-fit=cover lets the page use the whole screen of phones with a notch; css/login.css keeps the
          content out of the notch with env(safe-area-inset-*). -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>WebMet25 — Iniciar sesión</title>
-    <link rel="icon" type="image/png" href="/assets/images/logos/OHMC@3x.png">
-    <link rel="stylesheet" href="/css/login.css">
+    <link rel="icon" type="image/png" href="assets/images/logos/OHMC@3x.png">
+    <link rel="stylesheet" href="css/login.css">
 </head>
 <!-- The class "login-page" plus the radar modifier on the body turns on the radar look of this page
      (see css/login.css). The sign-up and recovery pages share the same stylesheet but do not carry the modifier,
@@ -20,7 +21,7 @@
                  many cells of rain the generated field has. -->
             <canvas class="login-radar" id="login-radar" data-cx="0.76" data-cy="0.52" data-radius="0.5" data-rpm="3" data-cells="110" aria-hidden="true"></canvas>
 
-            <img class="login-hero-logo" src="/assets/images/logos/OHMC@3x.png" alt="Observatorio Hidro-Meteorológico de la Provincia de Córdoba">
+            <img class="login-hero-logo" src="assets/images/logos/OHMC@3x.png" alt="Observatorio Hidro-Meteorológico de la Provincia de Córdoba">
 
             <div class="login-hero-body">
                 <p class="login-hero-title">Sistema de visualización de la Red de Radares Meteorológicos de Argentina</p>
@@ -71,7 +72,7 @@
                             </div>
                         </div>
 
-                        <a id="login-forgot" class="login-link" href="/forgot" hidden>¿Olvidaste tu contraseña?</a>
+                        <a id="login-forgot" class="login-link" href="forgot" hidden>¿Olvidaste tu contraseña?</a>
 
                         <div id="login-error" class="login-error hidden" role="alert"></div>
                         <div id="login-info" class="login-info" role="status" hidden></div>
@@ -87,7 +88,7 @@
                         <div id="login-google-button" class="login-google-button"></div>
                     </div>
 
-                    <p id="login-signup" class="login-switch" hidden>¿No tenés cuenta? <a href="/register">Crear cuenta</a></p>
+                    <p id="login-signup" class="login-switch" hidden>¿No tenés cuenta? <a href="register">Crear cuenta</a></p>
                 </div>
             </div>
 
@@ -97,11 +98,11 @@
             </footer>
         </main>
     </div>
-    <script type="module" src="/js/login.js"></script>
-    <script type="module" src="/js/login-ui.js"></script>
-    <script type="module" src="/js/login-clock.js"></script>
+    <script type="module" src="js/login.js"></script>
+    <script type="module" src="js/login-ui.js"></script>
+    <script type="module" src="js/login-clock.js"></script>
     <!-- A plain script (not a module), as written by the designer: it only draws on the canvas above. Absolute path
          on purpose: nginx also serves this page in place of /admin and the map when there is no session. -->
-    <script src="/js/login-radar.js"></script>
+    <script src="js/login-radar.js"></script>
 </body>
 </html>

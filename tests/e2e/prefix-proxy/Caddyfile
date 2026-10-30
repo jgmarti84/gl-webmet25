@@ -1,0 +1,16 @@
+# Test proxy that serves the e2e frontend under /pfx/, like stage serves a copy under /nacho/ (spec base-path).
+# It strips the prefix and tells nginx about it; tests/e2e/test_base_path.py browses through it.
+{
+  auto_https off
+  admin off
+}
+
+:80 {
+  # "/pfx" without the final slash would break relative URLs: send it to "/pfx/".
+  redir /pfx /pfx/
+  handle_path /pfx/* {
+    reverse_proxy frontend-e2e:80 {
+      header_up X-Forwarded-Prefix /pfx
+    }
+  }
+}

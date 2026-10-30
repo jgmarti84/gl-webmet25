@@ -458,6 +458,21 @@ Backed by `ColormapService` — a thread-safe singleton with a 5-minute TTL cach
 
 **Authentication:** every `/api/v1/*` endpoint except `/auth/login`, `/auth/refresh`, `/auth/logout` and the sign-up and recovery endpoints of §4.10 requires a session (role `admin` or `viewer`); `/api/v1/admin/*` and `/api/v1/admin/users/*` require `admin`. Sessions use a 30-minute JWT access cookie and a rotating refresh cookie (48 h idle, 7 days absolute), both `HttpOnly` and `SameSite=Strict`, validated by the API ([`api/app/auth/dependencies.py`](../api/app/auth/dependencies.py)). nginx asks `GET /api/v1/auth/check` (204/401/403) before serving the HTML pages and the admin panel; without a session it serves `/login` in place of the requested page. The basemap tile proxies (`/osm-tiles/`, `/ign-tiles/`) ask the lighter `GET /api/v1/auth/check-token` (204/401) instead: it only verifies the signed access token and never reads the user, so panning the map uses no database connection; a deactivated user keeps receiving those public tiles until the access token expires (30 minutes at most). Static files (`.js`, `.css`, images), `/login`, `/register`, `/verify`, `/forgot`, `/reset` and `/health` stay public. People log in with their username or their mail; an account whose mail was never verified cannot log in (see §4.10). State-changing requests also check the `Origin` header against `ALLOWED_ORIGINS`.
 
+**Base path:** a proxy may serve the site under a prefix (`/nacho/`): it strips the prefix and sends
+`X-Forwarded-Prefix: /nacho`. nginx accepts only one simple segment (`map` with `^/[A-Za-z0-9_-]+$`; anything else
+means "at the root"), writes it into each page's `<base href>` (`sub_filter`), uses it in its one redirect
+(`@to_map`) and passes the validated value (never the raw header) to the API, which checks it again
+(`request_base_path` in [`api/app/auth/cookies.py`](../api/app/auth/cookies.py)). Two copies of the site on one
+hostname share the browser's cookies, so the prefix goes into the cookie names and the refresh path:
+
+| | At the root | Under `/nacho` |
+|---|---|---|
+| Access cookie (HTTPS) | `__Host-webmet_access`, `Path=/` | `__Host-nacho_webmet_access`, `Path=/` |
+| Refresh cookie (HTTPS) | `__Secure-webmet_refresh`, `Path=/api/v1/auth` | `__Secure-nacho_webmet_refresh`, `Path=/nacho/api/v1/auth` |
+
+(Over local HTTP the names drop the `__Host-`/`__Secure-` part.) Routes of nginx and the API do not change: behind
+the proxy they still receive `/api/v1/...`.
+
 **Endpoint groups:**
 
 | Resource | Operations |

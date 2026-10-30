@@ -1,5 +1,8 @@
 // Auth client shared by every page: login, admin panel, map, radar detail and COG browser.
-const AUTH_BASE = '/api/v1/auth';
+import { basePath } from './shared/base-path.js';
+
+// Relative on purpose: <base href> keeps it inside the base path (see js/shared/base-path.js).
+const AUTH_BASE = 'api/v1/auth';
 
 // What the pages may offer when /options cannot be read: nothing extra.
 const DEFAULT_OPTIONS = {
@@ -151,17 +154,22 @@ export async function initPageSession() {
     return me;
 }
 
-/** Accept only same-site absolute paths, to avoid open redirects. */
-export function safeNextPath(raw, fallback = '/') {
-    if (typeof raw !== 'string' || !raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) {
+/**
+ * Accept only same-site absolute paths inside this site's base path, to avoid open redirects (and never jump to
+ * another copy of the site served under a different prefix on the same host).
+ */
+export function safeNextPath(raw, fallback = `${basePath()}/`) {
+    const base = `${basePath()}/`;
+    if (typeof raw !== 'string' || !raw.startsWith(base) || raw.startsWith('//') || raw.startsWith('/\\')) {
         return fallback;
     }
     return raw;
 }
 
 export function redirectToLogin() {
+    // Full browser path (with the base path), so the login sends the user back to the same page.
     const next = window.location.pathname + window.location.search + window.location.hash;
-    window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+    window.location.assign(`login?next=${encodeURIComponent(next)}`);
 }
 
 export const authApi = {
