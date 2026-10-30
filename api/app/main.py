@@ -20,6 +20,7 @@ from .routers import (
     cogs_router,
     colormap_router,
     frames_router,
+    permissions_router,
     products_router,
     radars_router,
     registration_router,
@@ -213,6 +214,8 @@ app.include_router(auth_router, prefix=settings.api_prefix)
 # Public (no session): sign-up, e-mail verification and password recovery.
 app.include_router(registration_router, prefix=settings.api_prefix)
 app.include_router(users_router, prefix=settings.api_prefix)
+# The user's own permissions; the route itself requires a session (get_current_user).
+app.include_router(permissions_router, prefix=settings.api_prefix)
 
 
 # Health check endpoints

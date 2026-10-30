@@ -4,7 +4,7 @@
 from datetime import datetime, timezone
 from typing import List
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from radar_db.accounts import (
     AccountError,
@@ -29,7 +29,8 @@ class UserRuleError(Exception):
 
 
 def list_users(db: Session) -> List[User]:
-    return db.query(User).order_by(User.username).all()
+    # selectinload: one extra query for every user's permissions, instead of one per user in the response.
+    return db.query(User).options(selectinload(User.permissions)).order_by(User.username).all()
 
 
 def create(db: Session, data: dict) -> User:
