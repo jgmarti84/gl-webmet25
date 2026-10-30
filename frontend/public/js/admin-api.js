@@ -165,6 +165,13 @@ export const adminApi = {
     revokeUserSessions(id) { return request(`/users/${id}/revoke-sessions`, { method: 'POST' }); },
     // The admin vouches for the mail of an account that never opened its verification link.
     verifyUserEmail(id) { return request(`/users/${id}/verify-email`, { method: 'POST' }); },
+    // Companies (spec C): the general admin's side.
+    listOrganizations() { return request('/organizations'); },
+    createOrganization(payload) { return request('/organizations', { method: 'POST', body: JSON.stringify(payload) }); },
+    patchOrganization(id, payload) { return request(`/organizations/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }); },
+    setOrganizationRadarViews(id, views) {
+        return request(`/organizations/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ radar_detail_view: views }) });
+    },
     // Replace the user's whole list of one-radar detail views: radar codes, ['*'] for all, [] for none.
     setUserRadarViews(id, views) {
         return request(`/users/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ radar_detail_view: views }) });

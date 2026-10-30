@@ -2,7 +2,7 @@ import { adminApi, EXPIRED_SESSION_MESSAGE } from './admin-api.js';
 import { authApi, redirectToLogin } from './auth-api.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
 
-const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'colormaps', 'colormap-options', 'users'];
+const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'colormaps', 'colormap-options', 'users', 'organizations'];
 const STATUS_OPTIONS = ['available', 'missing', 'error', 'pending', 'processing', 'archived'];
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
@@ -1954,13 +1954,19 @@ async function renderColormapOptions() {
     });
 }
 
-const ROLE_LABELS = { admin: 'Administrador', viewer: 'Lector' };
+const ROLE_LABELS = { admin: 'Administrador', org_admin: 'Admin de empresa', viewer: 'Lector' };
 
 async function renderUsers() {
-    const users = sortItems(await adminApi.listUsers(), 'users');
+    const [allUsers, orgs] = await Promise.all([adminApi.listUsers(), adminApi.listOrganizations()]);
+    state.organizations = orgs;  // the add-user form offers them
+    // Coming from the Empresas section ("Usuarios" link) shows only that company's users until "ver todos".
+    const orgFilter = state.usersOrgFilter || null;
+    const orgFilterName = orgs.find((o) => o.id === orgFilter)?.name;
+    const users = sortItems(orgFilter ? allUsers.filter((u) => u.organization_id === orgFilter) : allUsers, 'users');
     const meId = state.me?.id;
     elements.sectionContent.innerHTML = `
         <div class="toolbar"><button class="btn" id="users-add">+ Agregar usuario</button></div>
+        ${orgFilter ? `<p class="toolbar-note">Usuarios de ${safeText(orgFilterName)} · <a href="#users" id="users-clear-org">ver todos</a></p>` : ''}
         ${renderFilterBar('users', users)}
         <div class="table-wrap">
         <table>
@@ -1968,6 +1974,7 @@ async function renderUsers() {
                 <th><button data-sort="username">Usuario</button></th>
                 <th><button data-sort="full_name">Nombre</button></th>
                 <th><button data-sort="role">Rol</button></th>
+                <th>Empresa</th>
                 <th>Vistas de radar</th>
                 <th><button data-sort="is_active">Activo</button></th>
                 <th><button data-sort="last_login_at">Último ingreso</button></th>
@@ -1979,6 +1986,7 @@ async function renderUsers() {
                         <td>${safeText(user.username)}${user.password_is_bootstrap ? ' <span class="status-pill">contraseña inicial</span>' : ''}${needsMailVerification(user) ? ' <span class="status-pill">mail sin verificar</span>' : ''}</td>
                         <td>${safeText(user.full_name)}</td>
                         <td>${ROLE_LABELS[user.role] || safeText(user.role)}</td>
+                        <td>${user.organization_name ? safeText(user.organization_name) : '—'}</td>
                         <td>${user.role === 'admin' ? 'Todas (admin)' : safeText(viewsSummary(user.radar_detail_views))}</td>
                         <td>${user.is_active ? 'Sí' : 'No'}</td>
                         <td>${user.last_login_at ? fmtDate(user.last_login_at) : '—'}</td>
@@ -2004,6 +2012,15 @@ async function renderUsers() {
     const byId = (id) => users.find((u) => String(u.id) === String(id));
 
     document.getElementById('users-add').onclick = () => openUserForm();
+    const clearOrgFilter = document.getElementById('users-clear-org');
+    if (clearOrgFilter) {
+        // Already on #users, so changing the hash would not redraw: do it by hand.
+        clearOrgFilter.onclick = (event) => {
+            event.preventDefault();
+            state.usersOrgFilter = null;
+            renderSection();
+        };
+    }
     elements.sectionContent.querySelectorAll('[data-edit-user]').forEach((el) => {
         el.onclick = () => openUserForm(byId(el.dataset.editUser));
     });
@@ -2048,9 +2065,18 @@ async function renderUsers() {
 function openUserForm(user = null) {
     const isEdit = Boolean(user);
     const isSelf = isEdit && user.id === state.me?.id;
-    const roleOptions = Object.entries(ROLE_LABELS)
-        .map(([value, label]) => `<option value="${value}"${(user?.role || 'viewer') === value ? ' selected' : ''}>${label}</option>`)
+    // Editing: the roles that fit the account (a company user is viewer or company admin, never the general admin;
+    // the company never changes). Creating: all three, and the API answers 422 for a mismatch with the company.
+    const allowedRoles = !isEdit ? Object.keys(ROLE_LABELS)
+        : user.organization_id ? ['org_admin', 'viewer'] : ['admin', 'viewer'];
+    const roleOptions = allowedRoles
+        .map((value) => `<option value="${value}"${(user?.role || 'viewer') === value ? ' selected' : ''}>${ROLE_LABELS[value]}</option>`)
         .join('');
+    const orgOptions = ['<option value="">Ninguna</option>',
+        ...(state.organizations || []).map((org) => `<option value="${org.id}">${safeText(org.name)}</option>`)].join('');
+    const orgField = !isEdit
+        ? `<label>Empresa <select name="organization_id">${orgOptions}</select></label>`
+        : (user.organization_name ? `<p class="toolbar-note">Empresa: ${safeText(user.organization_name)} (no se cambia)</p>` : '');
     openFormModal(
         isEdit ? `Editar usuario ${user.username}` : 'Agregar usuario',
         `
@@ -2058,6 +2084,7 @@ function openUserForm(user = null) {
             <label>Nombre <input name="full_name" type="text" maxlength="128" value="${safeText(user?.full_name)}"></label>
             <label>Email <input name="email" type="email" maxlength="254" value="${safeText(user?.email)}"></label>
             <label>Rol <select name="role"${isSelf ? ' disabled' : ''}>${roleOptions}</select></label>
+            ${orgField}
             ${isEdit ? '' : '<label>Contraseña inicial <input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required></label>'}
             <div class="form-actions"><button class="btn" type="submit">${isEdit ? 'Guardar' : 'Crear'}</button></div>
         `,
@@ -2074,6 +2101,8 @@ function openUserForm(user = null) {
             } else {
                 payload.username = formData.get('username');
                 payload.password = formData.get('password');
+                const orgId = formData.get('organization_id');
+                if (orgId) payload.organization_id = Number(orgId);
                 await adminApi.createUser(payload);
                 message = `Usuario ${payload.username.toLowerCase()} creado`;
             }
@@ -2084,13 +2113,15 @@ function openUserForm(user = null) {
 }
 
 /**
- * Modal to choose which one-radar detail views a user may open (spec C).
- * Only radars with the view enabled are listed. Codes the user already has on radars whose view is now off are
- * kept as they are (sent back unchanged), so switching a view off for maintenance does not lose anybody's access.
+ * Modal to choose one-radar detail views (spec C), for a user or a company.
+ * Only radars with the view enabled are listed. Saved codes of radars whose view is now off are kept as they are
+ * (sent back unchanged), so switching a view off for maintenance does not lose anybody's access.
+ * `onSave` saves the list and RETURNS the success message: it is shown after `renderSection()`, because
+ * `renderSection()` starts by clearing the notice (showing it before would make it vanish at once).
+ * @param {{title: string, stored: string[], onSave: (views: string[]) => Promise<string>}} options
  */
-async function openViewsForm(user) {
+async function openRadarViewsForm({ title, stored, onSave }) {
     const radars = (await adminApi.listRadars()).filter((radar) => radar.detail_view_enabled);
-    const stored = user.radar_detail_views || [];
     const hasAll = stored.includes(ALL_RADARS);
     const listedCodes = new Set(radars.map((radar) => radar.code));
     const keptHidden = stored.filter((code) => code !== ALL_RADARS && !listedCodes.has(code));
@@ -2102,7 +2133,7 @@ async function openViewsForm(user) {
             </label>`).join('')
         : '<p class="toolbar-note">Ningún radar tiene la vista de detalle habilitada.</p>';
     openFormModal(
-        `Vistas de radar de ${user.username}`,
+        title,
         `
             <label class="checkbox-row"><input type="checkbox" name="all"${hasAll ? ' checked' : ''}> Todas</label>
             <fieldset class="views-radars"><legend>O elegir radares</legend>${radarRows}</fieldset>
@@ -2110,10 +2141,96 @@ async function openViewsForm(user) {
             <div class="form-actions"><button class="btn" type="submit">Guardar</button></div>
         `,
         async (formData) => {
-            const views = formData.get('all') ? [ALL_RADARS] : [...formData.getAll('radar'), ...keptHidden];
-            await adminApi.setUserRadarViews(user.id, views);
+            const message = await onSave(formData.get('all') ? [ALL_RADARS] : [...formData.getAll('radar'), ...keptHidden]);
             await renderSection();
-            showMessage(`Vistas de ${user.username} actualizadas`, 'success');
+            showMessage(message, 'success');
+        },
+    );
+}
+
+/** Users section: views of one user. */
+function openViewsForm(user) {
+    return openRadarViewsForm({
+        title: `Vistas de radar de ${user.username}`,
+        stored: user.radar_detail_views || [],
+        onSave: async (views) => {
+            await adminApi.setUserRadarViews(user.id, views);
+            return `Vistas de ${user.username} actualizadas`;
+        },
+    });
+}
+
+/** Companies section (spec C): list, create, edit, seats and the company's views. */
+async function renderOrganizations() {
+    const orgs = await adminApi.listOrganizations();
+    elements.sectionContent.innerHTML = `
+        <div class="toolbar"><button class="btn" id="orgs-add">+ Agregar empresa</button></div>
+        <div class="table-wrap">
+        <table>
+            <thead><tr>
+                <th>Empresa</th><th>Lugares</th><th>Activa</th><th>Vistas de radar</th><th>Acciones</th>
+            </tr></thead>
+            <tbody>
+                ${orgs.map((org) => `
+                    <tr>
+                        <td>${safeText(org.name)}</td>
+                        <td>${org.seats_used} de ${org.seat_limit}</td>
+                        <td>${org.is_active ? 'Sí' : 'No'}</td>
+                        <td>${safeText(viewsSummary(org.radar_detail_views))}</td>
+                        <td class="table-actions">
+                            <button class="btn-secondary" data-edit-org="${org.id}" title="Editar">${ICON_EDIT}</button>
+                            <button class="btn-secondary" data-views-org="${org.id}">Vistas</button>
+                            <a class="btn-secondary" href="#users" data-users-of-org="${org.id}">Usuarios</a>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+        </div>
+    `;
+    const byId = (id) => orgs.find((o) => String(o.id) === String(id));
+    document.getElementById('orgs-add').onclick = () => openOrganizationForm();
+    elements.sectionContent.querySelectorAll('[data-edit-org]').forEach((el) => {
+        el.onclick = () => openOrganizationForm(byId(el.dataset.editOrg));
+    });
+    elements.sectionContent.querySelectorAll('[data-views-org]').forEach((el) => {
+        const org = byId(el.dataset.viewsOrg);
+        el.onclick = () => openRadarViewsForm({
+            title: `Vistas de radar de ${org.name}`,
+            stored: org.radar_detail_views,
+            onSave: async (views) => {
+                await adminApi.setOrganizationRadarViews(org.id, views);
+                return `Vistas de ${org.name} actualizadas`;
+            },
+        });
+    });
+    elements.sectionContent.querySelectorAll('[data-users-of-org]').forEach((el) => {
+        // Opens the users section filtered by this company (see renderUsers): the hash change redraws the page.
+        el.onclick = () => { state.usersOrgFilter = Number(el.dataset.usersOfOrg); };
+    });
+}
+
+/** Create or edit a company: name, seat limit and whether it is active. */
+function openOrganizationForm(org = null) {
+    const isEdit = Boolean(org);
+    openFormModal(
+        isEdit ? `Editar empresa ${org.name}` : 'Agregar empresa',
+        `
+            <label>Nombre <input name="name" type="text" maxlength="128" required value="${safeText(org?.name)}"></label>
+            <label>Lugares (usuarios activos, admins incluidos) <input name="seat_limit" type="number" min="1" max="10000" required value="${org?.seat_limit ?? 5}"></label>
+            <label class="checkbox-row"><input type="checkbox" name="is_active"${!isEdit || org.is_active ? ' checked' : ''}> Activa (si no, ninguno de sus usuarios puede entrar)</label>
+            <div class="form-actions"><button class="btn" type="submit">${isEdit ? 'Guardar' : 'Crear'}</button></div>
+        `,
+        async (formData) => {
+            const payload = {
+                name: formData.get('name'),
+                seat_limit: Number(formData.get('seat_limit')),
+                is_active: formData.get('is_active') === 'on',
+            };
+            if (isEdit) await adminApi.patchOrganization(org.id, payload);
+            else await adminApi.createOrganization(payload);
+            await renderSection();
+            showMessage(`Empresa ${payload.name} ${isEdit ? 'actualizada' : 'creada'}`, 'success');
         },
     );
 }
@@ -2137,6 +2254,8 @@ function openPasswordResetForm(user) {
 async function renderSection() {
     hideMessage();
     state.section = parseHashSection();
+    // The "only this company's users" filter belongs to one visit of the users section.
+    if (state.section !== 'users') state.usersOrgFilter = null;
     setActiveSidebar(state.section);
 
     const titleBySection = {
@@ -2151,6 +2270,7 @@ async function renderSection() {
         colormaps: 'Mapas de colores',
         'colormap-options': 'Opciones de mapa de colores',
         users: 'Usuarios',
+        organizations: 'Empresas',
     };
     elements.sectionTitle.textContent = titleBySection[state.section] || 'Panel';
 
@@ -2166,6 +2286,7 @@ async function renderSection() {
         if (state.section === 'colormaps') await renderColormaps();
         if (state.section === 'colormap-options') await renderColormapOptions();
         if (state.section === 'users') await renderUsers();
+        if (state.section === 'organizations') await renderOrganizations();
         decorateSortHeaders(state.section);
     } catch (error) {
         if ((error.message || '').includes(EXPIRED_SESSION_MESSAGE)) {
