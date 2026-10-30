@@ -197,3 +197,20 @@ def test_a_foreign_origin_is_refused(client, google_verifier, google_on):
     google_verifier.identity = _identity()
     response = client.post(f"{BASE}/google", json={"credential": "t"}, headers={"Origin": "https://evil.example"})
     assert response.status_code == 403
+
+
+# --- behind a base path (spec base-path) ----------------------------------------------
+
+
+def test_google_login_behind_a_prefix_sets_the_prefixed_cookies(client, google_verifier, google_on):
+    """Through /nacho/ the session cookies carry the prefix, exactly like /login (otherwise the person would end up
+    logged in to the copy of the site at the root)."""
+    google_verifier.identity = _identity()
+    response = client.post(f"{BASE}/google", json={"credential": "any-token"}, headers={"X-Forwarded-Prefix": "/nacho"})
+    assert response.status_code == 200
+    set_cookie = response.headers.get_list("set-cookie")
+    access = next(c for c in set_cookie if c.startswith("nacho_webmet_access="))
+    refresh = next(c for c in set_cookie if c.startswith("nacho_webmet_refresh="))
+    assert "Path=/;" in access + ";"
+    assert "Path=/nacho/api/v1/auth" in refresh
+    assert not any(c.startswith("webmet_access=") for c in set_cookie)

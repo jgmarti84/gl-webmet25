@@ -105,7 +105,8 @@ def google_login(
     session, refresh_token = service.create_session(db, user, user_agent=user_agent, ip=ip)
     db.commit()
     access_token = create_access_token(user.id, user.role, user.token_version)
-    set_auth_cookies(response, access_token, refresh_token, session.expires_at)
+    # Same cookies as /login, scoped to the base path the request came through (spec base-path).
+    set_auth_cookies(response, access_token, refresh_token, session.expires_at, base_path=request_base_path(request))
     return _me(user, _full_access_lifetime())
 
 
