@@ -388,6 +388,14 @@ class User(Base):
     email_tokens = relationship(
         "EmailToken", back_populates="user", cascade="all, delete-orphan", passive_deletes=True
     )
+    # What the user may do. Two foreign keys point at users (user_id, granted_by), so the join is explicit.
+    permissions = relationship(
+        "Permission",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        foreign_keys="Permission.user_id",
+    )
 
     __table_args__ = (
         CheckConstraint("role IN ('admin', 'viewer')", name='ck_users_role'),
@@ -400,6 +408,43 @@ class User(Base):
 
     def __repr__(self):
         return f"<User(id={self.id}, username='{self.username}', role='{self.role}')>"
+
+
+# Actions a permission may grant. The CHECK constraint on the table repeats this list, so a typo can never be stored;
+# new features (spec D: map layers) add their action here and in a migration.
+PERMISSION_ACTIONS = ("radar.detail_view",)
+# Resource meaning "every radar, including the ones added later".
+PERMISSION_ALL = "*"
+
+
+class Permission(Base):
+    """One thing a user may do: an action on a resource.
+
+    Example: action "radar.detail_view", resource "RMA1" lets the user open radar.html for RMA1. Resource "*"
+    covers every radar, present and future. Read only when a page asks for /permissions/me, never per data request.
+    """
+    __tablename__ = 'permissions'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    action = Column(String(64), nullable=False)
+    # A radar code, or PERMISSION_ALL. Plain text (no foreign key): deleting a radar removes its rows in the
+    # admin endpoint, in the same transaction.
+    resource = Column(String(64), nullable=False)
+    # Who granted it (audit). Kept when that admin account goes away.
+    granted_by = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    user = relationship("User", back_populates="permissions", foreign_keys=[user_id])
+
+    __table_args__ = (
+        CheckConstraint("action IN ('radar.detail_view')", name='ck_permissions_action'),
+        # Also serves lookups by user_id (its first column), so no separate index is needed.
+        UniqueConstraint('user_id', 'action', 'resource', name='uq_permissions_user_action_resource'),
+    )
+
+    def __repr__(self):
+        return f"<Permission(user_id={self.user_id}, action='{self.action}', resource='{self.resource}')>"
 
 
 class UserSession(Base):
