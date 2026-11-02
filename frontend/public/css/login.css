@@ -931,18 +931,18 @@
 }
 
 /* ── Login on phones: everything on one screen ──────────────────────────────
-   Only login.html carries .login-page--fit. On a phone (up to 640 px wide) the layout is exactly as tall as the
-   screen: the form column takes the room it needs, shrunk, and the radar strip gets ALL the height that is left, so
-   it is much taller than before and nobody has to scroll to reach "Crear cuenta" or Google.
+   Only login.html carries .login-page--fit. On a phone (up to 640 px wide) the layout is at least as tall as the
+   screen: the radar strip takes 40 % of the height (never less than 185 px, so the logo, the title and the status
+   line fit) and the form column takes the rest, shrunk, so nobody has to scroll to reach "Crear cuenta" or Google.
    100dvh is the height that really shows (the browser bars of a phone change it); 100vh is the fallback for browsers
-   that do not know dvh. If the screen is so short that the form does not fit, the strip keeps a minimum of 150 px
-   and the page scrolls a little instead of squashing the form. Inputs stay at 16 px: below that, iPhones zoom the
+   that do not know dvh. If the screen is so short that the form does not fit in the 60 % left, that row grows and
+   the page scrolls a little instead of squashing the form. Inputs stay at 16 px: below that, iPhones zoom the
    page when a field is tapped. */
 @media (max-width: 640px) {
     .login-page--radar.login-page--fit .login-layout {
         min-height: 100vh;
         min-height: 100dvh;
-        grid-template-rows: minmax(150px, 1fr) auto;
+        grid-template-rows: minmax(185px, 40dvh) 1fr;
     }
 
     /* Radar strip: the logo and the title of the system at the top, the status line at the bottom (margin-top: auto
