@@ -1,5 +1,5 @@
 /**
- * Account chip of the map pages: always visible, bottom-left under the color legend. It shows the user's avatar (initials),
+ * Account chip of the map pages: always visible, top-right right above the icon bar. It shows the user's avatar (initials),
  * the name, the role badge (admins only) and the "Cerrar sesión" button. For admins it also reveals the
  * admin panel link that lives in the settings panel.
  */
