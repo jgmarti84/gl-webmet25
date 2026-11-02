@@ -11,6 +11,9 @@ from .auth import router as auth_router
 from .registration import router as registration_router
 from .users import router as users_router
 from .permissions import router as permissions_router
+from .organizations import router as organizations_router
+from .org import router as org_router
+from .profile import router as profile_router
 
 __all__ = [
     "radars_router",
@@ -25,4 +28,7 @@ __all__ = [
     "registration_router",
     "users_router",
     "permissions_router",
+    "organizations_router",
+    "org_router",
+    "profile_router",
 ]

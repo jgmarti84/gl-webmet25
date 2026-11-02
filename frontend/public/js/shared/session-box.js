@@ -1,11 +1,11 @@
 /**
- * Account chip of the map pages: always visible, bottom-left under the color legend. It shows the user's avatar (initials),
+ * Account chip of the map pages: always visible, top-right right above the icon bar. It shows the user's avatar (initials),
  * the name, the role badge (admins only) and the "Cerrar sesión" button. For admins it also reveals the
  * admin panel link that lives in the settings panel.
  */
 import { authApi } from '../auth-api.js';
 
-const ROLE_LABELS = { admin: 'Administrador', viewer: 'Lector' };
+export const ROLE_LABELS = { admin: 'Administrador', org_admin: 'Admin de empresa', viewer: 'Lector' };
 
 /** Up to two letters: initials of the first two words, or the first two characters of one word. */
 export function initialsOf(name) {
@@ -15,13 +15,32 @@ export function initialsOf(name) {
     return letters.toUpperCase();
 }
 
+/**
+ * Which of the optional buttons of the account chip a role gets. Only ONE of them is ever shown: the profile
+ * button for viewers (they have nothing else), the admin panel button for the general admin and the company panel
+ * button for company admins (both panels have a "Mi perfil" entry of their own, so they do not need another button).
+ */
+export function chipLinksFor(role) {
+    return {
+        admin: role === 'admin',
+        empresa: role === 'org_admin',
+        profile: role === 'viewer',
+    };
+}
+
 export function renderSessionBox(me) {
     const displayName = me.full_name || me.username;
 
+    const links = chipLinksFor(me.role);
     const adminLink = document.getElementById('admin-link');
-    if (adminLink) adminLink.hidden = me.role !== 'admin';
+    if (adminLink) adminLink.hidden = !links.admin;
     const chipAdminLink = document.getElementById('admin-chip-link');
-    if (chipAdminLink) chipAdminLink.hidden = me.role !== 'admin';
+    if (chipAdminLink) chipAdminLink.hidden = !links.admin;
+    // Company admins get a shortcut to their own panel (spec C); viewers get the profile button (spec D).
+    const chipEmpresaLink = document.getElementById('empresa-chip-link');
+    if (chipEmpresaLink) chipEmpresaLink.hidden = !links.empresa;
+    const chipProfileLink = document.getElementById('profile-chip-link');
+    if (chipProfileLink) chipProfileLink.hidden = !links.profile;
 
     const chip = document.getElementById('account-chip');
     if (!chip) return;
@@ -34,7 +53,7 @@ export function renderSessionBox(me) {
     role.textContent = ROLE_LABELS[me.role] || me.role;
     role.classList.toggle('is-admin', me.role === 'admin');
     // The role badge is only worth the space when it is not the everyday case.
-    role.hidden = me.role !== 'admin';
+    role.hidden = me.role === 'viewer';
     document.getElementById('session-box-logout').addEventListener('click', async () => {
         await authApi.logout();
         window.location.reload();  // nginx serves the login in place

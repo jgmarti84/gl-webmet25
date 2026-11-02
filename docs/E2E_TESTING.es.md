@@ -114,7 +114,7 @@ $DC stop
 **Credenciales de admin:** definirlas una vez en un `.env` en la raíz del repositorio (Compose lo lee):
 ```dotenv
 ADMIN_USERNAME=admin
-ADMIN_PASSWORD=your-strong-password   # 12+ caracteres
+ADMIN_PASSWORD=your-strong-password   # 10+ caracteres, con un carácter especial
 ```
 `db-init` (stack principal) y `db-init-e2e` (stack de test) crean la cuenta con ellas y el servicio `tests` lee los
 mismos valores, así que se mantienen consistentes.

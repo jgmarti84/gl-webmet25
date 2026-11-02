@@ -349,7 +349,38 @@ class TopsAndCores(Base):
         return f"<TopsAndCores(id={self.id}, radar='{self.radar_code}', file='{self.file_name}')>"
 
 
-USER_ROLES = ("admin", "viewer")
+USER_ROLES = ("admin", "org_admin", "viewer")
+
+
+class Organization(Base):
+    """A company account: a group of users with a seat limit and its own radar detail views.
+
+    Its company admins (role org_admin) manage its users from /empresa. Organizations are never deleted, only
+    deactivated: an inactive organization blocks the sign-in of all its users.
+    """
+    __tablename__ = 'organizations'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(128), nullable=False, unique=True)
+    # Maximum ACTIVE users, company admins included (decision C7).
+    seat_limit = Column(Integer, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True, server_default='true')
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    users = relationship("User", back_populates="organization")
+    permissions = relationship(
+        "Permission",
+        back_populates="organization",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        foreign_keys="Permission.organization_id",
+    )
+
+    __table_args__ = (CheckConstraint('seat_limit > 0', name='ck_organizations_seat_limit'),)
+
+    def __repr__(self):
+        return f"<Organization(id={self.id}, name='{self.name}')>"
 
 
 class User(Base):
@@ -362,6 +393,9 @@ class User(Base):
     email = Column(String(254))
     password_hash = Column(String(255), nullable=False)
     role = Column(String(16), nullable=False, default='viewer', server_default='viewer')
+    # The company this user belongs to, or NULL. Fixed when the account is created (decision C14).
+    # RESTRICT: an organization with users cannot be deleted (and the app never deletes organizations).
+    organization_id = Column(Integer, ForeignKey('organizations.id', ondelete='RESTRICT'), index=True)
     is_active = Column(Boolean, nullable=False, default=True, server_default='true')
     # Copied into each access token at login and compared on every request. Adding 1 makes all
     # the user's older tokens invalid at once (role change, deactivation, admin "revoke sessions").
@@ -384,6 +418,7 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    organization = relationship("Organization", back_populates="users")
     sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
     email_tokens = relationship(
         "EmailToken", back_populates="user", cascade="all, delete-orphan", passive_deletes=True
@@ -398,13 +433,21 @@ class User(Base):
     )
 
     __table_args__ = (
-        CheckConstraint("role IN ('admin', 'viewer')", name='ck_users_role'),
+        CheckConstraint("role IN ('admin', 'org_admin', 'viewer')", name='ck_users_role'),
+        # A company admin always has a company; the general admin never does.
+        CheckConstraint("role <> 'org_admin' OR organization_id IS NOT NULL", name='ck_users_org_admin_has_org'),
+        CheckConstraint("role <> 'admin' OR organization_id IS NULL", name='ck_users_admin_has_no_org'),
         # The mail is unique among the accounts that have one (stored normalized: lower case, no spaces).
         # Partial index: many accounts may have no mail at all.
         Index('uq_users_email', 'email', unique=True, postgresql_where=text("email IS NOT NULL")),
         # Same for the Google identifier: one Google account links to at most one user.
         Index('uq_users_google_sub', 'google_sub', unique=True, postgresql_where=text("google_sub IS NOT NULL")),
     )
+
+    @property
+    def can_sign_in(self) -> bool:
+        """Active account in an active company (or no company). Checked at login, refresh and every request."""
+        return bool(self.is_active) and (self.organization is None or bool(self.organization.is_active))
 
     def __repr__(self):
         return f"<User(id={self.id}, username='{self.username}', role='{self.role}')>"
@@ -426,7 +469,9 @@ class Permission(Base):
     __tablename__ = 'permissions'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    # The owner of the row: a user OR a company (exactly one of the two, see ck_permissions_one_subject).
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'))
+    organization_id = Column(Integer, ForeignKey('organizations.id', ondelete='CASCADE'))
     action = Column(String(64), nullable=False)
     # A radar code, or PERMISSION_ALL. Plain text (no foreign key): deleting a radar removes its rows in the
     # admin endpoint, in the same transaction.
@@ -436,11 +481,16 @@ class Permission(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     user = relationship("User", back_populates="permissions", foreign_keys=[user_id])
+    organization = relationship("Organization", back_populates="permissions", foreign_keys=[organization_id])
 
     __table_args__ = (
         CheckConstraint("action IN ('radar.detail_view')", name='ck_permissions_action'),
-        # Also serves lookups by user_id (its first column), so no separate index is needed.
+        # Exactly one owner: a user or a company.
+        CheckConstraint("(user_id IS NULL) <> (organization_id IS NULL)", name='ck_permissions_one_subject'),
+        # NULLs never collide in a unique constraint, so these two cover user rows and company rows separately.
+        # Each also serves lookups by its first column, so no separate index is needed.
         UniqueConstraint('user_id', 'action', 'resource', name='uq_permissions_user_action_resource'),
+        UniqueConstraint('organization_id', 'action', 'resource', name='uq_permissions_org_action_resource'),
     )
 
     def __repr__(self):

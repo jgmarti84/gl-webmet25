@@ -61,8 +61,11 @@ def _free_username(db: Session, email: str) -> str:
 
 
 def _unusable_password() -> str:
-    """A long random password nobody knows: the account only enters through Google (or after a password recovery)."""
-    return secrets.token_urlsafe(32)
+    """A long random password nobody knows: the account only enters through Google (or after a password recovery).
+
+    token_urlsafe only has a "-" or "_" about 3 times out of 4, and the password policy asks for a special character,
+    so one is always added at the end (without it, 1 sign-up in 4 would be refused by create_user)."""
+    return secrets.token_urlsafe(32) + "-"
 
 
 def sign_in(db: Session, identity: GoogleIdentity, now: Optional[datetime] = None) -> User:
@@ -111,7 +114,7 @@ def sign_in(db: Session, identity: GoogleIdentity, now: Optional[datetime] = Non
 def _check_may_come_in(user: User, identity: GoogleIdentity) -> None:
     if user.role == "admin":
         raise GoogleLoginError(403, "Las cuentas de administrador entran con usuario y contraseña", "admin_no_google")
-    if not user.is_active:
+    if not user.can_sign_in:
         raise GoogleLoginError(403, "Tu cuenta está desactivada", "account_disabled")
     if user.google_sub is not None and user.google_sub != identity.sub:
         raise GoogleLoginError(403, "Ese mail está enlazado a otra cuenta de Google", "google_account_mismatch")

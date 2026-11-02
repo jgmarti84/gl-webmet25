@@ -21,6 +21,7 @@ frontend/public/
 ├── forgot.html                # Página "Olvidé mi contraseña" (/forgot, pública)
 ├── reset.html                 # Página de contraseña nueva (/reset#token=…, pública)
 ├── admin.html                 # Admin panel SPA (served at /admin, login required)
+├── empresa.html               # Panel del admin de empresa (/empresa, solo admins de empresa)
 ├── css/
 │   ├── styles.css            # Main app UI styling (dark theme)
 │   ├── admin.css             # Admin panel styling (modern-light theme)
@@ -32,6 +33,7 @@ frontend/public/
     ├── register.js, verify.js, forgot.js, reset.js   # Un script por página pública
     ├── admin.js              # Admin panel orchestrator (CRUD, filters, colormap creator)
     ├── admin-api.js          # Admin REST client (/api/v1/admin/*)
+    ├── empresa.js, empresa-api.js  # Company admin panel (/empresa) and its REST client (/api/v1/org)
     ├── shared/               # Shared by v1 and v2
     │   ├── api.js            # REST API client
     │   ├── controls.js       # UI control handlers (+ radar ordering, time-wheel wiring)
@@ -439,9 +441,21 @@ Pipeline de composición en canvas:
 
 **Archivos:** [`frontend/public/js/auth-api.js`](../../frontend/public/js/auth-api.js), [`frontend/public/js/shared/session-box.js`](../../frontend/public/js/shared/session-box.js)
 
-**Responsabilidad:** Todas las páginas requieren sesión (nginx sirve `/login` en lugar de la página cuando no hay). `auth-api.js` es el cliente compartido: `authFetch()` reemplaza a `fetch()` para los datos de la API (ante un 401 renueva la sesión por `/auth/refresh` y reintenta una vez; si la sesión se perdió recarga la página, o va a `/login` si ya recargó hace unos segundos), e `initPageSession()` carga el usuario actual y arranca la renovación anticipada del access token, dos minutos antes de que venza (con el `access_expires_in` de `login`/`refresh`/`me`, también después de que una pestaña estuvo en segundo plano). `session-box.js` completa la franja de cuenta (`#account-chip`), siempre visible abajo a la izquierda, bajo el mapa de colores: avatar con las iniciales, nombre, la etiqueta de rol (solo para admins) y el botón de ícono "Cerrar sesión". Para admins también muestra dos accesos al panel de administración: un botón de ícono en la franja (`#admin-chip-link`, a la izquierda de cerrar sesión) y un link dentro del panel de configuración (`#admin-link`). Lo usan el mapa y el detalle de radar.
+**Responsabilidad:** Todas las páginas requieren sesión (nginx sirve `/login` en lugar de la página cuando no hay). `auth-api.js` es el cliente compartido: `authFetch()` reemplaza a `fetch()` para los datos de la API (ante un 401 renueva la sesión por `/auth/refresh` y reintenta una vez; si la sesión se perdió recarga la página, o va a `/login` si ya recargó hace unos segundos), e `initPageSession()` carga el usuario actual y arranca la renovación anticipada del access token, dos minutos antes de que venza (con el `access_expires_in` de `login`/`refresh`/`me`, también después de que una pestaña estuvo en segundo plano). `session-box.js` completa la franja de cuenta (`#account-chip`), siempre visible arriba a la derecha, justo encima de la barra de íconos: avatar con las iniciales, nombre, la etiqueta de rol (solo para admins) y el botón de ícono "Cerrar sesión". Para admins también muestra dos accesos al panel de administración: un botón de ícono en la franja (`#admin-chip-link`, a la izquierda de cerrar sesión) y un link dentro del panel de configuración (`#admin-link`). Lo usan el mapa y el detalle de radar. `chipLinksFor(role)` decide qué botón opcional de la franja recibe cada rol: el admin general el del panel de admin, el admin de empresa el del panel de empresa y el lector el botón de perfil (`#profile-chip-link`, hacia `/perfil`).
 
 `auth-api.js` también habla con los endpoints públicos del registro (DATA_FLOW §4.10): `login(username, password)` (el campo de usuario también acepta el mail, y la respuesta trae el `code` del fallo, por ejemplo `email_not_verified`), `options()` (qué pueden ofrecer las páginas; nunca lanza error y, si falla, devuelve "nada extra"), `register(payload)`, `verifyEmail(token)`, `resendVerification(identifier)`, `forgotPassword(email)` y `resetPassword(token, password)`. Los últimos cinco devuelven `{ ok, status, data }` y dejan los textos a cargo de la página.
+
+### **shared/profile-section.js** — El perfil, dibujado dentro de cualquier página (spec D)
+
+**Archivo:** [`frontend/public/js/shared/profile-section.js`](../../frontend/public/js/shared/profile-section.js)
+
+**Responsabilidad:** `mountProfile(container, {me, openModal, showMessage})` dibuja el perfil propio en un contenedor: los datos de la cuenta, los radares que la persona puede abrir y, para el admin de empresa, la tarjeta de su empresa, más la edición del nombre. La página que lo aloja le pasa sus propias funciones de modal y de avisos, así el formulario se comporta como el resto de esa página. Lo usan tres páginas: el panel de admin (sección `profile`), el panel de empresa (sección `perfil`) y `perfil.html`. Las funciones puras (`formatDate`, `profileRows`, `viewsNote`) tienen tests en `tests/js/test_profile_section.mjs`.
+
+### **perfil.html / perfil.js / perfil-api.js** — Página de perfil para lectores (spec D)
+
+**Archivos:** [`frontend/public/perfil.html`](../../frontend/public/perfil.html), [`frontend/public/js/perfil.js`](../../frontend/public/js/perfil.js), [`frontend/public/js/perfil-api.js`](../../frontend/public/js/perfil-api.js)
+
+**Responsabilidad:** La página que tiene cada usuario en `/perfil`, con el diseño del panel de admin (`css/admin.css`). Muestra los datos de la cuenta (`#perfil-details`), la tarjeta de identidad con las iniciales (`#perfil-avatar`, `#perfil-name`, `#perfil-username`), los radares que la persona puede abrir (`#perfil-views`) y, solo para el admin de empresa, la tarjeta de su empresa (`#perfil-company`, `#perfil-company-name`). Lo único editable es el nombre (`#perfil-edit-name`); el error de un guardado fallido sale dentro del modal. El admin general y el admin de empresa tienen el perfil dentro de sus paneles, así que `perfil.js` los redirige allí (`admin#profile`, `empresa#perfil`). `perfil-api.js` llama a `GET` y `PATCH api/v1/profile` con `authFetch`.
 
 ---
 
@@ -449,7 +463,7 @@ Pipeline de composición en canvas:
 
 **Archivo:** [`frontend/public/js/auth-pages.js`](../../frontend/public/js/auth-pages.js) — tests unitarios: `tests/js/test_auth_pages.mjs`
 
-**Responsabilidad:** Ayudas solo de presentación compartidas por el login y las cuatro páginas públicas; el servidor vuelve a validar todo. Exporta las mismas formas que exige el servidor (`USERNAME_RE`, un `EMAIL_RE` flexible, de 12 a 128 caracteres para las contraseñas), `validatePassword()` y `validateRegistration()` (null si está bien, si no el mensaje), `errorText()` / `statusMessage()` (el texto del propio servidor, o uno fijo para 429 y 503) y las ayudas de interfaz `showMessage()` / `hideMessage()` (siempre `textContent`, nunca `innerHTML`) y `startCooldown()` (un botón que cuenta hacia atrás, usado por "Reenviar mail").
+**Responsabilidad:** Ayudas solo de presentación compartidas por el login y las cuatro páginas públicas; el servidor vuelve a validar todo. Exporta las mismas formas que exige el servidor (`USERNAME_RE`, un `EMAIL_RE` flexible, de 10 a 128 caracteres y un carácter especial para las contraseñas), `validatePassword()` y `validateRegistration()` (null si está bien, si no el mensaje), `errorText()` / `statusMessage()` (el texto del propio servidor, o uno fijo para 429 y 503) y las ayudas de interfaz `showMessage()` / `hideMessage()` (siempre `textContent`, nunca `innerHTML`) y `startCooldown()` (un botón que cuenta hacia atrás, usado por "Reenviar mail").
 
 ---
 

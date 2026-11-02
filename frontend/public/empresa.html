@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+    <meta charset="UTF-8">
+    <!-- Base path rule: right after the charset; nginx rewrites it to <base href="/nacho/"> behind a prefix. -->
+    <base href="/">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebMet25 · Mi empresa</title>
+    <link rel="icon" type="image/png" href="assets/images/logos/OHMC@3x.png">
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+    <!-- Company admin panel (spec C). nginx serves it only to company admins (probe /_auth_org). It has the same
+         look as the admin panel (css/admin.css): the dark sidebar with the logo, the page header, the summary
+         cards and the table. The company has a single section, so the sidebar has a single entry. -->
+    <div class="admin-layout">
+        <aside class="sidebar">
+            <div class="sidebar-logo-wrap">
+                <img class="sidebar-logo" src="assets/images/logos/OHMC@3x.png" alt="OHMC Radar Meteorology System">
+            </div>
+            <div class="sidebar-brand">
+                <span class="sidebar-brand-mark">◑</span>
+                <span class="sidebar-brand-text">WebMet25<small>Empresa</small></span>
+            </div>
+            <nav id="sidebar-nav">
+                <div class="nav-group-label">Gestión</div>
+                <a href="#usuarios" data-section="usuarios" class="active"><span class="nav-ico">👤</span> Usuarios</a>
+                <div class="nav-group-label">Cuenta</div>
+                <a href="#perfil" data-section="perfil"><span class="nav-ico">🙍</span> Mi perfil</a>
+            </nav>
+            <div class="sidebar-footer">
+                <a id="empresa-back-sidebar" class="btn btn-ghost btn-block" href="./">← Volver al mapa</a>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="page-header">
+                <div class="page-header-left">
+                    <a id="empresa-back" class="btn btn-ghost btn-back" href="./" title="Volver al mapa">←</a>
+                    <h1 id="empresa-name">Mi empresa</h1>
+                </div>
+                <div class="session-box">
+                    <span id="session-user" class="session-user"></span>
+                    <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Cerrar sesión</button>
+                </div>
+            </header>
+
+            <!-- Same notice as the admin panel: a close button, and success notices close by themselves. -->
+            <div id="empresa-message" class="feedback-message hidden" role="status">
+                <span class="feedback-text"></span>
+                <button type="button" class="feedback-close" aria-label="Cerrar aviso">×</button>
+            </div>
+
+            <!-- Two sections, chosen from the side menu (empresa.js shows one and hides the other): the users of the
+                 company, and the person's own profile (drawn by js/shared/profile-section.js into #perfil-content). -->
+            <div id="empresa-section-usuarios">
+            <p class="section-subtitle">Resumen</p>
+            <div class="card-grid">
+                <div class="card">
+                    <h3>Lugares</h3>
+                    <div class="card-stat" id="empresa-seats"></div>
+                </div>
+                <div class="card">
+                    <h3>Usuarios activos</h3>
+                    <div class="card-stat" id="empresa-active"></div>
+                </div>
+                <div class="card">
+                    <h3>Vistas de radar de la empresa</h3>
+                    <div class="card-stat" id="empresa-views"></div>
+                </div>
+            </div>
+
+            <p class="section-subtitle">Usuarios</p>
+            <div class="toolbar"><button class="btn" id="empresa-add" type="button">+ Agregar usuario</button></div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr>
+                        <th>Usuario</th><th>Nombre</th><th>Rol</th><th>Activo</th><th>Vistas de radar</th><th>Acciones</th>
+                    </tr></thead>
+                    <tbody id="empresa-users"></tbody>
+                </table>
+            </div>
+            </div>
+
+            <div id="empresa-section-perfil" hidden>
+                <div id="perfil-content"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Same modal markup as admin.html (classes that exist in css/admin.css). -->
+    <div id="form-modal" class="modal hidden" role="dialog" aria-modal="true">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2 id="form-modal-title">Editar</h2>
+                <button id="close-form-modal" class="btn btn-secondary btn-sm" type="button">Cerrar</button>
+            </div>
+            <form id="form-modal-body" class="form-grid"></form>
+        </div>
+    </div>
+
+    <script type="module" src="js/empresa.js"></script>
+</body>
+</html>

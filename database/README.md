@@ -143,7 +143,7 @@ python -m radar_db.manage create-admin --username maria
 python -m radar_db.manage reset-password --username maria
 ```
 
-Passwords must be 12–128 characters. Admins cannot reset their own password from the admin panel, so `reset-password` is the only way to change it.
+Passwords must be 10–128 characters and include at least one special character (not a letter, digit or space). Admins cannot reset their own password from the admin panel, so `reset-password` is the only way to change it.
 
 ---
 
