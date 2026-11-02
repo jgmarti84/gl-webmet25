@@ -24,7 +24,9 @@
             </div>
             <nav id="sidebar-nav">
                 <div class="nav-group-label">Gestión</div>
-                <a href="empresa" class="active"><span class="nav-ico">👤</span> Usuarios</a>
+                <a href="#usuarios" data-section="usuarios" class="active"><span class="nav-ico">👤</span> Usuarios</a>
+                <div class="nav-group-label">Cuenta</div>
+                <a href="#perfil" data-section="perfil"><span class="nav-ico">🙍</span> Mi perfil</a>
             </nav>
             <div class="sidebar-footer">
                 <a id="empresa-back-sidebar" class="btn btn-ghost btn-block" href="./">← Volver al mapa</a>
@@ -49,6 +51,9 @@
                 <button type="button" class="feedback-close" aria-label="Cerrar aviso">×</button>
             </div>
 
+            <!-- Two sections, chosen from the side menu (empresa.js shows one and hides the other): the users of the
+                 company, and the person's own profile (drawn by js/shared/profile-section.js into #perfil-content). -->
+            <div id="empresa-section-usuarios">
             <p class="section-subtitle">Resumen</p>
             <div class="card-grid">
                 <div class="card">
@@ -74,6 +79,11 @@
                     </tr></thead>
                     <tbody id="empresa-users"></tbody>
                 </table>
+            </div>
+            </div>
+
+            <div id="empresa-section-perfil" hidden>
+                <div id="perfil-content"></div>
             </div>
         </main>
     </div>

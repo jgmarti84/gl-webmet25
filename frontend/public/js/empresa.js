@@ -6,6 +6,7 @@
 import { authApi, initPageSession } from './auth-api.js';
 import { empresaApi } from './empresa-api.js';
 import { api } from './shared/api.js';
+import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
 
 const ROLE_LABELS = { org_admin: 'Admin de empresa', viewer: 'Lector' };
@@ -283,6 +284,44 @@ async function openViewsForm(user) {
     );
 }
 
+// --- sections of the panel --------------------------------------------------------------------------------------
+
+const SECTIONS = ['usuarios', 'perfil'];
+
+/** The section named in the address (#perfil), or the users by default. */
+function currentSection() {
+    const hash = window.location.hash.replace('#', '');
+    return SECTIONS.includes(hash) ? hash : 'usuarios';
+}
+
+/** Show one section (the company's users, or the person's own profile), mark its menu entry and load it. */
+async function showSection(section) {
+    hideMessage();
+    $('empresa-section-usuarios').hidden = section !== 'usuarios';
+    $('empresa-section-perfil').hidden = section !== 'perfil';
+    document.querySelectorAll('#sidebar-nav [data-section]').forEach((link) => {
+        link.classList.toggle('active', link.dataset.section === section);
+    });
+    try {
+        if (section === 'perfil') {
+            $('empresa-name').textContent = 'Mi perfil';  // the users section puts the company name back (render)
+            await mountProfile($('perfil-content'), { me: state.me, openModal, showMessage });
+        } else {
+            await render();
+        }
+    } catch (error) {
+        showMessage(error.message || 'No se pudo cargar la sección', 'error');
+    }
+}
+
+/** Switch section without adding history entries. */
+function navigateTo(section) {
+    // Full path, not just "#section": a relative URL resolves against <base href>, which would move the address bar
+    // to the map ("/#perfil") even though the page stays.
+    history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${section}`);
+    showSection(section);
+}
+
 async function init() {
     const me = await initPageSession();
     if (!me) return;  // initPageSession reloads the page, and nginx then serves the login
@@ -298,11 +337,16 @@ async function init() {
         if (event.target === $('form-modal')) closeModal();
     });
     $('empresa-message').querySelector('.feedback-close').onclick = hideMessage;
-    try {
-        await render();
-    } catch (error) {
-        showMessage(error.message || 'No se pudo cargar la empresa', 'error');
-    }
+    // The side menu: [data-section] links switch sections instead of following their address.
+    $('sidebar-nav').addEventListener('click', (event) => {
+        const link = event.target.closest('[data-section]');
+        if (!link) return;
+        event.preventDefault();
+        navigateTo(link.dataset.section);
+    });
+    // A hand-edited address (or the back button) also switches sections.
+    window.addEventListener('hashchange', () => showSection(currentSection()));
+    await showSection(currentSection());
 }
 
 init();

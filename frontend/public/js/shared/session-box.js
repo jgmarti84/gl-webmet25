@@ -15,16 +15,32 @@ export function initialsOf(name) {
     return letters.toUpperCase();
 }
 
+/**
+ * Which of the optional buttons of the account chip a role gets. Only ONE of them is ever shown: the profile
+ * button for viewers (they have nothing else), the admin panel button for the general admin and the company panel
+ * button for company admins (both panels have a "Mi perfil" entry of their own, so they do not need another button).
+ */
+export function chipLinksFor(role) {
+    return {
+        admin: role === 'admin',
+        empresa: role === 'org_admin',
+        profile: role === 'viewer',
+    };
+}
+
 export function renderSessionBox(me) {
     const displayName = me.full_name || me.username;
 
+    const links = chipLinksFor(me.role);
     const adminLink = document.getElementById('admin-link');
-    if (adminLink) adminLink.hidden = me.role !== 'admin';
+    if (adminLink) adminLink.hidden = !links.admin;
     const chipAdminLink = document.getElementById('admin-chip-link');
-    if (chipAdminLink) chipAdminLink.hidden = me.role !== 'admin';
-    // Company admins get a shortcut to their own panel (spec C).
+    if (chipAdminLink) chipAdminLink.hidden = !links.admin;
+    // Company admins get a shortcut to their own panel (spec C); viewers get the profile button (spec D).
     const chipEmpresaLink = document.getElementById('empresa-chip-link');
-    if (chipEmpresaLink) chipEmpresaLink.hidden = me.role !== 'org_admin';
+    if (chipEmpresaLink) chipEmpresaLink.hidden = !links.empresa;
+    const chipProfileLink = document.getElementById('profile-chip-link');
+    if (chipProfileLink) chipProfileLink.hidden = !links.profile;
 
     const chip = document.getElementById('account-chip');
     if (!chip) return;

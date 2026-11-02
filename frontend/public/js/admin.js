@@ -1,8 +1,9 @@
 import { adminApi, EXPIRED_SESSION_MESSAGE } from './admin-api.js';
 import { authApi, redirectToLogin } from './auth-api.js';
+import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
 
-const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'colormaps', 'colormap-options', 'users', 'organizations'];
+const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'colormaps', 'colormap-options', 'users', 'organizations', 'profile'];
 const STATUS_OPTIONS = ['available', 'missing', 'error', 'pending', 'processing', 'archived'];
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
@@ -2323,6 +2324,15 @@ function openPasswordResetForm(user) {
     );
 }
 
+/**
+ * "Mi perfil": the logged-in admin's own profile, drawn by the section every role shares (shared/profile-section.js).
+ * The form and the notices are the ones of this panel. The success notice is shown by the section itself after it
+ * redraws, so renderSection() clearing the notice first does not hide it.
+ */
+async function renderProfile() {
+    await mountProfile(elements.sectionContent, { me: state.me, openModal: openFormModal, showMessage });
+}
+
 async function renderSection() {
     hideMessage();
     state.section = parseHashSection();
@@ -2343,6 +2353,7 @@ async function renderSection() {
         'colormap-options': 'Opciones de mapa de colores',
         users: 'Usuarios',
         organizations: 'Empresas',
+        profile: 'Mi perfil',
     };
     elements.sectionTitle.textContent = titleBySection[state.section] || 'Panel';
 
@@ -2359,6 +2370,7 @@ async function renderSection() {
         if (state.section === 'colormap-options') await renderColormapOptions();
         if (state.section === 'users') await renderUsers();
         if (state.section === 'organizations') await renderOrganizations();
+        if (state.section === 'profile') await renderProfile();
         decorateSortHeaders(state.section);
     } catch (error) {
         if ((error.message || '').includes(EXPIRED_SESSION_MESSAGE)) {
