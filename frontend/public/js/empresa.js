@@ -52,18 +52,39 @@ function closeModal() {
     $('form-modal-body').innerHTML = '';
 }
 
-/** Open the shared modal. `onSubmit` gets the FormData; the modal closes when it resolves, and a rejection is shown. */
+/** Show (or clear, with no text) the error inside the open modal, just above the buttons. */
+function setModalError(form, text) {
+    let box = form.querySelector('.form-error');
+    if (!text) {
+        box?.remove();
+        return;
+    }
+    if (!box) {
+        box = document.createElement('p');
+        box.className = 'form-error';
+        box.setAttribute('role', 'alert');
+        const actions = form.querySelector('.form-actions');
+        form.insertBefore(box, actions);  // insertBefore(x, null) appends, for forms with no buttons row
+    }
+    box.textContent = text;
+}
+
+/**
+ * Open the shared modal. `onSubmit` gets the FormData; the modal closes when it resolves. A rejection is shown inside
+ * the modal (not in the page notice behind it), and the form stays open so the person can fix the data.
+ */
 function openModal(title, html, onSubmit) {
     $('form-modal-title').textContent = title;
     const form = $('form-modal-body');
     form.innerHTML = html;
     form.onsubmit = async (event) => {
         event.preventDefault();
+        setModalError(form, '');
         try {
             await onSubmit(new FormData(form));
             closeModal();
         } catch (error) {
-            showMessage(error.message || 'La operación falló', 'error');
+            setModalError(form, error.message || 'La operación falló');
         }
     };
     $('form-modal').classList.remove('hidden');

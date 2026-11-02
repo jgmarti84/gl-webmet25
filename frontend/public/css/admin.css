@@ -514,6 +514,18 @@ th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
 
 .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
 
+/* Error shown inside a form modal (for example "Ese mail ya está en uso"), right above the buttons, so the person sees
+   it next to the field they have to fix instead of behind the modal. Same colors as .feedback-message.error. */
+.form-error {
+    margin: 0;
+    padding: 9px 12px;
+    border: 1px solid #fecaca;
+    border-radius: var(--radius-sm);
+    background: var(--danger-soft);
+    color: #991b1b;
+    font-size: 13px;
+}
+
 .reference-row {
     display: grid;
     grid-template-columns: repeat(3, 1fr);

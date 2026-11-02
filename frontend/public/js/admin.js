@@ -422,16 +422,38 @@ function decorateSortHeaders(section) {
     });
 }
 
+/** Show (or clear, with no text) the error inside the open form modal, just above the buttons. */
+function setFormModalError(text) {
+    const form = elements.formModalBody;
+    let box = form.querySelector('.form-error');
+    if (!text) {
+        box?.remove();
+        return;
+    }
+    if (!box) {
+        box = document.createElement('p');
+        box.className = 'form-error';
+        box.setAttribute('role', 'alert');
+        form.insertBefore(box, form.querySelector('.form-actions'));  // null (no buttons row) appends at the end
+    }
+    box.textContent = text;
+}
+
+/**
+ * `onSubmit` gets the FormData; the modal closes when it resolves. A rejection is shown inside the modal (not in the
+ * page notice behind it) and the form stays open so the person can fix the data.
+ */
 function openFormModal(title, html, onSubmit) {
     elements.formModalTitle.textContent = title;
     elements.formModalBody.innerHTML = html;
     elements.formModalBody.onsubmit = async (event) => {
         event.preventDefault();
+        setFormModalError('');
         try {
             await onSubmit(new FormData(elements.formModalBody));
             closeFormModal();
         } catch (error) {
-            showMessage(error.message || 'La operación falló', 'error');
+            setFormModalError(error.message || 'La operación falló');
         }
     };
     elements.formModal.classList.remove('hidden');
