@@ -468,7 +468,7 @@ settings), and animation controls (bottom-center).
 
 **File:** [`frontend/public/js/auth-pages.js`](../../frontend/public/js/auth-pages.js) — unit tests: `tests/js/test_auth_pages.mjs`
 
-**Responsibility:** Presentation-only helpers shared by the login and the four public pages; the server validates everything again. Exports the same shapes the server enforces (`USERNAME_RE`, a loose `EMAIL_RE`, 12 to 128 characters for passwords), `validatePassword()` and `validateRegistration()` (null when fine, else the message), `errorText()` / `statusMessage()` (the server's own text, or a fixed one for 429 and 503), and the small UI helpers `showMessage()` / `hideMessage()` (always `textContent`, never `innerHTML`) and `startCooldown()` (a button that counts down, used by "Reenviar mail").
+**Responsibility:** Presentation-only helpers shared by the login and the four public pages; the server validates everything again. Exports the same shapes the server enforces (`USERNAME_RE`, a loose `EMAIL_RE`, 10 to 128 characters and a special character for passwords), `validatePassword()` and `validateRegistration()` (null when fine, else the message), `errorText()` / `statusMessage()` (the server's own text, or a fixed one for 429 and 503), and the small UI helpers `showMessage()` / `hideMessage()` (always `textContent`, never `innerHTML`) and `startCooldown()` (a button that counts down, used by "Reenviar mail").
 
 ---
 

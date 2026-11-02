@@ -2118,7 +2118,7 @@ function openUserForm(user = null) {
             <label>Email <input name="email" type="email" maxlength="254" value="${safeText(user?.email)}"></label>
             <label>Rol <select name="role"${isSelf ? ' disabled' : ''}>${roleOptions}</select></label>
             ${orgField}
-            ${isEdit ? '' : '<label>Contraseña inicial <input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required></label>'}
+            ${isEdit ? '' : '<label>Contraseña inicial <input name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required></label><p class="toolbar-note">Mínimo 10 caracteres, con al menos un carácter especial (por ejemplo ! - _ . @ #).</p>'}
             <div class="form-actions"><button class="btn" type="submit">${isEdit ? 'Guardar' : 'Crear'}</button></div>
         `,
         async (formData) => {
@@ -2310,7 +2310,8 @@ function openPasswordResetForm(user) {
     openFormModal(
         `Resetear contraseña de ${user.username}`,
         `
-            <label>Contraseña nueva <input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required></label>
+            <label>Contraseña nueva <input name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required></label>
+            <p class="toolbar-note">Mínimo 10 caracteres, con al menos un carácter especial (por ejemplo ! - _ . @ #).</p>
             <p class="toolbar-note">Se cierran todas las sesiones de ${safeText(user.username)}.</p>
             <div class="form-actions"><button class="btn" type="submit">Guardar</button></div>
         `,

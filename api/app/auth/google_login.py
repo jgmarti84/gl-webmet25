@@ -61,8 +61,11 @@ def _free_username(db: Session, email: str) -> str:
 
 
 def _unusable_password() -> str:
-    """A long random password nobody knows: the account only enters through Google (or after a password recovery)."""
-    return secrets.token_urlsafe(32)
+    """A long random password nobody knows: the account only enters through Google (or after a password recovery).
+
+    token_urlsafe only has a "-" or "_" about 3 times out of 4, and the password policy asks for a special character,
+    so one is always added at the end (without it, 1 sign-up in 4 would be refused by create_user)."""
+    return secrets.token_urlsafe(32) + "-"
 
 
 def sign_in(db: Session, identity: GoogleIdentity, now: Optional[datetime] = None) -> User:

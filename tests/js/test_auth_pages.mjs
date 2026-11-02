@@ -38,7 +38,13 @@ assert(validateRegistration({ ...valid, fullName: '   ' }) === null, 'a blank fu
 assert(validateRegistration({ ...valid, fullName: 'x'.repeat(129) }) !== null, 'full name longer than 128');
 
 console.log('T2: password rules');
-assert(validatePassword('corta', 'corta') !== null, 'shorter than 12');
+assert(validatePassword('corta', 'corta') !== null, 'shorter than 10');
+assert(validatePassword('abcdefg-1', 'abcdefg-1') !== null, '9 characters is one too few');
+assert(validatePassword('abcdefgh-1', 'abcdefgh-1') === null, 'exactly 10 characters is enough');
+assert(validatePassword('abcdefghij1', 'abcdefghij1') !== null, 'no special character');
+assert(validatePassword('buenos dias amigos', 'buenos dias amigos') !== null, 'spaces are not special characters');
+assert(validatePassword('ñandú123456', 'ñandú123456') !== null, 'accented letters are not special characters');
+assert(validatePassword('abcdefghi¿', 'abcdefghi¿') === null, 'any symbol counts, accented punctuation included');
 assert(validatePassword('x'.repeat(129), 'x'.repeat(129)) !== null, 'longer than 128');
 assert(validatePassword(' '.repeat(14), ' '.repeat(14)) !== null, 'only spaces');
 assert(validatePassword('ana.perez.123', 'ana.perez.123', 'Ana.Perez.123') !== null, 'same as the username');

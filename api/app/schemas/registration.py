@@ -30,7 +30,7 @@ class RegisterRequest(_EmailField):
     # Username shape (letters, digits, dot, dash, underscore) is checked by the service: it needs the same rule
     # the admin panel uses. Here only the size, to stop huge values early.
     username: str = Field(..., min_length=3, max_length=32)
-    # The password policy (12 to 128 characters, not the username...) is checked by the service.
+    # The password policy (10 to 128 characters, one special character, not the username...) is checked by the service.
     password: str = Field(..., min_length=1, max_length=128)
     # Optional "Nombre y apellido" in a single field (same size as users.full_name). The service cleans it up
     # (white space, non-printable characters) and stores NULL when it ends up empty.

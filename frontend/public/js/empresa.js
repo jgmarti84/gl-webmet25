@@ -162,7 +162,8 @@ function openAddForm() {
             <label>Usuario <input name="username" type="text" minlength="3" maxlength="32" pattern="[a-zA-Z0-9._-]+" required></label>
             <label>Nombre <input name="full_name" type="text" maxlength="128"></label>
             <label>Email <input name="email" type="email" maxlength="254"></label>
-            <label>Contraseña inicial <input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required></label>
+            <label>Contraseña inicial <input name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required></label>
+            <p class="toolbar-note">Mínimo 10 caracteres, con al menos un carácter especial (por ejemplo ! - _ . @ #).</p>
             <p class="toolbar-note">Entra como lector de tu empresa y empieza con las vistas de la empresa.</p>
             <div class="form-actions"><button class="btn" type="submit">Crear</button></div>
         `,
@@ -216,7 +217,8 @@ function openPasswordForm(user) {
     openModal(
         `Resetear contraseña de ${user.username}`,
         `
-            <label>Contraseña nueva <input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required></label>
+            <label>Contraseña nueva <input name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required></label>
+            <p class="toolbar-note">Mínimo 10 caracteres, con al menos un carácter especial (por ejemplo ! - _ . @ #).</p>
             <p class="toolbar-note">Se cierran todas las sesiones de ${safeText(user.username)}.</p>
             <div class="form-actions"><button class="btn" type="submit">Guardar</button></div>
         `,

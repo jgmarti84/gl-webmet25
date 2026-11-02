@@ -451,7 +451,7 @@ Pipeline de composición en canvas:
 
 **Archivo:** [`frontend/public/js/auth-pages.js`](../../frontend/public/js/auth-pages.js) — tests unitarios: `tests/js/test_auth_pages.mjs`
 
-**Responsabilidad:** Ayudas solo de presentación compartidas por el login y las cuatro páginas públicas; el servidor vuelve a validar todo. Exporta las mismas formas que exige el servidor (`USERNAME_RE`, un `EMAIL_RE` flexible, de 12 a 128 caracteres para las contraseñas), `validatePassword()` y `validateRegistration()` (null si está bien, si no el mensaje), `errorText()` / `statusMessage()` (el texto del propio servidor, o uno fijo para 429 y 503) y las ayudas de interfaz `showMessage()` / `hideMessage()` (siempre `textContent`, nunca `innerHTML`) y `startCooldown()` (un botón que cuenta hacia atrás, usado por "Reenviar mail").
+**Responsabilidad:** Ayudas solo de presentación compartidas por el login y las cuatro páginas públicas; el servidor vuelve a validar todo. Exporta las mismas formas que exige el servidor (`USERNAME_RE`, un `EMAIL_RE` flexible, de 10 a 128 caracteres y un carácter especial para las contraseñas), `validatePassword()` y `validateRegistration()` (null si está bien, si no el mensaje), `errorText()` / `statusMessage()` (el texto del propio servidor, o uno fijo para 429 y 503) y las ayudas de interfaz `showMessage()` / `hideMessage()` (siempre `textContent`, nunca `innerHTML`) y `startCooldown()` (un botón que cuenta hacia atrás, usado por "Reenviar mail").
 
 ---
 
