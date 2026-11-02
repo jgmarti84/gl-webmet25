@@ -24,6 +24,7 @@ from .routers import (
     organizations_router,
     permissions_router,
     products_router,
+    profile_router,
     radars_router,
     registration_router,
     tiles_router,
@@ -218,6 +219,8 @@ app.include_router(registration_router, prefix=settings.api_prefix)
 app.include_router(users_router, prefix=settings.api_prefix)
 # The user's own permissions; the route itself requires a session (get_current_user).
 app.include_router(permissions_router, prefix=settings.api_prefix)
+# The user's own profile (spec D): needs a session, any role.
+app.include_router(profile_router, prefix=settings.api_prefix)
 # Company accounts: each router requires its role itself (admin / org_admin).
 app.include_router(organizations_router, prefix=settings.api_prefix)
 app.include_router(org_router, prefix=settings.api_prefix)
