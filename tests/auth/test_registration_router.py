@@ -288,6 +288,16 @@ def test_a_weak_new_password_is_a_422_and_the_link_still_works(client, make_user
     assert client.post(f"{URL}/reset-password", json={"token": token, "password": NEW_PASSWORD}).status_code == 204
 
 
+def test_the_same_password_as_before_is_a_422_and_the_link_still_works(client, make_user, mailer):
+    make_user(username="ana", email=f"ana@{DOMAIN}")
+    client.post(f"{URL}/forgot-password", json={"email": f"ana@{DOMAIN}"})
+    token = token_from(mailer.sent[0])
+    same = client.post(f"{URL}/reset-password", json={"token": token, "password": TEST_PASSWORD})
+    assert same.status_code == 422
+    assert "distinta" in same.json()["detail"]
+    assert client.post(f"{URL}/reset-password", json={"token": token, "password": NEW_PASSWORD}).status_code == 204
+
+
 def test_a_reset_link_works_once(client, make_user, mailer):
     make_user(username="ana", email=f"ana@{DOMAIN}")
     client.post(f"{URL}/forgot-password", json={"email": f"ana@{DOMAIN}"})
