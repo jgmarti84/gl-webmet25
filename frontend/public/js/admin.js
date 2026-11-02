@@ -2386,21 +2386,6 @@ function renderNoPermission() {
     document.getElementById('no-permission-back').onclick = goBackToMap;
 }
 
-async function showBootstrapWarningIfNeeded() {
-    const box = document.getElementById('bootstrap-warning');
-    try {
-        const users = await adminApi.listUsers();
-        const pending = users.filter((u) => u.role === 'admin' && u.is_active && u.password_is_bootstrap);
-        if (pending.length) {
-            box.querySelector('.feedback-text').textContent = `Atención:${pending.map((u) => u.username).join(', ')} sigue con la contraseña inicial del .env. `
-                + 'Cambiala desde el servidor con make reset-password U=<usuario> y borrá ADMIN_USERNAME / ADMIN_PASSWORD del .env.';
-            box.classList.remove('hidden');
-        }
-    } catch (error) {
-        // Non-blocking: the panel works without the warning.
-    }
-}
-
 async function init() {
     const me = await authApi.me();
     if (!me) {
@@ -2451,7 +2436,6 @@ async function init() {
     // Full path for the same reason as navigateTo: "#section" alone would resolve against <base href>.
     history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${parseHashSection()}`);
     renderSection();
-    showBootstrapWarningIfNeeded();
 }
 
 init();
