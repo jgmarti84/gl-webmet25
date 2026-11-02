@@ -13,23 +13,6 @@ from radar_db.models import Organization, Permission
 from .conftest import TEST_PASSWORD, login
 
 
-@pytest.fixture
-def make_org(test_db_session):
-    """Factory for organizations inside the rolled-back test transaction."""
-
-    def _make(name="Test Org A", seat_limit=3, is_active=True, views=()):
-        org = Organization(name=name, seat_limit=seat_limit, is_active=is_active)
-        test_db_session.add(org)
-        test_db_session.flush()
-        for resource in views:
-            test_db_session.add(Permission(organization_id=org.id, action="radar.detail_view", resource=resource))
-        test_db_session.flush()
-        test_db_session.refresh(org)
-        return org
-
-    return _make
-
-
 def _rejected(db, obj) -> None:
     """Assert the database refuses to store `obj` (inside a savepoint, so the test can go on)."""
     with pytest.raises(IntegrityError):

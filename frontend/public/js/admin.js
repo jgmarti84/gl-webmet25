@@ -2094,11 +2094,22 @@ function openUserForm(user = null) {
     const roleOptions = allowedRoles
         .map((value) => `<option value="${value}"${(user?.role || 'viewer') === value ? ' selected' : ''}>${ROLE_LABELS[value]}</option>`)
         .join('');
+    // Only a viewer can change company (a company admin or the general admin never moves). When editing, the
+    // current company is the selected option; creating starts with "Ninguna".
+    const canMove = isEdit && user.role === 'viewer';
+    const currentOrgId = user?.organization_id ?? null;
     const orgOptions = ['<option value="">Ninguna</option>',
-        ...(state.organizations || []).map((org) => `<option value="${org.id}">${safeText(org.name)}</option>`)].join('');
-    const orgField = !isEdit
-        ? `<label>Empresa <select name="organization_id">${orgOptions}</select></label>`
-        : (user.organization_name ? `<p class="toolbar-note">Empresa: ${safeText(user.organization_name)} (no se cambia)</p>` : '');
+        ...(state.organizations || []).map((org) =>
+            `<option value="${org.id}"${canMove && org.id === currentOrgId ? ' selected' : ''}>${safeText(org.name)}</option>`)].join('');
+    let orgField = '';
+    if (!isEdit) {
+        orgField = `<label>Empresa <select name="organization_id">${orgOptions}</select></label>`;
+    } else if (canMove) {
+        orgField = `<label>Empresa <select name="organization_id">${orgOptions}</select></label>
+            <p class="toolbar-note" id="org-move-note"></p>`;
+    } else if (user.organization_name) {
+        orgField = `<p class="toolbar-note">Empresa: ${safeText(user.organization_name)} (un admin de empresa no cambia de empresa)</p>`;
+    }
     openFormModal(
         isEdit ? `Editar usuario ${user.username}` : 'Agregar usuario',
         `
@@ -2118,6 +2129,12 @@ function openUserForm(user = null) {
             if (!isSelf) payload.role = formData.get('role');
             let message;
             if (isEdit) {
+                if (canMove) {
+                    // Sent only when it changed: the server replaces the account's views when it moves.
+                    const chosen = formData.get('organization_id');
+                    const newOrgId = chosen ? Number(chosen) : null;
+                    if (newOrgId !== currentOrgId) payload.organization_id = newOrgId;
+                }
                 await adminApi.patchUser(user.id, payload);
                 message = `Usuario ${user.username} actualizado`;
             } else {
@@ -2132,6 +2149,36 @@ function openUserForm(user = null) {
             showMessage(message, 'success');
         },
     );
+    if (canMove) wireMoveNote(user, currentOrgId);
+}
+
+/** Views as a short text for the move notice: radar codes, "Todas" or "ninguna". */
+function describeViews(views) {
+    if (views.includes(ALL_RADARS)) return 'Todas';
+    return views.length ? views.join(', ') : 'ninguna';
+}
+
+/**
+ * Under the "Empresa" selector of the edit form, say what saving will do to the account's views before it happens:
+ * joining a company REPLACES the account's views with the company's list (and closes its sessions); leaving keeps them.
+ */
+function wireMoveNote(user, currentOrgId) {
+    const select = elements.formModalBody.querySelector('select[name="organization_id"]');
+    const note = elements.formModalBody.querySelector('#org-move-note');
+    const update = () => {
+        const chosen = select.value ? Number(select.value) : null;
+        if (chosen === currentOrgId) {
+            note.textContent = '';
+        } else if (chosen === null) {
+            note.textContent = `Sale de ${user.organization_name}: libera su lugar y conserva sus vistas (${describeViews(user.radar_detail_views)}).`;
+        } else {
+            const target = (state.organizations || []).find((org) => org.id === chosen);
+            note.textContent = `Se reemplazan sus vistas actuales (${describeViews(user.radar_detail_views)}) por las de la empresa `
+                + `(${describeViews(target?.radar_detail_views || [])}) y se cierran sus sesiones. Ocupa un lugar de la empresa.`;
+        }
+    };
+    select.addEventListener('change', update);
+    update();
 }
 
 /**

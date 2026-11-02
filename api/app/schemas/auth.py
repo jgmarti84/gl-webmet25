@@ -49,6 +49,9 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None  # null clears it
     role: Optional[Literal["admin", "org_admin", "viewer"]] = None
     is_active: Optional[bool] = None
+    # Move a viewer into a company, between companies, or out of one (null). Only counts when the key is sent
+    # (the router dumps with exclude_unset), so leaving it out never changes the company.
+    organization_id: Optional[int] = None
 
 
 class PasswordReset(BaseModel):

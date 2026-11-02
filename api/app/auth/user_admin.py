@@ -50,6 +50,13 @@ def create(db: Session, data: dict) -> User:
 
 
 def update_user(db: Session, actor: User, user: User, changes: dict) -> User:
+    # Moving the account between companies goes first: the role rules below must see the company it ends up in.
+    if "organization_id" in changes:
+        try:
+            organizations.move_user(db, actor, user, changes["organization_id"])
+        except organizations.OrgRuleError as exc:
+            raise UserRuleError(exc.status_code, exc.detail) from exc
+
     new_role = changes.get("role")
     deactivating = changes.get("is_active") is False
     demoting = new_role is not None and new_role != "admin" and user.role == "admin"

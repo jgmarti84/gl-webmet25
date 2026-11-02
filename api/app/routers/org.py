@@ -61,6 +61,10 @@ def create_company_user(
     """New viewer in the actor's company: takes a seat and starts with the company's views."""
     try:
         user = orgs.create_member(db, actor.organization_id, payload.model_dump(), "viewer", actor)
+    except orgs.AccountExistsError as exc:
+        # The person may already have an account elsewhere; only the general admin can move it into a company.
+        ask = "Si esa persona ya tiene una cuenta, pedile al administrador general que la sume a tu empresa."
+        raise HTTPException(status_code=exc.status_code, detail=f"{exc.detail}. {ask}")
     except orgs.OrgRuleError as exc:
         raise _rule(exc)
     db.commit()

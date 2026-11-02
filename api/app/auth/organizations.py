@@ -1,11 +1,13 @@
 # api/app/auth/organizations.py
 """Company accounts (spec C §5): seats, creating company users, editing companies. Functions flush; routers commit."""
 
+from typing import Optional
+
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from radar_db.accounts import AccountError, EmailTakenError, UsernameTakenError, create_user
+from radar_db.accounts import AccountError, EmailTakenError, UsernameTakenError, create_user, revoke_all_sessions
 from radar_db.models import Organization, User
 from radar_db.passwords import PasswordPolicyError
 
@@ -19,6 +21,13 @@ class OrgRuleError(Exception):
         super().__init__(detail)
         self.status_code = status_code
         self.detail = detail
+
+
+class AccountExistsError(OrgRuleError):
+    """The username or mail of a new company user already belongs to an account (409).
+
+    A subclass so the company panel can add "ask the general admin" to the message, while the general admin's own
+    panel keeps the plain text."""
 
 
 def seats_used(db: Session, org: Organization) -> int:
@@ -53,11 +62,40 @@ def create_member(db: Session, org_id: int, data: dict, role: str, actor: User) 
     try:
         user = create_user(db, role=role, organization_id=org.id, **data)
     except (UsernameTakenError, EmailTakenError) as exc:
-        raise OrgRuleError(409, str(exc)) from exc
+        raise AccountExistsError(409, str(exc)) from exc
     except (AccountError, PasswordPolicyError) as exc:
         raise OrgRuleError(422, str(exc)) from exc
     permissions.copy_company_views_to(db, user, actor)
     return user
+
+
+def move_user(db: Session, actor: User, user: User, target_org_id: Optional[int]) -> None:
+    """Put an existing viewer into a company, move it to another, or take it out (None). Only the general admin.
+
+    Joining takes a seat (409 when the company is full or inactive) unless the account is inactive, which only takes
+    one when it is reactivated. The account's own views are REPLACED by a copy of the company's list, the same start a
+    new member gets (no intersection), and its sessions are closed because what it can see changes. Leaving frees the
+    seat and keeps the list it has. Asking for the company it already has does nothing.
+    """
+    if target_org_id == user.organization_id:
+        return
+    if actor.role != "admin":
+        raise OrgRuleError(403, "Solo el administrador general puede mover cuentas entre empresas")
+    if user.role != "viewer":
+        raise OrgRuleError(422, "Solo se pueden mover lectores: los administradores no cambian de empresa")
+
+    if target_org_id is None:
+        user.organization = None
+    else:
+        # Locked even for an inactive account, so the company cannot be deactivated or resized under our feet.
+        org = reserve_seat(db, target_org_id) if user.is_active else lock_org(db, target_org_id)
+        if not org.is_active:
+            raise OrgRuleError(409, f"La empresa {org.name} está inactiva")
+        user.organization = org
+        db.flush()
+        permissions.copy_company_views_to(db, user, actor)
+    revoke_all_sessions(db, user)
+    db.flush()
 
 
 def create_org(db: Session, data: dict) -> Organization:

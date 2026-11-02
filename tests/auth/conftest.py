@@ -22,6 +22,24 @@ def make_user(test_db_session):
 
 
 @pytest.fixture
+def make_org(test_db_session):
+    """Factory for organizations inside the rolled-back test transaction."""
+    from radar_db.models import Organization, Permission
+
+    def _make(name="Test Org A", seat_limit=3, is_active=True, views=()):
+        org = Organization(name=name, seat_limit=seat_limit, is_active=is_active)
+        test_db_session.add(org)
+        test_db_session.flush()
+        for resource in views:
+            test_db_session.add(Permission(organization_id=org.id, action="radar.detail_view", resource=resource))
+        test_db_session.flush()
+        test_db_session.refresh(org)
+        return org
+
+    return _make
+
+
+@pytest.fixture
 def make_radar(test_db_session):
     """Factory for test radars. Codes start with TST so they never clash with real radars."""
     from radar_db.models import Radar
