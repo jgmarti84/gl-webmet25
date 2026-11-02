@@ -239,6 +239,15 @@ Cuando un tope frena un mail, la API no envía nada y responde exactamente igual
 - **La verificación y el recupero de contraseña** solo necesitan la configuración del mail (`MAIL_HOST`, `MAIL_FROM`, `PUBLIC_BASE_URL`).
 - Si `REGISTRATION_ENABLED=true` pero falta algo, la API dice qué en su log al arrancar y el registro queda apagado (el endpoint responde 503 y el login no ofrece "Crear cuenta").
 
+### 7.2b Cómo se ven los mails
+
+Los tres mails de la cuenta (verificar el mail, recuperar la contraseña, "ya tenés una cuenta") comparten un mismo diseño: el logo del observatorio, el título, el texto, un botón y un aviso al pie.
+
+- **El link está solo dentro del botón.** El cuerpo del mail en HTML nunca escribe la dirección, así que el token de un solo uso no se ve; debajo del botón solo nombra la página del sitio donde se puede pedir un mail nuevo (sin token). La **versión en texto plano** del mail, que solo muestran los programas que no leen HTML, conserva el link completo porque ahí no hay botón.
+- **No responder.** El remitente se ve como **"WebMet25 (no responder)"** con la dirección de `MAIL_FROM` (si `MAIL_FROM` ya trae un nombre, `Nombre <dirección>`, se respeta ese nombre). Todos los mails terminan con "este es un mensaje automático, no respondas; si necesitás ayuda escribinos a info@ohmc.ar". Llevan `Auto-Submitted: auto-generated` y `X-Auto-Response-Suppress: All` (las respuestas automáticas de vacaciones no los contestan) y **no llevan `Reply-To`**.
+- **El logo viaja dentro del mail** (una imagen en línea de unos 30 KB, `api/app/mail/assets/ohmc-logo.png`), no como un link al sitio, porque los programas de correo suelen bloquear las imágenes remotas hasta que la persona las autoriza.
+- **Para verlos:** en desarrollo, Mailpit muestra cada mail en http://localhost:8025 (ver §7.4).
+
 ### 7.3 Encenderlo en producción
 
 1. Si hay un proxy delante de nginx, configurar antes `set_real_ip_from` / `real_ip_header`. Los límites de estos endpoints (10 pedidos por minuto por IP) son por IP del cliente: sin la IP real todos los visitantes comparten la del proxy y la cuota se agota para todos.
