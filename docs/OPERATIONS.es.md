@@ -327,6 +327,23 @@ Una **empresa** (por ejemplo EPEC) es un grupo de usuarios con un **tope de luga
 
 **Nota de despliegue:** la migración (`d5e6f7a8b9c0`: tablas `organizations`, `users.organization_id`, el rol `org_admin` y las filas de `permissions` que pertenecen a una empresa) la aplica `db-init` en el próximo `docker compose up -d --build`. No hay claves nuevas en el `.env`. Nadie pertenece a una empresa hasta que el admin general cree una, así que para los usuarios existentes no cambia nada.
 
+## 11. Perfil de usuario
+
+Cada usuario tiene una página de perfil, `/perfil`, con el mismo diseño del panel de admin. Muestra los datos de la
+cuenta (usuario, nombre, mail, rol, empresa, alta, último ingreso) y los radares que puede abrir en la vista de radar
+único; el admin de empresa ve además la tarjeta de su empresa (lugares y vistas).
+
+- **Cómo llega cada rol:** el lector tiene un botón de perfil en la franja de cuenta del mapa (página `/perfil`). El
+  admin general y el admin de empresa no tienen un botón extra: el perfil es una sección **dentro de su panel** ("Mi
+  perfil" en el menú lateral: `admin#profile` y `empresa#perfil`), a la que llegan con el botón que ya tenían.
+  `/perfil` los manda a esa sección.
+- **Qué se puede editar:** solo el nombre. Usuario y mail son de solo lectura acá (un admin sí puede cambiar un mail
+  desde el panel de admin).
+- **Todavía no incluye:** foto de perfil (el avatar son siempre las iniciales). El diseño quedó guardado en la spec.
+
+**Nota de despliegue:** nada especial. Sin migración, sin volumen nuevo, sin claves nuevas en el `.env`. Se aplica
+con `docker compose up -d --build`.
+
 ---
 
 **Versión del Documento:** 1.2.0  

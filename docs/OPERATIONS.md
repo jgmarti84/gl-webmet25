@@ -376,6 +376,23 @@ A **company** (for example EPEC) is a group of users with a **seat limit** and i
 
 **Deployment note:** the migration (`d5e6f7a8b9c0`: tables `organizations`, `users.organization_id`, the `org_admin` role and company-owned rows in `permissions`) is applied by `db-init` on the next `docker compose up -d --build`. No new `.env` keys. Nobody belongs to a company until the general admin creates one, so nothing changes for the existing users.
 
+## 13. User Profile
+
+Every user has a profile page, `/perfil`, with the same look as the admin panel. It shows the account data (user,
+name, mail, role, company, sign-up date, last login) and the radars the person may open in the one-radar view; a company
+admin also sees the company card (seats and views).
+
+- **How each role gets there:** a viewer has a profile button in the account chip of the map (page `/perfil`). The
+  general admin and the company admin have no extra button: the profile is a section **inside their panel** ("Mi perfil"
+  in the side menu: `admin#profile` and `empresa#perfil`), reached with the button they already have. `/perfil` sends
+  them to that section.
+- **What can be edited:** only the name. User and mail are read only here (an admin can still change a mail from the
+  admin panel).
+- **Not included yet:** a profile photo (the avatar is always the initials). The design is kept in the spec for later.
+
+**Deployment note:** nothing special. No migration, no new volume, no new `.env` keys. It is applied with
+`docker compose up -d --build`.
+
 ---
 
 **Document Version:** 1.3.0  
