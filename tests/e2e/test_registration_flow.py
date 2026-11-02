@@ -7,6 +7,7 @@ Every test account is deactivated at the end.
 """
 
 import os
+import re
 import time
 
 import pytest
@@ -59,6 +60,20 @@ def _sign_up(page: Page, username: str, email: str, password: str = PASSWORD, fu
     page.check("#reg-terms")
     page.click("#register-submit")
     expect(page.locator("#register-done")).to_be_visible()
+
+
+def test_the_verification_mail_has_the_no_reply_sender_the_logo_and_hides_the_token(page: Page, account):
+    """Real delivery (Mailpit): how the mail looks to the person who gets it."""
+    username, email = account
+    _sign_up(page, username, email)
+    message = mailpit_message(email, "Verificá tu mail")
+    assert message["From"]["Name"] == "WebMet25 (no responder)"
+    assert len(message["Inline"]) == 1 and message["Inline"][0]["ContentID"] == "logo-ohmc"
+    token = re.search(r"#token=([A-Za-z0-9_-]{43})", message["Text"]).group(1)
+    visible = re.sub(r"<[^>]+>", " ", message["HTML"])
+    assert token not in visible  # it is inside the button, never written in the body
+    assert token in message["HTML"]  # ... but the button does carry it
+    assert "no respondas a este mail" in visible.lower()
 
 
 def _verify(page: Page, email: str) -> None:

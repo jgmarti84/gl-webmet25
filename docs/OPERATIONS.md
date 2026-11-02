@@ -279,6 +279,15 @@ When a cap stops a mail, the API sends nothing and answers exactly as if it had,
 - **Verification and password recovery** only need the mail settings (`MAIL_HOST`, `MAIL_FROM`, `PUBLIC_BASE_URL`).
 - If `REGISTRATION_ENABLED=true` but something is missing, the API says what in its log at startup and the sign-up stays off (the endpoint answers 503 and the login does not offer "Crear cuenta").
 
+### 9.2b How the mails look
+
+The three account mails (verify the mail, recover the password, "you already have an account") share one layout: the observatory logo, the title, the text, a button and a notice at the bottom.
+
+- **The link is only inside the button.** The body of the HTML mail never writes the address, so the one-time token is not visible; below the button it only names the site page where a new mail can be asked for (no token). The **plain-text version** of the mail, shown only by programs that do not read HTML, keeps the full link because it has no button.
+- **No reply.** The sender shows as **"WebMet25 (no responder)"** with the address of `MAIL_FROM` (if `MAIL_FROM` already has a name, `Name <address>`, that name is kept). Every mail ends with "this is an automatic message, do not reply; for help write to info@ohmc.ar". The mails carry `Auto-Submitted: auto-generated` and `X-Auto-Response-Suppress: All` (out-of-office replies do not answer them) and **no `Reply-To`**.
+- **The logo travels inside the mail** (an inline image of about 30 KB, `api/app/mail/assets/ohmc-logo.png`), not as a link to the site, because mail programs usually block remote images until the person allows them.
+- **Seeing them:** in development, Mailpit shows every mail at http://localhost:8025 (see §9.4).
+
 ### 9.3 Turning it on in production
 
 1. If a proxy sits in front of nginx, configure `set_real_ip_from` / `real_ip_header` first. The limits of these endpoints (10 requests/minute per IP) are per client IP: without the real IP every visitor shares the proxy's and the quota runs out for everybody.
