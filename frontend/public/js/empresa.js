@@ -79,8 +79,15 @@ async function render() {
     state.users = users;
 
     $('empresa-name').textContent = company.name;
-    $('empresa-seats').textContent = `${company.seats_used} de ${company.seat_limit} lugares`;
-    $('empresa-views').textContent = viewsSummary(company.radar_detail_views);
+    // Summary cards, drawn like the admin dashboard cards: a big number and a small line under it.
+    const card = (num, sub) => `<span class="num">${safeText(num)}</span> <span class="sub">${safeText(sub)}</span>`;
+    $('empresa-seats').innerHTML = card(`${company.seats_used} de ${company.seat_limit}`, 'lugares');
+    const activeUsers = users.filter((user) => user.is_active).length;
+    $('empresa-active').innerHTML = card(activeUsers, `de ${users.length} en total`);
+    const views = company.radar_detail_views;
+    $('empresa-views').innerHTML = views.includes(ALL_RADARS)
+        ? card('Todas', 'incluidas las de radares futuros')
+        : card(views.length, views.length ? views.join(', ') : 'ninguna');
     const full = company.seats_used >= company.seat_limit;
     const addButton = $('empresa-add');
     addButton.disabled = full;

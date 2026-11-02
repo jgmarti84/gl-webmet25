@@ -10,15 +10,32 @@
     <link rel="stylesheet" href="css/admin.css">
 </head>
 <body>
-    <!-- Company admin panel (spec C). nginx serves it only to company admins (probe /_auth_org). It reuses the
-         layout and the look of the admin panel (css/admin.css), without the sidebar. -->
-    <div class="admin-layout empresa-layout">
+    <!-- Company admin panel (spec C). nginx serves it only to company admins (probe /_auth_org). It has the same
+         look as the admin panel (css/admin.css): the dark sidebar with the logo, the page header, the summary
+         cards and the table. The company has a single section, so the sidebar has a single entry. -->
+    <div class="admin-layout">
+        <aside class="sidebar">
+            <div class="sidebar-logo-wrap">
+                <img class="sidebar-logo" src="assets/images/logos/OHMC@3x.png" alt="OHMC Radar Meteorology System">
+            </div>
+            <div class="sidebar-brand">
+                <span class="sidebar-brand-mark">◑</span>
+                <span class="sidebar-brand-text">WebMet25<small>Empresa</small></span>
+            </div>
+            <nav id="sidebar-nav">
+                <div class="nav-group-label">Gestión</div>
+                <a href="empresa" class="active"><span class="nav-ico">👤</span> Usuarios</a>
+            </nav>
+            <div class="sidebar-footer">
+                <a id="empresa-back-sidebar" class="btn btn-ghost btn-block" href="./">← Volver al mapa</a>
+            </div>
+        </aside>
+
         <main class="main-content">
             <header class="page-header">
                 <div class="page-header-left">
                     <a id="empresa-back" class="btn btn-ghost btn-back" href="./" title="Volver al mapa">←</a>
                     <h1 id="empresa-name">Mi empresa</h1>
-                    <span id="empresa-seats" class="status-pill"></span>
                 </div>
                 <div class="session-box">
                     <span id="session-user" class="session-user"></span>
@@ -32,7 +49,23 @@
                 <button type="button" class="feedback-close" aria-label="Cerrar aviso">×</button>
             </div>
 
-            <p class="toolbar-note">Vistas de radar de la empresa: <strong id="empresa-views"></strong></p>
+            <p class="section-subtitle">Resumen</p>
+            <div class="card-grid">
+                <div class="card">
+                    <h3>Lugares</h3>
+                    <div class="card-stat" id="empresa-seats"></div>
+                </div>
+                <div class="card">
+                    <h3>Usuarios activos</h3>
+                    <div class="card-stat" id="empresa-active"></div>
+                </div>
+                <div class="card">
+                    <h3>Vistas de radar de la empresa</h3>
+                    <div class="card-stat" id="empresa-views"></div>
+                </div>
+            </div>
+
+            <p class="section-subtitle">Usuarios</p>
             <div class="toolbar"><button class="btn" id="empresa-add" type="button">+ Agregar usuario</button></div>
             <div class="table-wrap">
                 <table>
