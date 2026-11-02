@@ -11,9 +11,10 @@
     <link rel="stylesheet" href="css/login.css">
 </head>
 <!-- The class "login-page" plus the radar modifier on the body turns on the radar look of this page
-     (see css/login.css). The sign-up and recovery pages share the same stylesheet but do not carry the modifier,
-     so they keep the plain look. -->
-<body class="login-page login-page--radar">
+     (see css/login.css). "login-page--fit" is only on this page: on phones it shrinks the form so the whole login
+     (including "Crear cuenta" and Google) fits on one screen without scrolling, and gives the rest of the height
+     to the radar strip. The sign-up and recovery pages do not carry it. -->
+<body class="login-page login-page--radar login-page--fit">
     <div class="login-layout">
         <aside class="login-hero">
             <!-- Decorative radar, drawn live by js/login-radar.js. The data-* attributes set where the radar sits in
