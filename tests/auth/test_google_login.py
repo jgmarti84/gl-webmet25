@@ -214,3 +214,13 @@ def test_google_login_behind_a_prefix_sets_the_prefixed_cookies(client, google_v
     assert "Path=/;" in access + ";"
     assert "Path=/nacho/api/v1/auth" in refresh
     assert not any(c.startswith("webmet_access=") for c in set_cookie)
+
+
+def test_the_random_password_of_a_google_account_always_meets_the_policy():
+    """The policy asks for a special character and token_urlsafe has one only about 3 times in 4: a single run
+    could pass by luck, so this tries many."""
+    from api.app.auth.google_login import _unusable_password
+    from radar_db.passwords import validate_password
+
+    for _ in range(300):
+        validate_password(_unusable_password(), "ana.perez")

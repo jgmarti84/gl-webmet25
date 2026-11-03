@@ -381,6 +381,29 @@ def test_a_weak_password_does_not_spend_the_token(make_user, test_db_session):
     registration.reset_password(test_db_session, token, "otra-contrasena-larga", now=NOW + timedelta(minutes=3))
 
 
+def test_the_new_password_cannot_be_the_current_one(make_user, test_db_session):
+    """Someone who comes through "forgot my password" and types the same password again gets an error, and the
+    link is not spent: they can try again with a different one."""
+    user = make_user(username="ana", email=f"ana@{DOMAIN}")
+    old_hash = user.password_hash
+    token = _token_in(registration.forgot_password(test_db_session, f"ana@{DOMAIN}", now=NOW)[0])
+    with pytest.raises(PasswordPolicyError) as exc:
+        registration.reset_password(test_db_session, token, TEST_PASSWORD, now=NOW + timedelta(minutes=2))
+    assert "distinta" in str(exc.value)
+    assert user.password_hash == old_hash
+    registration.reset_password(test_db_session, token, "otra-contrasena-larga", now=NOW + timedelta(minutes=3))
+    assert verify_password("otra-contrasena-larga", user.password_hash)
+
+
+def test_an_account_with_an_unknown_password_can_reset_to_anything_valid(make_user, test_db_session):
+    """Accounts made with Google have a random password nobody knows: nothing typed can match it."""
+    from api.app.auth.google_login import _unusable_password
+
+    make_user(username="ana", email=f"ana@{DOMAIN}", password=_unusable_password())
+    token = _token_in(registration.forgot_password(test_db_session, f"ana@{DOMAIN}", now=NOW)[0])
+    registration.reset_password(test_db_session, token, TEST_PASSWORD, now=NOW + timedelta(minutes=2))
+
+
 def test_reset_token_is_single_use_and_verifies_the_mail(test_db_session):
     _register(test_db_session)
     user = test_db_session.query(User).filter_by(username="nuevo").one()

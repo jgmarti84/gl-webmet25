@@ -31,7 +31,9 @@ class MeResponse(BaseModel):
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=32)
     password: str = Field(..., min_length=1, max_length=128)
-    role: Literal["admin", "viewer"]
+    role: Literal["admin", "org_admin", "viewer"]
+    # The company the new account joins (spec C); required for the org_admin role, never for admin.
+    organization_id: Optional[int] = None
     full_name: Optional[str] = Field(None, max_length=128)
     # A real address (format and length checked by email-validator); the rules lower-case it before saving.
     email: Optional[EmailStr] = None
@@ -45,8 +47,11 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(None, max_length=128)
     email: Optional[EmailStr] = None  # null clears it
-    role: Optional[Literal["admin", "viewer"]] = None
+    role: Optional[Literal["admin", "org_admin", "viewer"]] = None
     is_active: Optional[bool] = None
+    # Move a viewer into a company, between companies, or out of one (null). Only counts when the key is sent
+    # (the router dumps with exclude_unset), so leaving it out never changes the company.
+    organization_id: Optional[int] = None
 
 
 class PasswordReset(BaseModel):
@@ -61,6 +66,9 @@ class UserResponse(BaseModel):
     # False for a self-registered account that never opened its verification link (it cannot log in yet).
     email_verified: bool = True
     role: str
+    # The user's company (spec C), or None.
+    organization_id: Optional[int] = None
+    organization_name: Optional[str] = None
     is_active: bool
     password_is_bootstrap: bool
     last_login_at: Optional[datetime] = None

@@ -239,6 +239,15 @@ Cuando un tope frena un mail, la API no envía nada y responde exactamente igual
 - **La verificación y el recupero de contraseña** solo necesitan la configuración del mail (`MAIL_HOST`, `MAIL_FROM`, `PUBLIC_BASE_URL`).
 - Si `REGISTRATION_ENABLED=true` pero falta algo, la API dice qué en su log al arrancar y el registro queda apagado (el endpoint responde 503 y el login no ofrece "Crear cuenta").
 
+### 7.2b Cómo se ven los mails
+
+Los tres mails de la cuenta (verificar el mail, recuperar la contraseña, "ya tenés una cuenta") comparten un mismo diseño: el logo del observatorio, el título, el texto, un botón y un aviso al pie.
+
+- **El link está solo dentro del botón.** El cuerpo del mail en HTML nunca escribe la dirección, así que el token de un solo uso no se ve; debajo del botón solo nombra la página del sitio donde se puede pedir un mail nuevo (sin token). La **versión en texto plano** del mail, que solo muestran los programas que no leen HTML, conserva el link completo porque ahí no hay botón.
+- **No responder.** El remitente se ve como **"WebMet25 (no responder)"** con la dirección de `MAIL_FROM` (si `MAIL_FROM` ya trae un nombre, `Nombre <dirección>`, se respeta ese nombre). Todos los mails terminan con "este es un mensaje automático, no respondas; si necesitás ayuda escribinos a info@ohmc.ar". Llevan `Auto-Submitted: auto-generated` y `X-Auto-Response-Suppress: All` (las respuestas automáticas de vacaciones no los contestan) y **no llevan `Reply-To`**.
+- **El logo viaja dentro del mail** (una imagen en línea de unos 30 KB, `api/app/mail/assets/ohmc-logo.png`), no como un link al sitio, porque los programas de correo suelen bloquear las imágenes remotas hasta que la persona las autoriza.
+- **Para verlos:** en desarrollo, Mailpit muestra cada mail en http://localhost:8025 (ver §7.4).
+
 ### 7.3 Encenderlo en producción
 
 1. Si hay un proxy delante de nginx, configurar antes `set_real_ip_from` / `real_ip_header`. Los límites de estos endpoints (10 pedidos por minuto por IP) son por IP del cliente: sin la IP real todos los visitantes comparten la del proxy y la cuota se agota para todos.
@@ -310,6 +319,39 @@ El mapa muestra todos los radares a todos los usuarios con sesión, pero la **p�
 - **Las cuentas nuevas no tienen vistas.** Eso incluye las cuentas creadas por el registro y por "Continuar con Google". Las personas que ya existían antes de esta versión también empiezan sin ninguna.
 
 **Nota de despliegue:** después de aplicar esta versión, **nadie salvo el admin puede abrir la vista de un radar** hasta que el admin se la asigne. Conviene asignar las vistas antes de anunciar el cambio, o avisar a los usuarios. La migración (`c4d5e6f7a8b9`, tabla `permissions`) la aplica `db-init` en el próximo `docker compose up -d --build`; no necesita ninguna clave nueva en el `.env`.
+
+## 10. Cuentas de empresa
+
+Una **empresa** (por ejemplo EPEC) es un grupo de usuarios con un **tope de lugares** y su propia lista de vistas de radar único. La crea el admin general; después un **admin de empresa** (rol `org_admin`) administra a los usuarios de la empresa desde `/empresa`, un panel propio.
+
+- **Crear una empresa:** panel de admin, **Empresas**, "Agregar empresa": nombre, tope de lugares (usuarios activos, admins de empresa incluidos) y si está activa. El botón **Vistas** define la lista de vistas de radar de la empresa; **Usuarios** abre la sección de usuarios filtrada por esa empresa.
+- **Nombrar a su admin:** panel de admin, **Usuarios**, "Agregar usuario", elegir la empresa y el rol "Admin de empresa". Solo el admin general crea o cambia admins de empresa, y un admin de empresa nunca cambia de empresa (para moverlo, se crea una cuenta nueva).
+- **Mover una cuenta existente:** panel de admin, **Usuarios**, editar un lector y cambiar el selector **Empresa** (solo el admin general; sirve para sumarlo a una empresa, pasarlo a otra o sacarlo con "Ninguna"). El formulario avisa qué va a pasar antes de guardar. Entrar a una empresa ocupa un lugar (409 si está llena o inactiva) y **reemplaza** las vistas de la cuenta por una copia de las de la empresa (sin intersección; si la persona tiene que ver más, hay que darle más vistas a la empresa); se le cierran las sesiones. Salir libera el lugar y conserva la lista de la cuenta. Cuando un admin de empresa intenta agregar un usuario o mail que ya existe, el panel le dice que le pida al admin general que sume esa cuenta a su empresa.
+- **Qué puede hacer un admin de empresa** (desde el botón "Mi empresa" de la franja de cuenta del mapa, o en `/empresa`): crear usuarios (entran como lectores de la empresa, con una contraseña inicial, y empiezan con las vistas de la empresa), editar nombre y mail, resetear contraseñas, cerrar sesiones, activar o desactivar, y achicar las vistas de radar de cada uno, siempre dentro de la lista de la empresa. No puede tocar a otros admins de empresa, a otras empresas ni entrar a `/admin`.
+- **Lugares:** crear o reactivar un usuario de la empresa necesita un lugar libre (409 si no). Desactivar lo libera. Bajar el tope por debajo de los usuarios activos no desactiva a nadie: solo bloquea los usuarios nuevos.
+- **Vistas de un miembro de la empresa** = su propia lista intersectada con la de la empresa, calculado en cada lectura: si el admin general le quita un radar a la empresa, todos sus miembros lo pierden al instante. Un admin de empresa ve la lista de la empresa.
+- **Una empresa desactivada** bloquea a todos sus usuarios: no pueden entrar (con contraseña ni con Google) y sus sesiones abiertas dejan de funcionar.
+- **Entrar con Google:** un admin de empresa puede usarlo (solo el admin general no).
+- **Qué no cubre:** igual que las vistas por usuario, la lista de la empresa solo decide qué páginas de radar único se abren. Los endpoints de datos son los mismos para todos.
+
+**Nota de despliegue:** la migración (`d5e6f7a8b9c0`: tablas `organizations`, `users.organization_id`, el rol `org_admin` y las filas de `permissions` que pertenecen a una empresa) la aplica `db-init` en el próximo `docker compose up -d --build`. No hay claves nuevas en el `.env`. Nadie pertenece a una empresa hasta que el admin general cree una, así que para los usuarios existentes no cambia nada.
+
+## 11. Perfil de usuario
+
+Cada usuario tiene una página de perfil, `/perfil`, con el mismo diseño del panel de admin. Muestra los datos de la
+cuenta (usuario, nombre, mail, rol, empresa, alta, último ingreso) y los radares que puede abrir en la vista de radar
+único; el admin de empresa ve además la tarjeta de su empresa (lugares y vistas).
+
+- **Cómo llega cada rol:** el lector tiene un botón de perfil en la franja de cuenta del mapa (página `/perfil`). El
+  admin general y el admin de empresa no tienen un botón extra: el perfil es una sección **dentro de su panel** ("Mi
+  perfil" en el menú lateral: `admin#profile` y `empresa#perfil`), a la que llegan con el botón que ya tenían.
+  `/perfil` los manda a esa sección.
+- **Qué se puede editar:** solo el nombre. Usuario y mail son de solo lectura acá (un admin sí puede cambiar un mail
+  desde el panel de admin).
+- **Todavía no incluye:** foto de perfil (el avatar son siempre las iniciales). El diseño quedó guardado en la spec.
+
+**Nota de despliegue:** nada especial. Sin migración, sin volumen nuevo, sin claves nuevas en el `.env`. Se aplica
+con `docker compose up -d --build`.
 
 ---
 

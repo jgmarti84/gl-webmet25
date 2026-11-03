@@ -10,7 +10,7 @@ from radar_db import get_db
 from radar_db.accounts import revoke_all_sessions
 from radar_db.models import User
 
-from ..auth import permissions, user_admin
+from ..auth import organizations, permissions, user_admin
 from ..auth.dependencies import check_origin, require_admin
 from ..schemas.auth import PasswordReset, UserCreate, UserResponse, UserUpdate
 from ..schemas.permissions import RadarViewsUpdate
@@ -32,6 +32,8 @@ def _response(user: User) -> UserResponse:
         created_at=user.created_at,
         updated_at=user.updated_at,
         radar_detail_views=permissions.stored_radar_views(user),
+        organization_id=user.organization_id,
+        organization_name=user.organization.name if user.organization else None,
     )
 
 
@@ -42,7 +44,8 @@ def _get_or_404(db: Session, user_id: int) -> User:
     return user
 
 
-def _rule(exc: user_admin.UserRuleError) -> HTTPException:
+def _rule(exc: Exception) -> HTTPException:
+    """Both UserRuleError and OrgRuleError carry a status_code and a detail."""
     return HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
@@ -55,9 +58,20 @@ def list_users(db: Session = Depends(get_db), actor: User = Depends(require_admi
 def create_user(
     payload: UserCreate, db: Session = Depends(get_db), actor: User = Depends(require_admin)
 ) -> UserResponse:
+    """Create an account. With organization_id it goes into that company: takes a seat, copies its views."""
+    data = payload.model_dump()
+    organization_id = data.pop("organization_id")
+    role = data.pop("role")
     try:
-        user = user_admin.create(db, payload.model_dump())
-    except user_admin.UserRuleError as exc:
+        if organization_id is not None:
+            if role == "admin":
+                raise user_admin.UserRuleError(422, "Un usuario de una empresa no puede ser administrador general")
+            user = organizations.create_member(db, organization_id, data, role, actor)
+        elif role == "org_admin":
+            raise user_admin.UserRuleError(422, "Solo un usuario de una empresa puede ser admin de empresa")
+        else:
+            user = user_admin.create(db, {**data, "role": role})
+    except (user_admin.UserRuleError, organizations.OrgRuleError) as exc:
         raise _rule(exc)
     db.commit()
     db.refresh(user)

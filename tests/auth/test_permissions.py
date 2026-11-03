@@ -6,29 +6,9 @@ from sqlalchemy.exc import IntegrityError
 
 from api.app.auth import permissions as perms
 from api.app.auth.google import GoogleIdentity
-from radar_db.models import Permission, Radar
+from radar_db.models import Permission
 
 from .conftest import login
-
-
-@pytest.fixture
-def make_radar(test_db_session):
-    """Factory for test radars. Codes start with TST so they never clash with real radars."""
-
-    def _make(code="TSTA", detail_view_enabled=True):
-        radar = Radar(
-            code=code,
-            title=f"Test {code}",
-            center_lat=-31.4,
-            center_long=-64.2,
-            img_radio=240,
-            detail_view_enabled=detail_view_enabled,
-        )
-        test_db_session.add(radar)
-        test_db_session.flush()
-        return radar
-
-    return _make
 
 
 def _grant(db, user, *resources):

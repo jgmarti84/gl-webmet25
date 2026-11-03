@@ -19,6 +19,7 @@ frontend/public/
 ├── forgot.html                # "Forgot my password" page (/forgot, public)
 ├── reset.html                 # New password page (/reset#token=…, public)
 ├── admin.html                 # Admin panel SPA (served at /admin, login required)
+├── empresa.html               # Company admin panel (/empresa, company admins only)
 ├── cog-browser.html          # Alternative detailed COG browser view
 ├── css/
 │   ├── styles.css            # Main app UI styling (dark theme)
@@ -31,6 +32,7 @@ frontend/public/
     ├── register.js, verify.js, forgot.js, reset.js   # One script per public page
     ├── admin.js              # Admin panel orchestrator (CRUD, filters, colormap creator)
     ├── admin-api.js          # Admin REST client (/api/v1/admin/*)
+    ├── empresa.js, empresa-api.js  # Company admin panel (/empresa) and its REST client (/api/v1/org)
     ├── shared/               # Shared by v1 and v2
     │   ├── api.js            # REST API client
     │   ├── controls.js       # UI control handlers (+ radar ordering, time-wheel wiring)
@@ -456,9 +458,21 @@ settings), and animation controls (bottom-center).
 
 **Files:** [`frontend/public/js/auth-api.js`](../../frontend/public/js/auth-api.js), [`frontend/public/js/shared/session-box.js`](../../frontend/public/js/shared/session-box.js)
 
-**Responsibility:** Every page needs a session (nginx serves `/login` in place of a page when there is none). `auth-api.js` is the shared client: `authFetch()` replaces `fetch()` for API data (on a 401 it renews the session through `/auth/refresh` and retries once; if the session is gone it reloads the page, or goes to `/login` if it already reloaded a few seconds ago), and `initPageSession()` loads the current user and starts the keep-alive that renews the access token two minutes before it expires (using `access_expires_in` from `login`/`refresh`/`me`, also after a tab was in the background). `session-box.js` fills the account chip (`#account-chip`), an always-visible pill at the bottom-left under the color legend: avatar with the initials, name, the role badge (only for admins) and the "Cerrar sesión" icon button. For admins it also un-hides two links to the admin panel: an icon button in the chip (`#admin-chip-link`, left of logout) and a link in the settings panel (`#admin-link`). Used by the map and the radar detail page.
+**Responsibility:** Every page needs a session (nginx serves `/login` in place of a page when there is none). `auth-api.js` is the shared client: `authFetch()` replaces `fetch()` for API data (on a 401 it renews the session through `/auth/refresh` and retries once; if the session is gone it reloads the page, or goes to `/login` if it already reloaded a few seconds ago), and `initPageSession()` loads the current user and starts the keep-alive that renews the access token two minutes before it expires (using `access_expires_in` from `login`/`refresh`/`me`, also after a tab was in the background). `session-box.js` fills the account chip (`#account-chip`), an always-visible pill at the top-right, right above the icon bar: avatar with the initials, name, the role badge (only for admins) and the "Cerrar sesión" icon button. For admins it also un-hides two links to the admin panel: an icon button in the chip (`#admin-chip-link`, left of logout) and a link in the settings panel (`#admin-link`). Used by the map and the radar detail page. `chipLinksFor(role)` decides which optional button of the chip each role gets: the general admin the admin panel, the company admin the company panel, and the viewer the profile button (`#profile-chip-link`, to `/perfil`).
 
 `auth-api.js` also talks to the public endpoints of the sign-up (DATA_FLOW §4.10): `login(username, password)` (the username field also takes the mail, and the answer carries the failure `code`, for example `email_not_verified`), `options()` (what the pages may offer; never throws, and falls back to "nothing extra"), `register(payload)`, `verifyEmail(token)`, `resendVerification(identifier)`, `forgotPassword(email)` and `resetPassword(token, password)`. The last five resolve `{ ok, status, data }` and leave the texts to the page.
+
+### **shared/profile-section.js** — The profile, drawn inside any page (spec D)
+
+**File:** [`frontend/public/js/shared/profile-section.js`](../../frontend/public/js/shared/profile-section.js)
+
+**Responsibility:** `mountProfile(container, {me, openModal, showMessage})` draws the user's own profile into a container: the account data, the radars the person may open and, for company admins, the card of their company, plus the name edit. The host page passes its own modal and notice functions, so the form behaves like the rest of that page. It is used by three pages: the admin panel (section `profile`), the company panel (section `perfil`) and `perfil.html`. Pure helpers (`formatDate`, `profileRows`, `viewsNote`) are unit-tested in `tests/js/test_profile_section.mjs`.
+
+### **perfil.html / perfil.js / perfil-api.js** — User profile page for viewers (spec D)
+
+**Files:** [`frontend/public/perfil.html`](../../frontend/public/perfil.html), [`frontend/public/js/perfil.js`](../../frontend/public/js/perfil.js), [`frontend/public/js/perfil-api.js`](../../frontend/public/js/perfil-api.js)
+
+**Responsibility:** The page every user has at `/perfil`, with the look of the admin panel (`css/admin.css`). It shows the account data (`#perfil-details`), the identity card with the initials (`#perfil-avatar`, `#perfil-name`, `#perfil-username`), the radars the person may open (`#perfil-views`) and, for company admins only, the company card (`#perfil-company`, `#perfil-company-name`). The only edit is the name (`#perfil-edit-name`); the error of a failed save shows inside the modal. Admins and company admins have the profile inside their own panels, so `perfil.js` redirects them there (`admin#profile`, `empresa#perfil`). `perfil-api.js` calls `GET` and `PATCH api/v1/profile` through `authFetch`.
 
 ---
 
@@ -466,7 +480,7 @@ settings), and animation controls (bottom-center).
 
 **File:** [`frontend/public/js/auth-pages.js`](../../frontend/public/js/auth-pages.js) — unit tests: `tests/js/test_auth_pages.mjs`
 
-**Responsibility:** Presentation-only helpers shared by the login and the four public pages; the server validates everything again. Exports the same shapes the server enforces (`USERNAME_RE`, a loose `EMAIL_RE`, 12 to 128 characters for passwords), `validatePassword()` and `validateRegistration()` (null when fine, else the message), `errorText()` / `statusMessage()` (the server's own text, or a fixed one for 429 and 503), and the small UI helpers `showMessage()` / `hideMessage()` (always `textContent`, never `innerHTML`) and `startCooldown()` (a button that counts down, used by "Reenviar mail").
+**Responsibility:** Presentation-only helpers shared by the login and the four public pages; the server validates everything again. Exports the same shapes the server enforces (`USERNAME_RE`, a loose `EMAIL_RE`, 10 to 128 characters and a special character for passwords), `validatePassword()` and `validateRegistration()` (null when fine, else the message), `errorText()` / `statusMessage()` (the server's own text, or a fixed one for 429 and 503), and the small UI helpers `showMessage()` / `hideMessage()` (always `textContent`, never `innerHTML`) and `startCooldown()` (a button that counts down, used by "Reenviar mail").
 
 ---
 

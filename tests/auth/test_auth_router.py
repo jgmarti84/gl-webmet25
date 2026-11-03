@@ -291,3 +291,23 @@ def test_login_with_an_unverified_mail_says_so_only_with_the_right_password(clie
     wrong = client.post("/api/v1/auth/login", json={"username": "pend", "password": "wrong-password-xx"})
     assert wrong.status_code == 401
     assert wrong.json()["detail"] == "Usuario o contraseña incorrectos"
+
+
+# --- the probe nginx uses for /empresa (spec C) --------------------------------------------------------
+
+
+def test_check_org_admin_role_rejects_the_general_admin(client, make_user):
+    make_user(username="boss", role="admin")
+    login(client, username="boss")
+    assert client.get("/api/v1/auth/check", params={"role": "org_admin"}).status_code == 403
+
+
+def test_check_org_admin_role_accepts_a_company_admin(client, make_user, test_db_session):
+    from radar_db.models import Organization
+
+    org = Organization(name="Test Org A", seat_limit=2)
+    test_db_session.add(org)
+    test_db_session.flush()
+    make_user(username="jefe", role="org_admin", organization_id=org.id)
+    login(client, username="jefe")
+    assert client.get("/api/v1/auth/check", params={"role": "org_admin"}).status_code == 204

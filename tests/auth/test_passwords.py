@@ -41,7 +41,7 @@ def test_dummy_hash_is_a_valid_hash():
     assert not verify_password("whatever", DUMMY_HASH)
 
 
-@pytest.mark.parametrize("password", ["short", "a" * 11, "x" * 129])
+@pytest.mark.parametrize("password", ["short", "abcdefg-1", "x" * 129])  # 5, 9 (one under the minimum) and 129
 def test_policy_rejects_bad_length(password):
     with pytest.raises(PasswordPolicyError):
         validate_password(password, username="alice")
@@ -73,9 +73,29 @@ def test_verify_and_update_rehashes_weaker_parameters():
     assert verify_password("correct-horse-battery", new_hash)
 
 
-@pytest.mark.parametrize("password", ["a" * 12, "a" * 128])
+@pytest.mark.parametrize("password", ["a" * 9 + "!", "a" * 127 + "!"])  # exactly 10 and exactly 128 characters
 def test_policy_accepts_boundary_lengths(password):
     validate_password(password, username="alice")
+
+
+@pytest.mark.parametrize(
+    "password",
+    [
+        "abcdefghijkl",  # letters only
+        "Abcdefgh1234",  # letters and digits
+        "buenos dias amigos",  # spaces do not count as special
+        "ñandú123456",  # accented letters are still letters
+    ],
+)
+def test_policy_requires_a_special_character(password):
+    with pytest.raises(PasswordPolicyError) as exc:
+        validate_password(password, username="alice")
+    assert "carácter especial" in str(exc.value)
+
+
+@pytest.mark.parametrize("special", list("!@#$%^&*()-_=+[]{};:,.<>/?~|") + ["'", '"', "\\", "€", "¿"])
+def test_policy_accepts_any_symbol_as_special(special):
+    validate_password(f"abcdefghi1{special}", username="alice")
 
 
 def test_policy_rejects_whitespace_only_password():
