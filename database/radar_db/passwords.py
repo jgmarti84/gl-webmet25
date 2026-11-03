@@ -10,7 +10,7 @@ from typing import Optional, Tuple
 from pwdlib import PasswordHash
 from pwdlib.exceptions import UnknownHashError
 
-MIN_PASSWORD_LENGTH = 12
+MIN_PASSWORD_LENGTH = 10
 MAX_PASSWORD_LENGTH = 128
 
 _hasher = PasswordHash.recommended()
@@ -45,7 +45,16 @@ def verify_and_update(password: str, password_hash: str) -> Tuple[bool, Optional
         return False, None
 
 
+def has_special_character(password: str) -> bool:
+    """True when the password has a character that is not a letter, a digit or a space (for example ! - _ . @ #).
+
+    Spaces do not count on purpose: "buenos dias amigos" would pass otherwise, and a space is easy to miss."""
+    return any(not char.isalnum() and not char.isspace() for char in password)
+
+
 def validate_password(password: str, username: str) -> None:
+    """Raise PasswordPolicyError unless the password is acceptable. Only used when a password is SET (sign-up,
+    admin create, reset); login never checks it, so accounts with an older, weaker password keep working."""
     if not isinstance(password, str) or not isinstance(username, str):
         raise PasswordPolicyError("La contraseña y el nombre de usuario deben ser texto")
     if not MIN_PASSWORD_LENGTH <= len(password) <= MAX_PASSWORD_LENGTH:
@@ -56,6 +65,8 @@ def validate_password(password: str, username: str) -> None:
         raise PasswordPolicyError("La contraseña no puede estar formada solo por espacios")
     if password.strip().casefold() == username.strip().casefold():
         raise PasswordPolicyError("La contraseña no puede ser igual al nombre de usuario")
+    if not has_special_character(password):
+        raise PasswordPolicyError("La contraseña debe tener al menos un carácter especial (por ejemplo ! - _ . @ #)")
 
 
 # Hash used to spend the same time when the user does not exist (timing attacks).

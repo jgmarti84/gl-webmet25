@@ -6,7 +6,9 @@
 export const USERNAME_RE = /^[a-z0-9._-]{3,32}$/;
 // Deliberately loose: it only catches typos like a missing "@". The server runs the real validation.
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-export const MIN_PASSWORD = 12;
+export const MIN_PASSWORD = 10;
+// A character that is not a letter, a digit or a space (spaces do not count, same as the server).
+export const SPECIAL_CHAR_RE = /[^\p{L}\p{N}\s]/u;
 export const MAX_PASSWORD = 128;
 // Size of users.full_name: the optional "Nombre y apellido" of the sign-up form.
 export const MAX_FULL_NAME = 128;
@@ -31,6 +33,7 @@ export function validatePassword(password, repeat, username = '') {
     if (username && password.trim().toLowerCase() === username.trim().toLowerCase()) {
         return 'La contraseña no puede ser igual al usuario.';
     }
+    if (!SPECIAL_CHAR_RE.test(password)) return 'La contraseña debe tener al menos un carácter especial (por ejemplo ! - _ . @ #).';
     if (password !== repeat) return 'Las contraseñas no coinciden.';
     return null;
 }

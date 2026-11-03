@@ -79,5 +79,8 @@ def require_role(role: str) -> Callable[..., User]:
 
 require_admin = require_role("admin")
 
+# A company admin (spec C). /org endpoints work on this user's own company only.
+require_org_admin = require_role("org_admin")
+
 # Any logged-in user (admin or viewer). Used for every data router (spec A).
 require_user = get_current_user

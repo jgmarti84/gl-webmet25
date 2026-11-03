@@ -49,7 +49,8 @@ body {
    ============================================================ */
 #icon-bar {
     position: absolute;
-    top: 10px;
+    /* 10 px margin + the account chip (48 px) + 6 px gap: the chip sits right above the first button. */
+    top: 64px;
     right: 10px;
     z-index: 1100;
     display: flex;
@@ -134,11 +135,11 @@ body {
    ============================================================ */
 .floating-panel {
     position: absolute;
-    top: 10px;
+    top: 64px;              /* level with the first icon button, which sits under the account chip */
     right: 64px;            /* icon-bar width (44px) + 10px gap + 10px page margin */
     z-index: 1050;
     width: 260px;
-    max-height: calc(100vh - 100px);
+    max-height: calc(100vh - 154px);
     overflow-y: auto;
     background: rgba(26, 26, 46, 0.97);
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -774,7 +775,7 @@ code {
    ============================================================ */
 .snapshot-error {
     position: absolute;
-    top: 60px;
+    top: 114px;
     right: 64px;
     z-index: 1200;
     background: rgba(244, 67, 54, 0.9);
@@ -1524,14 +1525,13 @@ code {
     padding-bottom: 10px;
 }
 
-/* Field loading indicator — appears in bottom-left during
+/* Field loading indicator — appears in the bottom-left corner during
    field switch preload so it does not hide behind open panels. */
 #field-loading-badge {
     display: none;
     position: fixed;
     bottom: 20px;
-    /* Starts to the right of the account chip, which sits at the bottom-left corner. */
-    left: 340px;
+    left: 10px;
     z-index: 1100;
     background: rgba(30, 30, 60, 0.85);
     color: #a0c4ff;
@@ -1687,14 +1687,21 @@ code {
    RESPONSIVE
    ============================================================ */
 @media (max-width: 768px) {
-    #icon-bar { top: 5px; right: 5px; }
+    /* The account chip moves 5 px from the corner here; the icon bar sits under it with a wider gap than on
+       desktop (5 + 48 + 13), so the chip's buttons and the radar button are not touched by the same thumb. */
+    #icon-bar { top: 66px; right: 5px; }
+
+    /* The animation controls take the whole width down here, so the loading badge sits right above them
+       (20 px margin + about 107 px of controls + a gap) instead of hiding behind them. */
+    #field-loading-badge { bottom: 135px; }
 
     .icon-btn { width: 43px; height: 43px; font-size: 18px; }
 
     .floating-panel {
+        top: 66px;
         right: 53px;
         width: 220px;
-        max-height: 80vh;
+        max-height: calc(80vh - 56px);
     }
 
     #animation-controls {
@@ -2206,18 +2213,21 @@ code {
     font-family: 'Courier New', monospace;
 }
 
-/* Account chip: always-visible "who is signed in" pill, bottom-left under the color legend (the legend ends
-   70 px above the bottom, 80 px on narrow screens, and there is only ever one). It carries the avatar, the
-   name, the role badge (admins only), the admin panel shortcut and the logout button. */
+/* Account chip: always-visible "who is signed in" pill, top-right, right above the icon bar (the icon bar
+   starts 6 px below it, see #icon-bar). It carries the avatar, the name, the role badge (admins only), the
+   admin panel shortcut and the logout button. It is always 48 px tall (fixed, so it is the same with or without
+   the role badge): #icon-bar and .floating-panel count on that. */
 .account-chip {
     position: absolute;
-    bottom: 14px;
-    left: 10px;
+    top: 10px;
+    right: 10px;
     z-index: 1100;
     display: flex;
     align-items: center;
     gap: 8px;
-    max-width: calc(100vw - 90px);
+    height: 48px;
+    box-sizing: border-box;
+    max-width: calc(100vw - 20px);
     padding: 5px 6px 5px 5px;
     border-radius: 999px;
     background: rgba(26, 26, 46, 0.92);
@@ -2299,15 +2309,23 @@ code {
     color: #ef9a9a;
 }
 
+/* Small screens: the chip is 5 px from the corner, like the icon bar. This block is HERE, after the base
+   .account-chip rule, on purpose: same specificity, so the later rule wins (in the responsive block higher up in
+   the file it was overridden). */
+@media (max-width: 768px) {
+    .account-chip { top: 5px; right: 5px; }
+}
+
 /* Narrow screens: only the avatar and the icon buttons stay (name and role are hidden), so the chip is
-   narrower and the field-loading badge can move closer to the corner. */
+   narrower and does not run into the logo at the top-left. */
 @media (max-width: 640px) {
     .account-chip .account-meta {
         display: none;
     }
 
-    #field-loading-badge {
-        left: 150px;
+    /* A smaller logo, so the chip (top-right) does not cover the end of it on a phone. */
+    #logo-container img {
+        height: 62px;
     }
 }
 

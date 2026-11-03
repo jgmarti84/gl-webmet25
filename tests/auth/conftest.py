@@ -22,6 +22,45 @@ def make_user(test_db_session):
 
 
 @pytest.fixture
+def make_org(test_db_session):
+    """Factory for organizations inside the rolled-back test transaction."""
+    from radar_db.models import Organization, Permission
+
+    def _make(name="Test Org A", seat_limit=3, is_active=True, views=()):
+        org = Organization(name=name, seat_limit=seat_limit, is_active=is_active)
+        test_db_session.add(org)
+        test_db_session.flush()
+        for resource in views:
+            test_db_session.add(Permission(organization_id=org.id, action="radar.detail_view", resource=resource))
+        test_db_session.flush()
+        test_db_session.refresh(org)
+        return org
+
+    return _make
+
+
+@pytest.fixture
+def make_radar(test_db_session):
+    """Factory for test radars. Codes start with TST so they never clash with real radars."""
+    from radar_db.models import Radar
+
+    def _make(code="TSTA", detail_view_enabled=True):
+        radar = Radar(
+            code=code,
+            title=f"Test {code}",
+            center_lat=-31.4,
+            center_long=-64.2,
+            img_radio=240,
+            detail_view_enabled=detail_view_enabled,
+        )
+        test_db_session.add(radar)
+        test_db_session.flush()
+        return radar
+
+    return _make
+
+
+@pytest.fixture
 def google_verifier():
     """Stands in for Google: the test sets `.identity` (what a valid token carries) or `.fail = True`."""
     from api.app.auth.google import FakeGoogleVerifier

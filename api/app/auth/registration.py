@@ -24,7 +24,7 @@ from radar_db.accounts import (
     validate_username,
 )
 from radar_db.models import User
-from radar_db.passwords import hash_password, validate_password
+from radar_db.passwords import PasswordPolicyError, hash_password, validate_password, verify_password
 
 from ..config import settings
 from ..mail.service import OutgoingMail
@@ -239,6 +239,11 @@ def reset_password(db: Session, token: str, new_password: str, now: Optional[dat
     row = find_valid_token(db, token, PURPOSE_RESET, now)
     user = row.user
     validate_password(new_password, user.username)
+    # The same password as the current one is refused (the stored hash is compared, never the text). Like a weak
+    # password, this does not spend the link: the person can type another one. An account whose password nobody
+    # knows (created with Google) can never match.
+    if user.password_hash and verify_password(new_password, user.password_hash):
+        raise PasswordPolicyError("La contraseña nueva tiene que ser distinta de la actual")
     row.used_at = now
     cancel_open_tokens(db, user, PURPOSE_RESET, now)
     # The user closes their own sessions: record it as such, not as an admin action.

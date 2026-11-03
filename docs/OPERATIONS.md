@@ -279,6 +279,15 @@ When a cap stops a mail, the API sends nothing and answers exactly as if it had,
 - **Verification and password recovery** only need the mail settings (`MAIL_HOST`, `MAIL_FROM`, `PUBLIC_BASE_URL`).
 - If `REGISTRATION_ENABLED=true` but something is missing, the API says what in its log at startup and the sign-up stays off (the endpoint answers 503 and the login does not offer "Crear cuenta").
 
+### 9.2b How the mails look
+
+The three account mails (verify the mail, recover the password, "you already have an account") share one layout: the observatory logo, the title, the text, a button and a notice at the bottom.
+
+- **The link is only inside the button.** The body of the HTML mail never writes the address, so the one-time token is not visible; below the button it only names the site page where a new mail can be asked for (no token). The **plain-text version** of the mail, shown only by programs that do not read HTML, keeps the full link because it has no button.
+- **No reply.** The sender shows as **"WebMet25 (no responder)"** with the address of `MAIL_FROM` (if `MAIL_FROM` already has a name, `Name <address>`, that name is kept). Every mail ends with "this is an automatic message, do not reply; for help write to info@ohmc.ar". The mails carry `Auto-Submitted: auto-generated` and `X-Auto-Response-Suppress: All` (out-of-office replies do not answer them) and **no `Reply-To`**.
+- **The logo travels inside the mail** (an inline image of about 30 KB, `api/app/mail/assets/ohmc-logo.png`), not as a link to the site, because mail programs usually block remote images until the person allows them.
+- **Seeing them:** in development, Mailpit shows every mail at http://localhost:8025 (see §9.4).
+
 ### 9.3 Turning it on in production
 
 1. If a proxy sits in front of nginx, configure `set_real_ip_from` / `real_ip_header` first. The limits of these endpoints (10 requests/minute per IP) are per client IP: without the real IP every visitor shares the proxy's and the quota runs out for everybody.
@@ -359,6 +368,39 @@ The map shows every radar to every logged-in user, but the **one-radar page** (`
 - **New accounts have no views.** That includes the accounts created by sign-up and by "Continuar con Google". The people who existed before this version also start with none.
 
 **Deployment note:** after this version is applied, **nobody but the admin can open a one-radar view** until the admin assigns them. Assign the views before announcing the change, or tell the users. The migration (`c4d5e6f7a8b9`, table `permissions`) is applied by `db-init` on the next `docker compose up -d --build`; it needs no new `.env` key.
+
+## 12. Company Accounts
+
+A **company** (for example EPEC) is a group of users with a **seat limit** and its own list of one-radar detail views. The general admin creates it; a **company admin** (role `org_admin`) then manages the company's users from `/empresa`, a panel of its own.
+
+- **Create a company:** Admin panel, **Empresas**, "Agregar empresa": name, seat limit (active users, company admins included) and whether it is active. The **Vistas** button sets the company's list of radar views; **Usuarios** opens the users section filtered by that company.
+- **Name its admin:** Admin panel, **Usuarios**, "Agregar usuario", pick the company and the role "Admin de empresa". Only the general admin can create or change company admins, and a company admin never changes company (to move one, create a new account).
+- **Move an existing account:** Admin panel, **Usuarios**, edit a viewer and change the **Empresa** selector (only the general admin; it works to join a company, to switch company or to leave one with "Ninguna"). The form shows what will happen before saving. Joining takes a seat (409 if the company is full or inactive) and **replaces** the account's views with a copy of the company's list (no intersection; if the person should see more, give the company more views); its sessions are closed. Leaving frees the seat and keeps the account's list. When a company admin tries to add a username or mail that already exists, the panel tells them to ask the general admin to add that account to their company.
+- **What a company admin can do** (from the map's account chip, button "Mi empresa", or `/empresa`): create users (they enter as viewers of the company with an initial password, and start with the company's views), edit their name and mail, reset passwords, close sessions, activate or deactivate them, and narrow the radar views of each one, always within the company's list. It cannot touch other company admins, other companies or `/admin`.
+- **Seats:** creating or reactivating a company user needs a free seat (409 otherwise). Deactivating frees it. Lowering the limit below the active users deactivates nobody: it only blocks new users.
+- **Views of a company member** = its own list intersected with the company's list, computed on every read: when the general admin removes a radar from the company, every member loses it at once. A company admin sees the company's list.
+- **A deactivated company** blocks all its users: they cannot log in (password or Google) and their open sessions stop working.
+- **Google sign-in:** a company admin may use it (only the general admin may not).
+- **Not covered:** like the per-user views, the company list only decides which one-radar pages open. The data endpoints are the same for everybody.
+
+**Deployment note:** the migration (`d5e6f7a8b9c0`: tables `organizations`, `users.organization_id`, the `org_admin` role and company-owned rows in `permissions`) is applied by `db-init` on the next `docker compose up -d --build`. No new `.env` keys. Nobody belongs to a company until the general admin creates one, so nothing changes for the existing users.
+
+## 13. User Profile
+
+Every user has a profile page, `/perfil`, with the same look as the admin panel. It shows the account data (user,
+name, mail, role, company, sign-up date, last login) and the radars the person may open in the one-radar view; a company
+admin also sees the company card (seats and views).
+
+- **How each role gets there:** a viewer has a profile button in the account chip of the map (page `/perfil`). The
+  general admin and the company admin have no extra button: the profile is a section **inside their panel** ("Mi perfil"
+  in the side menu: `admin#profile` and `empresa#perfil`), reached with the button they already have. `/perfil` sends
+  them to that section.
+- **What can be edited:** only the name. User and mail are read only here (an admin can still change a mail from the
+  admin panel).
+- **Not included yet:** a profile photo (the avatar is always the initials). The design is kept in the spec for later.
+
+**Deployment note:** nothing special. No migration, no new volume, no new `.env` keys. It is applied with
+`docker compose up -d --build`.
 
 ---
 

@@ -930,6 +930,78 @@
     .login-page--radar .login-panel { padding-block: 30px 22px; }
 }
 
+/* ── Login on phones: everything on one screen ──────────────────────────────
+   Only login.html carries .login-page--fit. On a phone (up to 640 px wide) the layout is at least as tall as the
+   screen: the radar strip takes 40 % of the height (never less than 185 px, so the logo, the title and the status
+   line fit) and the form column takes the rest, shrunk, so nobody has to scroll to reach "Crear cuenta" or Google.
+   100dvh is the height that really shows (the browser bars of a phone change it); 100vh is the fallback for browsers
+   that do not know dvh. If the screen is so short that the form does not fit in the 60 % left, that row grows and
+   the page scrolls a little instead of squashing the form. Inputs stay at 16 px: below that, iPhones zoom the
+   page when a field is tapped. */
+@media (max-width: 640px) {
+    .login-page--radar.login-page--fit .login-layout {
+        min-height: 100vh;
+        min-height: 100dvh;
+        grid-template-rows: minmax(185px, 40dvh) 1fr;
+    }
+
+    /* Radar strip: the logo and the title of the system at the top, the status line at the bottom (margin-top: auto
+       pushes it down), the radar showing through in between. The long paragraph stays hidden: it does not fit. */
+    .login-page--radar.login-page--fit .login-hero {
+        padding-block: 18px 14px;
+        justify-content: flex-start;
+        gap: 12px;
+    }
+    .login-page--radar.login-page--fit .login-hero-logo { width: 190px; }
+    .login-page--radar.login-page--fit .login-hero-body { display: block; }
+    .login-page--radar.login-page--fit .login-hero .login-hero-title {
+        display: block;
+        max-width: 19rem;
+        margin: 0;
+        font-size: 17px;
+        line-height: 1.25;
+        letter-spacing: -0.01em;
+    }
+    .login-page--radar.login-page--fit .login-hero-foot { margin-top: auto; }
+
+    /* Form column, smaller. */
+    .login-page--radar.login-page--fit .login-panel {
+        padding-block: 12px 8px;
+        padding-left: max(20px, env(safe-area-inset-left, 0px));
+        padding-right: max(20px, env(safe-area-inset-right, 0px));
+    }
+    .login-page--radar.login-page--fit .login-form-wrap { gap: 9px; }
+    .login-page--radar.login-page--fit .login-heading { gap: 1px; }
+    .login-page--radar.login-page--fit .login-heading h1 { font-size: 20px; }
+    .login-page--radar.login-page--fit .login-heading p { font-size: 12.5px; line-height: 1.3; }
+
+    .login-page--radar.login-page--fit .login-form { gap: 8px; }
+    .login-page--radar.login-page--fit .login-field { gap: 3px; }
+    .login-page--radar.login-page--fit .login-field label { font-size: 10.5px; }
+    .login-page--radar.login-page--fit .login-input { height: 37px; }
+    .login-page--radar.login-page--fit .login-input.has-toggle { padding-right: 42px; }
+    .login-page--radar.login-page--fit .login-pw-toggle { width: 35px; height: 35px; }
+    .login-page--radar.login-page--fit .login-link { margin-top: 0; font-size: 12.5px; }
+    .login-page--radar.login-page--fit .login-error,
+    .login-page--radar.login-page--fit .login-info { padding: 7px 9px; font-size: 12.5px; }
+    .login-page--radar.login-page--fit .login-submit { height: 38px; margin-top: 0; font-size: 14.5px; }
+    .login-page--radar.login-page--fit .login-secondary { height: 36px; font-size: 13.5px; }
+
+    /* "o" divider, Google's button and "Crear cuenta". */
+    .login-page--radar.login-page--fit .login-google { gap: 8px; }
+    .login-page--radar.login-page--fit .login-or { font-size: 10.5px; }
+    .login-page--radar.login-page--fit .login-google-button { min-height: 40px; }
+    .login-page--radar.login-page--fit .login-switch { font-size: 12.5px; }
+
+    .login-page--radar.login-page--fit .login-footer {
+        margin-top: 8px;
+        padding-top: 7px;
+        font-size: 11px;
+        line-height: 1.3;
+        gap: 1px;
+    }
+}
+
 /* People who ask their system for less motion get a still page (the script draws one frame). */
 @media (prefers-reduced-motion: reduce) {
     .login-page--radar * { transition-duration: .01ms !important; animation: none !important; }

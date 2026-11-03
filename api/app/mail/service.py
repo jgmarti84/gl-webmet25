@@ -8,6 +8,9 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from email.message import EmailMessage
+from email.utils import formataddr, parseaddr
+from functools import lru_cache
+from pathlib import Path
 from typing import List, Protocol
 
 from ..config import settings
@@ -16,6 +19,16 @@ logger = logging.getLogger(__name__)
 
 # Seconds to wait for the SMTP server, so a stuck server cannot hold a background task forever.
 SMTP_TIMEOUT_SECONDS = 10
+
+# Name shown as the sender when MAIL_FROM is only an address, so the person sees at a glance that this is an
+# automatic mail that is not answered. A MAIL_FROM that already carries a name ("Name <address>") keeps its own.
+NO_REPLY_NAME = "WebMet25 (no responder)"
+
+# The logo shown at the top of the mails. It travels INSIDE the message (an inline image with this Content-ID) and
+# is not linked from the web: mail programs usually block remote images until the person allows them, and an
+# inline one shows at once. A copy of the site logo, 360 px wide (shown at 180 px, so it is sharp on dense screens).
+LOGO_CID = "logo-ohmc"
+LOGO_PATH = Path(__file__).parent / "assets" / "ohmc-logo.png"
 
 
 class MailError(Exception):
@@ -44,15 +57,37 @@ def mask_email(address: str) -> str:
     return f"{local[:1]}***@{domain}" if domain else "***"
 
 
+def sender_with_name(sender: str) -> str:
+    """The From header: the configured address with the no-reply name, unless MAIL_FROM already has a name."""
+    name, address = parseaddr(sender)
+    return formataddr((name or NO_REPLY_NAME, address)) if address else sender
+
+
+@lru_cache(maxsize=1)
+def _logo_bytes() -> bytes:
+    """The logo file, read once per process (it goes in every mail)."""
+    return LOGO_PATH.read_bytes()
+
+
 def build_message(mail: OutgoingMail, sender: str) -> EmailMessage:
     """Build the MIME message. EmailMessage refuses line breaks in headers, which closes header injection
-    (e.g. a "to" value like "a@x.com\\nBcc: victim@x.com")."""
+    (e.g. a "to" value like "a@x.com\\nBcc: victim@x.com").
+
+    Besides the plain text and HTML versions it marks the mail as automatic (so out-of-office replies and mailing
+    robots do not answer it), has NO Reply-To (an answer goes nowhere; the text says where to write) and, when the
+    HTML uses the logo (src="cid:logo-ohmc"), attaches it inline.
+    """
     message = EmailMessage()
-    message["From"] = sender
+    message["From"] = sender_with_name(sender)
     message["To"] = mail.to
     message["Subject"] = mail.subject
+    message["Auto-Submitted"] = "auto-generated"
+    message["X-Auto-Response-Suppress"] = "All"
     message.set_content(mail.text)
     message.add_alternative(mail.html, subtype="html")
+    if f"cid:{LOGO_CID}" in mail.html:
+        # The related part is added to the HTML alternative, so the logo belongs to the HTML version only.
+        message.get_body(("html",)).add_related(_logo_bytes(), "image", "png", cid=f"<{LOGO_CID}>")
     return message
 
 

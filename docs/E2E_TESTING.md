@@ -110,7 +110,7 @@ $DC stop
 **Admin credentials:** set them once in a repo-root `.env` (compose reads it):
 ```dotenv
 ADMIN_USERNAME=admin
-ADMIN_PASSWORD=your-strong-password   # 12+ characters
+ADMIN_PASSWORD=your-strong-password   # 10+ characters, with a special character
 ```
 `db-init` (main stack) and `db-init-e2e` (test stack) create the account from them and the `tests` service reads the
 same values, so they stay consistent.

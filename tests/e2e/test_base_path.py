@@ -60,11 +60,11 @@ def test_logged_in_walk_never_leaves_the_prefix(browser):
         assert cookies["pfx_webmet_refresh"]["path"] == f"{PREFIX}/api/v1/auth"
         assert "webmet_access" not in cookies
 
-        for path in ("/", "/radar.html?code=RMA1", "/cog-browser.html", "/register", "/forgot"):
+        for path in ("/", "/radar.html?code=RMA1", "/cog-browser.html", "/register", "/forgot", "/perfil"):
             page.goto(f"{PREFIX_URL}{path}", wait_until="networkidle")
 
         page.goto(f"{PREFIX_URL}/admin", wait_until="networkidle")
-        for section in ("users", "radars"):
+        for section in ("users", "radars", "profile"):
             page.click(f"#sidebar-nav [data-section={section}]")
             page.wait_for_load_state("networkidle")
             assert urlsplit(page.url).path == f"{PREFIX}/admin"
@@ -92,4 +92,32 @@ def test_a_viewer_sent_from_admin_lands_on_the_prefixed_map(browser, admin_stora
     finally:
         context.close()
         deactivate_user(admin.request, viewer_id)
+        admin.close()
+
+
+def test_the_company_panel_stays_inside_the_prefix(browser, admin_storage_state):
+    """/empresa (spec C, plan C-2) behind the prefix: the probe, the page, its scripts and its API calls."""
+    from .test_empresa import ORG_ADMIN, ORG_ADMIN_PASSWORD, _ensure_company, _ensure_org_admin
+
+    admin = browser.new_context(storage_state=admin_storage_state, ignore_https_errors=True)
+    org_admin_id = _ensure_org_admin(admin.request, _ensure_company(admin.request))
+    context = browser.new_context(ignore_https_errors=True)
+    page = context.new_page()
+    urls = _track(page)
+    try:
+        _login(page, ORG_ADMIN, ORG_ADMIN_PASSWORD)
+        page.goto(f"{PREFIX_URL}/empresa", wait_until="networkidle")
+        assert urlsplit(page.url).path == f"{PREFIX}/empresa"
+        expect(page.locator("#empresa-name")).to_be_visible()
+        # The profile section (spec D) and the way back: the address keeps the prefix and gets only the hash.
+        page.click("#sidebar-nav [data-section=perfil]")
+        expect(page.locator("#perfil-username")).to_be_visible()
+        assert urlsplit(page.url).path == f"{PREFIX}/empresa" and urlsplit(page.url).fragment == "perfil"
+        page.click("#sidebar-nav [data-section=usuarios]")
+        expect(page.locator("#empresa-section-usuarios")).to_be_visible()
+        assert urlsplit(page.url).path == f"{PREFIX}/empresa"
+        assert _escaped(urls) == [], _escaped(urls)
+    finally:
+        context.close()
+        deactivate_user(admin.request, org_admin_id)
         admin.close()
