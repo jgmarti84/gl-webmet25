@@ -310,6 +310,26 @@ whatever its purpose, counts toward the per-account caps (`MAIL_MAX_PER_HOUR`, `
 signs up with it, so the sign-up answer is the same for a new and for a registered mail (nobody can find out which
 mails have an account) while the caps still protect that inbox from flooding.
 
+#### **Invitation** (an invitation by mail to join an institution, spec E)
+```python
+id: UUID (PK)
+email: str                            # normalized (trimmed, lower case); the person has no account yet
+organization_id: int (FK → organizations.id, ON DELETE CASCADE)
+role: str                             # 'org_admin' | 'viewer' (CHECK constraint)
+radar_views: JSON | None              # radar codes or ["*"]; NULL = a copy of the institution's list when accepted. Viewers only
+token_hash: str (unique)              # SHA-256 of the token; the token itself only travels in the mail
+invited_by: int | None (FK → users.id, ON DELETE SET NULL)
+created_at, expires_at: datetime      # expires_at = created_at + INVITATION_TTL_DAYS
+accepted_at, cancelled_at: datetime | None
+# Indexes: email, organization_id, created_at
+```
+**Pending** = not accepted, not cancelled and not expired. A pending invitation reserves a seat of the institution
+(`organizations.pending_invitations`). The link (`/invitacion#token=...`) is read by the page, which posts the token to
+`POST /api/v1/invitations/details`, `/accept` (form) or `/accept-google`; accepting runs in one transaction (institution
+locked, invitation locked with `FOR UPDATE`, account created with a confirmed mail, views applied, invitation closed).
+Rows are never deleted. The mail caps count them (per address and site-wide). Code: [`api/app/auth/invitations.py`](../api/app/auth/invitations.py),
+[`api/app/routers/invitations.py`](../api/app/routers/invitations.py).
+
 ### 3.2 Indexes (Performance)
 
 ```sql

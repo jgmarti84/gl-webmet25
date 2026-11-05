@@ -473,6 +473,18 @@ Pipeline de composición en canvas:
 
 ---
 
+### **invitacion.html / invitacion.js** — Página pública de una invitación (spec E)
+
+**Archivos:** [`frontend/public/invitacion.html`](../../frontend/public/invitacion.html), `js/invitacion.js` (más `authApi.invitationDetails / acceptInvitation / acceptInvitationWithGoogle` en `auth-api.js` y la opción `signIn` de `setupGoogleSignIn` en `login-google.js`)
+
+**Responsabilidad:** Destino del link del mail de invitación (`/invitacion#token=...`, servida por nginx sin sesión, con `Cache-Control: no-store` y sin `Referer`). Lee el token de la dirección, lo saca de la barra y del historial, le pregunta a la API quién te invitó (`POST /api/v1/invitations/details`) y muestra la institución, el mail invitado y el rol. Después la persona crea la cuenta con el formulario o con Google (la cuenta de Google tiene que ser la del mail invitado). Al terminar la sesión ya está abierta: un admin de institución va a `empresa` y un lector al mapa. Un link inválido, vencido, usado o cancelado muestra el aviso y **saca el formulario de la página**.
+
+**Ids principales:** `#invitation-company`, `#invitation-email`, `#invitation-role`, `#invitation-form` (campos `username`, `full_name`, `password`, `repeat`, `accept_terms`), `#invitation-submit`, `#invitation-invalid`, `#invitation-google`.
+
+**Paneles.** Panel de admin: sección **Invitaciones** (`renderInvitations`, `openInvitationForm`, con el buscador de instituciones de `wireOrgCombobox`) y la opción **Invitar por mail** del admin en "Agregar institución". Panel de la institución (`/empresa`): el formulario **Agregar usuario** elige entre una contraseña y una invitación (con las vistas de radar a dar), y la tabla **Invitaciones pendientes** tiene `data-resend-invitation` / `data-cancel-invitation`.
+
+---
+
 ### **register.html / verify.html / forgot.html / reset.html** — Páginas públicas de registro y recupero
 
 **Archivos:** [`frontend/public/register.html`](../../frontend/public/register.html), `verify.html`, `forgot.html`, `reset.html` y sus scripts `js/register.js`, `verify.js`, `forgot.js`, `reset.js`

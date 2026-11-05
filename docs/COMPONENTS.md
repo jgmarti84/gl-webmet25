@@ -490,6 +490,18 @@ settings), and animation controls (bottom-center).
 
 ---
 
+### **invitacion.html / invitacion.js** — Public page of an invitation (spec E)
+
+**Files:** [`frontend/public/invitacion.html`](../../frontend/public/invitacion.html), `js/invitacion.js` (plus `authApi.invitationDetails / acceptInvitation / acceptInvitationWithGoogle` in `auth-api.js` and the `signIn` option of `setupGoogleSignIn` in `login-google.js`)
+
+**Responsibility:** Target of the link in the invitation mail (`/invitacion#token=...`, served by nginx without a session, with `Cache-Control: no-store` and no `Referer`). It reads the token from the address, removes it from the address bar and the history, asks the API who invited you (`POST /api/v1/invitations/details`) and shows the institution, the invited mail and the role. The person then creates the account with the form or with Google (the Google account must have the invited mail). On success the session is already open: an institution admin goes to `empresa`, a reader to the map. A link that is invalid, expired, used or cancelled shows the notice and **removes the form from the page**.
+
+**Main ids:** `#invitation-company`, `#invitation-email`, `#invitation-role`, `#invitation-form` (fields `username`, `full_name`, `password`, `repeat`, `accept_terms`), `#invitation-submit`, `#invitation-invalid`, `#invitation-google`.
+
+**Panels.** Admin panel: section **Invitaciones** (`renderInvitations`, `openInvitationForm`, with the institution search box of `wireOrgCombobox`) and the **Invitar por mail** option of the admin in "Agregar institución". Institution panel (`/empresa`): the **Agregar usuario** form chooses between a password and an invitation (with the radar views to give), and the **Invitaciones pendientes** table has `data-resend-invitation` / `data-cancel-invitation`.
+
+---
+
 ### **register.html / verify.html / forgot.html / reset.html** — Public sign-up and recovery pages
 
 **Files:** [`frontend/public/register.html`](../../frontend/public/register.html), `verify.html`, `forgot.html`, `reset.html` and their scripts `js/register.js`, `verify.js`, `forgot.js`, `reset.js`
