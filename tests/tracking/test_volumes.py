@@ -138,6 +138,53 @@ class TestResolveWindow:
         assert sum(v.lead_in for v in vols) == 0
 
 
+class TestResolveLastN:
+    """Track only the newest N volumes of the window (the radar view's tool)."""
+
+    def test_keeps_the_newest_n_of_the_window(self, test_db_session, cubes):
+        vols = resolve_window(
+            test_db_session, "RMA1", T0, T0 + 11 * CADENCE, lead_in=0, last_n=3
+        )
+        assert [v.timestamp for v in vols] == [
+            T0 + 9 * CADENCE, T0 + 10 * CADENCE, T0 + 11 * CADENCE
+        ]
+
+    def test_newest_is_bounded_by_the_window_end(self, test_db_session, cubes):
+        vols = resolve_window(
+            test_db_session, "RMA1", T0, T0 + 6 * CADENCE, lead_in=0, last_n=3
+        )
+        assert vols[-1].timestamp == T0 + 6 * CADENCE
+
+    def test_lead_in_comes_from_inside_the_window(self, test_db_session, cubes):
+        """The warm-up is the volumes just before the N tracked ones."""
+        vols = resolve_window(
+            test_db_session, "RMA1", T0, T0 + 11 * CADENCE, lead_in=4, last_n=3
+        )
+        assert [v.timestamp for v in vols] == [T0 + i * CADENCE for i in range(5, 12)]
+        assert [v.lead_in for v in vols] == [True] * 4 + [False] * 3
+
+    def test_lead_in_may_reach_before_the_window(self, test_db_session, cubes):
+        vols = resolve_window(
+            test_db_session, "RMA1", T0 + 8 * CADENCE, T0 + 11 * CADENCE, lead_in=4, last_n=3
+        )
+        assert vols[0].timestamp == T0 + 5 * CADENCE
+
+    def test_fewer_volumes_than_n_returns_what_exists(self, test_db_session, cubes):
+        vols = resolve_window(
+            test_db_session, "RMA1", T0 + 10 * CADENCE, T0 + 11 * CADENCE, lead_in=0, last_n=5
+        )
+        assert len(vols) == 2
+
+    def test_is_chronological(self, test_db_session, cubes):
+        vols = resolve_window(test_db_session, "RMA1", T0, T0 + 11 * CADENCE, last_n=5)
+        stamps = [v.timestamp for v in vols]
+        assert stamps == sorted(stamps)
+
+    def test_empty_window_returns_nothing(self, test_db_session, cubes):
+        far = T0 + timedelta(days=30)
+        assert resolve_window(test_db_session, "RMA1", far, far + CADENCE, last_n=3) == []
+
+
 class TestMissingOnDisk:
     """Retention and the indexer prune are not synchronised, so a row can
     briefly outlive its file."""

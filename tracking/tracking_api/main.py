@@ -6,7 +6,7 @@ import logging
 import os
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
@@ -21,6 +21,8 @@ from tracking_api.schemas import (
     JobCreated,
     JobProgress,
     JobResult,
+    RadarAvailability,
+    RadarJobRequest,
     VolumeWindow,
 )
 
@@ -109,7 +111,9 @@ def _execute(job: Job) -> None:
     job.config_in_force = config_summary(cfg)
 
     with session_scope() as session:
-        vols = volumes_mod.resolve_window(session, job.radar, job.start, job.end)
+        vols = volumes_mod.resolve_window(
+            session, job.radar, job.start, job.end, last_n=job.last_n
+        )
 
     if not vols:
         job.frames = []
@@ -132,29 +136,31 @@ def _execute(job: Job) -> None:
     job.frames = run_tracking(vols, cfg, progress=progress)
 
 
-@router.post("/jobs", response_model=JobCreated, status_code=202)
-def submit_job(request: VolumeWindow) -> JobCreated:
-    """Queue a tracking run over a radar and time window.
+#: Radar codes as they appear in URLs: RMA1, AR5, RMA00. Rejecting anything else
+#: keeps the path safe to match in nginx when per-radar permissions arrive.
+RADAR_CODE = Path(..., pattern=r"^[A-Za-z0-9]{1,16}$", description="Radar code, e.g. RMA1")
 
-    Returns 202 immediately; poll ``/jobs/{job_id}`` for the result. Tracking a
-    window is seconds of CPU, so a synchronous response would have nowhere to
-    report progress and would sit on an open connection throughout.
 
-    An identical run already in the cache is returned straight away with
-    ``cached: true`` and no work queued.
-    """
+def _submit(radar: str, request: RadarJobRequest) -> JobCreated:
+    """Queue (or serve from cache) one tracking run. Shared by both routes."""
+    if request.last_n is not None and request.last_n > settings.max_last_n:
+        raise HTTPException(
+            status_code=422,
+            detail=f"last_n must be at most {settings.max_last_n}",
+        )
+    radar = radar.upper()
     config = request.config.model_dump()
-    key = cache_key(request.radar, request.start, request.end, config)
+    key = cache_key(radar, request.start, request.end, config, request.last_n)
 
     hit = store.find_cached(key)
     if hit is not None:
         return JobCreated(
             job_id=hit.job_id, status=hit.status.value, radar=hit.radar,
-            start=hit.start, end=hit.end, volumes_total=hit.volumes_total,
-            cached=True,
+            start=hit.start, end=hit.end, last_n=hit.last_n,
+            volumes_total=hit.volumes_total, cached=True,
         )
 
-    job = store.create(request.radar, request.start, request.end, config)
+    job = store.create(radar, request.start, request.end, config, last_n=request.last_n)
 
     def run_and_cache(j: Job) -> None:
         _execute(j)
@@ -165,8 +171,57 @@ def submit_job(request: VolumeWindow) -> JobCreated:
 
     return JobCreated(
         job_id=job.job_id, status=job.status.value, radar=job.radar,
-        start=job.start, end=job.end, volumes_total=job.volumes_total,
+        start=job.start, end=job.end, last_n=job.last_n,
+        volumes_total=job.volumes_total,
     )
+
+
+@router.post("/jobs", response_model=JobCreated, status_code=202)
+def submit_job(request: VolumeWindow) -> JobCreated:
+    """Queue a tracking run over a radar and time window.
+
+    Returns 202 immediately; poll ``/jobs/{job_id}`` for the result. Tracking a
+    window is seconds of CPU, so a synchronous response would have nowhere to
+    report progress and would sit on an open connection throughout.
+
+    An identical run already in the cache is returned straight away with
+    ``cached: true`` and no work queued.
+
+    The radar-scoped route below is preferred for new clients; this one stays
+    for the standalone /tracking page.
+    """
+    return _submit(request.radar, request)
+
+
+@router.get("/radars/{radar}/availability", response_model=RadarAvailability)
+def get_radar_availability(
+    radar: str = RADAR_CODE,
+    db: Session = Depends(get_db),
+) -> RadarAvailability:
+    """One radar's cube coverage and the limits a client must respect.
+
+    A radar with no cubes answers 200 with ``count: 0``, so a client can tell
+    "no tracking data for this radar" from "tracking is not deployed" (502/404).
+    """
+    rows = volumes_mod.availability(db, radar)
+    row = rows[0] if rows else None
+    return RadarAvailability(
+        radar_code=radar.upper(),
+        count=row.count if row else 0,
+        min_time=row.min_time if row else None,
+        max_time=row.max_time if row else None,
+        max_last_n=settings.max_last_n,
+    )
+
+
+@router.post("/radars/{radar}/jobs", response_model=JobCreated, status_code=202)
+def submit_radar_job(request: RadarJobRequest, radar: str = RADAR_CODE) -> JobCreated:
+    """Like ``POST /jobs``, with the radar in the path.
+
+    The radar lives in the URL so that a future per-radar permission can be
+    checked by nginx from the path alone, without reading the body.
+    """
+    return _submit(radar, request)
 
 
 @router.get("/jobs/{job_id}", response_model=JobResult)
@@ -190,6 +245,7 @@ def get_job(job_id: str) -> JobResult:
         radar=job.radar,
         start=job.start,
         end=job.end,
+        last_n=job.last_n,
         progress=JobProgress(
             volumes_total=job.volumes_total,
             volumes_done=job.volumes_done,

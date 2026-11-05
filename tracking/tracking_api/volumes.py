@@ -72,8 +72,13 @@ def resolve_window(
     start: datetime,
     end: datetime,
     lead_in: Optional[int] = None,
+    last_n: Optional[int] = None,
 ) -> List[Volume]:
     """Cubes covering [start, end], preceded by lead-in volumes.
+
+    With ``last_n``, only the newest ``last_n`` cubes inside [start, end] are
+    tracked (they get frames). The lead-in is then taken from the volumes just
+    before the first of those, which may themselves lie inside the window.
 
     The lead-in exists because tracking has a warm-up. Association needs one
     previous volume and the velocity fit uses up to
@@ -92,17 +97,17 @@ def resolve_window(
     radar_code = radar_code.upper()
     lead_in = settings.lead_in_volumes if lead_in is None else lead_in
 
-    in_window = (
-        session.query(NCCube.observation_time, NCCube.file_path)
-        .filter(
-            NCCube.radar_code == radar_code,
-            NCCube.status == COGStatus.AVAILABLE,
-            NCCube.observation_time >= start,
-            NCCube.observation_time <= end,
-        )
-        .order_by(NCCube.observation_time.asc())
-        .all()
+    q = session.query(NCCube.observation_time, NCCube.file_path).filter(
+        NCCube.radar_code == radar_code,
+        NCCube.status == COGStatus.AVAILABLE,
+        NCCube.observation_time >= start,
+        NCCube.observation_time <= end,
     )
+    if last_n is not None:
+        in_window = q.order_by(NCCube.observation_time.desc()).limit(last_n).all()
+        in_window.reverse()  # back to ascending
+    else:
+        in_window = q.order_by(NCCube.observation_time.asc()).all()
 
     if not in_window:
         # Nothing to warm up for. Returning lead-in volumes here would make the
@@ -120,7 +125,10 @@ def resolve_window(
             .filter(
                 NCCube.radar_code == radar_code,
                 NCCube.status == COGStatus.AVAILABLE,
-                NCCube.observation_time < start,
+                # Before the first tracked volume, not before `start`: with
+                # last_n the warm-up comes from inside the window when it can.
+                # Without last_n the two are the same thing.
+                NCCube.observation_time < in_window[0][0],
             )
             .order_by(NCCube.observation_time.desc())
             .limit(lead_in)

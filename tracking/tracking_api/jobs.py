@@ -46,6 +46,8 @@ class Job:
     start: datetime
     end: datetime
     config: Dict[str, Any]
+    #: Track only the newest N volumes of [start, end]; None = all of them.
+    last_n: Optional[int] = None
     status: JobStatus = JobStatus.PENDING
     volumes_total: int = 0
     volumes_done: int = 0
@@ -64,18 +66,21 @@ class Job:
         return round(self.volumes_done / self.volumes_total, 3)
 
 
-def cache_key(radar: str, start: datetime, end: datetime, config: Dict[str, Any]) -> str:
+def cache_key(radar: str, start: datetime, end: datetime, config: Dict[str, Any],
+              last_n: Optional[int] = None) -> str:
     """Identity of a tracking run.
 
     The config participates because changing any knob changes the output — and
     `sort_keys` because two dicts with the same contents in a different order
-    describe the same run and must not miss each other in the cache.
+    describe the same run and must not miss each other in the cache. ``last_n``
+    participates because it selects different volumes from the same window.
     """
     blob = json.dumps(
         {
             "radar": radar.upper(),
             "start": start.isoformat(),
             "end": end.isoformat(),
+            "last_n": last_n,
             "config": config,
         },
         sort_keys=True,
@@ -99,13 +104,14 @@ class JobStore:
     # -- registry ---------------------------------------------------------
 
     def create(self, radar: str, start: datetime, end: datetime,
-               config: Dict[str, Any]) -> Job:
+               config: Dict[str, Any], last_n: Optional[int] = None) -> Job:
         job = Job(
             job_id=uuid.uuid4().hex[:16],
             radar=radar.upper(),
             start=start,
             end=end,
             config=config,
+            last_n=last_n,
         )
         with self._lock:
             self._jobs[job.job_id] = job

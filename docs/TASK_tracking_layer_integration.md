@@ -2,6 +2,7 @@
 
 **Status:** Phases 1-2 **delivered and running on the host**; Phase 3 (sidecar) next
 **Drafted:** 2026-10-15 — architecture confirmed 2026-10-19 — **updated 2026-10-20**
+**Update 2026-11-05:** tracking moves into the single-radar view as a toggleable tool; see §15.
 **Spans three repos:** `gl-radarlib` (producer), `gl-webmet25` (consumer), `gl-tracker` (tracking engine)
 
 **Next action:** Phase 3 (§8) — the on-demand tracking sidecar.
@@ -1536,3 +1537,97 @@ but the job POST should not inherit a short default.
 
 Step 3 is the risky one and is fully testable offline against the cubes already
 on disk.
+
+---
+
+## 15. Tracking as a tool in the single-radar view (`radar.html`)
+
+**Decided 2026-11-05.** The standalone `/tracking` page (§9) is not the target. Tracking
+becomes a tool inside the single-radar view that the user switches on and off, on top
+of what the view already shows. The `/tracking` page stays for now.
+
+### 15.1 Decisions
+
+| # | question | decision |
+|---|---|---|
+| 1 | Who can use the tool | Anyone who can open that radar's view (the existing `radar.detail_view` permission). No extra check yet. |
+| 2 | Future restriction | A per-radar permission, like detail views (§15.5). Not now; the code is prepared for it. |
+| 3 | Which volumes are tracked | The **last N volumes of the selected window**; N is chosen in the panel: **3** (default), 5 or 10. The service caps N (`MAX_LAST_N`, default 10). |
+| 4 | Holes in cores | Filled: a core is drawn as everything its outline encloses. Forecasts too. |
+| 5 | Jagged edges | Smoothed for display (Gaussian along the outline). |
+| 6 | Forecast leads shown | Chosen in the panel from 9, 18, 27, 36, 45, 54, 63 min; default **18, 36, 54**. |
+| 7 | Forecast style | One fill colour per lead, all fairly solid. |
+
+### 15.2 Tracking service (PR 1)
+
+- **`last_n`.** `POST …/jobs` accepts `last_n`. `resolve_window()` keeps the newest
+  `last_n` cubes in `[start, end]`; the lead-in (`LEAD_IN_VOLUMES`, 4) is the volumes
+  just before the first of those, inside the window when possible. N=3 is about 7
+  volumes of work, a few seconds. `last_n` is part of the cache key.
+- **Radar code in the URL.** New routes `GET /api/tracking/radars/{code}/availability`
+  (one radar, `count: 0` when it has no cubes, plus `max_last_n`) and
+  `POST /api/tracking/radars/{code}/jobs`. The old routes stay for `/tracking`. With
+  the radar in the path, a future per-radar check can be done by nginx alone.
+- **Display geometry** (`tracking_api/shapes.py`), applied to every feature, cores and
+  forecasts:
+  1. fill holes: keep each polygon part's exterior ring;
+  2. smooth: resample the ring at a uniform step in km, then a circular Gaussian
+     filter on x and y (`SHAPE_SMOOTH_SIGMA_KM`, default 1.0, about one pixel;
+     0 = no smoothing). If the result is invalid or loses more than half the area,
+     the filled polygon is kept.
+
+  Tracking runs on gl-tracker's original polygons; only what is drawn changes. Feature
+  properties (area, dBZ, velocity…) describe the raw polygon.
+
+### 15.3 Frontend tool (PR 2)
+
+- **Markup.** A new icon-bar button and floating panel in `radar.html`, registered in
+  `initPanelControls()` like the other panels. `js/shared/tracking.js` is loaded with a
+  dynamic `import()` the first time the panel opens, so the view costs nothing extra
+  when the tool is unused.
+- **Visibility.** One function, `canUseTracking(radar, permissions)`, decides; today it
+  is "can open this radar's view". On load it calls the radar's availability:
+  - no answer (502/404: a deployment without the tracking service) → button hidden;
+  - `count: 0` → button disabled, "Sin datos de seguimiento para este radar".
+- **Panel** (es-AR): on/off switch; N (3 / 5 / 10); forecast leads (7 checkboxes);
+  the 4 tracking settings (shared with `/tracking` through `webmet25_tracking_params`);
+  show trails; job progress; "Configuración en uso". Choices persist in `webmet25_*`
+  localStorage keys.
+- **Request.** `{start, end}` = the view's current window, `last_n` = N. Re-run when the
+  tool is switched on, the window changes, N or a setting changes, or (live mode) when
+  the radar's newest cube (`max_time`) moves forward. A newer request supersedes a
+  pending one. The old overlay stays until the new result arrives (animation
+  continuity).
+- **Frame matching.** Each tracking frame goes into the view's 10-minute slot with the
+  same rule as the field layers (`round(t / 10 min)`, latest wins). A pure helper in
+  `radar-utils.js`, unit-tested with node. The `_showCurrentFrame` override draws the
+  slot's tracking frame, or clears the overlay when the slot has none, so only the
+  last N frames of the animation carry tracking.
+- **Forecast drawing.** `FORECAST_OUTLINE_LEADS` and the fixed outline style become the
+  selected leads. One filled colour per lead, fairly solid, with a thin dark halo.
+  Longer leads are drawn underneath. The palette avoids the reflectivity colormaps'
+  greens, yellows, reds and magentas (a cool cyan → blue → violet ramp); checked on
+  screenshots over DBZH and COLMAX. Changing the selection only redraws.
+- **Off.** `clear()`, stop polling, drop the frames; the field layers are untouched.
+- **Tests.** Node unit tests (slot matching, lead selection, `canUseTracking`);
+  Playwright e2e with `/api/tracking/*` faked through `page.route`: button hidden on
+  502, disabled on `count: 0`, polygons on the right frames, removed when off.
+
+### 15.4 Not in this step
+
+- The per-radar permission (§15.5).
+- More than one tracking worker; per-role limits.
+- Removing `/tracking`.
+
+### 15.5 Later: the per-radar permission
+
+- A new action `radar.tracking` in `PERMISSION_ACTIONS`, with a migration widening the
+  `permissions` check constraint (Alembic-generated revision id).
+- `effective_radar_views()` generalised to any action, with the same admin / company
+  admin / member rules. Tracking also requires the detail view.
+- `/permissions/me` gains `radar_tracking: [codes]`; the admin and company panels get a
+  second list next to "Vistas".
+- nginx: `/api/tracking/radars/(code)/` asks a new probe
+  (`/auth/check?action=radar.tracking&radar=…`). Job polling stays behind the plain
+  login check (job ids are random).
+- Frontend: only `canUseTracking` changes.

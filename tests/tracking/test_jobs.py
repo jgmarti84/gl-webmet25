@@ -33,6 +33,11 @@ class TestCacheKey:
     def test_differs_by_start(self):
         assert cache_key("RMA1", T0, T1, CFG) != cache_key("RMA1", T0 + timedelta(minutes=1), T1, CFG)
 
+    def test_differs_by_last_n(self):
+        """Same window, different N = different volumes tracked."""
+        assert cache_key("RMA1", T0, T1, CFG, 3) != cache_key("RMA1", T0, T1, CFG, 5)
+        assert cache_key("RMA1", T0, T1, CFG, 3) != cache_key("RMA1", T0, T1, CFG)
+
     def test_differs_by_end(self):
         assert cache_key("RMA1", T0, T1, CFG) != cache_key("RMA1", T0, T1 + timedelta(minutes=1), CFG)
 
