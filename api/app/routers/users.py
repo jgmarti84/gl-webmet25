@@ -66,6 +66,9 @@ def create_user(
         if organization_id is not None:
             if role == "admin":
                 raise user_admin.UserRuleError(422, "Un usuario de una institución no puede ser administrador general")
+            if role == "viewer":
+                # A reader needs an active institution admin to be managed by (the first user must be the admin).
+                organizations.ensure_org_has_admin(db, organization_id)
             user = organizations.create_member(db, organization_id, data, role, actor)
         elif role == "org_admin":
             raise user_admin.UserRuleError(422, "Solo un usuario de una institución puede ser admin de institución")

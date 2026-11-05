@@ -2099,6 +2099,9 @@ function openUserForm(user = null) {
     // Only a viewer can change company (a company admin or the general admin never moves). When editing, the
     // current company is the selected option; creating starts with "Ninguna".
     const canMove = isEdit && user.role === 'viewer';
+    // An institution admin can only be taken out (never moved): the selector offers its institution or "none", which
+    // demotes it to viewer and unlinks it in one step.
+    const canLeave = isEdit && user.role === 'org_admin' && Boolean(user.organization_id);
     const currentOrgId = user?.organization_id ?? null;
     const orgOptions = ['<option value="">Ninguna</option>',
         ...(state.organizations || []).map((org) =>
@@ -2109,8 +2112,14 @@ function openUserForm(user = null) {
     } else if (canMove) {
         orgField = `<label>Institución <select name="organization_id">${orgOptions}</select></label>
             <p class="toolbar-note" id="org-move-note"></p>`;
+    } else if (canLeave) {
+        orgField = `<label>Institución <select name="organization_id">
+                <option value="${user.organization_id}" selected>${safeText(user.organization_name)}</option>
+                <option value="">Ninguna (lo baja a lector y lo desvincula)</option>
+            </select></label>
+            <p class="toolbar-note" id="org-move-note"></p>`;
     } else if (user.organization_name) {
-        orgField = `<p class="toolbar-note">Institución: ${safeText(user.organization_name)} (un admin de institución no cambia de institución)</p>`;
+        orgField = `<p class="toolbar-note">Institución: ${safeText(user.organization_name)}</p>`;
     }
     openFormModal(
         isEdit ? `Editar usuario ${user.username}` : 'Agregar usuario',
@@ -2131,6 +2140,11 @@ function openUserForm(user = null) {
             if (!isSelf) payload.role = formData.get('role');
             let message;
             if (isEdit) {
+                if (canLeave && !formData.get('organization_id')) {
+                    // The server demotes it to viewer itself; sending the old role would contradict that.
+                    payload.organization_id = null;
+                    delete payload.role;
+                }
                 if (canMove) {
                     // Sent only when it changed: the server replaces the account's views when it moves.
                     const chosen = formData.get('organization_id');
@@ -2152,6 +2166,21 @@ function openUserForm(user = null) {
         },
     );
     if (canMove) wireMoveNote(user, currentOrgId);
+    if (canLeave) wireLeaveNote(user);
+}
+
+/** Under the selector of an institution admin: say what choosing "Ninguna" does before saving. */
+function wireLeaveNote(user) {
+    const select = elements.formModalBody.querySelector('select[name="organization_id"]');
+    const note = elements.formModalBody.querySelector('#org-move-note');
+    const update = () => {
+        note.textContent = select.value ? ''
+            : `Deja de ser administrador y sale de ${user.organization_name}: pasa a lector sin institución, libera su lugar, `
+            + 'se le quitan sus vistas y se cierran sus sesiones. Si la institución sigue con usuarios activos, '
+            + 'antes tiene que quedar otro administrador activo.';
+    };
+    select.addEventListener('change', update);
+    update();
 }
 
 /** Views as a short text for the move notice: radar codes, "Todas" or "ninguna". */

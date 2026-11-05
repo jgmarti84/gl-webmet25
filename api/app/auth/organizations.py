@@ -35,6 +35,43 @@ def seats_used(db: Session, org: Organization) -> int:
     return db.query(func.count(User.id)).filter(User.organization_id == org.id, User.is_active.is_(True)).scalar() or 0
 
 
+def _count_active(db: Session, org_id: int, role: Optional[str] = None, excluding: Optional[int] = None) -> int:
+    """Active users of an institution, optionally only one role and/or leaving one user out."""
+    query = db.query(func.count(User.id)).filter(User.organization_id == org_id, User.is_active.is_(True))
+    if role is not None:
+        query = query.filter(User.role == role)
+    if excluding is not None:
+        query = query.filter(User.id != excluding)
+    return query.scalar() or 0
+
+
+def ensure_org_keeps_admin(db: Session, user: User, stays_as_user: bool) -> None:
+    """Rule: an institution with at least one ACTIVE user must have at least one ACTIVE admin (409 otherwise).
+
+    Call it BEFORE `user` (an active institution admin) stops being an admin: when it is deactivated or taken out
+    (`stays_as_user=False`) or when it is demoted to viewer but stays in the institution (`stays_as_user=True`).
+    An institution left with no active users may have no admin, so the last admin can leave together with the last user.
+    """
+    org = lock_org(db, user.organization_id)
+    others = _count_active(db, org.id, excluding=user.id)
+    remaining_users = others + (1 if stays_as_user else 0)
+    if remaining_users > 0 and _count_active(db, org.id, role="org_admin", excluding=user.id) == 0:
+        raise OrgRuleError(
+            409,
+            f"La institución {org.name} quedaría con usuarios y sin administrador activo: "
+            "primero nombrá administrador a otro de sus usuarios",
+        )
+
+
+def ensure_org_has_admin(db: Session, org_id: int) -> None:
+    """A viewer can only join or be reactivated in an institution that has an active admin (409 otherwise)."""
+    org = lock_org(db, org_id)
+    if _count_active(db, org.id, role="org_admin") == 0:
+        raise OrgRuleError(
+            409, f"La institución {org.name} no tiene un administrador activo: primero creale o activale uno"
+        )
+
+
 def lock_org(db: Session, org_id: int) -> Organization:
     """Read the company row with FOR UPDATE: two sign-ups for the last seat then run one after the other."""
     org = db.query(Organization).filter(Organization.id == org_id).with_for_update().one_or_none()
@@ -84,13 +121,14 @@ def leave_org(db: Session, actor: User, user: User) -> None:
     db.flush()
 
 
-def move_user(db: Session, actor: User, user: User, target_org_id: Optional[int]) -> None:
+def move_user(db: Session, actor: User, user: User, target_org_id: Optional[int], becoming_admin: bool = False) -> None:
     """Put an existing viewer into a company, move it to another, or take it out (None). Only the general admin.
 
     Joining takes a seat (409 when the company is full or inactive) unless the account is inactive, which only takes
     one when it is reactivated. The account's own views are REPLACED by a copy of the company's list, the same start a
     new member gets (no intersection), and its sessions are closed because what it can see changes. Leaving (see
     leave_org) frees the seat and removes its views. Asking for the company it already has does nothing.
+    A viewer only joins a company that has an active admin, unless `becoming_admin` (it is about to be that admin).
     """
     if target_org_id == user.organization_id:
         return
@@ -106,6 +144,8 @@ def move_user(db: Session, actor: User, user: User, target_org_id: Optional[int]
     org = reserve_seat(db, target_org_id) if user.is_active else lock_org(db, target_org_id)
     if not org.is_active:
         raise OrgRuleError(409, f"La institución {org.name} está inactiva")
+    if user.is_active and not becoming_admin:
+        ensure_org_has_admin(db, org.id)
     user.organization = org
     db.flush()
     permissions.copy_company_views_to(db, user, actor)
@@ -138,7 +178,7 @@ def make_org_admin(db: Session, actor: User, org: Organization, user: User) -> N
         raise OrgRuleError(422, f"El usuario {user.username} ya pertenece a una institución")
     if not user.is_active:
         raise OrgRuleError(422, f"El usuario {user.username} está desactivado")
-    move_user(db, actor, user, org.id)
+    move_user(db, actor, user, org.id, becoming_admin=True)
     user.role = "org_admin"
     db.flush()
 

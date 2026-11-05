@@ -12,7 +12,7 @@ import pytest
 from playwright.sync_api import expect
 
 from .conftest import ADMIN_USERNAME, deactivate_by_username
-from .test_empresa import _ensure_company
+from .test_empresa import _ensure_company, _ensure_org_admin
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://frontend-v2:80")
 ADMIN_API = f"{FRONTEND_URL}/api/v1/admin"
@@ -76,6 +76,7 @@ def test_an_existing_user_without_company_can_be_the_admin_and_one_with_company_
     page, api, names = panel
     member_name = f"{names['user']}-m"
     org_id = _ensure_company(api)  # "E2E Empresa": the member below belongs to it
+    _ensure_org_admin(api, org_id)  # a viewer can only join a company that has an active admin
     viewer = api.post(f"{ADMIN_API}/users", data={"username": names["user"], "password": PASSWORD, "role": "viewer"})
     member = api.post(
         f"{ADMIN_API}/users",

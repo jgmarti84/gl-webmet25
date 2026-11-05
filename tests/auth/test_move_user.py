@@ -29,6 +29,11 @@ def _member_data(username):
     return {"username": username, "password": TEST_PASSWORD, "full_name": None, "email": None}
 
 
+def _give_admin(db, org, actor, username):
+    """A viewer can only join a company that has an active admin: give it one (it takes a seat)."""
+    return orgs.create_member(db, org.id, _member_data(username), "org_admin", actor)
+
+
 @pytest.fixture
 def boss(make_user):
     return make_user(username="boss", role="admin")
@@ -40,10 +45,11 @@ def boss(make_user):
 def test_a_loose_account_joins_a_company_and_takes_a_seat(make_user, make_org, make_radar, boss, test_db_session):
     make_radar("TSTA")
     org = make_org(views=["TSTA"])
+    _give_admin(test_db_session, org, boss, "jefe")
     loner = make_user(username="suelto")
     user_admin.update_user(test_db_session, boss, loner, {"organization_id": org.id})
     assert loner.organization_id == org.id
-    assert orgs.seats_used(test_db_session, org) == 1
+    assert orgs.seats_used(test_db_session, org) == 2
 
 
 def test_its_old_views_are_replaced_by_the_company_ones_not_intersected(
@@ -53,6 +59,7 @@ def test_its_old_views_are_replaced_by_the_company_ones_not_intersected(
     make_radar("TSTB")
     make_radar("TSTC")
     org = make_org(views=["TSTA", "TSTC"])
+    _give_admin(test_db_session, org, boss, "jefe")
     loner = make_user(username="suelto")
     _own(test_db_session, loner, "TSTA", "TSTB")
     user_admin.update_user(test_db_session, boss, loner, {"organization_id": org.id})
@@ -62,6 +69,7 @@ def test_its_old_views_are_replaced_by_the_company_ones_not_intersected(
 
 def test_joining_closes_its_sessions(make_user, make_org, boss, test_db_session):
     org = make_org()
+    _give_admin(test_db_session, org, boss, "jefe")
     loner = make_user(username="suelto")
     before = loner.token_version
     user_admin.update_user(test_db_session, boss, loner, {"organization_id": org.id})
@@ -118,11 +126,13 @@ def test_moving_between_companies_frees_one_seat_and_takes_the_other(
     make_radar("TSTB")
     org_a = make_org(name="Test Org A", views=["TSTA"])
     org_b = make_org(name="Test Org B", views=["TSTB"])
+    _give_admin(test_db_session, org_a, boss, "jefe-a")
+    _give_admin(test_db_session, org_b, boss, "jefe-b")
     member = orgs.create_member(test_db_session, org_a.id, _member_data("juan"), "viewer", boss)
     user_admin.update_user(test_db_session, boss, member, {"organization_id": org_b.id})
     assert member.organization_id == org_b.id
-    assert orgs.seats_used(test_db_session, org_a) == 0
-    assert orgs.seats_used(test_db_session, org_b) == 1
+    assert orgs.seats_used(test_db_session, org_a) == 1  # only its admin is left
+    assert orgs.seats_used(test_db_session, org_b) == 2
     assert perms.stored_radar_views(member) == ["TSTB"]
 
 
@@ -150,15 +160,27 @@ def test_asking_for_the_company_it_already_has_changes_nothing(make_user, make_o
     assert member.token_version == before
 
 
-def test_a_company_admin_cannot_be_moved_or_taken_out(make_user, make_org, boss, test_db_session):
+def test_a_company_admin_cannot_be_moved_and_is_taken_out_only_if_the_company_keeps_an_admin(
+    make_user, make_org, boss, test_db_session
+):
     org_a = make_org(name="Test Org A")
     org_b = make_org(name="Test Org B")
     orgboss = orgs.create_member(test_db_session, org_a.id, _member_data("jefe"), "org_admin", boss)
-    for target in (org_b.id, None):
-        with pytest.raises(user_admin.UserRuleError) as exc:
-            user_admin.update_user(test_db_session, boss, orgboss, {"organization_id": target})
-        assert exc.value.status_code == 422
+    with pytest.raises(user_admin.UserRuleError) as exc:
+        user_admin.update_user(test_db_session, boss, orgboss, {"organization_id": org_b.id})
+    assert exc.value.status_code == 422
     assert orgboss.organization_id == org_a.id
+    # With another active user left and no other admin, taking it out is refused (409) and nothing changes.
+    orgs.create_member(test_db_session, org_a.id, _member_data("juan"), "viewer", boss)
+    with pytest.raises(user_admin.UserRuleError) as exc:
+        user_admin.update_user(test_db_session, boss, orgboss, {"organization_id": None})
+    assert exc.value.status_code == 409
+    assert orgboss.organization_id == org_a.id and orgboss.role == "org_admin"
+    # With a second admin it goes in one step: it becomes a viewer with no company, and frees its seat.
+    _give_admin(test_db_session, org_a, boss, "jefe2")
+    user_admin.update_user(test_db_session, boss, orgboss, {"organization_id": None})
+    assert orgboss.organization_id is None and orgboss.role == "viewer"
+    assert orgs.seats_used(test_db_session, org_a) == 2
 
 
 def test_the_general_admin_cannot_join_a_company(make_user, make_org, boss, test_db_session):
@@ -188,6 +210,7 @@ def test_the_admin_moves_an_account_through_the_api(app_client, make_user, make_
     make_radar("TSTA")
     org = make_org(views=["TSTA"])
     make_user(username="boss", role="admin")
+    make_user(username="jefe", role="org_admin", organization_id=org.id)
     loner = make_user(username="suelto")
     login(app_client, "boss")
     response = app_client.patch(f"/api/v1/admin/users/{loner.id}", json={"organization_id": org.id})

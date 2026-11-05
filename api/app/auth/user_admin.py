@@ -50,12 +50,29 @@ def create(db: Session, data: dict) -> User:
 
 
 def update_user(db: Session, actor: User, user: User, changes: dict) -> User:
-    # Moving the account between companies goes first: the role rules below must see the company it ends up in.
-    if "organization_id" in changes:
-        try:
+    try:
+        # An institution admin can be taken out by the general admin in one step: it goes back to viewer and leaves.
+        # The institution must keep another active admin if it keeps active users (see ensure_org_keeps_admin).
+        if (
+            "organization_id" in changes
+            and changes["organization_id"] is None
+            and user.role == "org_admin"
+            and user.organization_id is not None
+        ):
+            if actor.role != "admin":
+                raise organizations.OrgRuleError(403, "Solo el administrador general puede desvincular cuentas")
+            if user.is_active:
+                organizations.ensure_org_keeps_admin(db, user, stays_as_user=False)
+            user.role = "viewer"
+            db.flush()
+            if changes.get("role") == "org_admin":
+                raise UserRuleError(422, "Solo un usuario de una institución puede ser admin de institución")
+            changes = {**changes, "role": None}
+        # Moving the account between companies goes first: the role rules below must see the company it ends up in.
+        if "organization_id" in changes:
             organizations.move_user(db, actor, user, changes["organization_id"])
-        except organizations.OrgRuleError as exc:
-            raise UserRuleError(exc.status_code, exc.detail) from exc
+    except organizations.OrgRuleError as exc:
+        raise UserRuleError(exc.status_code, exc.detail) from exc
 
     new_role = changes.get("role")
     deactivating = changes.get("is_active") is False
@@ -70,6 +87,15 @@ def update_user(db: Session, actor: User, user: User, changes: dict) -> User:
     if reactivating and user.organization_id is not None:
         try:
             organizations.reserve_seat(db, user.organization_id)
+            if user.role == "viewer":
+                organizations.ensure_org_has_admin(db, user.organization_id)
+        except organizations.OrgRuleError as exc:
+            raise UserRuleError(exc.status_code, exc.detail) from exc
+
+    leaving_admin_role = user.role == "org_admin" and user.is_active and (deactivating or new_role == "viewer")
+    if leaving_admin_role and user.organization_id is not None:
+        try:
+            organizations.ensure_org_keeps_admin(db, user, stays_as_user=not deactivating)
         except organizations.OrgRuleError as exc:
             raise UserRuleError(exc.status_code, exc.detail) from exc
 

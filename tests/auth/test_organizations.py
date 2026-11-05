@@ -273,6 +273,11 @@ def test_demoting_a_company_admin_recopies_the_company_views(make_user, make_org
     boss = make_user(username="boss", role="admin")
     orgboss = orgs.create_member(test_db_session, org.id, _member_data("jefe"), "org_admin", boss)
     perms.replace_org_radar_views(test_db_session, org, ["TSTA", "TSTB"], boss)
+    # Demoting the only admin of a company with users is refused: another admin has to be there first.
+    with pytest.raises(user_admin.UserRuleError) as exc:
+        user_admin.update_user(test_db_session, boss, orgboss, {"role": "viewer"})
+    assert exc.value.status_code == 409
+    orgs.create_member(test_db_session, org.id, _member_data("jefe2"), "org_admin", boss)
     user_admin.update_user(test_db_session, boss, orgboss, {"role": "viewer"})
     assert perms.stored_radar_views(orgboss) == ["TSTA", "TSTB"]
 
@@ -323,9 +328,9 @@ def test_admin_creates_a_company_admin(app_client, make_user, make_org):
 def test_admin_cannot_create_into_a_full_company(app_client, make_user, make_org):
     _as_admin(app_client, make_user)
     org = make_org(seat_limit=1)
-    first = {"username": "uno", "password": TEST_PASSWORD, "role": "viewer", "organization_id": org.id}
+    first = {"username": "uno", "password": TEST_PASSWORD, "role": "org_admin", "organization_id": org.id}
     assert app_client.post("/api/v1/admin/users", json=first).status_code == 201
-    second = {**first, "username": "dos"}
+    second = {**first, "username": "dos", "role": "viewer"}
     assert app_client.post("/api/v1/admin/users", json=second).status_code == 409
 
 
