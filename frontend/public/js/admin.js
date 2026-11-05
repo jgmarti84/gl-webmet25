@@ -104,6 +104,13 @@ const FILTER_CONFIG = {
             { field: 'cmap_name', label: 'Mapa de colores', type: 'select' },
         ],
     },
+    organizations: {
+        facets: [
+            { field: 'name', label: 'Institución', type: 'text' },
+            { field: 'is_active', label: 'Activa', type: 'boolean' },
+            { field: 'seats_state', label: 'Lugares', type: 'select' },
+        ],
+    },
     users: {
         facets: [
             { field: 'username', label: 'Usuario', type: 'text' },
@@ -2356,16 +2363,22 @@ function openViewsForm(user) {
 /** Companies section (spec C): list, create, edit, seats and the company's views. */
 async function renderOrganizations() {
     const orgs = await adminApi.listOrganizations();
+    // The "Lugares" filter is computed here: the API gives the numbers, the filter needs a word to compare.
+    const filterable = orgs.map((org) => ({
+        ...org,
+        seats_state: org.seats_used >= org.seat_limit ? 'Completa' : 'Con lugares libres',
+    }));
     elements.sectionContent.innerHTML = `
         <div class="toolbar"><button class="btn" id="orgs-add">+ Agregar institución</button></div>
+        ${renderFilterBar('organizations', filterable)}
         <div class="table-wrap">
         <table>
             <thead><tr>
                 <th>Institución</th><th>Lugares</th><th>Activa</th><th>Vistas de radar</th><th>Acciones</th>
             </tr></thead>
             <tbody>
-                ${orgs.map((org) => `
-                    <tr>
+                ${filterable.map((org) => `
+                    <tr${rowFacetAttr('organizations', org)}>
                         <td>${safeText(org.name)}</td>
                         <td>${org.seats_used} de ${org.seat_limit}</td>
                         <td>${org.is_active ? 'Sí' : 'No'}</td>
@@ -2382,6 +2395,7 @@ async function renderOrganizations() {
         </div>
     `;
     const byId = (id) => orgs.find((o) => String(o.id) === String(id));
+    wireFilterBar('organizations');
     document.getElementById('orgs-add').onclick = () => openOrganizationForm();
     elements.sectionContent.querySelectorAll('[data-edit-org]').forEach((el) => {
         el.onclick = () => openOrganizationForm(byId(el.dataset.editOrg));
