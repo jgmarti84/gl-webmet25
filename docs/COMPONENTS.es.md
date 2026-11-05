@@ -445,7 +445,7 @@ Pipeline de composición en canvas:
 
 `auth-api.js` también habla con los endpoints públicos del registro (DATA_FLOW §4.10): `login(username, password)` (el campo de usuario también acepta el mail, y la respuesta trae el `code` del fallo, por ejemplo `email_not_verified`), `options()` (qué pueden ofrecer las páginas; nunca lanza error y, si falla, devuelve "nada extra"), `register(payload)`, `verifyEmail(token)`, `resendVerification(identifier)`, `forgotPassword(email)` y `resetPassword(token, password)`. Los últimos cinco devuelven `{ ok, status, data }` y dejan los textos a cargo de la página.
 
-### **shared/org-form.js** — Lógica del formulario "Agregar empresa"
+### **shared/org-form.js** — Lógica del formulario "Agregar institución"
 
 **Archivo:** [`frontend/public/js/shared/org-form.js`](../../frontend/public/js/shared/org-form.js)
 

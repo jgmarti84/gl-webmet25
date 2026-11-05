@@ -1,5 +1,5 @@
 /**
- * Unit tests for shared/org-form.js: what the "Agregar empresa" form offers and what it sends (the company with its
+ * Unit tests for shared/org-form.js: what the "Agregar institución" form offers and what it sends (the company with its
  * optional admin and radar views, in one request).
  * Run with: node tests/js/test_org_form.mjs
  */

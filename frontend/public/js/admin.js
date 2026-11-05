@@ -1978,12 +1978,12 @@ async function renderColormapOptions() {
     });
 }
 
-const ROLE_LABELS = { admin: 'Administrador', org_admin: 'Admin de empresa', viewer: 'Lector' };
+const ROLE_LABELS = { admin: 'Administrador', org_admin: 'Admin de institución', viewer: 'Lector' };
 
 async function renderUsers() {
     const [allUsers, orgs] = await Promise.all([adminApi.listUsers(), adminApi.listOrganizations()]);
     state.organizations = orgs;  // the add-user form offers them
-    // Coming from the Empresas section ("Usuarios" link) shows only that company's users until "ver todos".
+    // Coming from the Instituciones section ("Usuarios" link) shows only that company's users until "ver todos".
     const orgFilter = state.usersOrgFilter || null;
     const orgFilterName = orgs.find((o) => o.id === orgFilter)?.name;
     const users = sortItems(orgFilter ? allUsers.filter((u) => u.organization_id === orgFilter) : allUsers, 'users');
@@ -1998,7 +1998,7 @@ async function renderUsers() {
                 <th><button data-sort="username">Usuario</button></th>
                 <th><button data-sort="full_name">Nombre</button></th>
                 <th><button data-sort="role">Rol</button></th>
-                <th>Empresa</th>
+                <th>Institución</th>
                 <th>Vistas de radar</th>
                 <th><button data-sort="is_active">Activo</button></th>
                 <th><button data-sort="last_login_at">Último ingreso</button></th>
@@ -2105,12 +2105,12 @@ function openUserForm(user = null) {
             `<option value="${org.id}"${canMove && org.id === currentOrgId ? ' selected' : ''}>${safeText(org.name)}</option>`)].join('');
     let orgField = '';
     if (!isEdit) {
-        orgField = `<label>Empresa <select name="organization_id">${orgOptions}</select></label>`;
+        orgField = `<label>Institución <select name="organization_id">${orgOptions}</select></label>`;
     } else if (canMove) {
-        orgField = `<label>Empresa <select name="organization_id">${orgOptions}</select></label>
+        orgField = `<label>Institución <select name="organization_id">${orgOptions}</select></label>
             <p class="toolbar-note" id="org-move-note"></p>`;
     } else if (user.organization_name) {
-        orgField = `<p class="toolbar-note">Empresa: ${safeText(user.organization_name)} (un admin de empresa no cambia de empresa)</p>`;
+        orgField = `<p class="toolbar-note">Institución: ${safeText(user.organization_name)} (un admin de institución no cambia de institución)</p>`;
     }
     openFormModal(
         isEdit ? `Editar usuario ${user.username}` : 'Agregar usuario',
@@ -2161,7 +2161,7 @@ function describeViews(views) {
 }
 
 /**
- * Under the "Empresa" selector of the edit form, say what saving will do to the account's views before it happens:
+ * Under the "Institución" selector of the edit form, say what saving will do to the account's views before it happens:
  * joining a company REPLACES the account's views with the company's list (and closes its sessions); leaving keeps them.
  */
 function wireMoveNote(user, currentOrgId) {
@@ -2175,8 +2175,8 @@ function wireMoveNote(user, currentOrgId) {
             note.textContent = `Sale de ${user.organization_name}: libera su lugar y conserva sus vistas (${describeViews(user.radar_detail_views)}).`;
         } else {
             const target = (state.organizations || []).find((org) => org.id === chosen);
-            note.textContent = `Se reemplazan sus vistas actuales (${describeViews(user.radar_detail_views)}) por las de la empresa `
-                + `(${describeViews(target?.radar_detail_views || [])}) y se cierran sus sesiones. Ocupa un lugar de la empresa.`;
+            note.textContent = `Se reemplazan sus vistas actuales (${describeViews(user.radar_detail_views)}) por las de la institución `
+                + `(${describeViews(target?.radar_detail_views || [])}) y se cierran sus sesiones. Ocupa un lugar de la institución.`;
         }
     };
     select.addEventListener('change', update);
@@ -2235,11 +2235,11 @@ function openViewsForm(user) {
 async function renderOrganizations() {
     const orgs = await adminApi.listOrganizations();
     elements.sectionContent.innerHTML = `
-        <div class="toolbar"><button class="btn" id="orgs-add">+ Agregar empresa</button></div>
+        <div class="toolbar"><button class="btn" id="orgs-add">+ Agregar institución</button></div>
         <div class="table-wrap">
         <table>
             <thead><tr>
-                <th>Empresa</th><th>Lugares</th><th>Activa</th><th>Vistas de radar</th><th>Acciones</th>
+                <th>Institución</th><th>Lugares</th><th>Activa</th><th>Vistas de radar</th><th>Acciones</th>
             </tr></thead>
             <tbody>
                 ${orgs.map((org) => `
@@ -2301,7 +2301,7 @@ function organizationExtrasHtml(users, radars) {
         : '<p class="toolbar-note">Ningún radar tiene la vista de detalle habilitada.</p>';
     return `
         <fieldset class="org-admin-block">
-            <legend>Administrador de la empresa</legend>
+            <legend>Administrador de la institución</legend>
             <label class="checkbox-row"><input type="radio" name="admin_mode" value="new" checked> Crear un usuario nuevo</label>
             <div id="org-admin-new" class="org-admin-fields">
                 <label>Usuario <input name="admin_username" type="text" minlength="3" maxlength="32" pattern="[a-zA-Z0-9._-]+" autocomplete="off"></label>
@@ -2313,15 +2313,15 @@ function organizationExtrasHtml(users, radars) {
             <label class="checkbox-row"><input type="radio" name="admin_mode" value="existing"> Elegir uno que ya existe</label>
             <div id="org-admin-existing" class="org-admin-fields" hidden>
                 <label>Usuario <select name="admin_user_id"><option value="">Elegí un usuario…</option>${options}</select></label>
-                <p class="toolbar-note">Solo se ofrecen lectores activos que no están en ninguna empresa. Pasa a ser administrador de esta empresa: se le cierran las sesiones y sus vistas propias se reemplazan por las de la empresa.</p>
+                <p class="toolbar-note">Solo se ofrecen lectores activos que no están en ninguna institución. Pasa a ser administrador de esta institución: se le cierran las sesiones y sus vistas propias se reemplazan por las de la institución.</p>
             </div>
             <label class="checkbox-row"><input type="radio" name="admin_mode" value="none"> Sin administrador por ahora</label>
         </fieldset>
         <fieldset class="views-radars">
-            <legend>Vistas de radar de la empresa</legend>
+            <legend>Vistas de radar de la institución</legend>
             <label class="checkbox-row"><input type="checkbox" name="all"> Todas</label>
             ${radarRows}
-            <p class="toolbar-note">Se pueden cambiar después con el botón Vistas de la empresa.</p>
+            <p class="toolbar-note">Se pueden cambiar después con el botón Vistas de la institución.</p>
         </fieldset>`;
 }
 
@@ -2354,7 +2354,7 @@ async function openOrganizationForm(org = null) {
         }
     }
     openFormModal(
-        isEdit ? `Editar empresa ${org.name}` : 'Agregar empresa',
+        isEdit ? `Editar institución ${org.name}` : 'Agregar institución',
         `
             <label>Nombre <input name="name" type="text" maxlength="128" required value="${safeText(org?.name)}"></label>
             <label>Lugares (usuarios activos, admins incluidos) <input name="seat_limit" type="number" min="1" max="10000" required value="${org?.seat_limit ?? 5}"></label>
@@ -2371,7 +2371,7 @@ async function openOrganizationForm(org = null) {
                 };
                 await adminApi.patchOrganization(org.id, payload);
                 await renderSection();
-                showMessage(`Empresa ${payload.name} actualizada`, 'success');
+                showMessage(`Institución ${payload.name} actualizada`, 'success');
                 return;
             }
             const adminMode = formData.get('admin_mode') || 'none';
@@ -2392,7 +2392,7 @@ async function openOrganizationForm(org = null) {
             });
             await adminApi.createOrganization(payload);
             await renderSection();
-            showMessage(`Empresa ${payload.name} creada${payload.admin ? ' con su administrador' : ''}`, 'success');
+            showMessage(`Institución ${payload.name} creada${payload.admin ? ' con su administrador' : ''}`, 'success');
         },
     );
     if (!isEdit) wireAdminModeBlocks();
@@ -2443,7 +2443,7 @@ async function renderSection() {
         colormaps: 'Mapas de colores',
         'colormap-options': 'Opciones de mapa de colores',
         users: 'Usuarios',
-        organizations: 'Empresas',
+        organizations: 'Instituciones',
         profile: 'Mi perfil',
     };
     elements.sectionTitle.textContent = titleBySection[state.section] || 'Panel';

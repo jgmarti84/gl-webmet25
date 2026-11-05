@@ -65,10 +65,10 @@ def create_user(
     try:
         if organization_id is not None:
             if role == "admin":
-                raise user_admin.UserRuleError(422, "Un usuario de una empresa no puede ser administrador general")
+                raise user_admin.UserRuleError(422, "Un usuario de una institución no puede ser administrador general")
             user = organizations.create_member(db, organization_id, data, role, actor)
         elif role == "org_admin":
-            raise user_admin.UserRuleError(422, "Solo un usuario de una empresa puede ser admin de empresa")
+            raise user_admin.UserRuleError(422, "Solo un usuario de una institución puede ser admin de institución")
         else:
             user = user_admin.create(db, {**data, "role": role})
     except (user_admin.UserRuleError, organizations.OrgRuleError) as exc:

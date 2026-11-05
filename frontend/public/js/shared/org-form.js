@@ -1,5 +1,5 @@
 /**
- * Logic of the "Agregar empresa" form of the admin panel (spec C follow-up): who can be offered as the admin of a new
+ * Logic of the "Agregar institución" form of the admin panel (spec C follow-up): who can be offered as the admin of a new
  * company and the body the form sends. Kept apart from admin.js (which draws the form) so it can be tested without a
  * browser: tests/js/test_org_form.mjs.
  */
@@ -31,7 +31,7 @@ function adminBlock(values) {
         };
     }
     if (values.adminMode === 'existing') {
-        if (!values.existingUserId) throw new Error('Elegí el usuario que va a ser administrador de la empresa');
+        if (!values.existingUserId) throw new Error('Elegí el usuario que va a ser administrador de la institución');
         return { mode: 'existing', user_id: Number(values.existingUserId) };
     }
     return null;

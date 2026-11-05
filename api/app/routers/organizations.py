@@ -39,7 +39,7 @@ def org_response(db: Session, org: Organization) -> OrganizationResponse:
 def _get_or_404(db: Session, org_id: int) -> Organization:
     org = db.get(Organization, org_id)
     if org is None:
-        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+        raise HTTPException(status_code=404, detail="Institución no encontrada")
     return org
 
 

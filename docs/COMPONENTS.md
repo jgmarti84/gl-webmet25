@@ -462,7 +462,7 @@ settings), and animation controls (bottom-center).
 
 `auth-api.js` also talks to the public endpoints of the sign-up (DATA_FLOW §4.10): `login(username, password)` (the username field also takes the mail, and the answer carries the failure `code`, for example `email_not_verified`), `options()` (what the pages may offer; never throws, and falls back to "nothing extra"), `register(payload)`, `verifyEmail(token)`, `resendVerification(identifier)`, `forgotPassword(email)` and `resetPassword(token, password)`. The last five resolve `{ ok, status, data }` and leave the texts to the page.
 
-### **shared/org-form.js** — Logic of the "Agregar empresa" form
+### **shared/org-form.js** — Logic of the "Agregar institución" form
 
 **File:** [`frontend/public/js/shared/org-form.js`](../../frontend/public/js/shared/org-form.js)
 

@@ -39,7 +39,7 @@ def lock_org(db: Session, org_id: int) -> Organization:
     """Read the company row with FOR UPDATE: two sign-ups for the last seat then run one after the other."""
     org = db.query(Organization).filter(Organization.id == org_id).with_for_update().one_or_none()
     if org is None:
-        raise OrgRuleError(404, "Empresa no encontrada")
+        raise OrgRuleError(404, "Institución no encontrada")
     return org
 
 
@@ -48,7 +48,7 @@ def reserve_seat(db: Session, org_id: int) -> Organization:
     org = lock_org(db, org_id)
     used = seats_used(db, org)
     if used >= org.seat_limit:
-        raise OrgRuleError(409, f"La empresa {org.name} no tiene lugares libres ({used} de {org.seat_limit})")
+        raise OrgRuleError(409, f"La institución {org.name} no tiene lugares libres ({used} de {org.seat_limit})")
     return org
 
 
@@ -80,9 +80,9 @@ def move_user(db: Session, actor: User, user: User, target_org_id: Optional[int]
     if target_org_id == user.organization_id:
         return
     if actor.role != "admin":
-        raise OrgRuleError(403, "Solo el administrador general puede mover cuentas entre empresas")
+        raise OrgRuleError(403, "Solo el administrador general puede mover cuentas entre instituciones")
     if user.role != "viewer":
-        raise OrgRuleError(422, "Solo se pueden mover lectores: los administradores no cambian de empresa")
+        raise OrgRuleError(422, "Solo se pueden mover lectores: los administradores no cambian de institución")
 
     if target_org_id is None:
         user.organization = None
@@ -90,7 +90,7 @@ def move_user(db: Session, actor: User, user: User, target_org_id: Optional[int]
         # Locked even for an inactive account, so the company cannot be deactivated or resized under our feet.
         org = reserve_seat(db, target_org_id) if user.is_active else lock_org(db, target_org_id)
         if not org.is_active:
-            raise OrgRuleError(409, f"La empresa {org.name} está inactiva")
+            raise OrgRuleError(409, f"La institución {org.name} está inactiva")
         user.organization = org
         db.flush()
         permissions.copy_company_views_to(db, user, actor)
@@ -106,7 +106,7 @@ def create_org(db: Session, data: dict) -> Organization:
         with db.begin_nested():
             db.flush()
     except IntegrityError as exc:
-        raise OrgRuleError(409, f"Ya existe una empresa llamada {data.get('name')}") from exc
+        raise OrgRuleError(409, f"Ya existe una institución llamada {data.get('name')}") from exc
     return org
 
 
@@ -118,9 +118,9 @@ def make_org_admin(db: Session, actor: User, org: Organization, user: User) -> N
     company is a separate feature. Rules are 422, except a user that does not exist (404).
     """
     if user.role != "viewer":
-        raise OrgRuleError(422, "Solo un lector sin empresa puede ser administrador de la empresa")
+        raise OrgRuleError(422, "Solo un lector sin institución puede ser administrador de la institución")
     if user.organization_id is not None:
-        raise OrgRuleError(422, f"El usuario {user.username} ya pertenece a una empresa")
+        raise OrgRuleError(422, f"El usuario {user.username} ya pertenece a una institución")
     if not user.is_active:
         raise OrgRuleError(422, f"El usuario {user.username} está desactivado")
     move_user(db, actor, user, org.id)
@@ -160,5 +160,5 @@ def update_org(db: Session, org: Organization, changes: dict) -> Organization:
         with db.begin_nested():
             db.flush()
     except IntegrityError as exc:
-        raise OrgRuleError(409, f"Ya existe una empresa llamada {changes.get('name')}") from exc
+        raise OrgRuleError(409, f"Ya existe una institución llamada {changes.get('name')}") from exc
     return org

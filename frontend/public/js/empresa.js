@@ -9,7 +9,7 @@ import { api } from './shared/api.js';
 import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
 
-const ROLE_LABELS = { org_admin: 'Admin de empresa', viewer: 'Lector' };
+const ROLE_LABELS = { org_admin: 'Admin de institución', viewer: 'Lector' };
 // How long a success notice stays before it closes by itself (errors stay until the × is pressed).
 const SUCCESS_MESSAGE_MS = 4000;
 
@@ -118,7 +118,7 @@ async function render() {
     const meId = state.me?.id;
     $('empresa-users').innerHTML = users.map((user) => {
         const isViewer = user.role === 'viewer';
-        const views = isViewer ? viewsSummary(user.radar_detail_views) : 'Las de la empresa';
+        const views = isViewer ? viewsSummary(user.radar_detail_views) : 'Las de la institución';
         const actions = isViewer
             ? `
                 <button class="btn-secondary" data-edit="${user.id}">Editar</button>
@@ -165,7 +165,7 @@ function openAddForm() {
             <label>Email <input name="email" type="email" maxlength="254"></label>
             <label>Contraseña inicial <input name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required></label>
             <p class="toolbar-note">Mínimo 10 caracteres, con al menos un carácter especial (por ejemplo ! - _ . @ #).</p>
-            <p class="toolbar-note">Entra como lector de tu empresa y empieza con las vistas de la empresa.</p>
+            <p class="toolbar-note">Entra como lector de tu institución y empieza con las vistas de la institución.</p>
             <div class="form-actions"><button class="btn" type="submit">Crear</button></div>
         `,
         async (formData) => {
@@ -266,13 +266,13 @@ async function openViewsForm(user) {
                 <input type="checkbox" name="radar" value="${safeText(radar.code)}"${!hasAll && stored.includes(radar.code) ? ' checked' : ''}>
                 ${safeText(radar.code)} - ${safeText(radar.title)}
             </label>`).join('')
-        : '<p class="toolbar-note">La empresa no tiene vistas de radar para repartir.</p>';
+        : '<p class="toolbar-note">La institución no tiene vistas de radar para repartir.</p>';
 
     openModal(
         `Vistas de radar de ${user.username}`,
         `
             ${allRow}
-            <fieldset class="views-radars"><legend>${companyHasAll ? 'O elegir radares' : 'Radares de la empresa'}</legend>${rows}</fieldset>
+            <fieldset class="views-radars"><legend>${companyHasAll ? 'O elegir radares' : 'Radares de la institución'}</legend>${rows}</fieldset>
             <div class="form-actions"><button class="btn" type="submit">Guardar</button></div>
         `,
         async (formData) => {

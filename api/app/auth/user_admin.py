@@ -63,9 +63,9 @@ def update_user(db: Session, actor: User, user: User, changes: dict) -> User:
 
     # Company rules (spec C): roles must match the company link, and reactivating takes a seat.
     if new_role == "org_admin" and user.organization_id is None:
-        raise UserRuleError(422, "Solo un usuario de una empresa puede ser admin de empresa")
+        raise UserRuleError(422, "Solo un usuario de una institución puede ser admin de institución")
     if new_role == "admin" and user.organization_id is not None:
-        raise UserRuleError(422, "Un usuario de una empresa no puede ser administrador general")
+        raise UserRuleError(422, "Un usuario de una institución no puede ser administrador general")
     reactivating = changes.get("is_active") is True and not user.is_active
     if reactivating and user.organization_id is not None:
         try:

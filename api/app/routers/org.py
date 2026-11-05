@@ -39,7 +39,7 @@ def _member_or_404(db: Session, actor: User, user_id: int) -> User:
 def _editable(actor: User, user: User) -> User:
     """Company admins manage the viewers of their company; other company admins are the general admin's job."""
     if user.role != "viewer":
-        raise HTTPException(status_code=403, detail="Solo podés administrar a los lectores de tu empresa")
+        raise HTTPException(status_code=403, detail="Solo podés administrar a los lectores de tu institución")
     return user
 
 
@@ -63,7 +63,7 @@ def create_company_user(
         user = orgs.create_member(db, actor.organization_id, payload.model_dump(), "viewer", actor)
     except orgs.AccountExistsError as exc:
         # The person may already have an account elsewhere; only the general admin can move it into a company.
-        ask = "Si esa persona ya tiene una cuenta, pedile al administrador general que la sume a tu empresa."
+        ask = "Si esa persona ya tiene una cuenta, pedile al administrador general que la sume a tu institución."
         raise HTTPException(status_code=exc.status_code, detail=f"{exc.detail}. {ask}")
     except orgs.OrgRuleError as exc:
         raise _rule(exc)
