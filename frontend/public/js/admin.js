@@ -2172,7 +2172,7 @@ function wireMoveNote(user, currentOrgId) {
         if (chosen === currentOrgId) {
             note.textContent = '';
         } else if (chosen === null) {
-            note.textContent = `Sale de ${user.organization_name}: libera su lugar y conserva sus vistas (${describeViews(user.radar_detail_views)}).`;
+            note.textContent = `Sale de ${user.organization_name}: libera su lugar, se le quitan sus vistas (${describeViews(user.radar_detail_views)}) y se cierran sus sesiones.`;
         } else {
             const target = (state.organizations || []).find((org) => org.id === chosen);
             note.textContent = `Se reemplazan sus vistas actuales (${describeViews(user.radar_detail_views)}) por las de la institución `

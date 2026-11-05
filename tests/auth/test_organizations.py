@@ -417,10 +417,26 @@ def test_org_admin_cannot_touch_another_company_admin(app_client, company, make_
     assert app_client.patch(f"/api/v1/org/users/{peer.id}", json={"is_active": False}).status_code == 403
 
 
-def test_org_admin_deactivates_and_reactivates_a_member(app_client, company):
+def test_org_admin_cannot_deactivate_but_can_unlink_a_member(app_client, company, test_db_session):
     member = company["member"]
-    assert app_client.patch(f"/api/v1/org/users/{member.id}", json={"is_active": False}).json()["is_active"] is False
-    assert app_client.patch(f"/api/v1/org/users/{member.id}", json={"is_active": True}).json()["is_active"] is True
+    # Only the general admin activates or deactivates accounts.
+    assert app_client.patch(f"/api/v1/org/users/{member.id}", json={"is_active": False}).status_code == 403
+    assert app_client.patch(f"/api/v1/org/users/{member.id}", json={"is_active": True}).status_code == 403
+    test_db_session.refresh(member)
+    assert member.is_active is True
+
+    # Unlinking takes the person out of the institution: the seat is freed, the views the institution gave go away.
+    seats_before = app_client.get("/api/v1/org").json()["seats_used"]
+    assert perms.stored_radar_views(member) == ["TSTA", "TSTB"]  # the copy it got when it joined
+    response = app_client.post(f"/api/v1/org/users/{member.id}/unlink")
+    assert response.status_code == 200
+    assert response.json()["organization_id"] is None and response.json()["radar_detail_views"] == []
+    assert app_client.get("/api/v1/org").json()["seats_used"] == seats_before - 1
+    assert "juan" not in {u["username"] for u in app_client.get("/api/v1/org/users").json()}
+    # It is out of reach now, like any user of another company.
+    assert app_client.post(f"/api/v1/org/users/{member.id}/unlink").status_code == 404
+    test_db_session.refresh(member)
+    assert member.is_active is True  # the account is still active: it can log in, as a viewer with no institution
 
 
 def test_org_admin_resets_a_members_password(app_client, company):

@@ -31,6 +31,7 @@ export const empresaApi = {
         return request(`/users/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ password }) });
     },
     revokeSessions(id) { return request(`/users/${id}/revoke-sessions`, { method: 'POST' }); },
+    unlinkUser(id) { return request(`/users/${id}/unlink`, { method: 'POST' }); },
     setRadarViews(id, views) {
         return request(`/users/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ radar_detail_view: views }) });
     },

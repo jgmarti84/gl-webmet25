@@ -77,10 +77,29 @@ def update_company_user(
     user_id: int, payload: OrgUserUpdate, db: Session = Depends(get_db), actor: User = Depends(require_org_admin)
 ) -> UserResponse:
     user = _editable(actor, _member_or_404(db, actor, user_id))
+    changes = payload.model_dump(exclude_unset=True)
+    # Activating or deactivating accounts is the general admin's job. A company admin takes someone out of its
+    # institution with POST .../unlink instead. Refused loudly (not ignored) so nobody thinks it worked.
+    if "is_active" in changes:
+        raise HTTPException(status_code=403, detail="Solo el administrador general puede activar o desactivar usuarios")
     try:
-        user_admin.update_user(db, actor, user, payload.model_dump(exclude_unset=True))
+        user_admin.update_user(db, actor, user, changes)
     except user_admin.UserRuleError as exc:
         raise _rule(exc)
+    db.commit()
+    db.refresh(user)
+    return user_response(user)
+
+
+@router.post("/users/{user_id}/unlink", response_model=UserResponse)
+def unlink_company_user(
+    user_id: int, db: Session = Depends(get_db), actor: User = Depends(require_org_admin)
+) -> UserResponse:
+    """Take a viewer out of the actor's institution: it stops taking a seat, loses the views the institution gave it
+    and its sessions are closed. The account stays active (the general admin deactivates). Only viewers of the own
+    institution; once unlinked the user is out of reach, like any user of another institution (404)."""
+    user = _editable(actor, _member_or_404(db, actor, user_id))
+    orgs.leave_org(db, actor, user)
     db.commit()
     db.refresh(user)
     return user_response(user)

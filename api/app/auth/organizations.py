@@ -69,13 +69,28 @@ def create_member(db: Session, org_id: int, data: dict, role: str, actor: User) 
     return user
 
 
+def leave_org(db: Session, actor: User, user: User) -> None:
+    """Take a viewer out of its institution. Used by the general admin (move to "none") and by the company admin.
+
+    It frees the seat (seats count the ACTIVE users of the company, so the person simply stops being counted), removes
+    the radar views the person had (they were a copy of what the institution gave it: someone who leaves must not keep
+    seeing the institution's radars) and closes its sessions, because what it can see changes. The account stays active
+    and can still log in, as a viewer with no institution and no views. The caller checks who may do this.
+    """
+    # The views go first: replace_user_radar_views locks and reloads the user, which must not happen after the change.
+    permissions.replace_user_radar_views(db, user, [], actor)
+    user.organization = None
+    revoke_all_sessions(db, user)
+    db.flush()
+
+
 def move_user(db: Session, actor: User, user: User, target_org_id: Optional[int]) -> None:
     """Put an existing viewer into a company, move it to another, or take it out (None). Only the general admin.
 
     Joining takes a seat (409 when the company is full or inactive) unless the account is inactive, which only takes
     one when it is reactivated. The account's own views are REPLACED by a copy of the company's list, the same start a
-    new member gets (no intersection), and its sessions are closed because what it can see changes. Leaving frees the
-    seat and keeps the list it has. Asking for the company it already has does nothing.
+    new member gets (no intersection), and its sessions are closed because what it can see changes. Leaving (see
+    leave_org) frees the seat and removes its views. Asking for the company it already has does nothing.
     """
     if target_org_id == user.organization_id:
         return
@@ -85,15 +100,15 @@ def move_user(db: Session, actor: User, user: User, target_org_id: Optional[int]
         raise OrgRuleError(422, "Solo se pueden mover lectores: los administradores no cambian de institución")
 
     if target_org_id is None:
-        user.organization = None
-    else:
-        # Locked even for an inactive account, so the company cannot be deactivated or resized under our feet.
-        org = reserve_seat(db, target_org_id) if user.is_active else lock_org(db, target_org_id)
-        if not org.is_active:
-            raise OrgRuleError(409, f"La institución {org.name} está inactiva")
-        user.organization = org
-        db.flush()
-        permissions.copy_company_views_to(db, user, actor)
+        leave_org(db, actor, user)
+        return
+    # Locked even for an inactive account, so the company cannot be deactivated or resized under our feet.
+    org = reserve_seat(db, target_org_id) if user.is_active else lock_org(db, target_org_id)
+    if not org.is_active:
+        raise OrgRuleError(409, f"La institución {org.name} está inactiva")
+    user.organization = org
+    db.flush()
+    permissions.copy_company_views_to(db, user, actor)
     revoke_all_sessions(db, user)
     db.flush()
 

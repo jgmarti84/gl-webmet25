@@ -126,14 +126,15 @@ def test_moving_between_companies_frees_one_seat_and_takes_the_other(
     assert perms.stored_radar_views(member) == ["TSTB"]
 
 
-def test_leaving_a_company_frees_the_seat_and_keeps_the_list(make_user, make_org, make_radar, boss, test_db_session):
+def test_leaving_a_company_frees_the_seat_and_removes_its_views(make_user, make_org, make_radar, boss, test_db_session):
     make_radar("TSTA")
     org = make_org(views=["TSTA"])
     member = orgs.create_member(test_db_session, org.id, _member_data("juan"), "viewer", boss)
+    assert perms.stored_radar_views(member) == ["TSTA"]  # the copy of the company's list it got when it joined
     user_admin.update_user(test_db_session, boss, member, {"organization_id": None})
     assert member.organization_id is None
     assert orgs.seats_used(test_db_session, org) == 0
-    assert perms.stored_radar_views(member) == ["TSTA"]  # what it had, not an empty list
+    assert perms.stored_radar_views(member) == []  # what the institution gave goes away with the person
 
 
 def test_asking_for_the_company_it_already_has_changes_nothing(make_user, make_org, make_radar, boss, test_db_session):

@@ -122,10 +122,10 @@ async function render() {
         const actions = isViewer
             ? `
                 <button class="btn-secondary" data-edit="${user.id}">Editar</button>
-                <button class="btn-secondary" data-toggle="${user.id}">${user.is_active ? 'Desactivar' : 'Activar'}</button>
                 <button class="btn-secondary" data-views="${user.id}">Vistas</button>
                 <button class="btn-secondary" data-reset="${user.id}">Resetear contraseña</button>
-                <button class="btn-secondary" data-revoke="${user.id}">Cerrar sesiones</button>`
+                <button class="btn-secondary" data-revoke="${user.id}">Cerrar sesiones</button>
+                <button class="btn-secondary" data-unlink="${user.id}">Desvincular</button>`
             : '<span class="toolbar-note">Lo administra el administrador general</span>';
         return `
             <tr>
@@ -150,10 +150,10 @@ function wireRowButtons() {
         });
     };
     each('[data-edit]', openEditForm);
-    each('[data-toggle]', toggleActive);
     each('[data-views]', openViewsForm);
     each('[data-reset]', openPasswordForm);
     each('[data-revoke]', revokeSessions);
+    each('[data-unlink]', unlinkUser);
 }
 
 function openAddForm() {
@@ -201,15 +201,20 @@ function openEditForm(user) {
     );
 }
 
-async function toggleActive(user) {
-    const action = user.is_active ? 'desactivar' : 'activar';
-    if (!window.confirm(`¿Confirma ${action} a ${user.username}?`)) return;
+/**
+ * Take a user out of the institution: it stops taking a seat, loses the radar views the institution gave it and its
+ * sessions are closed. Its account stays active (only the general admin activates or deactivates accounts), and once
+ * it is out only the general admin can put it back, so it is confirmed first.
+ */
+async function unlinkUser(user) {
+    const question = `¿Confirma desvincular a ${user.username} de la institución? Se le cierran las sesiones y pierde `
+        + 'sus vistas de radar. Deja de ocupar un lugar. Solo el administrador general podrá volver a sumarlo.';
+    if (!window.confirm(question)) return;
     try {
-        await empresaApi.patchUser(user.id, { is_active: !user.is_active });
+        await empresaApi.unlinkUser(user.id);
         await render();
-        showMessage(`Usuario ${user.username} ${user.is_active ? 'desactivado' : 'activado'}`);
+        showMessage(`Usuario ${user.username} desvinculado de la institución`);
     } catch (error) {
-        // For example 409 when reactivating with no free seat.
         showMessage(error.message, 'error');
     }
 }

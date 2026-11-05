@@ -85,4 +85,5 @@ class OrgUserCreate(BaseModel):
 class OrgUserUpdate(BaseModel):
     full_name: Optional[str] = Field(None, max_length=128)
     email: Optional[EmailStr] = None
+    # Kept only so the endpoint can REFUSE it (403): a company admin does not activate or deactivate accounts.
     is_active: Optional[bool] = None
