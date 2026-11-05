@@ -5,10 +5,8 @@
  * convective system polygons, their forecast polygons, and the centroid
  * trajectory of each track.
  *
- * Written as a self-contained module rather than page code on purpose. v1 lives
- * on its own page, but the intent is to fold tracking into radar.html as a
- * toggleable layer later — which is cheap wiring only if the layer owns its own
- * fetch, render and frame-sync, exactly as tops-cores.js does.
+ * A self-contained module, used by two hosts: the standalone /tracking page and
+ * the tracking tool of the single-radar view (v2/radar-tracking.js).
  *
  * Tracking is single-radar by nature and this layer assumes it: every cube is
  * gridded through one radar's geometry, and a storm in the overlap between two
@@ -36,12 +34,31 @@ const HALO = { color: '#000000', opacity: 0.55, fill: false, dashArray: null, li
 
 const STYLE_CONVECTIVE = { color: '#ffffff', weight: 2.5, opacity: 1, fillColor: `url(#${HATCH_CONV})`, fillOpacity: 1 };
 const STYLE_PLAIN      = { color: '#d9d9d9', weight: 1.8, opacity: 0.95, dashArray: '6,4', fillColor: `url(#${HATCH_PLAIN})`, fillOpacity: 1 };
-const STYLE_FORECAST   = { color: '#ffd54f', weight: 2, opacity: 1, dashArray: '5,5', fill: false };
 const STYLE_ARROW      = { color: '#ffd54f', weight: 2.5, opacity: 1, fill: false };
 const STYLE_TRACK      = { color: '#4dd0e1', weight: 2.5, opacity: 1, fill: false };
 
-/** Forecast leads (min) drawn as outlines, besides the furthest one. */
-const FORECAST_OUTLINE_LEADS = [18, 36];
+/** Every forecast lead the tracker produces (min), gl-tracker's forecast_intervals. */
+export const FORECAST_LEADS = [9, 18, 27, 36, 45, 54, 63];
+
+/** Leads drawn until the user picks others. */
+export const DEFAULT_FORECAST_LEADS = [18, 36, 54];
+
+/**
+ * One fill colour per lead: a cool ramp (pale cyan -> blue -> violet), away
+ * from the reflectivity colormaps' greens, yellows, reds and magentas, so a
+ * forecast area never reads as data. Fairly solid on purpose (decided
+ * 2026-11-05); the dark halo keeps each edge visible where areas overlap.
+ */
+export const FORECAST_COLORS = {
+    9:  '#b2ebf2',
+    18: '#80deea',
+    27: '#4fc3f7',
+    36: '#2196f3',
+    45: '#3f51b5',
+    54: '#673ab7',
+    63: '#4a148c',
+};
+const FORECAST_FILL_OPACITY = 0.55;
 
 export class TrackingLayer {
     /** @param {L.Map} map */
@@ -69,6 +86,7 @@ export class TrackingLayer {
         this._paths = new Map();
 
         this._showForecasts = true;
+        this._forecastLeads = new Set(DEFAULT_FORECAST_LEADS);
         this._showTrails = true;
         this._currentIndex = null;
     }
@@ -152,7 +170,10 @@ export class TrackingLayer {
         // area still gets its click (popup); the area gets the hover elsewhere.
         const chains = this._showForecasts
             ? [...forecasts].flatMap(([name, features]) => forecastChains(live.get(name) || [], features))
-                .map(chain => ({ origin: chain.origin, leads: leadsOf(chain.features) }))
+                .map(chain => ({
+                    origin: chain.origin,
+                    leads: leadsOf(chain.features).filter(x => this._forecastLeads.has(x.lead)),
+                }))
                 .filter(chain => chain.leads.length)
             : [];
         for (const chain of chains) this._drawForecastAreas(chain.leads);
@@ -189,30 +210,24 @@ export class TrackingLayer {
     }
 
     /**
-     * One storm's forecast areas: the outlines of a few leads
-     * (FORECAST_OUTLINE_LEADS + the furthest), fainter the further ahead.
-     * Every lead's outline at once was unreadable. Lead times show on hover
-     * only, so a busy frame isn't covered in labels.
+     * One storm's forecast areas: every selected lead, each filled with its own
+     * colour (FORECAST_COLORS). Furthest first, so nearer areas sit on top and
+     * win the hover. Lead times show on hover only, so a busy frame isn't
+     * covered in labels.
      */
     _drawForecastAreas(leads) {
-        const last = leads[leads.length - 1];
-        const outlined = leads.filter(x => x === last || FORECAST_OUTLINE_LEADS.includes(x.lead));
-        // Furthest first: nearer outlines end up on top and win the hover.
-        for (let i = outlined.length - 1; i >= 0; i--) {
-            const x = outlined[i];
-            const fade = outlined.length > 1 ? i / (outlined.length - 1) : 0;  // 0 nearest .. 1 furthest
+        for (let i = leads.length - 1; i >= 0; i--) {
+            const x = leads[i];
+            const color = FORECAST_COLORS[x.lead] || '#2196f3';
             const style = {
-                ...STYLE_FORECAST,
-                opacity: 1 - 0.4 * fade,
-                weight: STYLE_FORECAST.weight - 0.6 * fade,
-                // Transparent fill so the whole area (not just the line) takes the hover.
-                fill: true, fillColor: STYLE_FORECAST.color, fillOpacity: 0,
+                color, weight: 1.5, opacity: 1,
+                fill: true, fillColor: color, fillOpacity: FORECAST_FILL_OPACITY,
             };
             this._halo(x.feature, style.weight).addTo(this._forecasts);
             const area = L.geoJSON(x.feature, { pane: this._pane, renderer: this._renderer, style })
                 .bindTooltip(`Pronóstico +${x.lead} min`, { sticky: true });
-            area.on('mouseover', () => area.setStyle({ fillOpacity: 0.15 }))
-                .on('mouseout', () => area.setStyle({ fillOpacity: 0 }))
+            area.on('mouseover', () => area.setStyle({ fillOpacity: Math.min(1, FORECAST_FILL_OPACITY + 0.25) }))
+                .on('mouseout', () => area.setStyle({ fillOpacity: FORECAST_FILL_OPACITY }))
                 .addTo(this._forecasts);
         }
     }
@@ -303,6 +318,14 @@ export class TrackingLayer {
         if (this._currentIndex !== null) this.showFrame(this._currentIndex);
     }
 
+    /** Which forecast leads (minutes) to draw; the others are hidden. */
+    setForecastLeads(leads) {
+        this._forecastLeads = new Set((leads || []).map(Number));
+        if (this._currentIndex !== null) this.showFrame(this._currentIndex);
+    }
+
+    get forecastLeads() { return [...this._forecastLeads].sort((a, b) => a - b); }
+
     setShowTrails(show) {
         this._showTrails = show;
         if (this._currentIndex !== null) this.showFrame(this._currentIndex);
@@ -353,6 +376,40 @@ export class TrackingLayer {
     }
 
     /**
+     * Track the newest `lastN` volumes of [start, end] for one radar, polling
+     * until done. `isCancelled()` is checked between polls: a superseded run
+     * stops polling and resolves to null instead of a result.
+     */
+    static async runForRadar({ radar, start, end, lastN, config }, onProgress,
+                             { pollMs = 1000, isCancelled = () => false } = {}) {
+        const res = await authFetch(`${TRACKING_BASE}/radars/${encodeURIComponent(radar)}/jobs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ start, end, last_n: lastN, config }),
+        });
+        if (!res.ok) throw new Error(`submit failed: ${res.status} ${await res.text()}`);
+        const job = await res.json();
+        return TrackingLayer._poll(job.job_id, onProgress, pollMs, isCancelled);
+    }
+
+    static async _poll(jobId, onProgress, pollMs, isCancelled = () => false) {
+        for (;;) {
+            if (isCancelled()) return null;
+            const poll = await authFetch(`${TRACKING_BASE}/jobs/${jobId}`);
+            if (poll.status === 404) {
+                throw new Error('Job disappeared (service restarted). Try again.');
+            }
+            if (!poll.ok) throw new Error(`poll failed: ${poll.status}`);
+            const state = await poll.json();
+            if (isCancelled()) return null;
+            if (onProgress) onProgress(state);
+            if (state.status === 'done') return state;
+            if (state.status === 'error') throw new Error(state.error || 'tracking failed');
+            await new Promise(r => setTimeout(r, pollMs));
+        }
+    }
+
+    /**
      * Submit a run and poll until it finishes.
      *
      * Submit/poll rather than one call because a window is seconds of CPU. A
@@ -368,20 +425,8 @@ export class TrackingLayer {
         });
         if (!res.ok) throw new Error(`submit failed: ${res.status} ${await res.text()}`);
         const job = await res.json();
-
-        for (;;) {
-            const poll = await authFetch(`${TRACKING_BASE}/jobs/${job.job_id}`);
-            if (poll.status === 404) {
-                // In-memory store: a restart loses jobs. Resubmit, don't error.
-                throw new Error('Job disappeared (service restarted). Try again.');
-            }
-            if (!poll.ok) throw new Error(`poll failed: ${poll.status}`);
-            const state = await poll.json();
-            if (onProgress) onProgress(state);
-            if (state.status === 'done') return state;
-            if (state.status === 'error') throw new Error(state.error || 'tracking failed');
-            await new Promise(r => setTimeout(r, pollMs));
-        }
+        // In-memory store: a restart loses jobs (404). Resubmit, don't error.
+        return TrackingLayer._poll(job.job_id, onProgress, pollMs);
     }
 }
 

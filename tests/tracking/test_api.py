@@ -13,7 +13,7 @@ from radar_db.models import COGStatus, NCCube
 from tracking_api import main as tracking_main
 from tracking_api.config import settings
 from tracking_api.db import get_db
-from tracking_api.jobs import JobStore
+from tracking_api.jobs import JobStatus, JobStore
 
 T0 = datetime(2026, 10, 20, 12, 0, 0, tzinfo=timezone.utc)
 WINDOW = {"start": T0.isoformat(), "end": (T0 + timedelta(hours=2)).isoformat()}
@@ -93,13 +93,47 @@ class TestRadarJobs:
         assert res.status_code == 202
         assert res.json()["last_n"] == 3
 
-    def test_both_routes_share_the_cache(self, client):
-        """The same run through either route is one cache entry."""
+    def test_both_routes_share_the_cache(self, client, cube):
+        """The same run through either route is one job."""
+        first = client.post("/api/tracking/radars/RMA1/jobs", json={**WINDOW, "last_n": 3}).json()
+        again = client.post("/api/tracking/jobs", json={**WINDOW, "radar": "rma1", "last_n": 3}).json()
+        assert again["cached"] is True
+        assert again["job_id"] == first["job_id"]
+
+    def test_a_run_in_progress_is_shared(self, client, cube):
+        """Identical requests arriving together do not queue the work twice."""
+        first = client.post("/api/tracking/radars/RMA1/jobs", json={**WINDOW, "last_n": 3}).json()
+        assert tracking_main.store.get(first["job_id"]).status.value == "pending"
+        again = client.post("/api/tracking/radars/RMA1/jobs", json={**WINDOW, "last_n": 3}).json()
+        assert again["job_id"] == first["job_id"]
+
+    def test_a_different_window_with_the_same_volumes_hits_the_cache(self, client, cube):
+        """Keyed on the volumes, not on the window that selected them."""
+        first = client.post("/api/tracking/radars/RMA1/jobs", json={**WINDOW, "last_n": 3}).json()
+        wider = {"start": (T0 - timedelta(hours=1)).isoformat(), "end": WINDOW["end"]}
+        again = client.post("/api/tracking/radars/RMA1/jobs", json={**wider, "last_n": 3}).json()
+        assert again["job_id"] == first["job_id"]
+
+    def test_a_new_cube_in_the_same_window_starts_a_new_run(self, client, cube, test_db_session):
+        """A live window can gain a cube after the first request; the result must include it."""
+        first = client.post("/api/tracking/radars/RMA1/jobs", json={**WINDOW, "last_n": 3}).json()
+        test_db_session.add(NCCube(
+            radar_code="RMA1", observation_time=T0 + timedelta(minutes=9),
+            file_path="/nccube/y.nc", file_name="y.nc", status=COGStatus.AVAILABLE,
+        ))
+        test_db_session.flush()
+        again = client.post("/api/tracking/radars/RMA1/jobs", json={**WINDOW, "last_n": 3}).json()
+        assert again["job_id"] != first["job_id"]
+        assert again["cached"] is False
+
+    def test_a_failed_run_is_not_reused(self, client, cube):
+        first = client.post("/api/tracking/radars/RMA1/jobs", json={**WINDOW, "last_n": 3}).json()
+        tracking_main.store.get(first["job_id"]).status = JobStatus.ERROR
+        again = client.post("/api/tracking/radars/RMA1/jobs", json={**WINDOW, "last_n": 3}).json()
+        assert again["job_id"] != first["job_id"]
+
+    def test_the_job_keeps_the_resolved_volumes(self, client, cube):
+        """The run processes exactly the volumes the cache key was built from."""
         first = client.post("/api/tracking/radars/RMA1/jobs", json={**WINDOW, "last_n": 3}).json()
         job = tracking_main.store.get(first["job_id"])
-        key = tracking_main.cache_key("RMA1", job.start, job.end, job.config, 3)
-        tracking_main.store.put_cached(key, job)
-
-        again = client.post("/api/tracking/jobs", json={**WINDOW, "radar": "rma1", "last_n": 3})
-        assert again.json()["cached"] is True
-        assert again.json()["job_id"] == first["job_id"]
+        assert [v.timestamp for v in job.volumes] == [T0]

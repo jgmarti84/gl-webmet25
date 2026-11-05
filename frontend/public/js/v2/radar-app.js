@@ -5,6 +5,7 @@ import { MapManager }          from './map.js';
 import { AnimationController } from './animation.js';
 import { UIControls }          from '../shared/controls.js';
 import { canOpenDetailView }   from '../shared/radar-views.js';
+import { initRadarTracking }   from './radar-tracking.js';
 import {
     waitForLeaflet,
     updateRadarHeader,
@@ -56,6 +57,8 @@ const state = {
     nextLayerId:      1,
     pickerContext:        null,
     pickerShowFiltered:   false,
+    // Storm tracking tool (radar-tracking.js); null when unavailable to this user/radar/deployment.
+    tracking:             null,
 };
 
 function updateTimeBadge(hours) {
@@ -681,6 +684,8 @@ async function loadLayerFramesForRange(layer, startTime, endTime) {
 
         showAllLayersAtFrame(state.frames.length - 1);
         state.mapManager._currentFrameIndex = state.frames.length - 1;
+        // The grid (or its window) may have changed: the tracking tool re-maps and re-asks.
+        state.tracking?.onFramesChanged();
 
         state.ui.setStatus(
             `✓ ${layer.productKey} cargado — ${state.frames.length} fotogramas`,
@@ -1137,6 +1142,7 @@ function initPanelControls() {
         'btn-module-b': 'panel-module-b',
         'btn-module-c': 'panel-module-c',
         'btn-settings': 'settings-panel',
+        'btn-tracking': 'panel-tracking',
     };
 
     Object.entries(panelMap).forEach(([btnId, panelId]) => {
@@ -1519,6 +1525,7 @@ const app = {
                 if (!frame) return;
                 showAllLayersAtFrame(this._currentFrame);
                 state.mapManager._currentFrameIndex = this._currentFrame;
+                state.tracking?.showAt(this._currentFrame);
                 if (this._onFrameChange) {
                     this._onFrameChange(this._currentFrame, frame);
                 }
@@ -1585,6 +1592,19 @@ const app = {
 
             updateRadarHeader(state.radar);
             fitMapToRadar(state.radar, state.mapManager);
+
+            // Storm tracking tool: not awaited, so its availability check never delays the fields.
+            initRadarTracking({
+                radarCode:       RADAR_CODE,
+                map:             state.mapManager.getMap(),
+                permissions,
+                getWindow:       () => state.ui.getTimeRangeValues(),
+                getGridFrames:   () => state.frames,
+                getCurrentFrame: () => state.mapManager._currentFrameIndex,
+            }).then(tool => {
+                state.tracking = tool;
+                if (tool && state.frames.length) tool.onFramesChanged();
+            }).catch(err => console.warn('tracking tool unavailable:', err));
 
             const storedHours = parseFloat(
                 localStorage.getItem(SETTINGS_KEY_TIME_HOURS)

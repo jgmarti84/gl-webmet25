@@ -48,6 +48,9 @@ class Job:
     config: Dict[str, Any]
     #: Track only the newest N volumes of [start, end]; None = all of them.
     last_n: Optional[int] = None
+    #: The volumes resolved at submission (see `volumes_cache_key`). The run
+    #: uses exactly these, so the result matches the key it is cached under.
+    volumes: Optional[List[Any]] = None
     status: JobStatus = JobStatus.PENDING
     volumes_total: int = 0
     volumes_done: int = 0
@@ -89,6 +92,28 @@ def cache_key(radar: str, start: datetime, end: datetime, config: Dict[str, Any]
     return hashlib.sha256(blob.encode()).hexdigest()[:32]
 
 
+def volumes_cache_key(radar: str, volumes: List[Any], config: Dict[str, Any]) -> str:
+    """Identity of a tracking run, from the volumes it will process.
+
+    Better than keying on the requested window: a window whose end is "now"
+    can gain a cube after the first request (cubes are indexed a little after
+    the images), and a window key would keep serving the result without it.
+    Two requests that resolve to the same volumes (with the same lead-in
+    split) and the same config produce the same frames, whatever window was
+    asked for.
+    """
+    blob = json.dumps(
+        {
+            "radar": radar.upper(),
+            "volumes": [[v.timestamp.isoformat(), bool(v.lead_in)] for v in volumes],
+            "config": config,
+        },
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(blob.encode()).hexdigest()[:32]
+
+
 class JobStore:
     """Thread-safe job registry with a bounded result cache."""
 
@@ -104,7 +129,8 @@ class JobStore:
     # -- registry ---------------------------------------------------------
 
     def create(self, radar: str, start: datetime, end: datetime,
-               config: Dict[str, Any], last_n: Optional[int] = None) -> Job:
+               config: Dict[str, Any], last_n: Optional[int] = None,
+               volumes: Optional[List[Any]] = None) -> Job:
         job = Job(
             job_id=uuid.uuid4().hex[:16],
             radar=radar.upper(),
@@ -112,6 +138,7 @@ class JobStore:
             end=end,
             config=config,
             last_n=last_n,
+            volumes=volumes,
         )
         with self._lock:
             self._jobs[job.job_id] = job

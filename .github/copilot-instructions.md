@@ -558,6 +558,11 @@ Updates record status to MISSING in DB if file not found at serve time.
 | `webmet25_coverage_mode` | string | 'cd' | Active coverage mode id (`'cd'` or `'vig'`). Determines which volumes are queried for products and COGs |
 | `webmet25_tops_cores_visible` | boolean | false | Tops & Cores layer toggle |
 | `webmet25_tops_cores_size` | number | 8 | Circle marker radius in px |
+| `webmet25_tracking_enabled` | '0'/'1' | '0' | Storm tracking tool on (single-radar view) |
+| `webmet25_tracking_last_n` | number | 3 | Tracking: last N volumes of the window (3 / 5 / 10) |
+| `webmet25_tracking_leads` | JSON list | [18,36,54] | Tracking: forecast leads drawn (min) |
+| `webmet25_tracking_trails` | '0'/'1' | '1' | Tracking: show trails |
+| `webmet25_tracking_params` | JSON object | service defaults | Tracking settings (CAPPI, dBZ, min area, growth); shared by `/tracking` and the radar view |
 
 ---
 
