@@ -35,6 +35,20 @@ export function filterAdmins(users, query) {
     });
 }
 
+/**
+ * The institutions (or other `{name}` entries, like the "Ninguna" option) whose name matches what was typed in the
+ * institution search box of the user form. Same rule as filterAdmins: every word must appear in the name, ignoring
+ * case and accents; an empty search keeps everything. Entries come back as given and in the same order.
+ */
+export function filterOrganizations(items, query) {
+    const words = plain(query).split(/\s+/).filter(Boolean);
+    if (words.length === 0) return items;
+    return items.filter((item) => {
+        const haystack = plain(item.name);
+        return words.every((word) => haystack.includes(word));
+    });
+}
+
 /** The "admin" block of the request for the chosen option, or null for "no admin for now". Throws a Spanish message. */
 function adminBlock(values) {
     if (values.adminMode === 'new') {

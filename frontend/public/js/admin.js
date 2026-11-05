@@ -1,6 +1,6 @@
 import { adminApi, EXPIRED_SESSION_MESSAGE } from './admin-api.js';
 import { authApi, redirectToLogin } from './auth-api.js';
-import { buildOrganizationPayload, eligibleAdmins, filterAdmins } from './shared/org-form.js';
+import { buildOrganizationPayload, eligibleAdmins, filterAdmins, filterOrganizations } from './shared/org-form.js';
 import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
 
@@ -2103,21 +2103,23 @@ function openUserForm(user = null) {
     // demotes it to viewer and unlinks it in one step.
     const canLeave = isEdit && user.role === 'org_admin' && Boolean(user.organization_id);
     const currentOrgId = user?.organization_id ?? null;
-    const orgOptions = ['<option value="">Ninguna</option>',
-        ...(state.organizations || []).map((org) =>
-            `<option value="${org.id}"${canMove && org.id === currentOrgId ? ' selected' : ''}>${safeText(org.name)}</option>`)].join('');
+    // The institution is picked in a search box (typing filters by name), not in a plain select. The first entry is
+    // always "Ninguna". An institution admin only has two entries: its institution, or "Ninguna", which demotes it.
     let orgField = '';
-    if (!isEdit) {
-        orgField = `<label>Institución <select name="organization_id">${orgOptions}</select></label>`;
-    } else if (canMove) {
-        orgField = `<label>Institución <select name="organization_id">${orgOptions}</select></label>
-            <p class="toolbar-note" id="org-move-note"></p>`;
-    } else if (canLeave) {
-        orgField = `<label>Institución <select name="organization_id">
-                <option value="${user.organization_id}" selected>${safeText(user.organization_name)}</option>
-                <option value="">Ninguna (lo baja a lector y lo desvincula)</option>
-            </select></label>
-            <p class="toolbar-note" id="org-move-note"></p>`;
+    let orgItems = [];
+    if (!isEdit || canMove || canLeave) {
+        const none = { id: '', name: canLeave ? 'Ninguna (lo baja a lector y lo desvincula)' : 'Ninguna' };
+        orgItems = canLeave
+            ? [{ id: user.organization_id, name: user.organization_name }, none]
+            : [none, ...(state.organizations || [])];
+        const current = isEdit && currentOrgId !== null ? orgItems.find((item) => item.id === currentOrgId) : null;
+        orgField = `<label for="user-org-search">Institución</label>
+            <div class="combo">
+                <input id="user-org-search" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="user-org-list" autocomplete="off" placeholder="Ninguna: escribí para buscar una institución…" value="${current ? safeText(current.name) : ''}" data-picked="${current ? '1' : ''}">
+                <input type="hidden" name="organization_id" value="${current ? current.id : ''}">
+                <ul id="user-org-list" class="combo-list" role="listbox" hidden></ul>
+            </div>
+            ${isEdit ? '<p class="toolbar-note" id="org-move-note"></p>' : ''}`;
     } else if (user.organization_name) {
         orgField = `<p class="toolbar-note">Institución: ${safeText(user.organization_name)}</p>`;
     }
@@ -2138,6 +2140,10 @@ function openUserForm(user = null) {
                 email: formData.get('email') || null,
             };
             if (!isSelf) payload.role = formData.get('role');
+            const orgSearch = elements.formModalBody.querySelector('#user-org-search');
+            if (orgSearch && orgSearch.value.trim() && !orgSearch.dataset.picked) {
+                throw new Error('Elegí una institución de la lista, o dejá el campo vacío para ninguna');
+            }
             let message;
             if (isEdit) {
                 if (canLeave && !formData.get('organization_id')) {
@@ -2165,13 +2171,100 @@ function openUserForm(user = null) {
             showMessage(message, 'success');
         },
     );
+    if (orgItems.length) wireOrgCombobox(orgItems);
     if (canMove) wireMoveNote(user, currentOrgId);
     if (canLeave) wireLeaveNote(user);
 }
 
+/**
+ * The institution search box of the user form. Typing filters the entries by name (see filterOrganizations); each
+ * shows its seats when it has them. Click or Enter picks the highlighted one (arrows move, Esc closes). The picked id
+ * goes in the hidden field `organization_id` ('' = Ninguna), which is what the form reads; typing again forgets the
+ * pick. The hidden field fires "change" after a pick or a typing, so the notes under the box can react. The list is
+ * drawn inside the form, like the admin picker, so the modal scrolls with it.
+ */
+function wireOrgCombobox(items) {
+    const form = elements.formModalBody;
+    const input = form.querySelector('#user-org-search');
+    const hidden = form.querySelector('input[name="organization_id"]');
+    const list = form.querySelector('#user-org-list');
+    let shown = [];
+    let active = -1;
+
+    const detail = (item) => {
+        if (item.seat_limit === undefined) return '';
+        return `${item.seats_used} de ${item.seat_limit} lugares${item.is_active === false ? ' · inactiva' : ''}`;
+    };
+    const optionId = (item) => `user-org-opt-${item.id === '' ? 'none' : item.id}`;
+    const optionHtml = (item, index) => `
+        <li role="option" id="${optionId(item)}" data-id="${item.id}" aria-selected="${index === active}">
+            <span class="combo-main"><strong>${safeText(item.name)}</strong></span>
+            ${detail(item) ? `<small class="combo-mail">${safeText(detail(item))}</small>` : ''}
+        </li>`;
+
+    const close = () => {
+        list.hidden = true;
+        list.innerHTML = '';
+        input.setAttribute('aria-expanded', 'false');
+        input.removeAttribute('aria-activedescendant');
+        active = -1;
+    };
+    // What is searched: what is typed, unless an entry is already picked (then the whole list is offered again).
+    const open = () => {
+        shown = filterOrganizations(items, input.dataset.picked ? '' : input.value);
+        if (active >= shown.length) active = shown.length - 1;
+        list.innerHTML = shown.length
+            ? shown.map(optionHtml).join('')
+            : '<li class="combo-empty">Ninguna institución coincide con la búsqueda</li>';
+        list.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+        if (active >= 0 && shown[active]) input.setAttribute('aria-activedescendant', optionId(shown[active]));
+    };
+    const pick = (item) => {
+        // "Ninguna" is shown as text but sends '' (no institution); typing later forgets it like any pick.
+        hidden.value = String(item.id);
+        input.value = item.name;
+        input.dataset.picked = '1';
+        close();
+        hidden.dispatchEvent(new Event('change'));
+    };
+    const move = (step) => {
+        if (!shown.length) return;
+        active = (active + step + shown.length) % shown.length;
+        open();
+        list.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+    };
+
+    input.addEventListener('focus', open);
+    input.addEventListener('input', () => {
+        hidden.value = '';
+        input.dataset.picked = '';
+        active = 0;
+        open();
+        hidden.dispatchEvent(new Event('change'));
+    });
+    input.addEventListener('blur', close);
+    input.addEventListener('keydown', (event) => {
+        const isOpen = !list.hidden;
+        if (event.key === 'ArrowDown') { event.preventDefault(); if (isOpen) move(1); else open(); }
+        else if (event.key === 'ArrowUp') { event.preventDefault(); if (isOpen) move(-1); }
+        else if (event.key === 'Enter' && isOpen) {
+            event.preventDefault();  // Enter picks, it does not submit the form
+            if (active >= 0 && shown[active]) pick(shown[active]);
+        } else if (event.key === 'Escape' && isOpen) { event.stopPropagation(); close(); }
+    });
+    // mousedown (not click) so the box keeps the focus and its blur does not close the list before the pick.
+    list.addEventListener('mousedown', (event) => {
+        const item = event.target.closest('[role="option"]');
+        if (!item) return;
+        event.preventDefault();
+        pick(shown.find((entry) => String(entry.id) === item.dataset.id));
+    });
+}
+
 /** Under the selector of an institution admin: say what choosing "Ninguna" does before saving. */
 function wireLeaveNote(user) {
-    const select = elements.formModalBody.querySelector('select[name="organization_id"]');
+    const select = elements.formModalBody.querySelector('input[name="organization_id"]');
     const note = elements.formModalBody.querySelector('#org-move-note');
     const update = () => {
         note.textContent = select.value ? ''
@@ -2194,7 +2287,7 @@ function describeViews(views) {
  * joining a company REPLACES the account's views with the company's list (and closes its sessions); leaving keeps them.
  */
 function wireMoveNote(user, currentOrgId) {
-    const select = elements.formModalBody.querySelector('select[name="organization_id"]');
+    const select = elements.formModalBody.querySelector('input[name="organization_id"]');
     const note = elements.formModalBody.querySelector('#org-move-note');
     const update = () => {
         const chosen = select.value ? Number(select.value) : null;
