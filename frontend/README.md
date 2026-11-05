@@ -124,6 +124,11 @@ Key behaviors:
 | `webmet25_smooth_enabled` | false | Gaussian smoothing toggle |
 | `webmet25_smooth_sigma` | 0.8 | Gaussian sigma |
 | `webmet25_selected_basemap` | 'argenmap' | Active basemap key |
+| `webmet25_tracking_enabled` | '0' | Storm tracking tool on (radar view) |
+| `webmet25_tracking_last_n` | 3 | Tracking: last N volumes (3 / 5 / 10) |
+| `webmet25_tracking_leads` | [18,36,54] | Tracking: forecast leads drawn (min) |
+| `webmet25_tracking_trails` | '1' | Tracking: show trails |
+| `webmet25_tracking_params` | service defaults | Tracking settings, shared with `/tracking` |
 
 ---
 

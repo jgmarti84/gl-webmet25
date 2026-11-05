@@ -68,6 +68,11 @@
             <span class="icon-badge" id="badge-module-c">1.5h</span>
         </button>
 
+        <!-- Storm tracking tool (v2/radar-tracking.js). Hidden until the tracking service answers for this radar. -->
+        <button id="btn-tracking" class="icon-btn" title="Seguimiento de tormentas" aria-label="Seguimiento de tormentas" style="display:none;">
+            <span class="icon-glyph">⛈</span>
+        </button>
+
         <!-- Gear – Settings -->
         <button id="btn-settings" class="icon-btn" title="Configuración" aria-label="Abrir configuración">
             <span class="icon-glyph">⚙</span>
@@ -168,6 +173,84 @@
                     <button id="btn-load-timerange" class="action-btn secondary" disabled>Cargar rango</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- ===== STORM TRACKING (v2/radar-tracking.js) ===== -->
+    <div id="panel-tracking" class="floating-panel" style="display:none;">
+        <div class="panel-header">
+            <span>⛈ Seguimiento de tormentas</span>
+            <button class="panel-close" data-close="panel-tracking" aria-label="Cerrar panel">✕</button>
+        </div>
+        <div class="panel-body">
+            <div class="control-group toggle-row">
+                <label class="toggle-switch-wrapper" for="toggle-tracking">
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="toggle-tracking">
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span class="toggle-label">Mostrar seguimiento</span>
+                </label>
+            </div>
+
+            <div class="trk-section">
+                <div class="trk-section-title">Últimos volúmenes de la ventana</div>
+                <div class="trk-lastn" role="group" aria-label="Cantidad de volúmenes a seguir">
+                    <button type="button" class="trk-lastn-btn" data-n="3">3</button>
+                    <button type="button" class="trk-lastn-btn" data-n="5">5</button>
+                    <button type="button" class="trk-lastn-btn" data-n="10">10</button>
+                </div>
+            </div>
+
+            <div class="trk-section">
+                <div class="trk-section-title">Pronósticos</div>
+                <!-- One checkbox per lead, built by radar-tracking.js from tracking.js's FORECAST_LEADS. -->
+                <div id="trk-leads" class="trk-leads"></div>
+            </div>
+
+            <div class="control-group toggle-row">
+                <label class="toggle-switch-wrapper" for="toggle-trk-trails">
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="toggle-trk-trails" checked>
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span class="toggle-label">Trayectorias</span>
+                </label>
+            </div>
+
+            <!-- Same four settings as the /tracking page (shared localStorage key). Ranges match the service. -->
+            <details class="trk-details" open>
+                <summary>Parámetros del seguimiento</summary>
+                <div class="trk-params">
+                    <label for="trk-param-cappi">CAPPI (m sobre la antena)</label>
+                    <input type="number" id="trk-param-cappi" min="500" max="15000" step="100" value="2500">
+                    <label for="trk-param-dbz">Umbral de detección (dBZ)</label>
+                    <input type="number" id="trk-param-dbz" min="0" max="75" step="0.5" value="35">
+                    <label for="trk-param-area">Área mínima (km²)</label>
+                    <input type="number" id="trk-param-area" min="1" max="10000" step="1" value="50">
+                </div>
+                <div class="control-group toggle-row" title="Apagado: el pronóstico conserva el tamaño actual del sistema y sólo se desplaza">
+                    <label class="toggle-switch-wrapper" for="trk-param-scale">
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="trk-param-scale" checked>
+                            <span class="toggle-slider"></span>
+                        </span>
+                        <span class="toggle-label">Crecimiento en pronósticos</span>
+                    </label>
+                </div>
+                <div class="trk-params-footer">
+                    <button id="btn-trk-reset" type="button" class="link-btn" title="Volver a los valores por defecto">Restablecer</button>
+                    <button id="btn-trk-apply" type="button" class="action-btn secondary">Recalcular seguimiento</button>
+                </div>
+            </details>
+
+            <div id="trk-status" class="trk-status" role="status" aria-live="polite"></div>
+
+            <!-- Read-only: the values the run actually used, read back from the service. -->
+            <details class="trk-details">
+                <summary>Configuración en uso</summary>
+                <table id="trk-config-table" class="trk-config-table"></table>
+            </details>
         </div>
     </div>
 

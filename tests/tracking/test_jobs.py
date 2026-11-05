@@ -8,7 +8,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from tracking_api.jobs import Job, JobStatus, JobStore, cache_key
+from tracking_api.jobs import Job, JobStatus, JobStore, cache_key, volumes_cache_key
+from tracking_api.volumes import Volume
 
 T0 = datetime(2026, 10, 20, 12, 0, 0, tzinfo=timezone.utc)
 T1 = T0 + timedelta(hours=1)
@@ -51,6 +52,25 @@ class TestCacheKey:
         """Growth on and off give different forecasts: two cache entries."""
         on, off = dict(CFG, apply_scale=True), dict(CFG, apply_scale=False)
         assert cache_key("RMA1", T0, T1, on) != cache_key("RMA1", T0, T1, off)
+
+
+class TestVolumesCacheKey:
+    VOLS = [Volume(T0, "/a.nc", lead_in=True), Volume(T1, "/b.nc")]
+
+    def test_is_deterministic(self):
+        assert volumes_cache_key("RMA1", self.VOLS, CFG) == volumes_cache_key("rma1", list(self.VOLS), CFG)
+
+    def test_differs_by_volumes(self):
+        assert volumes_cache_key("RMA1", self.VOLS, CFG) != volumes_cache_key("RMA1", self.VOLS[:1], CFG)
+
+    def test_differs_by_lead_in_split(self):
+        """Same cubes, different warm-up split = different frames."""
+        other = [Volume(T0, "/a.nc"), Volume(T1, "/b.nc")]
+        assert volumes_cache_key("RMA1", self.VOLS, CFG) != volumes_cache_key("RMA1", other, CFG)
+
+    def test_differs_by_config(self):
+        assert volumes_cache_key("RMA1", self.VOLS, CFG) != volumes_cache_key(
+            "RMA1", self.VOLS, {**CFG, "dbz_threshold": 40.0})
 
 
 class TestJobStore:

@@ -44,7 +44,9 @@ frontend/public/
 said OSM/`selectedBasemap`, that was stale), `webmet25_show_filtered_fields`,
 `webmet25_show_inactive_radars`, `webmet25_coverage_mode` (`cd`), `webmet25_coverage_visible`,
 `webmet25_coverage_opacity` (0.4), `webmet25_tops_cores_visible`, `webmet25_tops_cores_size`,
-`webmet25_smooth_enabled`, `webmet25_smooth_sigma`, `webmet25_live_refresh_interval_ms`.
+`webmet25_smooth_enabled`, `webmet25_smooth_sigma`, `webmet25_live_refresh_interval_ms`,
+`webmet25_tracking_enabled` / `_last_n` / `_leads` / `_trails` / `_params` (storm tracking tool of the
+radar view, `js/v2/radar-tracking.js`).
 Time window lives in `state.activeTimeWindowHours` (default 1.5h), not localStorage.
 
 ## Adding a control (the pattern)

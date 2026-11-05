@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from tracking_api import volumes as volumes_mod
 from tracking_api.config import settings
 from tracking_api.db import check_connection, get_db, session_scope
-from tracking_api.jobs import Job, JobStatus, cache_key, store
+from tracking_api.jobs import Job, JobStatus, store, volumes_cache_key
 from tracking_api.schemas import (
     AvailabilityItem,
     AvailabilityResponse,
@@ -110,10 +110,12 @@ def _execute(job: Job) -> None:
     cfg = build_config(TrackingConfig(**job.config))
     job.config_in_force = config_summary(cfg)
 
-    with session_scope() as session:
-        vols = volumes_mod.resolve_window(
-            session, job.radar, job.start, job.end, last_n=job.last_n
-        )
+    vols = job.volumes
+    if vols is None:
+        with session_scope() as session:
+            vols = volumes_mod.resolve_window(
+                session, job.radar, job.start, job.end, last_n=job.last_n
+            )
 
     if not vols:
         job.frames = []
@@ -141,8 +143,15 @@ def _execute(job: Job) -> None:
 RADAR_CODE = Path(..., pattern=r"^[A-Za-z0-9]{1,16}$", description="Radar code, e.g. RMA1")
 
 
-def _submit(radar: str, request: RadarJobRequest) -> JobCreated:
-    """Queue (or serve from cache) one tracking run. Shared by both routes."""
+def _submit(radar: str, request: RadarJobRequest, db: Session) -> JobCreated:
+    """Queue (or serve from cache) one tracking run. Shared by both routes.
+
+    The window is resolved to volumes here, in the request (one indexed
+    query), and the cache is keyed on those volumes. A run that is still
+    in progress is in the cache too, so identical requests arriving together
+    (several viewers of one radar in live mode) share one run. A failed run is
+    not reused: the next identical request starts a new one.
+    """
     if request.last_n is not None and request.last_n > settings.max_last_n:
         raise HTTPException(
             status_code=422,
@@ -150,24 +159,24 @@ def _submit(radar: str, request: RadarJobRequest) -> JobCreated:
         )
     radar = radar.upper()
     config = request.config.model_dump()
-    key = cache_key(radar, request.start, request.end, config, request.last_n)
+    vols = volumes_mod.resolve_window(
+        db, radar, request.start, request.end, last_n=request.last_n
+    )
+    key = volumes_cache_key(radar, vols, config)
 
     hit = store.find_cached(key)
-    if hit is not None:
+    if hit is not None and hit.status is not JobStatus.ERROR:
         return JobCreated(
             job_id=hit.job_id, status=hit.status.value, radar=hit.radar,
             start=hit.start, end=hit.end, last_n=hit.last_n,
             volumes_total=hit.volumes_total, cached=True,
         )
 
-    job = store.create(radar, request.start, request.end, config, last_n=request.last_n)
-
-    def run_and_cache(j: Job) -> None:
-        _execute(j)
-        j.cached = False
-        store.put_cached(key, j)
-
-    store.submit(job, run_and_cache)
+    job = store.create(
+        radar, request.start, request.end, config, last_n=request.last_n, volumes=vols
+    )
+    store.put_cached(key, job)
+    store.submit(job, _execute)
 
     return JobCreated(
         job_id=job.job_id, status=job.status.value, radar=job.radar,
@@ -177,7 +186,7 @@ def _submit(radar: str, request: RadarJobRequest) -> JobCreated:
 
 
 @router.post("/jobs", response_model=JobCreated, status_code=202)
-def submit_job(request: VolumeWindow) -> JobCreated:
+def submit_job(request: VolumeWindow, db: Session = Depends(get_db)) -> JobCreated:
     """Queue a tracking run over a radar and time window.
 
     Returns 202 immediately; poll ``/jobs/{job_id}`` for the result. Tracking a
@@ -190,7 +199,7 @@ def submit_job(request: VolumeWindow) -> JobCreated:
     The radar-scoped route below is preferred for new clients; this one stays
     for the standalone /tracking page.
     """
-    return _submit(request.radar, request)
+    return _submit(request.radar, request, db)
 
 
 @router.get("/radars/{radar}/availability", response_model=RadarAvailability)
@@ -215,13 +224,17 @@ def get_radar_availability(
 
 
 @router.post("/radars/{radar}/jobs", response_model=JobCreated, status_code=202)
-def submit_radar_job(request: RadarJobRequest, radar: str = RADAR_CODE) -> JobCreated:
+def submit_radar_job(
+    request: RadarJobRequest,
+    radar: str = RADAR_CODE,
+    db: Session = Depends(get_db),
+) -> JobCreated:
     """Like ``POST /jobs``, with the radar in the path.
 
     The radar lives in the URL so that a future per-radar permission can be
     checked by nginx from the path alone, without reading the body.
     """
-    return _submit(radar, request)
+    return _submit(radar, request, db)
 
 
 @router.get("/jobs/{job_id}", response_model=JobResult)

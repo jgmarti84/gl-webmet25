@@ -324,3 +324,34 @@ export async function getIPGeolocation() {
     if (!data.latitude || !data.longitude) throw new Error('No coordinates in IP geo response');
     return { lat: data.latitude, lon: data.longitude };
 }
+/**
+ * Tracking frames -> the view's frame grid: Map(gridIndex -> trackingIndex).
+ *
+ * The same rule the field layers use (loadLayerFramesForRange): a frame goes
+ * into the slot nearest its timestamp (Math.round on the grid step), the
+ * latest one wins a slot, and frames outside the grid are dropped. So a
+ * tracking overlay is drawn over the images of the same volume, and grid
+ * slots without a tracking frame map to nothing (the overlay is cleared).
+ *
+ * @param {Array<{timestamp: string}>} trackingFrames  job result frames
+ * @param {Array<{displayTimestamp: string}>} gridFrames  state.frames
+ * @param {number} stepMs  grid step (10 min)
+ */
+export function buildTrackingSlotMap(trackingFrames, gridFrames, stepMs = 10 * 60 * 1000) {
+    const slotToGrid = new Map(
+        (gridFrames || []).map((f, i) => [new Date(f.displayTimestamp).getTime(), i])
+    );
+    const map = new Map();
+    const latest = new Map();
+    (trackingFrames || []).forEach((frame, index) => {
+        const t = Date.parse(frame?.timestamp);
+        if (!Number.isFinite(t)) return;
+        const gridIndex = slotToGrid.get(Math.round(t / stepMs) * stepMs);
+        if (gridIndex === undefined) return;
+        if (!latest.has(gridIndex) || t > latest.get(gridIndex)) {
+            latest.set(gridIndex, t);
+            map.set(gridIndex, index);
+        }
+    });
+    return map;
+}

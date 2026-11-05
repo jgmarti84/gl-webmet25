@@ -1613,6 +1613,12 @@ of what the view already shows. The `/tracking` page stays for now.
   Playwright e2e with `/api/tracking/*` faked through `page.route`: button hidden on
   502, disabled on `count: 0`, polygons on the right frames, removed when off.
 
+**Added in PR 2 (service):** the result cache is keyed on the **volumes a request resolves
+to**, not on the requested window. In live mode the window end is the newest image, and its
+cube can be indexed a little later; a window key kept serving the result without it. A run
+still in progress is cached too, so identical requests (several viewers of one radar) share
+one run; a failed run is never reused.
+
 ### 15.4 Not in this step
 
 - The per-radar permission (§15.5).
