@@ -119,6 +119,11 @@ def update_user(db: Session, actor: User, user: User, changes: dict) -> User:
             user.email = new_email
             if user.email_verified_at is None:
                 user.email_verified_at = datetime.now(timezone.utc)  # the admin vouches for it
+            # The Google link belongs to the OLD mail (we keep only Google's id, not its mail, so they cannot be
+            # compared). Keeping it would leave the old Google account tied to this user: it would log in as this
+            # user, and an invitation to that Google account would be refused as "already linked". Dropping it frees
+            # that Google account; the person links the new mail on their next Google login (found by mail).
+            user.google_sub = None
 
     must_revoke = False
     if new_role is not None and new_role != user.role:
