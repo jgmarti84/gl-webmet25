@@ -16,6 +16,25 @@ export function eligibleAdmins(users) {
         .sort((a, b) => a.username.localeCompare(b.username));
 }
 
+/** Lower case and without accents, so "Perez" finds "Pérez" and "MARIA" finds "María". */
+function plain(text) {
+    return String(text || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+/**
+ * The users whose username, name or mail match what was typed in the search box. The text is split into words and
+ * ALL of them must appear somewhere in "username name mail" (in any order), ignoring case and accents. An empty
+ * search keeps everybody. The users come back as they were given (not copies) and in the same order.
+ */
+export function filterAdmins(users, query) {
+    const words = plain(query).split(/\s+/).filter(Boolean);
+    if (words.length === 0) return users;
+    return users.filter((user) => {
+        const haystack = plain(`${user.username} ${user.full_name || ''} ${user.email || ''}`);
+        return words.every((word) => haystack.includes(word));
+    });
+}
+
 /** The "admin" block of the request for the chosen option, or null for "no admin for now". Throws a Spanish message. */
 function adminBlock(values) {
     if (values.adminMode === 'new') {

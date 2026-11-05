@@ -1,6 +1,6 @@
 import { adminApi, EXPIRED_SESSION_MESSAGE } from './admin-api.js';
 import { authApi, redirectToLogin } from './auth-api.js';
-import { buildOrganizationPayload, eligibleAdmins } from './shared/org-form.js';
+import { buildOrganizationPayload, eligibleAdmins, filterAdmins } from './shared/org-form.js';
 import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
 
@@ -2287,11 +2287,7 @@ async function renderOrganizations() {
  * The extra blocks of the form that CREATES a company (not shown when editing): who administers it and which radar
  * views it has. Both are optional and are sent in the same request as the company, which is created all or nothing.
  */
-function organizationExtrasHtml(users, radars) {
-    const candidates = eligibleAdmins(users);
-    const options = candidates.length
-        ? candidates.map((user) => `<option value="${user.id}">${safeText(user.username)}${user.full_name ? ` (${safeText(user.full_name)})` : ''}</option>`).join('')
-        : '<option value="" disabled>No hay usuarios disponibles</option>';
+function organizationExtrasHtml(radars) {
     const radarRows = radars.length
         ? radars.map((radar) => `
             <label class="checkbox-row">
@@ -2312,7 +2308,12 @@ function organizationExtrasHtml(users, radars) {
             </div>
             <label class="checkbox-row"><input type="radio" name="admin_mode" value="existing"> Elegir uno que ya existe</label>
             <div id="org-admin-existing" class="org-admin-fields" hidden>
-                <label>Usuario <select name="admin_user_id"><option value="">Elegí un usuario…</option>${options}</select></label>
+                <label for="org-admin-search">Usuario</label>
+                <div class="combo">
+                    <input id="org-admin-search" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="org-admin-list" autocomplete="off" placeholder="Escribí para buscar por usuario, nombre o mail…">
+                    <input type="hidden" name="admin_user_id" value="">
+                    <ul id="org-admin-list" class="combo-list" role="listbox" hidden></ul>
+                </div>
                 <p class="toolbar-note">Solo se ofrecen lectores activos que no están en ninguna institución. Pasa a ser administrador de esta institución: se le cierran las sesiones y sus vistas propias se reemplazan por las de la institución.</p>
             </div>
             <label class="checkbox-row"><input type="radio" name="admin_mode" value="none"> Sin administrador por ahora</label>
@@ -2338,16 +2339,101 @@ function wireAdminModeBlocks() {
 }
 
 /**
+ * The search box that picks the admin among the users that can be chosen. Typing filters the list by username, name
+ * or mail (see filterAdmins); each option shows the username and name, and the mail under them. Click or Enter picks
+ * the highlighted one (arrows move, Esc closes). The id of the picked user goes in the hidden field `admin_user_id`,
+ * which is what the form sends; typing again forgets the pick. The list is drawn inside the form (not floating over
+ * it), so the modal can scroll with it.
+ */
+function wireAdminCombobox(candidates) {
+    const form = elements.formModalBody;
+    const input = form.querySelector('#org-admin-search');
+    const hidden = form.querySelector('input[name="admin_user_id"]');
+    const list = form.querySelector('#org-admin-list');
+    let shown = [];
+    let active = -1;
+
+    const optionHtml = (user, index) => `
+        <li role="option" id="org-admin-opt-${user.id}" data-id="${user.id}" aria-selected="${index === active}">
+            <span class="combo-main"><strong>${safeText(user.username)}</strong>${user.full_name ? ` <span class="combo-name">${safeText(user.full_name)}</span>` : ''}</span>
+            <small class="combo-mail">${user.email ? safeText(user.email) : 'sin mail'}</small>
+        </li>`;
+
+    const close = () => {
+        list.hidden = true;
+        list.innerHTML = '';  // nothing stale in the page while it is closed
+        input.setAttribute('aria-expanded', 'false');
+        input.removeAttribute('aria-activedescendant');
+        active = -1;
+    };
+
+    // What is searched: what is typed, unless a user is already picked (then the whole list is offered again).
+    const open = () => {
+        const query = hidden.value ? '' : input.value;
+        shown = filterAdmins(candidates, query);
+        if (active >= shown.length) active = shown.length - 1;
+        if (shown.length) {
+            list.innerHTML = shown.map(optionHtml).join('');
+        } else {
+            const text = candidates.length ? 'Ningún usuario coincide con la búsqueda' : 'No hay usuarios disponibles';
+            list.innerHTML = `<li class="combo-empty">${text}</li>`;
+        }
+        list.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+        if (active >= 0 && shown[active]) input.setAttribute('aria-activedescendant', `org-admin-opt-${shown[active].id}`);
+    };
+
+    const pick = (user) => {
+        hidden.value = String(user.id);
+        input.value = user.full_name ? `${user.username} — ${user.full_name}` : user.username;
+        close();
+    };
+
+    const move = (step) => {
+        if (!shown.length) return;
+        active = (active + step + shown.length) % shown.length;
+        open();
+        list.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+    };
+
+    input.addEventListener('focus', open);
+    input.addEventListener('input', () => {
+        hidden.value = '';  // typing again forgets the pick
+        active = 0;
+        open();
+    });
+    input.addEventListener('blur', close);
+    input.addEventListener('keydown', (event) => {
+        const isOpen = !list.hidden;
+        if (event.key === 'ArrowDown') { event.preventDefault(); if (isOpen) move(1); else open(); }
+        else if (event.key === 'ArrowUp') { event.preventDefault(); if (isOpen) move(-1); }
+        else if (event.key === 'Enter' && isOpen) {
+            event.preventDefault();  // Enter picks, it does not submit the form
+            if (active >= 0 && shown[active]) pick(shown[active]);
+        } else if (event.key === 'Escape' && isOpen) { event.stopPropagation(); close(); }
+    });
+    // mousedown (not click) so the box keeps the focus and its blur does not close the list before the pick.
+    list.addEventListener('mousedown', (event) => {
+        const item = event.target.closest('[role="option"]');
+        if (!item) return;
+        event.preventDefault();
+        pick(candidates.find((user) => String(user.id) === item.dataset.id));
+    });
+}
+
+/**
  * Create or edit a company. Editing: name, seat limit and whether it is active. Creating adds, in the same form, the
  * company admin (a new user, an existing one, or none for now) and the radar views of the company.
  */
 async function openOrganizationForm(org = null) {
     const isEdit = Boolean(org);
     let extras = '';
+    let candidates = [];  // the users that can be picked as the admin (the search box works on them)
     if (!isEdit) {
         try {
             const [users, radars] = await Promise.all([adminApi.listUsers(), adminApi.listRadars()]);
-            extras = organizationExtrasHtml(users, radars.filter((radar) => radar.detail_view_enabled));
+            candidates = eligibleAdmins(users);
+            extras = organizationExtrasHtml(radars.filter((radar) => radar.detail_view_enabled));
         } catch (error) {
             showMessage(error.message || 'No se pudo preparar el formulario', 'error');
             return;
@@ -2395,7 +2481,10 @@ async function openOrganizationForm(org = null) {
             showMessage(`Institución ${payload.name} creada${payload.admin ? ' con su administrador' : ''}`, 'success');
         },
     );
-    if (!isEdit) wireAdminModeBlocks();
+    if (!isEdit) {
+        wireAdminModeBlocks();
+        wireAdminCombobox(candidates);
+    }
 }
 
 function openPasswordResetForm(user) {

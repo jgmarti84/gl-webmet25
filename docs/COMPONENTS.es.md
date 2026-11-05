@@ -449,7 +449,7 @@ Pipeline de composición en canvas:
 
 **Archivo:** [`frontend/public/js/shared/org-form.js`](../../frontend/public/js/shared/org-form.js)
 
-**Responsabilidad:** `eligibleAdmins(users)` lista a quién se puede ofrecer como admin de una empresa nueva (lectores activos que no están en ninguna empresa, ordenados por nombre) y `buildOrganizationPayload(values)` arma el cuerpo de `POST /admin/organizations` desde el formulario: la empresa y, solo si se eligió, el bloque `admin` (`mode: "new"` con los datos del usuario, o `mode: "existing"` con `user_id`) y `radar_detail_view` (`["*"]` para "Todas"). Lanza un mensaje en español cuando una opción está incompleta. `admin.js` dibuja el formulario; la lógica vive acá para poder probarla (`tests/js/test_org_form.mjs`).
+**Responsabilidad:** `eligibleAdmins(users)` lista a quién se puede ofrecer como admin de una empresa nueva (lectores activos que no están en ninguna empresa, ordenados por nombre), `filterAdmins(users, query)` los filtra para la caja de búsqueda (por usuario, nombre o mail, sin distinguir mayúsculas ni tildes) y `buildOrganizationPayload(values)` arma el cuerpo de `POST /admin/organizations` desde el formulario: la empresa y, solo si se eligió, el bloque `admin` (`mode: "new"` con los datos del usuario, o `mode: "existing"` con `user_id`) y `radar_detail_view` (`["*"]` para "Todas"). Lanza un mensaje en español cuando una opción está incompleta. `admin.js` dibuja el formulario; la lógica vive acá para poder probarla (`tests/js/test_org_form.mjs`).
 
 ### **shared/profile-section.js** — El perfil, dibujado dentro de cualquier página (spec D)
 

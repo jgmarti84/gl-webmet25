@@ -86,10 +86,15 @@ def test_an_existing_user_without_company_can_be_the_admin_and_one_with_company_
         page.reload(wait_until="networkidle")
         _open_form(page, names["org"], "2")
         page.check("input[name=admin_mode][value=existing]")
-        select = page.locator("select[name=admin_user_id]")
-        expect(select.locator("option", has_text=names["user"])).to_have_count(1)
-        expect(select.locator("option", has_text=member_name)).to_have_count(0)  # it is in another company
-        select.select_option(str(viewer.json()["id"]))
+        # The user is picked from a search box (typing filters the list by username, name or mail).
+        search = page.locator("#org-admin-search")
+        options = page.locator("#org-admin-list [role=option]")
+        search.fill(names["user"])
+        expect(options.filter(has_text=names["user"])).to_have_count(1)
+        search.fill(member_name)
+        expect(options).to_have_count(0)  # it is in another company
+        search.fill(names["user"])
+        options.filter(has_text=names["user"]).click()
         page.click("#form-modal-body button[type=submit]")
 
         expect(page.locator("tr", has_text=names["org"])).to_contain_text("1 de 2")
