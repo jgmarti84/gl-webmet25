@@ -38,6 +38,9 @@ const PARAM_DEFAULTS = { cappi_height_m: 2500, dbz_threshold: 35, min_area_km2: 
 const PARAM_INPUTS = { cappi_height_m: 'trk-param-cappi', dbz_threshold: 'trk-param-dbz', min_area_km2: 'trk-param-area' };
 const PARAM_SWITCHES = { apply_scale: 'trk-param-scale' };
 
+const APPLY_LABEL = 'Recalcular seguimiento';
+const APPLY_LABEL_DIRTY = 'Recalcular seguimiento (cambios sin aplicar)';
+
 /** Grid rebuilds come in bursts (one per field layer); act once they settle. */
 const FRAMES_SETTLE_MS = 400;
 
@@ -112,6 +115,7 @@ class RadarTrackingTool {
         this._frames = [];
         this._slotMap = new Map();
         this._seq = 0;              // bumped by every request; older ones stop
+        this._runParams = null;     // settings of the run on screen (for the "unapplied" flag)
         this._settleTimer = null;
 
         // Opening the panel the first time loads the drawing module and builds
@@ -207,15 +211,25 @@ class RadarTrackingTool {
             this._layer.setShowTrails(trails.checked);
         });
 
-        // Tracking settings: applied with the button, not on every keystroke
+        // Tracking settings: applied only with "Recalcular seguimiento" (saved, then
+        // used by every run from then on), never on a keystroke. Edits that differ
+        // from the run on screen flag the button, as on the /tracking page.
         this._writeParams(this._restoreParams());
         el('btn-trk-apply').addEventListener('click', () => {
             const params = this._readParams();
             if (!params) return;
             localStorage.setItem(PARAMS_KEY, JSON.stringify(params));
             this._run();
+            this._updateDirty();
         });
-        el('btn-trk-reset').addEventListener('click', () => this._writeParams(PARAM_DEFAULTS));
+        el('btn-trk-reset').addEventListener('click', () => {
+            this._writeParams(PARAM_DEFAULTS);
+            this._updateDirty();
+        });
+        for (const id of [...Object.values(PARAM_INPUTS), ...Object.values(PARAM_SWITCHES)]) {
+            el(id).addEventListener('input', () => this._updateDirty());
+            el(id).addEventListener('change', () => this._updateDirty());
+        }
 
         this._status(this._enabled ? '' : 'Activá el seguimiento para calcularlo sobre la ventana actual.');
     }
@@ -233,6 +247,8 @@ class RadarTrackingTool {
             clearTimeout(this._settleTimer);
             this._frames = [];
             this._slotMap = new Map();
+            this._runParams = null;
+            this._updateDirty();
             this._layer?.clear();
             this._renderConfig(null);
             this._status('Activá el seguimiento para calcularlo sobre la ventana actual.');
@@ -257,7 +273,8 @@ class RadarTrackingTool {
         await this._ensureLoaded();
         if (!this._layer || !this._enabled) return;
 
-        const params = this._readParams({ report: false }) || this._restoreParams();
+        // The applied settings, not whatever is typed in the panel right now.
+        const params = this._restoreParams();
         const request = trackingRequest(this._opts.radarCode, this._opts.getWindow(), this._lastN, params);
         if (!request) {
             this._status('Esperando la ventana de tiempo…');
@@ -277,6 +294,8 @@ class RadarTrackingTool {
             }, { isCancelled });
             if (!result || isCancelled()) return;
 
+            this._runParams = params;
+            this._updateDirty();
             this._frames = result.frames || [];
             this._layer.setFrames(this._frames);
             this._remap();
@@ -302,6 +321,17 @@ class RadarTrackingTool {
     }
 
     // ------------------------------------------------------------ settings
+
+    /** Flag the button while the panel's settings differ from the run on screen. */
+    _updateDirty() {
+        const button = el('btn-trk-apply');
+        if (!button) return;
+        const panel = this._readParams({ report: false });
+        const dirty = !!this._runParams &&
+            (!panel || Object.keys(PARAM_DEFAULTS).some(k => panel[k] !== this._runParams[k]));
+        button.classList.toggle('dirty', dirty);
+        button.textContent = dirty ? APPLY_LABEL_DIRTY : APPLY_LABEL;
+    }
 
     _restoreParams() {
         let saved = {};

@@ -2490,7 +2490,9 @@ button.nav-link {
     color: inherit;
 }
 #panel-tracking .trk-params input:invalid { border-color: #ff6b6b; }
-#panel-tracking .trk-params-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+#panel-tracking .trk-params-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; }
+/* Settings edited but not applied yet (same cue as the /tracking page). */
+#panel-tracking #btn-trk-apply.dirty { box-shadow: 0 0 0 2px #ffd54f inset; }
 
 #panel-tracking .trk-status { font-size: 0.8rem; opacity: 0.8; margin: 8px 0; min-height: 1em; }
 #panel-tracking .trk-status.error { color: #ff6b6b; opacity: 1; }

@@ -183,3 +183,32 @@ def test_choices_survive_a_reload_and_off_stops_requests(admin_page):
     admin_page.wait_for_timeout(1500)
     assert len(bodies) == sent, "no tracking request while the tool is off"
     assert admin_page.evaluate("() => localStorage.getItem('webmet25_tracking_enabled')") == "0"
+
+
+def test_settings_apply_only_with_recalcular(admin_page):
+    """Edited settings are flagged and used only after "Recalcular seguimiento", never by other re-runs."""
+    _availability(admin_page, count=12)
+    bodies = _fake_jobs(admin_page)
+    _open(admin_page)
+    admin_page.click("#btn-tracking")
+    expect(admin_page.locator("#trk-param-dbz")).to_be_visible()  # the settings section starts open
+    _set_window(admin_page)
+    admin_page.locator("label[for='toggle-tracking']").click()
+    expect(admin_page.locator("#trk-status")).to_contain_text("Seguimiento sobre")
+    apply = admin_page.locator("#btn-trk-apply")
+    expect(apply).to_have_text("Recalcular seguimiento")
+
+    admin_page.fill("#trk-param-dbz", "40")
+    expect(apply).to_have_text("Recalcular seguimiento (cambios sin aplicar)")
+
+    # Another re-run (here: a different N) keeps the applied settings.
+    admin_page.click('.trk-lastn-btn[data-n="5"]')
+    admin_page.wait_for_function("() => document.querySelector('#trk-status').textContent.includes('Sólo hay 3')")
+    assert bodies[-1]["config"]["dbz_threshold"] == 35
+    expect(apply).to_have_text("Recalcular seguimiento (cambios sin aplicar)")
+
+    sent = len(bodies)
+    apply.click()
+    admin_page.wait_for_function(f"() => document.querySelector('#btn-trk-apply').textContent === 'Recalcular seguimiento'")
+    assert len(bodies) == sent + 1
+    assert bodies[-1]["config"]["dbz_threshold"] == 40
