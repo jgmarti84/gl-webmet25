@@ -20,6 +20,9 @@ from .routers import (
     cogs_router,
     colormap_router,
     frames_router,
+    invitations_admin_router,
+    invitations_org_router,
+    invitations_public_router,
     org_router,
     organizations_router,
     permissions_router,
@@ -54,6 +57,7 @@ async def lifespan(app: FastAPI):
     try:
         from radar_db import db_manager
         from radar_db.accounts import count_active_admins
+
         with db_manager.get_session() as session:
             if count_active_admins(session) == 0:
                 logger.warning(
@@ -224,6 +228,11 @@ app.include_router(profile_router, prefix=settings.api_prefix)
 # Company accounts: each router requires its role itself (admin / org_admin).
 app.include_router(organizations_router, prefix=settings.api_prefix)
 app.include_router(org_router, prefix=settings.api_prefix)
+# Invitations by mail: the admin's and the institution admin's need their role; the public one (the
+# invited person opening the link) needs no session.
+app.include_router(invitations_admin_router, prefix=settings.api_prefix)
+app.include_router(invitations_org_router, prefix=settings.api_prefix)
+app.include_router(invitations_public_router, prefix=settings.api_prefix)
 
 
 # Health check endpoints

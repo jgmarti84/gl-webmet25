@@ -31,8 +31,15 @@ class ExistingOrgAdmin(BaseModel):
     user_id: int
 
 
-# The "mode" field tells which of the two it is (anything else, or no mode, is a 422).
-OrgAdminChoice = Annotated[Union[NewOrgAdmin, ExistingOrgAdmin], Field(discriminator="mode")]
+class InviteOrgAdmin(BaseModel):
+    """The company admin is invited by mail (spec E): the person creates its own account from the link."""
+
+    mode: Literal["invite"]
+    email: EmailStr
+
+
+# The "mode" field tells which of the three it is (anything else, or no mode, is a 422).
+OrgAdminChoice = Annotated[Union[NewOrgAdmin, ExistingOrgAdmin, InviteOrgAdmin], Field(discriminator="mode")]
 
 
 class OrganizationCreate(BaseModel):
@@ -61,6 +68,8 @@ class OrganizationResponse(BaseModel):
     name: str
     seat_limit: int
     seats_used: int
+    # Open invitations (spec E): each one reserves a seat until it is accepted, cancelled or expires.
+    pending_invitations: int = 0
     is_active: bool
     # The company's list as saved: radar codes, or ["*"].
     radar_detail_views: List[str]

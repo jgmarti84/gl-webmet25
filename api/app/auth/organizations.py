@@ -1,14 +1,15 @@
 # api/app/auth/organizations.py
 """Company accounts (spec C §5): seats, creating company users, editing companies. Functions flush; routers commit."""
 
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, Optional
 
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from radar_db.accounts import AccountError, EmailTakenError, UsernameTakenError, create_user, revoke_all_sessions
-from radar_db.models import Organization, User
+from radar_db.models import Invitation, Organization, User
 from radar_db.passwords import PasswordPolicyError
 
 from . import permissions
@@ -33,6 +34,20 @@ class AccountExistsError(OrgRuleError):
 def seats_used(db: Session, org: Organization) -> int:
     """Active users of the company, company admins included (decision C7)."""
     return db.query(func.count(User.id)).filter(User.organization_id == org.id, User.is_active.is_(True)).scalar() or 0
+
+
+def pending_invitations(db: Session, org_id: int, excluding: Optional[Any] = None) -> int:
+    """Invitations of the institution that are still open (not accepted, cancelled or expired). Each one reserves a
+    seat. `excluding` is an invitation id left out of the count (the one being accepted or replaced)."""
+    query = db.query(func.count(Invitation.id)).filter(
+        Invitation.organization_id == org_id,
+        Invitation.accepted_at.is_(None),
+        Invitation.cancelled_at.is_(None),
+        Invitation.expires_at > datetime.now(timezone.utc),
+    )
+    if excluding is not None:
+        query = query.filter(Invitation.id != excluding)
+    return query.scalar() or 0
 
 
 def _count_active(db: Session, org_id: int, role: Optional[str] = None, excluding: Optional[int] = None) -> int:
@@ -80,12 +95,19 @@ def lock_org(db: Session, org_id: int) -> Organization:
     return org
 
 
-def reserve_seat(db: Session, org_id: int) -> Organization:
-    """Lock the company and fail with 409 when every seat is taken (create or reactivate, decision C10)."""
+def reserve_seat(db: Session, org_id: int, excluding_invitation: Optional[Any] = None) -> Organization:
+    """Lock the company and fail with 409 when every seat is taken (create or reactivate, decision C10).
+
+    Seats held by pending invitations count as taken (spec E), except `excluding_invitation`: the one the person is
+    accepting right now (its own seat).
+    """
     org = lock_org(db, org_id)
     used = seats_used(db, org)
-    if used >= org.seat_limit:
-        raise OrgRuleError(409, f"La institución {org.name} no tiene lugares libres ({used} de {org.seat_limit})")
+    reserved = pending_invitations(db, org.id, excluding_invitation)
+    if used + reserved >= org.seat_limit:
+        detail = f"La institución {org.name} no tiene lugares libres ({used} de {org.seat_limit}"
+        detail += f", más {reserved} invitación(es) pendiente(s))" if reserved else ")"
+        raise OrgRuleError(409, detail)
     return org
 
 
@@ -183,10 +205,14 @@ def make_org_admin(db: Session, actor: User, org: Organization, user: User) -> N
     db.flush()
 
 
-def create_org_with_admin(db: Session, actor: User, data: dict, admin, views: Optional[list]) -> Organization:
+def create_org_with_admin(
+    db: Session, actor: User, data: dict, admin, views: Optional[list], mails: Optional[list] = None
+) -> Organization:
     """New company plus, optionally, its radar views and its admin, all or nothing.
 
-    `admin` is a NewOrgAdmin / ExistingOrgAdmin (or None) and `views` a list of radar codes or ["*"] (or None). It all
+    `admin` is a NewOrgAdmin / ExistingOrgAdmin / InviteOrgAdmin (or None) and `views` a list of radar codes or ["*"]
+    (or None). With an InviteOrgAdmin the invitation is created here and its mail is appended to `mails`, for the
+    router to send after the commit (spec E). It all
     runs inside one savepoint, so if any step fails (name taken, bad radar, username taken, weak password, a user that
     cannot be chosen...) nothing is left behind, not even the company. The views are set BEFORE the admin is created,
     so the admin starts with the company's list.
@@ -198,6 +224,12 @@ def create_org_with_admin(db: Session, actor: User, data: dict, admin, views: Op
         if admin is not None and admin.mode == "new":
             fields = admin.model_dump(exclude={"mode"})
             create_member(db, org.id, fields, "org_admin", actor)
+        elif admin is not None and admin.mode == "invite":
+            from . import invitations  # here, not at the top: invitations imports this module
+
+            _, mail = invitations.create_invitation(db, actor, org.id, admin.email, "org_admin", None)
+            if mails is not None:
+                mails.append(mail)
         elif admin is not None:
             user = db.get(User, admin.user_id)
             if user is None:

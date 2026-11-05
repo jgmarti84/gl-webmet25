@@ -105,6 +105,8 @@ class APISettings(BaseSettings):
     privacy_url: str = Field(default="", alias="PRIVACY_URL")
     email_verify_ttl_hours: int = Field(default=24, alias="EMAIL_VERIFY_TTL_HOURS")
     password_reset_ttl_minutes: int = Field(default=60, alias="PASSWORD_RESET_TTL_MINUTES")
+    # How long an invitation link (spec E) works before it expires.
+    invitation_ttl_days: int = Field(default=7, alias="INVITATION_TTL_DAYS")
     # Per-account sending caps (see EmailToken): at most N mails per hour, at least S seconds apart.
     mail_max_per_hour: int = Field(default=3, alias="MAIL_MAX_PER_HOUR")
     mail_min_interval_seconds: int = Field(default=60, alias="MAIL_MIN_INTERVAL_SECONDS")

@@ -1,6 +1,7 @@
 # api/app/mail/templates.py
 """Bodies of the account mails (Spanish): plain text and HTML, values escaped."""
 
+from datetime import datetime, timezone
 from html import escape
 from typing import List, Optional
 
@@ -127,6 +128,38 @@ def reset_mail(user: User, token: str) -> OutgoingMail:
         "Si no fuiste vos, ignorá este mensaje: tu contraseña no cambia.",
         "/forgot",
         "Si el botón no funciona, pedí un mail nuevo en",
+    )
+
+
+def invitation_mail(
+    to: str, organization_name: str, role: str, inviter: Optional[str], token: str, expires_at: datetime
+) -> OutgoingMail:
+    """Sent when someone is invited to an institution: the link opens the page to create the account.
+
+    The token goes in the fragment, like the verify and reset links (see `link`). The text says what the person will
+    be in the institution (admin or reader) and until when the link works.
+    """
+    who = f"{inviter} te invitó" if inviter else "Te invitaron"
+    role_text = (
+        "como administrador de la institución: vas a poder agregar y administrar a sus usuarios."
+        if role == "org_admin"
+        else "como usuario de la institución."
+    )
+    until = expires_at.astimezone(timezone.utc).strftime("%d/%m/%Y")
+    return _build(
+        to,
+        f"Te invitaron a {organization_name} en WebMet25",
+        f"Te invitaron a {organization_name}",
+        [
+            f"{who} a unirte a {organization_name} en WebMet25, {role_text}",
+            f"Para crear tu cuenta (con una contraseña o con Google) abrí el link. Sirve una sola vez y vence "
+            f"el {until}.",
+        ],
+        "Aceptar la invitación",
+        link("/invitacion", token),
+        "Si no esperabas esta invitación, ignorá este mensaje: no se crea ninguna cuenta.",
+        "/login",
+        "Si el botón no funciona, pedile a quien te invitó que te envíe una invitación nueva. Sitio:",
     )
 
 
