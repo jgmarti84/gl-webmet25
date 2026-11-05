@@ -60,11 +60,19 @@ def test_logged_in_walk_never_leaves_the_prefix(browser):
         assert cookies["pfx_webmet_refresh"]["path"] == f"{PREFIX}/api/v1/auth"
         assert "webmet_access" not in cookies
 
-        for path in ("/", "/radar.html?code=RMA1", "/cog-browser.html", "/register", "/forgot", "/perfil"):
+        for path in (
+            "/",
+            "/radar.html?code=RMA1",
+            "/cog-browser.html",
+            "/register",
+            "/forgot",
+            "/perfil",
+            "/invitacion",
+        ):
             page.goto(f"{PREFIX_URL}{path}", wait_until="networkidle")
 
         page.goto(f"{PREFIX_URL}/admin", wait_until="networkidle")
-        for section in ("users", "radars", "profile"):
+        for section in ("users", "radars", "invitations", "profile"):
             page.click(f"#sidebar-nav [data-section={section}]")
             page.wait_for_load_state("networkidle")
             assert urlsplit(page.url).path == f"{PREFIX}/admin"

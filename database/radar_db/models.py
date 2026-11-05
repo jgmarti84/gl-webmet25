@@ -2,7 +2,7 @@
 from sqlalchemy import (
     Column, Integer, String, Text, Float, Boolean, DateTime, 
     ForeignKey, Numeric, Table, UniqueConstraint, Index, Enum as SQLEnum,
-    CheckConstraint,
+    CheckConstraint, JSON,
 )
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy import text
@@ -569,3 +569,48 @@ class EmailToken(Base):
 
     def __repr__(self):
         return f"<EmailToken(user_id={self.user_id}, purpose='{self.purpose}', used={self.used_at is not None})>"
+
+
+class Invitation(Base):
+    """An invitation by mail to join an organization: the person has no account yet.
+
+    The general admin invites a company admin (role org_admin); a company admin invites a viewer of its own company.
+    The person opens the link in the mail and fills a form or signs in with Google; the account is then created with
+    this role and company. Only the SHA-256 of the token is stored (the token travels in the mail).
+
+    PENDING means: not accepted, not cancelled and not expired. A pending invitation reserves one seat of the
+    organization (free seats = seat_limit - active users - pending invitations). Rows are never deleted: accepted,
+    cancelled and expired ones stay as a record.
+    """
+    __tablename__ = 'invitations'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # Normalized (trimmed, lower case) like users.email.
+    email = Column(String(254), nullable=False)
+    organization_id = Column(Integer, ForeignKey('organizations.id', ondelete='CASCADE'), nullable=False)
+    # org_admin | viewer
+    role = Column(String(16), nullable=False)
+    # Radar codes (or ["*"] for all) the viewer starts with; NULL = a copy of the organization's list at acceptance.
+    # none_as_null: Python None must be a SQL NULL (not the JSON value null), or the check below would refuse it.
+    radar_views = Column(JSON(none_as_null=True))
+    token_hash = Column(String(64), nullable=False, unique=True)
+    invited_by = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    accepted_at = Column(DateTime(timezone=True))
+    cancelled_at = Column(DateTime(timezone=True))
+
+    organization = relationship("Organization")
+
+    __table_args__ = (
+        CheckConstraint("role IN ('org_admin', 'viewer')", name='ck_invitations_role'),
+        # Only viewers carry a list of views (a company admin sees the company's list).
+        CheckConstraint("role = 'viewer' OR radar_views IS NULL", name='ck_invitations_views_only_viewer'),
+        Index('ix_invitations_email', 'email'),
+        Index('ix_invitations_organization_id', 'organization_id'),
+        # The sending caps count the mails of the last hour / day.
+        Index('ix_invitations_created_at', 'created_at'),
+    )
+
+    def __repr__(self):
+        return f"<Invitation(email='{self.email}', organization_id={self.organization_id}, role='{self.role}')>"

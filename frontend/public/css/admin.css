@@ -731,10 +731,30 @@ th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
 .profile-details dd { margin: 0; overflow-wrap: anywhere; }
 
 /* The two cards at the top of the profile: the identity card is narrower than the details card, and on a phone
-   they stack. The role pill keeps the text as written ("Admin de empresa"), not capitalized word by word. */
+   they stack. The role pill keeps the text as written ("Admin de institución"), not capitalized word by word. */
 .profile-grid { grid-template-columns: minmax(240px, 1fr) minmax(300px, 2fr); }
 #perfil-role { text-transform: none; }
 @media (max-width: 720px) {
     .profile-grid { grid-template-columns: minmax(0, 1fr); }
     .profile-details > div { grid-template-columns: 110px 1fr; }
 }
+
+/* "Agregar institución": the fields of the chosen admin option sit under their radio button, a little indented. */
+.org-admin-fields { display: grid; gap: 10px; padding: 4px 0 8px 26px; }
+.org-admin-fields[hidden] { display: none; }
+/* The admin block has the frame of .views-radars but grows with its content (that one scrolls after 240 px). */
+.org-admin-block { border: 1px solid var(--border, #ccc); border-radius: 6px; padding: 8px 12px; margin: 8px 0; }
+
+/* Search box that picks a user (the admin of a new institution): a text box and, under it, the list of matches. The
+   list is part of the page flow (not floating) so it works inside the scrolling modal and on a phone. Each option has
+   the username and name on one line and the mail, smaller, under them. */
+.combo { display: grid; gap: 4px; }
+.combo-list { margin: 0; padding: 4px; list-style: none; max-height: 220px; overflow-y: auto; background: #fff; border: 1px solid var(--border-strong, #cbd5e1); border-radius: 6px; }
+.combo-list[hidden] { display: none; }
+.combo-list [role="option"] { display: grid; gap: 1px; padding: 6px 8px; border-radius: 4px; cursor: pointer; }
+.combo-list [role="option"]:hover,
+.combo-list [role="option"][aria-selected="true"] { background: var(--primary-soft, #eff6ff); }
+.combo-main strong { font-weight: 600; }
+.combo-name { color: var(--muted, #64748b); }
+.combo-mail { color: var(--muted, #64748b); font-size: 12px; overflow-wrap: anywhere; }
+.combo-empty { padding: 8px; color: var(--muted, #64748b); font-size: 13px; }

@@ -103,7 +103,7 @@ def replace_user_radar_views(
     if within_company:
         company = set(stored_org_radar_views(user.organization)) if user.organization is not None else set()
         if PERMISSION_ALL not in company and not wanted <= company:
-            raise PermissionRuleError(403, "Solo podés asignar vistas que tenga tu empresa")
+            raise PermissionRuleError(403, "Solo podés asignar vistas que tenga tu institución")
     _replace_rows(db, user.permissions, wanted, granted_by)
     return stored_radar_views(user)
 

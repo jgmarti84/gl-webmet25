@@ -26,6 +26,10 @@ PUBLIC_ROUTES = {
     ("post", "/api/v1/auth/resend-verification"),
     ("post", "/api/v1/auth/forgot-password"),
     ("post", "/api/v1/auth/reset-password"),
+    # The invited person opens a link from a mail and has no session yet (spec E).
+    ("post", "/api/v1/invitations/details"),
+    ("post", "/api/v1/invitations/accept"),
+    ("post", "/api/v1/invitations/accept-google"),
 }
 
 HTTP_METHODS = {"get", "post", "put", "patch", "delete"}

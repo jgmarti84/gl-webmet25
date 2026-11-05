@@ -5,7 +5,7 @@
     <!-- Base path rule: right after the charset; nginx rewrites it to <base href="/nacho/"> behind a prefix. -->
     <base href="/">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebMet25 · Mi empresa</title>
+    <title>WebMet25 · Mi institución</title>
     <link rel="icon" type="image/png" href="assets/images/logos/OHMC@3x.png">
     <link rel="stylesheet" href="css/admin.css">
 </head>
@@ -20,7 +20,7 @@
             </div>
             <div class="sidebar-brand">
                 <span class="sidebar-brand-mark">◑</span>
-                <span class="sidebar-brand-text">WebMet25<small>Empresa</small></span>
+                <span class="sidebar-brand-text">WebMet25<small>Institución</small></span>
             </div>
             <nav id="sidebar-nav">
                 <div class="nav-group-label">Gestión</div>
@@ -37,7 +37,7 @@
             <header class="page-header">
                 <div class="page-header-left">
                     <a id="empresa-back" class="btn btn-ghost btn-back" href="./" title="Volver al mapa">←</a>
-                    <h1 id="empresa-name">Mi empresa</h1>
+                    <h1 id="empresa-name">Mi institución</h1>
                 </div>
                 <div class="session-box">
                     <span id="session-user" class="session-user"></span>
@@ -65,7 +65,7 @@
                     <div class="card-stat" id="empresa-active"></div>
                 </div>
                 <div class="card">
-                    <h3>Vistas de radar de la empresa</h3>
+                    <h3>Vistas de radar de la institución</h3>
                     <div class="card-stat" id="empresa-views"></div>
                 </div>
             </div>
@@ -80,6 +80,18 @@
                     <tbody id="empresa-users"></tbody>
                 </table>
             </div>
+            <p class="toolbar-note">Solo el administrador general puede activar o desactivar usuarios. Desvincular a alguien lo saca de la institución y deja libre su lugar.</p>
+
+            <p class="section-subtitle">Invitaciones pendientes</p>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr>
+                        <th>Mail</th><th>Vistas de radar</th><th>Vence</th><th>Acciones</th>
+                    </tr></thead>
+                    <tbody id="empresa-invitations"></tbody>
+                </table>
+            </div>
+            <p class="toolbar-note">Cada invitación pendiente reserva un lugar hasta que se acepta, se cancela o vence.</p>
             </div>
 
             <div id="empresa-section-perfil" hidden>

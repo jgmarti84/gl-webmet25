@@ -1,9 +1,10 @@
 import { adminApi, EXPIRED_SESSION_MESSAGE } from './admin-api.js';
 import { authApi, redirectToLogin } from './auth-api.js';
+import { buildOrganizationPayload, eligibleAdmins, filterAdmins, filterOrganizations } from './shared/org-form.js';
 import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
 
-const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'colormaps', 'colormap-options', 'users', 'organizations', 'profile'];
+const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'colormaps', 'colormap-options', 'users', 'organizations', 'invitations', 'profile'];
 const STATUS_OPTIONS = ['available', 'missing', 'error', 'pending', 'processing', 'archived'];
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
@@ -101,6 +102,20 @@ const FILTER_CONFIG = {
         facets: [
             { field: 'product_key', label: 'Producto', type: 'select' },
             { field: 'cmap_name', label: 'Mapa de colores', type: 'select' },
+        ],
+    },
+    invitations: {
+        facets: [
+            { field: 'email', label: 'Mail', type: 'text' },
+            { field: 'organization_name', label: 'Institución', type: 'select' },
+            { field: 'role_label', label: 'Rol', type: 'select' },
+        ],
+    },
+    organizations: {
+        facets: [
+            { field: 'name', label: 'Institución', type: 'text' },
+            { field: 'is_active', label: 'Activa', type: 'boolean' },
+            { field: 'seats_state', label: 'Lugares', type: 'select' },
         ],
     },
     users: {
@@ -1977,12 +1992,12 @@ async function renderColormapOptions() {
     });
 }
 
-const ROLE_LABELS = { admin: 'Administrador', org_admin: 'Admin de empresa', viewer: 'Lector' };
+const ROLE_LABELS = { admin: 'Administrador', org_admin: 'Admin de institución', viewer: 'Lector' };
 
 async function renderUsers() {
     const [allUsers, orgs] = await Promise.all([adminApi.listUsers(), adminApi.listOrganizations()]);
     state.organizations = orgs;  // the add-user form offers them
-    // Coming from the Empresas section ("Usuarios" link) shows only that company's users until "ver todos".
+    // Coming from the Instituciones section ("Usuarios" link) shows only that company's users until "ver todos".
     const orgFilter = state.usersOrgFilter || null;
     const orgFilterName = orgs.find((o) => o.id === orgFilter)?.name;
     const users = sortItems(orgFilter ? allUsers.filter((u) => u.organization_id === orgFilter) : allUsers, 'users');
@@ -1997,7 +2012,7 @@ async function renderUsers() {
                 <th><button data-sort="username">Usuario</button></th>
                 <th><button data-sort="full_name">Nombre</button></th>
                 <th><button data-sort="role">Rol</button></th>
-                <th>Empresa</th>
+                <th>Institución</th>
                 <th>Vistas de radar</th>
                 <th><button data-sort="is_active">Activo</button></th>
                 <th><button data-sort="last_login_at">Último ingreso</button></th>
@@ -2098,18 +2113,29 @@ function openUserForm(user = null) {
     // Only a viewer can change company (a company admin or the general admin never moves). When editing, the
     // current company is the selected option; creating starts with "Ninguna".
     const canMove = isEdit && user.role === 'viewer';
+    // An institution admin can only be taken out (never moved): the selector offers its institution or "none", which
+    // demotes it to viewer and unlinks it in one step.
+    const canLeave = isEdit && user.role === 'org_admin' && Boolean(user.organization_id);
     const currentOrgId = user?.organization_id ?? null;
-    const orgOptions = ['<option value="">Ninguna</option>',
-        ...(state.organizations || []).map((org) =>
-            `<option value="${org.id}"${canMove && org.id === currentOrgId ? ' selected' : ''}>${safeText(org.name)}</option>`)].join('');
+    // The institution is picked in a search box (typing filters by name), not in a plain select. The first entry is
+    // always "Ninguna". An institution admin only has two entries: its institution, or "Ninguna", which demotes it.
     let orgField = '';
-    if (!isEdit) {
-        orgField = `<label>Empresa <select name="organization_id">${orgOptions}</select></label>`;
-    } else if (canMove) {
-        orgField = `<label>Empresa <select name="organization_id">${orgOptions}</select></label>
-            <p class="toolbar-note" id="org-move-note"></p>`;
+    let orgItems = [];
+    if (!isEdit || canMove || canLeave) {
+        const none = { id: '', name: canLeave ? 'Ninguna (lo baja a lector y lo desvincula)' : 'Ninguna' };
+        orgItems = canLeave
+            ? [{ id: user.organization_id, name: user.organization_name }, none]
+            : [none, ...(state.organizations || [])];
+        const current = isEdit && currentOrgId !== null ? orgItems.find((item) => item.id === currentOrgId) : null;
+        orgField = `<label for="user-org-search">Institución</label>
+            <div class="combo">
+                <input id="user-org-search" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="user-org-list" autocomplete="off" placeholder="Ninguna: escribí para buscar una institución…" value="${current ? safeText(current.name) : ''}" data-picked="${current ? '1' : ''}">
+                <input type="hidden" name="organization_id" value="${current ? current.id : ''}">
+                <ul id="user-org-list" class="combo-list" role="listbox" hidden></ul>
+            </div>
+            ${isEdit ? '<p class="toolbar-note" id="org-move-note"></p>' : ''}`;
     } else if (user.organization_name) {
-        orgField = `<p class="toolbar-note">Empresa: ${safeText(user.organization_name)} (un admin de empresa no cambia de empresa)</p>`;
+        orgField = `<p class="toolbar-note">Institución: ${safeText(user.organization_name)}</p>`;
     }
     openFormModal(
         isEdit ? `Editar usuario ${user.username}` : 'Agregar usuario',
@@ -2128,8 +2154,17 @@ function openUserForm(user = null) {
                 email: formData.get('email') || null,
             };
             if (!isSelf) payload.role = formData.get('role');
+            const orgSearch = elements.formModalBody.querySelector('#user-org-search');
+            if (orgSearch && orgSearch.value.trim() && !orgSearch.dataset.picked) {
+                throw new Error('Elegí una institución de la lista, o dejá el campo vacío para ninguna');
+            }
             let message;
             if (isEdit) {
+                if (canLeave && !formData.get('organization_id')) {
+                    // The server demotes it to viewer itself; sending the old role would contradict that.
+                    payload.organization_id = null;
+                    delete payload.role;
+                }
                 if (canMove) {
                     // Sent only when it changed: the server replaces the account's views when it moves.
                     const chosen = formData.get('organization_id');
@@ -2150,7 +2185,109 @@ function openUserForm(user = null) {
             showMessage(message, 'success');
         },
     );
+    if (orgItems.length) wireOrgCombobox(orgItems);
     if (canMove) wireMoveNote(user, currentOrgId);
+    if (canLeave) wireLeaveNote(user);
+}
+
+/**
+ * The institution search box of the user form. Typing filters the entries by name (see filterOrganizations); each
+ * shows its seats when it has them. Click or Enter picks the highlighted one (arrows move, Esc closes). The picked id
+ * goes in the hidden field `organization_id` ('' = Ninguna), which is what the form reads; typing again forgets the
+ * pick. The hidden field fires "change" after a pick or a typing, so the notes under the box can react. The list is
+ * drawn inside the form, like the admin picker, so the modal scrolls with it.
+ */
+function wireOrgCombobox(items) {
+    const form = elements.formModalBody;
+    const input = form.querySelector('#user-org-search');
+    const hidden = form.querySelector('input[name="organization_id"]');
+    const list = form.querySelector('#user-org-list');
+    let shown = [];
+    let active = -1;
+
+    const detail = (item) => {
+        if (item.seat_limit === undefined) return '';
+        return `${item.seats_used} de ${item.seat_limit} lugares${item.is_active === false ? ' · inactiva' : ''}`;
+    };
+    const optionId = (item) => `user-org-opt-${item.id === '' ? 'none' : item.id}`;
+    const optionHtml = (item, index) => `
+        <li role="option" id="${optionId(item)}" data-id="${item.id}" aria-selected="${index === active}">
+            <span class="combo-main"><strong>${safeText(item.name)}</strong></span>
+            ${detail(item) ? `<small class="combo-mail">${safeText(detail(item))}</small>` : ''}
+        </li>`;
+
+    const close = () => {
+        list.hidden = true;
+        list.innerHTML = '';
+        input.setAttribute('aria-expanded', 'false');
+        input.removeAttribute('aria-activedescendant');
+        active = -1;
+    };
+    // What is searched: what is typed, unless an entry is already picked (then the whole list is offered again).
+    const open = () => {
+        shown = filterOrganizations(items, input.dataset.picked ? '' : input.value);
+        if (active >= shown.length) active = shown.length - 1;
+        list.innerHTML = shown.length
+            ? shown.map(optionHtml).join('')
+            : '<li class="combo-empty">Ninguna institución coincide con la búsqueda</li>';
+        list.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+        if (active >= 0 && shown[active]) input.setAttribute('aria-activedescendant', optionId(shown[active]));
+    };
+    const pick = (item) => {
+        // "Ninguna" is shown as text but sends '' (no institution); typing later forgets it like any pick.
+        hidden.value = String(item.id);
+        input.value = item.name;
+        input.dataset.picked = '1';
+        close();
+        hidden.dispatchEvent(new Event('change'));
+    };
+    const move = (step) => {
+        if (!shown.length) return;
+        active = (active + step + shown.length) % shown.length;
+        open();
+        list.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+    };
+
+    input.addEventListener('focus', open);
+    input.addEventListener('input', () => {
+        hidden.value = '';
+        input.dataset.picked = '';
+        active = 0;
+        open();
+        hidden.dispatchEvent(new Event('change'));
+    });
+    input.addEventListener('blur', close);
+    input.addEventListener('keydown', (event) => {
+        const isOpen = !list.hidden;
+        if (event.key === 'ArrowDown') { event.preventDefault(); if (isOpen) move(1); else open(); }
+        else if (event.key === 'ArrowUp') { event.preventDefault(); if (isOpen) move(-1); }
+        else if (event.key === 'Enter' && isOpen) {
+            event.preventDefault();  // Enter picks, it does not submit the form
+            if (active >= 0 && shown[active]) pick(shown[active]);
+        } else if (event.key === 'Escape' && isOpen) { event.stopPropagation(); close(); }
+    });
+    // mousedown (not click) so the box keeps the focus and its blur does not close the list before the pick.
+    list.addEventListener('mousedown', (event) => {
+        const item = event.target.closest('[role="option"]');
+        if (!item) return;
+        event.preventDefault();
+        pick(shown.find((entry) => String(entry.id) === item.dataset.id));
+    });
+}
+
+/** Under the selector of an institution admin: say what choosing "Ninguna" does before saving. */
+function wireLeaveNote(user) {
+    const select = elements.formModalBody.querySelector('input[name="organization_id"]');
+    const note = elements.formModalBody.querySelector('#org-move-note');
+    const update = () => {
+        note.textContent = select.value ? ''
+            : `Deja de ser administrador y sale de ${user.organization_name}: pasa a lector sin institución, libera su lugar, `
+            + 'se le quitan sus vistas y se cierran sus sesiones. Si la institución sigue con usuarios activos, '
+            + 'antes tiene que quedar otro administrador activo.';
+    };
+    select.addEventListener('change', update);
+    update();
 }
 
 /** Views as a short text for the move notice: radar codes, "Todas" or "ninguna". */
@@ -2160,22 +2297,22 @@ function describeViews(views) {
 }
 
 /**
- * Under the "Empresa" selector of the edit form, say what saving will do to the account's views before it happens:
+ * Under the "Institución" selector of the edit form, say what saving will do to the account's views before it happens:
  * joining a company REPLACES the account's views with the company's list (and closes its sessions); leaving keeps them.
  */
 function wireMoveNote(user, currentOrgId) {
-    const select = elements.formModalBody.querySelector('select[name="organization_id"]');
+    const select = elements.formModalBody.querySelector('input[name="organization_id"]');
     const note = elements.formModalBody.querySelector('#org-move-note');
     const update = () => {
         const chosen = select.value ? Number(select.value) : null;
         if (chosen === currentOrgId) {
             note.textContent = '';
         } else if (chosen === null) {
-            note.textContent = `Sale de ${user.organization_name}: libera su lugar y conserva sus vistas (${describeViews(user.radar_detail_views)}).`;
+            note.textContent = `Sale de ${user.organization_name}: libera su lugar, se le quitan sus vistas (${describeViews(user.radar_detail_views)}) y se cierran sus sesiones.`;
         } else {
             const target = (state.organizations || []).find((org) => org.id === chosen);
-            note.textContent = `Se reemplazan sus vistas actuales (${describeViews(user.radar_detail_views)}) por las de la empresa `
-                + `(${describeViews(target?.radar_detail_views || [])}) y se cierran sus sesiones. Ocupa un lugar de la empresa.`;
+            note.textContent = `Se reemplazan sus vistas actuales (${describeViews(user.radar_detail_views)}) por las de la institución `
+                + `(${describeViews(target?.radar_detail_views || [])}) y se cierran sus sesiones. Ocupa un lugar de la institución.`;
         }
     };
     select.addEventListener('change', update);
@@ -2233,18 +2370,25 @@ function openViewsForm(user) {
 /** Companies section (spec C): list, create, edit, seats and the company's views. */
 async function renderOrganizations() {
     const orgs = await adminApi.listOrganizations();
+    // The "Lugares" filter is computed here: the API gives the numbers, the filter needs a word to compare.
+    const filterable = orgs.map((org) => ({
+        ...org,
+        // A pending invitation reserves a seat (spec E), so the seats are full counting them too.
+        seats_state: org.seats_used + (org.pending_invitations || 0) >= org.seat_limit ? 'Completa' : 'Con lugares libres',
+    }));
     elements.sectionContent.innerHTML = `
-        <div class="toolbar"><button class="btn" id="orgs-add">+ Agregar empresa</button></div>
+        <div class="toolbar"><button class="btn" id="orgs-add">+ Agregar institución</button></div>
+        ${renderFilterBar('organizations', filterable)}
         <div class="table-wrap">
         <table>
             <thead><tr>
-                <th>Empresa</th><th>Lugares</th><th>Activa</th><th>Vistas de radar</th><th>Acciones</th>
+                <th>Institución</th><th>Lugares</th><th>Activa</th><th>Vistas de radar</th><th>Acciones</th>
             </tr></thead>
             <tbody>
-                ${orgs.map((org) => `
-                    <tr>
+                ${filterable.map((org) => `
+                    <tr${rowFacetAttr('organizations', org)}>
                         <td>${safeText(org.name)}</td>
-                        <td>${org.seats_used} de ${org.seat_limit}</td>
+                        <td>${org.seats_used} de ${org.seat_limit}${org.pending_invitations ? ` (+${org.pending_invitations} invitación${org.pending_invitations === 1 ? '' : 'es'})` : ''}</td>
                         <td>${org.is_active ? 'Sí' : 'No'}</td>
                         <td>${safeText(viewsSummary(org.radar_detail_views))}</td>
                         <td class="table-actions">
@@ -2259,6 +2403,7 @@ async function renderOrganizations() {
         </div>
     `;
     const byId = (id) => orgs.find((o) => String(o.id) === String(id));
+    wireFilterBar('organizations');
     document.getElementById('orgs-add').onclick = () => openOrganizationForm();
     elements.sectionContent.querySelectorAll('[data-edit-org]').forEach((el) => {
         el.onclick = () => openOrganizationForm(byId(el.dataset.editOrg));
@@ -2282,29 +2427,323 @@ async function renderOrganizations() {
     });
 }
 
-/** Create or edit a company: name, seat limit and whether it is active. */
-function openOrganizationForm(org = null) {
-    const isEdit = Boolean(org);
+/**
+ * Invitations section (spec E): the pending invitations of every institution, with Reenviar and Cancelar, and a form to
+ * invite someone to an institution that already exists (an admin for one without admin, or a viewer).
+ */
+async function renderInvitations() {
+    const [invitations, orgs] = await Promise.all([adminApi.listInvitations(), adminApi.listOrganizations()]);
+    state.organizations = orgs;
+    // "Rol" filter needs words: the API gives the code.
+    const items = invitations.map((invitation) => ({ ...invitation, role_label: ROLE_LABELS[invitation.role] || invitation.role }));
+    const views = (invitation) => (invitation.role === 'org_admin'
+        ? 'Las de la institución'
+        : (invitation.radar_views ? viewsSummary(invitation.radar_views) : 'Copia de las de la institución'));
+    elements.sectionContent.innerHTML = `
+        <div class="toolbar"><button class="btn" id="invitations-add">+ Invitar por mail</button></div>
+        ${renderFilterBar('invitations', items)}
+        <div class="table-wrap">
+        <table>
+            <thead><tr>
+                <th>Mail</th><th>Institución</th><th>Rol</th><th>Vistas de radar</th><th>Vence</th><th>Acciones</th>
+            </tr></thead>
+            <tbody>
+                ${items.map((invitation) => `
+                    <tr${rowFacetAttr('invitations', invitation)}>
+                        <td>${safeText(invitation.email)}</td>
+                        <td>${safeText(invitation.organization_name)}</td>
+                        <td>${safeText(invitation.role_label)}</td>
+                        <td>${safeText(views(invitation))}</td>
+                        <td>${safeText(new Date(invitation.expires_at).toLocaleDateString('es-AR'))}</td>
+                        <td class="table-actions">
+                            <button class="btn-secondary" data-resend-invitation="${safeText(invitation.id)}">Reenviar</button>
+                            <button class="btn-secondary" data-cancel-invitation="${safeText(invitation.id)}">Cancelar</button>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+        </div>
+        <p class="toolbar-note">Cada invitación pendiente reserva un lugar de su institución hasta que se acepta, se cancela o vence (7 días).</p>
+    `;
+    wireFilterBar('invitations');
+    document.getElementById('invitations-add').onclick = () => openInvitationForm();
+    elements.sectionContent.querySelectorAll('[data-resend-invitation]').forEach((el) => {
+        el.onclick = async () => {
+            try {
+                const sent = await adminApi.resendInvitation(el.dataset.resendInvitation);
+                await renderSection();
+                showMessage(`Invitación reenviada a ${sent.email}`, 'success');
+            } catch (error) {
+                showMessage(error.message, 'error');
+            }
+        };
+    });
+    elements.sectionContent.querySelectorAll('[data-cancel-invitation]').forEach((el) => {
+        el.onclick = async () => {
+            const invitation = invitations.find((item) => String(item.id) === el.dataset.cancelInvitation);
+            if (!window.confirm(`¿Cancelar la invitación a ${invitation ? invitation.email : 'esta persona'}? El link deja de funcionar.`)) return;
+            try {
+                await adminApi.cancelInvitation(el.dataset.cancelInvitation);
+                await renderSection();
+                showMessage('Invitación cancelada', 'success');
+            } catch (error) {
+                showMessage(error.message, 'error');
+            }
+        };
+    });
+}
+
+/** Form "Invitar por mail": the mail, the institution (search box) and the role it will have. */
+function openInvitationForm() {
+    const orgs = (state.organizations || []).filter((org) => org.is_active);
     openFormModal(
-        isEdit ? `Editar empresa ${org.name}` : 'Agregar empresa',
+        'Invitar por mail',
+        `
+            <label>Mail de la persona <input name="email" type="email" maxlength="254" required autocomplete="off"></label>
+            <label for="user-org-search">Institución</label>
+            <div class="combo">
+                <input id="user-org-search" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="user-org-list" autocomplete="off" placeholder="Escribí para buscar una institución…" data-picked="">
+                <input type="hidden" name="organization_id" value="">
+                <ul id="user-org-list" class="combo-list" role="listbox" hidden></ul>
+            </div>
+            <label>Rol <select name="role">
+                <option value="org_admin">Admin de institución</option>
+                <option value="viewer">Lector</option>
+            </select></label>
+            <p class="toolbar-note">Le mandamos un mail con un link (vale 7 días). Completa sus datos o entra con Google y queda dentro de la institución con ese rol. Un lector necesita que la institución ya tenga un admin activo. Mientras no lo acepte, la invitación reserva un lugar.</p>
+            <div class="form-actions"><button class="btn" type="submit">Enviar invitación</button></div>
+        `,
+        async (formData) => {
+            const organizationId = formData.get('organization_id');
+            if (!organizationId) throw new Error('Elegí una institución de la lista');
+            const sent = await adminApi.createInvitation({
+                email: String(formData.get('email') || '').trim(),
+                organization_id: Number(organizationId),
+                role: formData.get('role'),
+            });
+            await renderSection();
+            showMessage(`Invitación enviada a ${sent.email}`, 'success');
+        },
+    );
+    wireOrgCombobox(orgs.length ? orgs : []);
+}
+
+/**
+ * The extra blocks of the form that CREATES a company (not shown when editing): who administers it and which radar
+ * views it has. Both are optional and are sent in the same request as the company, which is created all or nothing.
+ */
+function organizationExtrasHtml(radars) {
+    const radarRows = radars.length
+        ? radars.map((radar) => `
+            <label class="checkbox-row">
+                <input type="checkbox" name="radar" value="${safeText(radar.code)}">
+                ${safeText(radar.code)} - ${safeText(radar.title)}
+            </label>`).join('')
+        : '<p class="toolbar-note">Ningún radar tiene la vista de detalle habilitada.</p>';
+    return `
+        <fieldset class="org-admin-block">
+            <legend>Administrador de la institución</legend>
+            <label class="checkbox-row"><input type="radio" name="admin_mode" value="new" checked> Crear un usuario nuevo</label>
+            <div id="org-admin-new" class="org-admin-fields">
+                <label>Usuario <input name="admin_username" type="text" minlength="3" maxlength="32" pattern="[a-zA-Z0-9._-]+" autocomplete="off"></label>
+                <label>Nombre <input name="admin_fullname" type="text" maxlength="128"></label>
+                <label>Email <input name="admin_email" type="email" maxlength="254"></label>
+                <label>Contraseña inicial <input name="admin_password" type="password" minlength="10" maxlength="128" autocomplete="new-password"></label>
+                <p class="toolbar-note">Mínimo 10 caracteres, con al menos un carácter especial (por ejemplo ! - _ . @ #).</p>
+            </div>
+            <label class="checkbox-row"><input type="radio" name="admin_mode" value="existing"> Elegir uno que ya existe</label>
+            <div id="org-admin-existing" class="org-admin-fields" hidden>
+                <label for="org-admin-search">Usuario</label>
+                <div class="combo">
+                    <input id="org-admin-search" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="org-admin-list" autocomplete="off" placeholder="Escribí para buscar por usuario, nombre o mail…">
+                    <input type="hidden" name="admin_user_id" value="">
+                    <ul id="org-admin-list" class="combo-list" role="listbox" hidden></ul>
+                </div>
+                <p class="toolbar-note">Solo se ofrecen lectores activos que no están en ninguna institución. Pasa a ser administrador de esta institución: se le cierran las sesiones y sus vistas propias se reemplazan por las de la institución.</p>
+            </div>
+            <label class="checkbox-row"><input type="radio" name="admin_mode" value="invite"> Invitar por mail</label>
+            <div id="org-admin-invite" class="org-admin-fields" hidden>
+                <label>Mail de la persona <input name="admin_invite_email" type="email" maxlength="254" autocomplete="off"></label>
+                <p class="toolbar-note">Le mandamos un mail con un link (vale 7 días). Completa sus datos o entra con Google y queda como administrador de esta institución. Mientras no lo acepte, la invitación reserva un lugar.</p>
+            </div>
+            <label class="checkbox-row"><input type="radio" name="admin_mode" value="none"> Sin administrador por ahora</label>
+        </fieldset>
+        <fieldset class="views-radars">
+            <legend>Vistas de radar de la institución</legend>
+            <label class="checkbox-row"><input type="checkbox" name="all"> Todas</label>
+            ${radarRows}
+            <p class="toolbar-note">Se pueden cambiar después con el botón Vistas de la institución.</p>
+        </fieldset>`;
+}
+
+/** Show only the fields of the chosen admin option (the other blocks stay hidden). */
+function wireAdminModeBlocks() {
+    const form = elements.formModalBody;
+    const update = () => {
+        const mode = form.querySelector('input[name="admin_mode"]:checked')?.value;
+        form.querySelector('#org-admin-new').hidden = mode !== 'new';
+        form.querySelector('#org-admin-existing').hidden = mode !== 'existing';
+        form.querySelector('#org-admin-invite').hidden = mode !== 'invite';
+    };
+    form.querySelectorAll('input[name="admin_mode"]').forEach((radio) => radio.addEventListener('change', update));
+    update();
+}
+
+/**
+ * The search box that picks the admin among the users that can be chosen. Typing filters the list by username, name
+ * or mail (see filterAdmins); each option shows the username and name, and the mail under them. Click or Enter picks
+ * the highlighted one (arrows move, Esc closes). The id of the picked user goes in the hidden field `admin_user_id`,
+ * which is what the form sends; typing again forgets the pick. The list is drawn inside the form (not floating over
+ * it), so the modal can scroll with it.
+ */
+function wireAdminCombobox(candidates) {
+    const form = elements.formModalBody;
+    const input = form.querySelector('#org-admin-search');
+    const hidden = form.querySelector('input[name="admin_user_id"]');
+    const list = form.querySelector('#org-admin-list');
+    let shown = [];
+    let active = -1;
+
+    const optionHtml = (user, index) => `
+        <li role="option" id="org-admin-opt-${user.id}" data-id="${user.id}" aria-selected="${index === active}">
+            <span class="combo-main"><strong>${safeText(user.username)}</strong>${user.full_name ? ` <span class="combo-name">${safeText(user.full_name)}</span>` : ''}</span>
+            <small class="combo-mail">${user.email ? safeText(user.email) : 'sin mail'}</small>
+        </li>`;
+
+    const close = () => {
+        list.hidden = true;
+        list.innerHTML = '';  // nothing stale in the page while it is closed
+        input.setAttribute('aria-expanded', 'false');
+        input.removeAttribute('aria-activedescendant');
+        active = -1;
+    };
+
+    // What is searched: what is typed, unless a user is already picked (then the whole list is offered again).
+    const open = () => {
+        const query = hidden.value ? '' : input.value;
+        shown = filterAdmins(candidates, query);
+        if (active >= shown.length) active = shown.length - 1;
+        if (shown.length) {
+            list.innerHTML = shown.map(optionHtml).join('');
+        } else {
+            const text = candidates.length ? 'Ningún usuario coincide con la búsqueda' : 'No hay usuarios disponibles';
+            list.innerHTML = `<li class="combo-empty">${text}</li>`;
+        }
+        list.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+        if (active >= 0 && shown[active]) input.setAttribute('aria-activedescendant', `org-admin-opt-${shown[active].id}`);
+    };
+
+    const pick = (user) => {
+        hidden.value = String(user.id);
+        input.value = user.full_name ? `${user.username} — ${user.full_name}` : user.username;
+        close();
+    };
+
+    const move = (step) => {
+        if (!shown.length) return;
+        active = (active + step + shown.length) % shown.length;
+        open();
+        list.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+    };
+
+    input.addEventListener('focus', open);
+    input.addEventListener('input', () => {
+        hidden.value = '';  // typing again forgets the pick
+        active = 0;
+        open();
+    });
+    input.addEventListener('blur', close);
+    input.addEventListener('keydown', (event) => {
+        const isOpen = !list.hidden;
+        if (event.key === 'ArrowDown') { event.preventDefault(); if (isOpen) move(1); else open(); }
+        else if (event.key === 'ArrowUp') { event.preventDefault(); if (isOpen) move(-1); }
+        else if (event.key === 'Enter' && isOpen) {
+            event.preventDefault();  // Enter picks, it does not submit the form
+            if (active >= 0 && shown[active]) pick(shown[active]);
+        } else if (event.key === 'Escape' && isOpen) { event.stopPropagation(); close(); }
+    });
+    // mousedown (not click) so the box keeps the focus and its blur does not close the list before the pick.
+    list.addEventListener('mousedown', (event) => {
+        const item = event.target.closest('[role="option"]');
+        if (!item) return;
+        event.preventDefault();
+        pick(candidates.find((user) => String(user.id) === item.dataset.id));
+    });
+}
+
+/**
+ * Create or edit a company. Editing: name, seat limit and whether it is active. Creating adds, in the same form, the
+ * company admin (a new user, an existing one, or none for now) and the radar views of the company.
+ */
+async function openOrganizationForm(org = null) {
+    const isEdit = Boolean(org);
+    let extras = '';
+    let candidates = [];  // the users that can be picked as the admin (the search box works on them)
+    if (!isEdit) {
+        try {
+            const [users, radars] = await Promise.all([adminApi.listUsers(), adminApi.listRadars()]);
+            candidates = eligibleAdmins(users);
+            extras = organizationExtrasHtml(radars.filter((radar) => radar.detail_view_enabled));
+        } catch (error) {
+            showMessage(error.message || 'No se pudo preparar el formulario', 'error');
+            return;
+        }
+    }
+    openFormModal(
+        isEdit ? `Editar institución ${org.name}` : 'Agregar institución',
         `
             <label>Nombre <input name="name" type="text" maxlength="128" required value="${safeText(org?.name)}"></label>
             <label>Lugares (usuarios activos, admins incluidos) <input name="seat_limit" type="number" min="1" max="10000" required value="${org?.seat_limit ?? 5}"></label>
             <label class="checkbox-row"><input type="checkbox" name="is_active"${!isEdit || org.is_active ? ' checked' : ''}> Activa (si no, ninguno de sus usuarios puede entrar)</label>
+            ${extras}
             <div class="form-actions"><button class="btn" type="submit">${isEdit ? 'Guardar' : 'Crear'}</button></div>
         `,
         async (formData) => {
-            const payload = {
+            if (isEdit) {
+                const payload = {
+                    name: formData.get('name'),
+                    seat_limit: Number(formData.get('seat_limit')),
+                    is_active: formData.get('is_active') === 'on',
+                };
+                await adminApi.patchOrganization(org.id, payload);
+                await renderSection();
+                showMessage(`Institución ${payload.name} actualizada`, 'success');
+                return;
+            }
+            const adminMode = formData.get('admin_mode') || 'none';
+            const payload = buildOrganizationPayload({
                 name: formData.get('name'),
-                seat_limit: Number(formData.get('seat_limit')),
-                is_active: formData.get('is_active') === 'on',
-            };
-            if (isEdit) await adminApi.patchOrganization(org.id, payload);
-            else await adminApi.createOrganization(payload);
+                seatLimit: formData.get('seat_limit'),
+                isActive: formData.get('is_active') === 'on',
+                adminMode,
+                newAdmin: {
+                    username: formData.get('admin_username'),
+                    password: formData.get('admin_password'),
+                    fullName: formData.get('admin_fullname'),
+                    email: formData.get('admin_email'),
+                },
+                existingUserId: formData.get('admin_user_id'),
+                inviteEmail: formData.get('admin_invite_email'),
+                allViews: formData.get('all') === 'on',
+                radars: formData.getAll('radar'),
+            });
+            await adminApi.createOrganization(payload);
             await renderSection();
-            showMessage(`Empresa ${payload.name} ${isEdit ? 'actualizada' : 'creada'}`, 'success');
+            const inviting = payload.admin && payload.admin.mode === 'invite';
+            showMessage(
+                inviting
+                    ? `Institución ${payload.name} creada: invitamos a ${payload.admin.email} como administrador`
+                    : `Institución ${payload.name} creada${payload.admin ? ' con su administrador' : ''}`,
+                'success',
+            );
         },
     );
+    if (!isEdit) {
+        wireAdminModeBlocks();
+        wireAdminCombobox(candidates);
+    }
 }
 
 function openPasswordResetForm(user) {
@@ -2352,7 +2791,8 @@ async function renderSection() {
         colormaps: 'Mapas de colores',
         'colormap-options': 'Opciones de mapa de colores',
         users: 'Usuarios',
-        organizations: 'Empresas',
+        organizations: 'Instituciones',
+        invitations: 'Invitaciones',
         profile: 'Mi perfil',
     };
     elements.sectionTitle.textContent = titleBySection[state.section] || 'Panel';
@@ -2370,6 +2810,7 @@ async function renderSection() {
         if (state.section === 'colormap-options') await renderColormapOptions();
         if (state.section === 'users') await renderUsers();
         if (state.section === 'organizations') await renderOrganizations();
+        if (state.section === 'invitations') await renderInvitations();
         if (state.section === 'profile') await renderProfile();
         decorateSortHeaders(state.section);
     } catch (error) {

@@ -31,7 +31,7 @@ export function profileRows(profile) {
         ['Nombre', profile.full_name || '—'],
         ['Mail', profile.email || '—'],
         ['Rol', ROLE_LABELS[profile.role] || profile.role],
-        ['Empresa', profile.organization_name || '—'],
+        ['Institución', profile.organization_name || '—'],
         ['Alta', formatDate(profile.created_at)],
         ['Último ingreso', formatDate(profile.last_login_at)],
     ];
@@ -49,11 +49,11 @@ function skeleton(isCompanyAdmin) {
     const companyCard = isCompanyAdmin
         ? `
         <div id="perfil-company" hidden>
-            <p class="section-subtitle">Mi empresa</p>
+            <p class="section-subtitle">Mi institución</p>
             <div class="card-grid">
-                <div class="card"><h3>Empresa</h3><div class="card-stat" id="perfil-company-name"></div></div>
+                <div class="card"><h3>Institución</h3><div class="card-stat" id="perfil-company-name"></div></div>
                 <div class="card"><h3>Lugares</h3><div class="card-stat" id="perfil-company-seats"></div></div>
-                <div class="card"><h3>Vistas de radar de la empresa</h3><div class="card-stat" id="perfil-company-views"></div></div>
+                <div class="card"><h3>Vistas de radar de la institución</h3><div class="card-stat" id="perfil-company-views"></div></div>
             </div>
         </div>`
         : '';

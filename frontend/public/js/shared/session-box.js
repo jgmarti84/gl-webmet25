@@ -5,7 +5,7 @@
  */
 import { authApi } from '../auth-api.js';
 
-export const ROLE_LABELS = { admin: 'Administrador', org_admin: 'Admin de empresa', viewer: 'Lector' };
+export const ROLE_LABELS = { admin: 'Administrador', org_admin: 'Admin de institución', viewer: 'Lector' };
 
 /** Up to two letters: initials of the first two words, or the first two characters of one word. */
 export function initialsOf(name) {

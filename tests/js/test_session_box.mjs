@@ -20,7 +20,7 @@ assert(initialsOf('') === '?' && initialsOf(null) === '?', 'empty name');
 
 console.log('T2: role labels');
 assert(ROLE_LABELS.admin === 'Administrador', 'general admin label');
-assert(ROLE_LABELS.org_admin === 'Admin de empresa', 'company admin label');
+assert(ROLE_LABELS.org_admin === 'Admin de institución', 'company admin label');
 assert(ROLE_LABELS.viewer === 'Lector', 'viewer label');
 
 console.log('T3: which buttons the account chip shows');

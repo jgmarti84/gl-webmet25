@@ -273,6 +273,11 @@ def test_demoting_a_company_admin_recopies_the_company_views(make_user, make_org
     boss = make_user(username="boss", role="admin")
     orgboss = orgs.create_member(test_db_session, org.id, _member_data("jefe"), "org_admin", boss)
     perms.replace_org_radar_views(test_db_session, org, ["TSTA", "TSTB"], boss)
+    # Demoting the only admin of a company with users is refused: another admin has to be there first.
+    with pytest.raises(user_admin.UserRuleError) as exc:
+        user_admin.update_user(test_db_session, boss, orgboss, {"role": "viewer"})
+    assert exc.value.status_code == 409
+    orgs.create_member(test_db_session, org.id, _member_data("jefe2"), "org_admin", boss)
     user_admin.update_user(test_db_session, boss, orgboss, {"role": "viewer"})
     assert perms.stored_radar_views(orgboss) == ["TSTA", "TSTB"]
 
@@ -323,9 +328,9 @@ def test_admin_creates_a_company_admin(app_client, make_user, make_org):
 def test_admin_cannot_create_into_a_full_company(app_client, make_user, make_org):
     _as_admin(app_client, make_user)
     org = make_org(seat_limit=1)
-    first = {"username": "uno", "password": TEST_PASSWORD, "role": "viewer", "organization_id": org.id}
+    first = {"username": "uno", "password": TEST_PASSWORD, "role": "org_admin", "organization_id": org.id}
     assert app_client.post("/api/v1/admin/users", json=first).status_code == 201
-    second = {**first, "username": "dos"}
+    second = {**first, "username": "dos", "role": "viewer"}
     assert app_client.post("/api/v1/admin/users", json=second).status_code == 409
 
 
@@ -384,6 +389,20 @@ def test_org_admin_creates_a_viewer_with_the_company_views(app_client, company):
     assert body["radar_detail_views"] == ["TSTA", "TSTB"]
 
 
+def test_org_admin_creates_a_viewer_with_the_views_it_chose(app_client, company, make_radar, test_db_session):
+    make_radar("TSTC")  # a radar the company does not have
+    company["org"].seat_limit = 6  # room for the accounts below
+    test_db_session.flush()
+    response = app_client.post(
+        "/api/v1/org/users", json={"username": "nueva", "password": TEST_PASSWORD, "radar_detail_view": ["TSTA"]}
+    )
+    assert response.status_code == 201 and response.json()["radar_detail_views"] == ["TSTA"]
+    # Views outside the company's list are refused and no account is left behind (the same name can be used again).
+    outside = {"username": "otra", "password": TEST_PASSWORD, "radar_detail_view": ["TSTC"]}
+    assert app_client.post("/api/v1/org/users", json=outside).status_code == 403
+    assert app_client.post("/api/v1/org/users", json={**outside, "radar_detail_view": []}).status_code == 201
+
+
 def test_org_admin_cannot_go_over_the_seats(app_client, company):
     assert app_client.post("/api/v1/org/users", json={"username": "tres", "password": TEST_PASSWORD}).status_code == 201
     response = app_client.post("/api/v1/org/users", json={"username": "cuatro", "password": TEST_PASSWORD})
@@ -417,10 +436,26 @@ def test_org_admin_cannot_touch_another_company_admin(app_client, company, make_
     assert app_client.patch(f"/api/v1/org/users/{peer.id}", json={"is_active": False}).status_code == 403
 
 
-def test_org_admin_deactivates_and_reactivates_a_member(app_client, company):
+def test_org_admin_cannot_deactivate_but_can_unlink_a_member(app_client, company, test_db_session):
     member = company["member"]
-    assert app_client.patch(f"/api/v1/org/users/{member.id}", json={"is_active": False}).json()["is_active"] is False
-    assert app_client.patch(f"/api/v1/org/users/{member.id}", json={"is_active": True}).json()["is_active"] is True
+    # Only the general admin activates or deactivates accounts.
+    assert app_client.patch(f"/api/v1/org/users/{member.id}", json={"is_active": False}).status_code == 403
+    assert app_client.patch(f"/api/v1/org/users/{member.id}", json={"is_active": True}).status_code == 403
+    test_db_session.refresh(member)
+    assert member.is_active is True
+
+    # Unlinking takes the person out of the institution: the seat is freed, the views the institution gave go away.
+    seats_before = app_client.get("/api/v1/org").json()["seats_used"]
+    assert perms.stored_radar_views(member) == ["TSTA", "TSTB"]  # the copy it got when it joined
+    response = app_client.post(f"/api/v1/org/users/{member.id}/unlink")
+    assert response.status_code == 200
+    assert response.json()["organization_id"] is None and response.json()["radar_detail_views"] == []
+    assert app_client.get("/api/v1/org").json()["seats_used"] == seats_before - 1
+    assert "juan" not in {u["username"] for u in app_client.get("/api/v1/org/users").json()}
+    # It is out of reach now, like any user of another company.
+    assert app_client.post(f"/api/v1/org/users/{member.id}/unlink").status_code == 404
+    test_db_session.refresh(member)
+    assert member.is_active is True  # the account is still active: it can log in, as a viewer with no institution
 
 
 def test_org_admin_resets_a_members_password(app_client, company):
