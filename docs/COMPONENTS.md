@@ -462,6 +462,12 @@ settings), and animation controls (bottom-center).
 
 `auth-api.js` also talks to the public endpoints of the sign-up (DATA_FLOW §4.10): `login(username, password)` (the username field also takes the mail, and the answer carries the failure `code`, for example `email_not_verified`), `options()` (what the pages may offer; never throws, and falls back to "nothing extra"), `register(payload)`, `verifyEmail(token)`, `resendVerification(identifier)`, `forgotPassword(email)` and `resetPassword(token, password)`. The last five resolve `{ ok, status, data }` and leave the texts to the page.
 
+### **shared/org-form.js** — Logic of the "Agregar institución" form
+
+**File:** [`frontend/public/js/shared/org-form.js`](../../frontend/public/js/shared/org-form.js)
+
+**Responsibility:** `eligibleAdmins(users)` lists who can be offered as the admin of a new company (active viewers that belong to no company, sorted by name), `filterAdmins(users, query)` filters them for the search box (by username, name or mail, ignoring case and accents) and `buildOrganizationPayload(values)` builds the body of `POST /admin/organizations` from the form: the company plus, only when chosen, the `admin` block (`mode: "new"` with the user data, or `mode: "existing"` with `user_id`) and `radar_detail_view` (`["*"]` for "Todas"). It throws a Spanish message when an option is incomplete. `admin.js` draws the form; the logic lives here so it is unit-tested (`tests/js/test_org_form.mjs`).
+
 ### **shared/profile-section.js** — The profile, drawn inside any page (spec D)
 
 **File:** [`frontend/public/js/shared/profile-section.js`](../../frontend/public/js/shared/profile-section.js)
@@ -481,6 +487,18 @@ settings), and animation controls (bottom-center).
 **File:** [`frontend/public/js/auth-pages.js`](../../frontend/public/js/auth-pages.js) — unit tests: `tests/js/test_auth_pages.mjs`
 
 **Responsibility:** Presentation-only helpers shared by the login and the four public pages; the server validates everything again. Exports the same shapes the server enforces (`USERNAME_RE`, a loose `EMAIL_RE`, 10 to 128 characters and a special character for passwords), `validatePassword()` and `validateRegistration()` (null when fine, else the message), `errorText()` / `statusMessage()` (the server's own text, or a fixed one for 429 and 503), and the small UI helpers `showMessage()` / `hideMessage()` (always `textContent`, never `innerHTML`) and `startCooldown()` (a button that counts down, used by "Reenviar mail").
+
+---
+
+### **invitacion.html / invitacion.js** — Public page of an invitation (spec E)
+
+**Files:** [`frontend/public/invitacion.html`](../../frontend/public/invitacion.html), `js/invitacion.js` (plus `authApi.invitationDetails / acceptInvitation / acceptInvitationWithGoogle` in `auth-api.js` and the `signIn` option of `setupGoogleSignIn` in `login-google.js`)
+
+**Responsibility:** Target of the link in the invitation mail (`/invitacion#token=...`, served by nginx without a session, with `Cache-Control: no-store` and no `Referer`). It reads the token from the address, removes it from the address bar and the history, asks the API who invited you (`POST /api/v1/invitations/details`) and shows the institution, the invited mail and the role. The person then creates the account with the form or with Google (the Google account must have the invited mail). On success the session is already open: an institution admin goes to `empresa`, a reader to the map. A link that is invalid, expired, used or cancelled shows the notice and **removes the form from the page**.
+
+**Main ids:** `#invitation-company`, `#invitation-email`, `#invitation-role`, `#invitation-form` (fields `username`, `full_name`, `password`, `repeat`, `accept_terms`), `#invitation-submit`, `#invitation-invalid`, `#invitation-google`.
+
+**Panels.** Admin panel: section **Invitaciones** (`renderInvitations`, `openInvitationForm`, with the institution search box of `wireOrgCombobox`) and the **Invitar por mail** option of the admin in "Agregar institución". Institution panel (`/empresa`): the **Agregar usuario** form chooses between a password and an invitation (with the radar views to give), and the **Invitaciones pendientes** table has `data-resend-invitation` / `data-cancel-invitation`.
 
 ---
 

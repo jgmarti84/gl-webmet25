@@ -313,6 +313,26 @@ dirección ya registrada cuando alguien se registra con ella, así la respuesta 
 nuevo y para uno registrado (nadie puede averiguar qué mails tienen cuenta) y los topes igual protegen esa casilla de
 una inundación.
 
+#### **Invitation** (una invitación por mail para sumarse a una institución, spec E)
+```python
+id: UUID (PK)
+email: str                            # normalizado (sin espacios, en minúsculas); la persona todavía no tiene cuenta
+organization_id: int (FK → organizations.id, ON DELETE CASCADE)
+role: str                             # 'org_admin' | 'viewer' (CHECK)
+radar_views: JSON | None              # códigos de radar o ["*"]; NULL = copia de la lista de la institución al aceptar. Solo lectores
+token_hash: str (único)               # SHA-256 del token; el token solo viaja en el mail
+invited_by: int | None (FK → users.id, ON DELETE SET NULL)
+created_at, expires_at: datetime      # expires_at = created_at + INVITATION_TTL_DAYS
+accepted_at, cancelled_at: datetime | None
+# Índices: email, organization_id, created_at
+```
+**Pendiente** = no aceptada, no cancelada y no vencida. Una invitación pendiente reserva un lugar de la institución
+(`organizations.pending_invitations`). La página lee el link (`/invitacion#token=...`) y manda el token por POST a
+`/api/v1/invitations/details`, `/accept` (formulario) o `/accept-google`; aceptar corre en una sola transacción
+(institución bloqueada, invitación bloqueada con `FOR UPDATE`, cuenta creada con el mail confirmado, vistas aplicadas
+e invitación cerrada). Las filas nunca se borran. Los topes de envío las cuentan (por dirección y de todo el sitio).
+Código: [`api/app/auth/invitations.py`](../api/app/auth/invitations.py), [`api/app/routers/invitations.py`](../api/app/routers/invitations.py).
+
 ### 3.2 Índices (Rendimiento)
 
 ```sql
@@ -470,7 +490,7 @@ Las vistas de radar único (`radar.html`) necesitan además un permiso: `GET /ap
 
 Admin general (`/api/v1/admin/`): `GET/POST /organizations`, `GET/PATCH /organizations/{id}` (`name`, `seat_limit`, `is_active`; cada respuesta trae `seats_used` y `radar_detail_views`), `PUT /organizations/{id}/permissions`. `POST /users` acepta `organization_id` y el rol `org_admin`; las respuestas de usuarios suman `organization_id` y `organization_name`; la empresa de un usuario no se edita.
 
-Admin de empresa (`/api/v1/org`, rol `org_admin`, siempre sobre su propia empresa, sin id de empresa en la ruta): `GET /org`, `GET/POST /org/users`, `PATCH /org/users/{id}` (`full_name`, `email`, `is_active`), `POST /org/users/{id}/reset-password`, `POST /org/users/{id}/revoke-sessions`, `PUT /org/users/{id}/permissions` (403 si se pasa de la lista de la empresa). Solo sobre los lectores de su propia empresa: otra empresa o un id inexistente es 404, otro admin de empresa es 403. Crear o reactivar un usuario necesita un lugar libre (409; la fila de la empresa se bloquea con `FOR UPDATE` para que dos altas no se lleven el último lugar). `GET /auth/check?role=org_admin` es el probe que usa nginx para `/empresa`.
+Admin de empresa (`/api/v1/org`, rol `org_admin`, siempre sobre su propia empresa, sin id de empresa en la ruta): `GET /org`, `GET/POST /org/users`, `PATCH /org/users/{id}` (`full_name`, `email`; `is_active` se rechaza con 403: solo el admin general activa o desactiva), `POST /org/users/{id}/unlink` (saca al lector de la empresa: libera su lugar, le quita sus vistas y le cierra las sesiones), `POST /org/users/{id}/reset-password`, `POST /org/users/{id}/revoke-sessions`, `PUT /org/users/{id}/permissions` (403 si se pasa de la lista de la empresa). Solo sobre los lectores de su propia empresa: otra empresa o un id inexistente es 404, otro admin de empresa es 403. Crear o reactivar un usuario necesita un lugar libre (409; la fila de la empresa se bloquea con `FOR UPDATE` para que dos altas no se lleven el último lugar). `GET /auth/check?role=org_admin` es el probe que usa nginx para `/empresa`.
 
 **Base path:** un proxy puede servir el sitio bajo un prefijo (`/nacho/`): saca el prefijo y manda
 `X-Forwarded-Prefix: /nacho`. nginx acepta solo un segmento simple (`map` con `^/[A-Za-z0-9_-]+$`; cualquier otra cosa

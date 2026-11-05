@@ -39,7 +39,7 @@ def _member_or_404(db: Session, actor: User, user_id: int) -> User:
 def _editable(actor: User, user: User) -> User:
     """Company admins manage the viewers of their company; other company admins are the general admin's job."""
     if user.role != "viewer":
-        raise HTTPException(status_code=403, detail="Solo podés administrar a los lectores de tu empresa")
+        raise HTTPException(status_code=403, detail="Solo podés administrar a los lectores de tu institución")
     return user
 
 
@@ -58,12 +58,22 @@ def company_users(db: Session = Depends(get_db), actor: User = Depends(require_o
 def create_company_user(
     payload: OrgUserCreate, db: Session = Depends(get_db), actor: User = Depends(require_org_admin)
 ) -> UserResponse:
-    """New viewer in the actor's company: takes a seat and starts with the company's views."""
+    """New viewer in the actor's company: takes a seat and starts with the views in the body, which must fit inside
+    the company's list, or with a copy of the company's list when the body has none. Account and
+    views are saved together: if the views are refused, no account is left behind."""
     try:
-        user = orgs.create_member(db, actor.organization_id, payload.model_dump(), "viewer", actor)
+        # One savepoint for both steps: if the views are refused the new account is rolled back with them.
+        with db.begin_nested():
+            user = orgs.create_member(
+                db, actor.organization_id, payload.model_dump(exclude={"radar_detail_view"}), "viewer", actor
+            )
+            if payload.radar_detail_view is not None:
+                permissions.replace_user_radar_views(db, user, payload.radar_detail_view, actor, within_company=True)
+    except permissions.PermissionRuleError as exc:
+        raise _rule(exc)
     except orgs.AccountExistsError as exc:
         # The person may already have an account elsewhere; only the general admin can move it into a company.
-        ask = "Si esa persona ya tiene una cuenta, pedile al administrador general que la sume a tu empresa."
+        ask = "Si esa persona ya tiene una cuenta, pedile al administrador general que la sume a tu institución."
         raise HTTPException(status_code=exc.status_code, detail=f"{exc.detail}. {ask}")
     except orgs.OrgRuleError as exc:
         raise _rule(exc)
@@ -77,10 +87,29 @@ def update_company_user(
     user_id: int, payload: OrgUserUpdate, db: Session = Depends(get_db), actor: User = Depends(require_org_admin)
 ) -> UserResponse:
     user = _editable(actor, _member_or_404(db, actor, user_id))
+    changes = payload.model_dump(exclude_unset=True)
+    # Activating or deactivating accounts is the general admin's job. A company admin takes someone out of its
+    # institution with POST .../unlink instead. Refused loudly (not ignored) so nobody thinks it worked.
+    if "is_active" in changes:
+        raise HTTPException(status_code=403, detail="Solo el administrador general puede activar o desactivar usuarios")
     try:
-        user_admin.update_user(db, actor, user, payload.model_dump(exclude_unset=True))
+        user_admin.update_user(db, actor, user, changes)
     except user_admin.UserRuleError as exc:
         raise _rule(exc)
+    db.commit()
+    db.refresh(user)
+    return user_response(user)
+
+
+@router.post("/users/{user_id}/unlink", response_model=UserResponse)
+def unlink_company_user(
+    user_id: int, db: Session = Depends(get_db), actor: User = Depends(require_org_admin)
+) -> UserResponse:
+    """Take a viewer out of the actor's institution: it stops taking a seat, loses the views the institution gave it
+    and its sessions are closed. The account stays active (the general admin deactivates). Only viewers of the own
+    institution; once unlinked the user is out of reach, like any user of another institution (404)."""
+    user = _editable(actor, _member_or_404(db, actor, user_id))
+    orgs.leave_org(db, actor, user)
     db.commit()
     db.refresh(user)
     return user_response(user)

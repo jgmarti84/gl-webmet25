@@ -310,6 +310,26 @@ whatever its purpose, counts toward the per-account caps (`MAIL_MAX_PER_HOUR`, `
 signs up with it, so the sign-up answer is the same for a new and for a registered mail (nobody can find out which
 mails have an account) while the caps still protect that inbox from flooding.
 
+#### **Invitation** (an invitation by mail to join an institution, spec E)
+```python
+id: UUID (PK)
+email: str                            # normalized (trimmed, lower case); the person has no account yet
+organization_id: int (FK → organizations.id, ON DELETE CASCADE)
+role: str                             # 'org_admin' | 'viewer' (CHECK constraint)
+radar_views: JSON | None              # radar codes or ["*"]; NULL = a copy of the institution's list when accepted. Viewers only
+token_hash: str (unique)              # SHA-256 of the token; the token itself only travels in the mail
+invited_by: int | None (FK → users.id, ON DELETE SET NULL)
+created_at, expires_at: datetime      # expires_at = created_at + INVITATION_TTL_DAYS
+accepted_at, cancelled_at: datetime | None
+# Indexes: email, organization_id, created_at
+```
+**Pending** = not accepted, not cancelled and not expired. A pending invitation reserves a seat of the institution
+(`organizations.pending_invitations`). The link (`/invitacion#token=...`) is read by the page, which posts the token to
+`POST /api/v1/invitations/details`, `/accept` (form) or `/accept-google`; accepting runs in one transaction (institution
+locked, invitation locked with `FOR UPDATE`, account created with a confirmed mail, views applied, invitation closed).
+Rows are never deleted. The mail caps count them (per address and site-wide). Code: [`api/app/auth/invitations.py`](../api/app/auth/invitations.py),
+[`api/app/routers/invitations.py`](../api/app/routers/invitations.py).
+
 ### 3.2 Indexes (Performance)
 
 ```sql
@@ -466,7 +486,7 @@ One-radar detail views (`radar.html`) also need a permission: `GET /api/v1/permi
 
 General admin (`/api/v1/admin/`): `GET/POST /organizations`, `GET/PATCH /organizations/{id}` (`name`, `seat_limit`, `is_active`; each answer has `seats_used` and `radar_detail_views`), `PUT /organizations/{id}/permissions`. `POST /users` accepts `organization_id` and the role `org_admin`; user answers add `organization_id` and `organization_name`; the company of a user cannot be edited.
 
-Company admin (`/api/v1/org`, role `org_admin`, always on its own company, no company id in the path): `GET /org`, `GET/POST /org/users`, `PATCH /org/users/{id}` (`full_name`, `email`, `is_active`), `POST /org/users/{id}/reset-password`, `POST /org/users/{id}/revoke-sessions`, `PUT /org/users/{id}/permissions` (403 above the company's list). Only the viewers of its own company: another company or an unknown id is 404, another company admin is 403. Creating or reactivating a user needs a free seat (409; the company row is locked with `FOR UPDATE` so two sign-ups cannot take the last seat). `GET /auth/check?role=org_admin` is the probe nginx uses for `/empresa`.
+Company admin (`/api/v1/org`, role `org_admin`, always on its own company, no company id in the path): `GET /org`, `GET/POST /org/users`, `PATCH /org/users/{id}` (`full_name`, `email`; `is_active` is refused with 403: only the general admin activates or deactivates), `POST /org/users/{id}/unlink` (takes the viewer out of the company: frees its seat, removes its views, closes its sessions), `POST /org/users/{id}/reset-password`, `POST /org/users/{id}/revoke-sessions`, `PUT /org/users/{id}/permissions` (403 above the company's list). Only the viewers of its own company: another company or an unknown id is 404, another company admin is 403. Creating or reactivating a user needs a free seat (409; the company row is locked with `FOR UPDATE` so two sign-ups cannot take the last seat). `GET /auth/check?role=org_admin` is the probe nginx uses for `/empresa`.
 
 **Base path:** a proxy may serve the site under a prefix (`/nacho/`): it strips the prefix and sends
 `X-Forwarded-Prefix: /nacho`. nginx accepts only one simple segment (`map` with `^/[A-Za-z0-9_-]+$`; anything else

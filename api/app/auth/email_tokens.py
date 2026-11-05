@@ -14,7 +14,7 @@ from typing import Optional, Set, Tuple
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from radar_db.models import EmailToken, User
+from radar_db.models import EmailToken, Invitation, User
 
 from ..config import settings
 
@@ -51,8 +51,11 @@ def hash_token(token: str) -> str:
 
 
 def _sent_since(db: Session, since: datetime) -> int:
-    """How many mails the whole site sent after `since` (one email_tokens row per mail, of every account)."""
-    return db.query(func.count(EmailToken.id)).filter(EmailToken.created_at > since).scalar()
+    """How many mails the whole site sent after `since`: one email_tokens row per account mail, one invitations
+    row per invitation mail, so both count toward the global caps."""
+    tokens = db.query(func.count(EmailToken.id)).filter(EmailToken.created_at > since).scalar()
+    invitations = db.query(func.count(Invitation.id)).filter(Invitation.created_at > since).scalar()
+    return tokens + invitations
 
 
 def _warn_once(window: str, key: str, message: str) -> None:

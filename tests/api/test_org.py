@@ -20,6 +20,7 @@ ENDPOINTS = [
     ("post", "/api/v1/org/users", {"username": "nadie", "password": "x"}),
     ("patch", "/api/v1/org/users/999999999", {"full_name": "x"}),
     ("put", "/api/v1/org/users/999999999/permissions", {"radar_detail_view": []}),
+    ("post", "/api/v1/org/users/999999999/unlink", None),
 ]
 
 
