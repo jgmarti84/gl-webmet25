@@ -53,10 +53,15 @@ def list_organizations(db: Session = Depends(get_db)) -> List[OrganizationRespon
 
 
 @router.post("", response_model=OrganizationResponse, status_code=201)
-def create_organization(payload: OrganizationCreate, db: Session = Depends(get_db)) -> OrganizationResponse:
+def create_organization(
+    payload: OrganizationCreate, db: Session = Depends(get_db), actor: User = Depends(require_admin)
+) -> OrganizationResponse:
+    """Create a company, optionally with its radar views and its admin (a new user, or an existing viewer without a
+    company), all in one transaction: if any part is refused, nothing is created."""
+    data = payload.model_dump(exclude={"admin", "radar_detail_view"})
     try:
-        org = orgs.create_org(db, payload.model_dump())
-    except orgs.OrgRuleError as exc:
+        org = orgs.create_org_with_admin(db, actor, data, payload.admin, payload.radar_detail_view)
+    except (orgs.OrgRuleError, permissions.PermissionRuleError) as exc:
         raise _rule(exc)
     db.commit()
     db.refresh(org)

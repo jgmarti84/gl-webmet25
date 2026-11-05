@@ -2,15 +2,47 @@
 """Bodies of the company endpoints (spec C): /admin/organizations and /org."""
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Annotated, List, Literal, Optional, Union
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from .permissions import RadarResource
+
+
+class NewOrgAdmin(BaseModel):
+    """A brand new company admin, created together with the company."""
+
+    mode: Literal["new"]
+    username: str = Field(..., min_length=3, max_length=32)
+    password: str = Field(..., min_length=1, max_length=128)
+    full_name: Optional[str] = Field(None, max_length=128)
+    email: Optional[EmailStr] = None
+
+    @field_validator("username")
+    @classmethod
+    def _normalize(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class ExistingOrgAdmin(BaseModel):
+    """An existing viewer without a company who becomes the admin of the new company."""
+
+    mode: Literal["existing"]
+    user_id: int
+
+
+# The "mode" field tells which of the two it is (anything else, or no mode, is a 422).
+OrgAdminChoice = Annotated[Union[NewOrgAdmin, ExistingOrgAdmin], Field(discriminator="mode")]
 
 
 class OrganizationCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     seat_limit: int = Field(..., gt=0, le=10000)
     is_active: bool = True
+    # Optional, created in the same transaction as the company (spec C follow-up): its admin, and its radar views
+    # (radar codes, or ["*"], the same shape as PUT /organizations/{id}/permissions).
+    admin: Optional[OrgAdminChoice] = None
+    radar_detail_view: Optional[List[RadarResource]] = Field(None, max_length=500)
 
     @field_validator("name")
     @classmethod

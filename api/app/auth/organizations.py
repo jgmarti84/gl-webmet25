@@ -110,6 +110,47 @@ def create_org(db: Session, data: dict) -> Organization:
     return org
 
 
+def make_org_admin(db: Session, actor: User, org: Organization, user: User) -> None:
+    """An existing viewer WITHOUT a company becomes the admin of `org` (only for a company that was just created).
+
+    It is moved into the company (takes a seat, its sessions are closed, its own views are replaced by the company's,
+    see move_user) and its role becomes org_admin. Users of another company are not offered: taking people out of a
+    company is a separate feature. Rules are 422, except a user that does not exist (404).
+    """
+    if user.role != "viewer":
+        raise OrgRuleError(422, "Solo un lector sin empresa puede ser administrador de la empresa")
+    if user.organization_id is not None:
+        raise OrgRuleError(422, f"El usuario {user.username} ya pertenece a una empresa")
+    if not user.is_active:
+        raise OrgRuleError(422, f"El usuario {user.username} está desactivado")
+    move_user(db, actor, user, org.id)
+    user.role = "org_admin"
+    db.flush()
+
+
+def create_org_with_admin(db: Session, actor: User, data: dict, admin, views: Optional[list]) -> Organization:
+    """New company plus, optionally, its radar views and its admin, all or nothing.
+
+    `admin` is a NewOrgAdmin / ExistingOrgAdmin (or None) and `views` a list of radar codes or ["*"] (or None). It all
+    runs inside one savepoint, so if any step fails (name taken, bad radar, username taken, weak password, a user that
+    cannot be chosen...) nothing is left behind, not even the company. The views are set BEFORE the admin is created,
+    so the admin starts with the company's list.
+    """
+    with db.begin_nested():
+        org = create_org(db, data)
+        if views:
+            permissions.replace_org_radar_views(db, org, views, actor)
+        if admin is not None and admin.mode == "new":
+            fields = admin.model_dump(exclude={"mode"})
+            create_member(db, org.id, fields, "org_admin", actor)
+        elif admin is not None:
+            user = db.get(User, admin.user_id)
+            if user is None:
+                raise OrgRuleError(404, "Usuario no encontrado")
+            make_org_admin(db, actor, org, user)
+    return org
+
+
 def update_org(db: Session, org: Organization, changes: dict) -> Organization:
     """Edit name, seat_limit or is_active. Lowering the limit deactivates nobody (spec §5)."""
     for field in ("name", "seat_limit", "is_active"):
