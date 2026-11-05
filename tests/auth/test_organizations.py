@@ -389,6 +389,20 @@ def test_org_admin_creates_a_viewer_with_the_company_views(app_client, company):
     assert body["radar_detail_views"] == ["TSTA", "TSTB"]
 
 
+def test_org_admin_creates_a_viewer_with_the_views_it_chose(app_client, company, make_radar, test_db_session):
+    make_radar("TSTC")  # a radar the company does not have
+    company["org"].seat_limit = 6  # room for the accounts below
+    test_db_session.flush()
+    response = app_client.post(
+        "/api/v1/org/users", json={"username": "nueva", "password": TEST_PASSWORD, "radar_detail_view": ["TSTA"]}
+    )
+    assert response.status_code == 201 and response.json()["radar_detail_views"] == ["TSTA"]
+    # Views outside the company's list are refused and no account is left behind (the same name can be used again).
+    outside = {"username": "otra", "password": TEST_PASSWORD, "radar_detail_view": ["TSTC"]}
+    assert app_client.post("/api/v1/org/users", json=outside).status_code == 403
+    assert app_client.post("/api/v1/org/users", json={**outside, "radar_detail_view": []}).status_code == 201
+
+
 def test_org_admin_cannot_go_over_the_seats(app_client, company):
     assert app_client.post("/api/v1/org/users", json={"username": "tres", "password": TEST_PASSWORD}).status_code == 201
     response = app_client.post("/api/v1/org/users", json={"username": "cuatro", "password": TEST_PASSWORD})

@@ -58,9 +58,19 @@ def company_users(db: Session = Depends(get_db), actor: User = Depends(require_o
 def create_company_user(
     payload: OrgUserCreate, db: Session = Depends(get_db), actor: User = Depends(require_org_admin)
 ) -> UserResponse:
-    """New viewer in the actor's company: takes a seat and starts with the company's views."""
+    """New viewer in the actor's company: takes a seat and starts with the views in the body, which must fit inside
+    the company's list, or with a copy of the company's list when the body has none. Account and
+    views are saved together: if the views are refused, no account is left behind."""
     try:
-        user = orgs.create_member(db, actor.organization_id, payload.model_dump(), "viewer", actor)
+        # One savepoint for both steps: if the views are refused the new account is rolled back with them.
+        with db.begin_nested():
+            user = orgs.create_member(
+                db, actor.organization_id, payload.model_dump(exclude={"radar_detail_view"}), "viewer", actor
+            )
+            if payload.radar_detail_view is not None:
+                permissions.replace_user_radar_views(db, user, payload.radar_detail_view, actor, within_company=True)
+    except permissions.PermissionRuleError as exc:
+        raise _rule(exc)
     except orgs.AccountExistsError as exc:
         # The person may already have an account elsewhere; only the general admin can move it into a company.
         ask = "Si esa persona ya tiene una cuenta, pedile al administrador general que la sume a tu institución."

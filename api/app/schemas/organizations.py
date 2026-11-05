@@ -84,6 +84,9 @@ class OrgUserCreate(BaseModel):
     password: str = Field(..., min_length=1, max_length=128)
     full_name: Optional[str] = Field(None, max_length=128)
     email: Optional[EmailStr] = None
+    # The views the new user starts with (radar codes, or ["*"]); they must fit inside the company's list. Omitted:
+    # a copy of the company's list, as before.
+    radar_detail_view: Optional[List[RadarResource]] = Field(None, max_length=500)
 
     @field_validator("username")
     @classmethod

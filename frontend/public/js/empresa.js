@@ -258,18 +258,19 @@ async function openAddForm() {
                 <label>Email <input name="email" type="email" maxlength="254"></label>
                 <label>Contraseña inicial <input name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password"></label>
                 <p class="toolbar-note">Mínimo 10 caracteres, con al menos un carácter especial (por ejemplo ! - _ . @ #).</p>
-                <p class="toolbar-note">Entra como lector de tu institución y empieza con las vistas de la institución.</p>
+                <p class="toolbar-note">Entra como lector de tu institución, con las vistas que marques abajo.</p>
             </div>
             <div id="add-invite-fields" hidden>
                 <label>Mail de la persona <input name="invite_email" type="email" maxlength="254" autocomplete="off"></label>
-                ${viewsHtml}
-                <p class="toolbar-note">Le mandamos un mail con un link (vale 7 días). Completa sus datos o entra con Google y queda como lector de tu institución, con las vistas que marcaste. Mientras no lo acepte, la invitación reserva un lugar.</p>
+                <p class="toolbar-note">Le mandamos un mail con un link (vale 7 días). Completa sus datos o entra con Google y queda como lector de tu institución, con las vistas que marques abajo. Mientras no lo acepte, la invitación reserva un lugar.</p>
             </div>
+            ${viewsHtml}
             <div class="form-actions"><button class="btn" type="submit">Continuar</button></div>
         `,
         async (formData) => {
+            // The views picked below apply to both ways: the account made now and the invitation.
+            const views = formData.get('all') ? [ALL_RADARS] : formData.getAll('radar');
             if (formData.get('create_mode') === 'invite') {
-                const views = formData.get('all') ? [ALL_RADARS] : formData.getAll('radar');
                 const email = String(formData.get('invite_email') || '').trim();
                 if (!email) throw new Error('Escribí el mail de la persona a invitar');
                 await empresaApi.createInvitation({ email, radar_views: views });
@@ -285,6 +286,7 @@ async function openAddForm() {
                 password: formData.get('password'),
                 full_name: formData.get('full_name') || null,
                 email: formData.get('email') || null,
+                radar_detail_view: views,
             };
             await empresaApi.createUser(payload);
             await render();
