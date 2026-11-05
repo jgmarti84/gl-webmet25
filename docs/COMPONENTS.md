@@ -462,6 +462,12 @@ settings), and animation controls (bottom-center).
 
 `auth-api.js` also talks to the public endpoints of the sign-up (DATA_FLOW §4.10): `login(username, password)` (the username field also takes the mail, and the answer carries the failure `code`, for example `email_not_verified`), `options()` (what the pages may offer; never throws, and falls back to "nothing extra"), `register(payload)`, `verifyEmail(token)`, `resendVerification(identifier)`, `forgotPassword(email)` and `resetPassword(token, password)`. The last five resolve `{ ok, status, data }` and leave the texts to the page.
 
+### **shared/org-form.js** — Logic of the "Agregar empresa" form
+
+**File:** [`frontend/public/js/shared/org-form.js`](../../frontend/public/js/shared/org-form.js)
+
+**Responsibility:** `eligibleAdmins(users)` lists who can be offered as the admin of a new company (active viewers that belong to no company, sorted by name) and `buildOrganizationPayload(values)` builds the body of `POST /admin/organizations` from the form: the company plus, only when chosen, the `admin` block (`mode: "new"` with the user data, or `mode: "existing"` with `user_id`) and `radar_detail_view` (`["*"]` for "Todas"). It throws a Spanish message when an option is incomplete. `admin.js` draws the form; the logic lives here so it is unit-tested (`tests/js/test_org_form.mjs`).
+
 ### **shared/profile-section.js** — The profile, drawn inside any page (spec D)
 
 **File:** [`frontend/public/js/shared/profile-section.js`](../../frontend/public/js/shared/profile-section.js)

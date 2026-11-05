@@ -1,0 +1,58 @@
+/**
+ * Logic of the "Agregar empresa" form of the admin panel (spec C follow-up): who can be offered as the admin of a new
+ * company and the body the form sends. Kept apart from admin.js (which draws the form) so it can be tested without a
+ * browser: tests/js/test_org_form.mjs.
+ */
+import { ALL_RADARS } from './radar-views.js';
+
+/**
+ * The users that can be chosen as the admin of a NEW company: active viewers that belong to no company, sorted by
+ * name. A user of another company, a company admin, the general admin or a deactivated account are not offered (the
+ * server refuses them too).
+ */
+export function eligibleAdmins(users) {
+    return users
+        .filter((user) => user.role === 'viewer' && user.is_active && (user.organization_id === null || user.organization_id === undefined))
+        .sort((a, b) => a.username.localeCompare(b.username));
+}
+
+/** The "admin" block of the request for the chosen option, or null for "no admin for now". Throws a Spanish message. */
+function adminBlock(values) {
+    if (values.adminMode === 'new') {
+        const admin = values.newAdmin || {};
+        const username = String(admin.username || '').trim();
+        if (!username || !admin.password) throw new Error('El administrador nuevo necesita un usuario y una contraseña');
+        return {
+            mode: 'new',
+            username,
+            password: admin.password,
+            full_name: admin.fullName ? admin.fullName : null,
+            email: admin.email ? admin.email : null,
+        };
+    }
+    if (values.adminMode === 'existing') {
+        if (!values.existingUserId) throw new Error('Elegí el usuario que va a ser administrador de la empresa');
+        return { mode: 'existing', user_id: Number(values.existingUserId) };
+    }
+    return null;
+}
+
+/**
+ * The body of POST /admin/organizations from the values of the form. `admin` and `radar_detail_view` are only sent
+ * when they were chosen, so a company without them is created exactly as before. "Todas" wins over single radars.
+ *
+ * @param {{name: string, seatLimit: string|number, isActive: boolean, adminMode: 'new'|'existing'|'none',
+ *          newAdmin?: object, existingUserId?: string, allViews: boolean, radars: string[]}} values
+ */
+export function buildOrganizationPayload(values) {
+    const payload = {
+        name: values.name,
+        seat_limit: Number(values.seatLimit),
+        is_active: values.isActive,
+    };
+    const admin = adminBlock(values);
+    if (admin) payload.admin = admin;
+    if (values.allViews) payload.radar_detail_view = [ALL_RADARS];
+    else if (values.radars && values.radars.length) payload.radar_detail_view = values.radars;
+    return payload;
+}

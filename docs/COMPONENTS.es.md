@@ -445,6 +445,12 @@ Pipeline de composición en canvas:
 
 `auth-api.js` también habla con los endpoints públicos del registro (DATA_FLOW §4.10): `login(username, password)` (el campo de usuario también acepta el mail, y la respuesta trae el `code` del fallo, por ejemplo `email_not_verified`), `options()` (qué pueden ofrecer las páginas; nunca lanza error y, si falla, devuelve "nada extra"), `register(payload)`, `verifyEmail(token)`, `resendVerification(identifier)`, `forgotPassword(email)` y `resetPassword(token, password)`. Los últimos cinco devuelven `{ ok, status, data }` y dejan los textos a cargo de la página.
 
+### **shared/org-form.js** — Lógica del formulario "Agregar empresa"
+
+**Archivo:** [`frontend/public/js/shared/org-form.js`](../../frontend/public/js/shared/org-form.js)
+
+**Responsabilidad:** `eligibleAdmins(users)` lista a quién se puede ofrecer como admin de una empresa nueva (lectores activos que no están en ninguna empresa, ordenados por nombre) y `buildOrganizationPayload(values)` arma el cuerpo de `POST /admin/organizations` desde el formulario: la empresa y, solo si se eligió, el bloque `admin` (`mode: "new"` con los datos del usuario, o `mode: "existing"` con `user_id`) y `radar_detail_view` (`["*"]` para "Todas"). Lanza un mensaje en español cuando una opción está incompleta. `admin.js` dibuja el formulario; la lógica vive acá para poder probarla (`tests/js/test_org_form.mjs`).
+
 ### **shared/profile-section.js** — El perfil, dibujado dentro de cualquier página (spec D)
 
 **Archivo:** [`frontend/public/js/shared/profile-section.js`](../../frontend/public/js/shared/profile-section.js)

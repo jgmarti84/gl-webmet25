@@ -1,5 +1,6 @@
 import { adminApi, EXPIRED_SESSION_MESSAGE } from './admin-api.js';
 import { authApi, redirectToLogin } from './auth-api.js';
+import { buildOrganizationPayload, eligibleAdmins } from './shared/org-form.js';
 import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
 
@@ -2282,29 +2283,119 @@ async function renderOrganizations() {
     });
 }
 
-/** Create or edit a company: name, seat limit and whether it is active. */
-function openOrganizationForm(org = null) {
+/**
+ * The extra blocks of the form that CREATES a company (not shown when editing): who administers it and which radar
+ * views it has. Both are optional and are sent in the same request as the company, which is created all or nothing.
+ */
+function organizationExtrasHtml(users, radars) {
+    const candidates = eligibleAdmins(users);
+    const options = candidates.length
+        ? candidates.map((user) => `<option value="${user.id}">${safeText(user.username)}${user.full_name ? ` (${safeText(user.full_name)})` : ''}</option>`).join('')
+        : '<option value="" disabled>No hay usuarios disponibles</option>';
+    const radarRows = radars.length
+        ? radars.map((radar) => `
+            <label class="checkbox-row">
+                <input type="checkbox" name="radar" value="${safeText(radar.code)}">
+                ${safeText(radar.code)} - ${safeText(radar.title)}
+            </label>`).join('')
+        : '<p class="toolbar-note">Ningún radar tiene la vista de detalle habilitada.</p>';
+    return `
+        <fieldset class="org-admin-block">
+            <legend>Administrador de la empresa</legend>
+            <label class="checkbox-row"><input type="radio" name="admin_mode" value="new" checked> Crear un usuario nuevo</label>
+            <div id="org-admin-new" class="org-admin-fields">
+                <label>Usuario <input name="admin_username" type="text" minlength="3" maxlength="32" pattern="[a-zA-Z0-9._-]+" autocomplete="off"></label>
+                <label>Nombre <input name="admin_fullname" type="text" maxlength="128"></label>
+                <label>Email <input name="admin_email" type="email" maxlength="254"></label>
+                <label>Contraseña inicial <input name="admin_password" type="password" minlength="10" maxlength="128" autocomplete="new-password"></label>
+                <p class="toolbar-note">Mínimo 10 caracteres, con al menos un carácter especial (por ejemplo ! - _ . @ #).</p>
+            </div>
+            <label class="checkbox-row"><input type="radio" name="admin_mode" value="existing"> Elegir uno que ya existe</label>
+            <div id="org-admin-existing" class="org-admin-fields" hidden>
+                <label>Usuario <select name="admin_user_id"><option value="">Elegí un usuario…</option>${options}</select></label>
+                <p class="toolbar-note">Solo se ofrecen lectores activos que no están en ninguna empresa. Pasa a ser administrador de esta empresa: se le cierran las sesiones y sus vistas propias se reemplazan por las de la empresa.</p>
+            </div>
+            <label class="checkbox-row"><input type="radio" name="admin_mode" value="none"> Sin administrador por ahora</label>
+        </fieldset>
+        <fieldset class="views-radars">
+            <legend>Vistas de radar de la empresa</legend>
+            <label class="checkbox-row"><input type="checkbox" name="all"> Todas</label>
+            ${radarRows}
+            <p class="toolbar-note">Se pueden cambiar después con el botón Vistas de la empresa.</p>
+        </fieldset>`;
+}
+
+/** Show only the fields of the chosen admin option (the other blocks stay hidden). */
+function wireAdminModeBlocks() {
+    const form = elements.formModalBody;
+    const update = () => {
+        const mode = form.querySelector('input[name="admin_mode"]:checked')?.value;
+        form.querySelector('#org-admin-new').hidden = mode !== 'new';
+        form.querySelector('#org-admin-existing').hidden = mode !== 'existing';
+    };
+    form.querySelectorAll('input[name="admin_mode"]').forEach((radio) => radio.addEventListener('change', update));
+    update();
+}
+
+/**
+ * Create or edit a company. Editing: name, seat limit and whether it is active. Creating adds, in the same form, the
+ * company admin (a new user, an existing one, or none for now) and the radar views of the company.
+ */
+async function openOrganizationForm(org = null) {
     const isEdit = Boolean(org);
+    let extras = '';
+    if (!isEdit) {
+        try {
+            const [users, radars] = await Promise.all([adminApi.listUsers(), adminApi.listRadars()]);
+            extras = organizationExtrasHtml(users, radars.filter((radar) => radar.detail_view_enabled));
+        } catch (error) {
+            showMessage(error.message || 'No se pudo preparar el formulario', 'error');
+            return;
+        }
+    }
     openFormModal(
         isEdit ? `Editar empresa ${org.name}` : 'Agregar empresa',
         `
             <label>Nombre <input name="name" type="text" maxlength="128" required value="${safeText(org?.name)}"></label>
             <label>Lugares (usuarios activos, admins incluidos) <input name="seat_limit" type="number" min="1" max="10000" required value="${org?.seat_limit ?? 5}"></label>
             <label class="checkbox-row"><input type="checkbox" name="is_active"${!isEdit || org.is_active ? ' checked' : ''}> Activa (si no, ninguno de sus usuarios puede entrar)</label>
+            ${extras}
             <div class="form-actions"><button class="btn" type="submit">${isEdit ? 'Guardar' : 'Crear'}</button></div>
         `,
         async (formData) => {
-            const payload = {
+            if (isEdit) {
+                const payload = {
+                    name: formData.get('name'),
+                    seat_limit: Number(formData.get('seat_limit')),
+                    is_active: formData.get('is_active') === 'on',
+                };
+                await adminApi.patchOrganization(org.id, payload);
+                await renderSection();
+                showMessage(`Empresa ${payload.name} actualizada`, 'success');
+                return;
+            }
+            const adminMode = formData.get('admin_mode') || 'none';
+            const payload = buildOrganizationPayload({
                 name: formData.get('name'),
-                seat_limit: Number(formData.get('seat_limit')),
-                is_active: formData.get('is_active') === 'on',
-            };
-            if (isEdit) await adminApi.patchOrganization(org.id, payload);
-            else await adminApi.createOrganization(payload);
+                seatLimit: formData.get('seat_limit'),
+                isActive: formData.get('is_active') === 'on',
+                adminMode,
+                newAdmin: {
+                    username: formData.get('admin_username'),
+                    password: formData.get('admin_password'),
+                    fullName: formData.get('admin_fullname'),
+                    email: formData.get('admin_email'),
+                },
+                existingUserId: formData.get('admin_user_id'),
+                allViews: formData.get('all') === 'on',
+                radars: formData.getAll('radar'),
+            });
+            await adminApi.createOrganization(payload);
             await renderSection();
-            showMessage(`Empresa ${payload.name} ${isEdit ? 'actualizada' : 'creada'}`, 'success');
+            showMessage(`Empresa ${payload.name} creada${payload.admin ? ' con su administrador' : ''}`, 'success');
         },
     );
+    if (!isEdit) wireAdminModeBlocks();
 }
 
 function openPasswordResetForm(user) {
