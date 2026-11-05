@@ -30,10 +30,10 @@ function loadGoogleScript() {
 
 /**
  * Show the Google button inside `container` (and reveal `wrapper`, which holds it and its "o" divider).
- * `onSuccess()` runs once the API opened the session; `onError(text)` gets the message to show otherwise.
+ * `onSuccess(data)` runs once the API opened the session (`data` is the answer); `onError(text)` gets the message to show otherwise.
  * If Google's script cannot load, nothing is shown and the normal login stays as the only way in.
  */
-export async function setupGoogleSignIn({ clientId, wrapper, container, onSuccess, onError }) {
+export async function setupGoogleSignIn({ clientId, wrapper, container, onSuccess, onError, signIn = authApi.google }) {
     if (!clientId) return;
     try {
         await loadGoogleScript();
@@ -46,9 +46,10 @@ export async function setupGoogleSignIn({ clientId, wrapper, container, onSucces
         // Google calls this with the token after the person chose an account.
         callback: async (response) => {
             try {
-                const { ok, status, data } = await authApi.google(response.credential);
+                // `signIn` is what the page does with the token: the login page signs in, the invitation page accepts.
+                const { ok, status, data } = await signIn(response.credential);
                 if (ok) {
-                    onSuccess();
+                    onSuccess(data);
                     return;
                 }
                 // 401: the token did not check out. 403: the API explains why this account cannot come in this way

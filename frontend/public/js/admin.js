@@ -4,7 +4,7 @@ import { buildOrganizationPayload, eligibleAdmins, filterAdmins, filterOrganizat
 import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
 
-const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'colormaps', 'colormap-options', 'users', 'organizations', 'profile'];
+const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'colormaps', 'colormap-options', 'users', 'organizations', 'invitations', 'profile'];
 const STATUS_OPTIONS = ['available', 'missing', 'error', 'pending', 'processing', 'archived'];
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
@@ -102,6 +102,13 @@ const FILTER_CONFIG = {
         facets: [
             { field: 'product_key', label: 'Producto', type: 'select' },
             { field: 'cmap_name', label: 'Mapa de colores', type: 'select' },
+        ],
+    },
+    invitations: {
+        facets: [
+            { field: 'email', label: 'Mail', type: 'text' },
+            { field: 'organization_name', label: 'Institución', type: 'select' },
+            { field: 'role_label', label: 'Rol', type: 'select' },
         ],
     },
     organizations: {
@@ -2366,7 +2373,8 @@ async function renderOrganizations() {
     // The "Lugares" filter is computed here: the API gives the numbers, the filter needs a word to compare.
     const filterable = orgs.map((org) => ({
         ...org,
-        seats_state: org.seats_used >= org.seat_limit ? 'Completa' : 'Con lugares libres',
+        // A pending invitation reserves a seat (spec E), so the seats are full counting them too.
+        seats_state: org.seats_used + (org.pending_invitations || 0) >= org.seat_limit ? 'Completa' : 'Con lugares libres',
     }));
     elements.sectionContent.innerHTML = `
         <div class="toolbar"><button class="btn" id="orgs-add">+ Agregar institución</button></div>
@@ -2380,7 +2388,7 @@ async function renderOrganizations() {
                 ${filterable.map((org) => `
                     <tr${rowFacetAttr('organizations', org)}>
                         <td>${safeText(org.name)}</td>
-                        <td>${org.seats_used} de ${org.seat_limit}</td>
+                        <td>${org.seats_used} de ${org.seat_limit}${org.pending_invitations ? ` (+${org.pending_invitations} invitación${org.pending_invitations === 1 ? '' : 'es'})` : ''}</td>
                         <td>${org.is_active ? 'Sí' : 'No'}</td>
                         <td>${safeText(viewsSummary(org.radar_detail_views))}</td>
                         <td class="table-actions">
@@ -2420,6 +2428,108 @@ async function renderOrganizations() {
 }
 
 /**
+ * Invitations section (spec E): the pending invitations of every institution, with Reenviar and Cancelar, and a form to
+ * invite someone to an institution that already exists (an admin for one without admin, or a viewer).
+ */
+async function renderInvitations() {
+    const [invitations, orgs] = await Promise.all([adminApi.listInvitations(), adminApi.listOrganizations()]);
+    state.organizations = orgs;
+    // "Rol" filter needs words: the API gives the code.
+    const items = invitations.map((invitation) => ({ ...invitation, role_label: ROLE_LABELS[invitation.role] || invitation.role }));
+    const views = (invitation) => (invitation.role === 'org_admin'
+        ? 'Las de la institución'
+        : (invitation.radar_views ? viewsSummary(invitation.radar_views) : 'Copia de las de la institución'));
+    elements.sectionContent.innerHTML = `
+        <div class="toolbar"><button class="btn" id="invitations-add">+ Invitar por mail</button></div>
+        ${renderFilterBar('invitations', items)}
+        <div class="table-wrap">
+        <table>
+            <thead><tr>
+                <th>Mail</th><th>Institución</th><th>Rol</th><th>Vistas de radar</th><th>Vence</th><th>Acciones</th>
+            </tr></thead>
+            <tbody>
+                ${items.map((invitation) => `
+                    <tr${rowFacetAttr('invitations', invitation)}>
+                        <td>${safeText(invitation.email)}</td>
+                        <td>${safeText(invitation.organization_name)}</td>
+                        <td>${safeText(invitation.role_label)}</td>
+                        <td>${safeText(views(invitation))}</td>
+                        <td>${safeText(new Date(invitation.expires_at).toLocaleDateString('es-AR'))}</td>
+                        <td class="table-actions">
+                            <button class="btn-secondary" data-resend-invitation="${safeText(invitation.id)}">Reenviar</button>
+                            <button class="btn-secondary" data-cancel-invitation="${safeText(invitation.id)}">Cancelar</button>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+        </div>
+        <p class="toolbar-note">Cada invitación pendiente reserva un lugar de su institución hasta que se acepta, se cancela o vence (7 días).</p>
+    `;
+    wireFilterBar('invitations');
+    document.getElementById('invitations-add').onclick = () => openInvitationForm();
+    elements.sectionContent.querySelectorAll('[data-resend-invitation]').forEach((el) => {
+        el.onclick = async () => {
+            try {
+                const sent = await adminApi.resendInvitation(el.dataset.resendInvitation);
+                await renderSection();
+                showMessage(`Invitación reenviada a ${sent.email}`, 'success');
+            } catch (error) {
+                showMessage(error.message, 'error');
+            }
+        };
+    });
+    elements.sectionContent.querySelectorAll('[data-cancel-invitation]').forEach((el) => {
+        el.onclick = async () => {
+            const invitation = invitations.find((item) => String(item.id) === el.dataset.cancelInvitation);
+            if (!window.confirm(`¿Cancelar la invitación a ${invitation ? invitation.email : 'esta persona'}? El link deja de funcionar.`)) return;
+            try {
+                await adminApi.cancelInvitation(el.dataset.cancelInvitation);
+                await renderSection();
+                showMessage('Invitación cancelada', 'success');
+            } catch (error) {
+                showMessage(error.message, 'error');
+            }
+        };
+    });
+}
+
+/** Form "Invitar por mail": the mail, the institution (search box) and the role it will have. */
+function openInvitationForm() {
+    const orgs = (state.organizations || []).filter((org) => org.is_active);
+    openFormModal(
+        'Invitar por mail',
+        `
+            <label>Mail de la persona <input name="email" type="email" maxlength="254" required autocomplete="off"></label>
+            <label for="user-org-search">Institución</label>
+            <div class="combo">
+                <input id="user-org-search" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="user-org-list" autocomplete="off" placeholder="Escribí para buscar una institución…" data-picked="">
+                <input type="hidden" name="organization_id" value="">
+                <ul id="user-org-list" class="combo-list" role="listbox" hidden></ul>
+            </div>
+            <label>Rol <select name="role">
+                <option value="org_admin">Admin de institución</option>
+                <option value="viewer">Lector</option>
+            </select></label>
+            <p class="toolbar-note">Le mandamos un mail con un link (vale 7 días). Completa sus datos o entra con Google y queda dentro de la institución con ese rol. Un lector necesita que la institución ya tenga un admin activo. Mientras no lo acepte, la invitación reserva un lugar.</p>
+            <div class="form-actions"><button class="btn" type="submit">Enviar invitación</button></div>
+        `,
+        async (formData) => {
+            const organizationId = formData.get('organization_id');
+            if (!organizationId) throw new Error('Elegí una institución de la lista');
+            const sent = await adminApi.createInvitation({
+                email: String(formData.get('email') || '').trim(),
+                organization_id: Number(organizationId),
+                role: formData.get('role'),
+            });
+            await renderSection();
+            showMessage(`Invitación enviada a ${sent.email}`, 'success');
+        },
+    );
+    wireOrgCombobox(orgs.length ? orgs : []);
+}
+
+/**
  * The extra blocks of the form that CREATES a company (not shown when editing): who administers it and which radar
  * views it has. Both are optional and are sent in the same request as the company, which is created all or nothing.
  */
@@ -2452,6 +2562,11 @@ function organizationExtrasHtml(radars) {
                 </div>
                 <p class="toolbar-note">Solo se ofrecen lectores activos que no están en ninguna institución. Pasa a ser administrador de esta institución: se le cierran las sesiones y sus vistas propias se reemplazan por las de la institución.</p>
             </div>
+            <label class="checkbox-row"><input type="radio" name="admin_mode" value="invite"> Invitar por mail</label>
+            <div id="org-admin-invite" class="org-admin-fields" hidden>
+                <label>Mail de la persona <input name="admin_invite_email" type="email" maxlength="254" autocomplete="off"></label>
+                <p class="toolbar-note">Le mandamos un mail con un link (vale 7 días). Completa sus datos o entra con Google y queda como administrador de esta institución. Mientras no lo acepte, la invitación reserva un lugar.</p>
+            </div>
             <label class="checkbox-row"><input type="radio" name="admin_mode" value="none"> Sin administrador por ahora</label>
         </fieldset>
         <fieldset class="views-radars">
@@ -2469,6 +2584,7 @@ function wireAdminModeBlocks() {
         const mode = form.querySelector('input[name="admin_mode"]:checked')?.value;
         form.querySelector('#org-admin-new').hidden = mode !== 'new';
         form.querySelector('#org-admin-existing').hidden = mode !== 'existing';
+        form.querySelector('#org-admin-invite').hidden = mode !== 'invite';
     };
     form.querySelectorAll('input[name="admin_mode"]').forEach((radio) => radio.addEventListener('change', update));
     update();
@@ -2609,12 +2725,19 @@ async function openOrganizationForm(org = null) {
                     email: formData.get('admin_email'),
                 },
                 existingUserId: formData.get('admin_user_id'),
+                inviteEmail: formData.get('admin_invite_email'),
                 allViews: formData.get('all') === 'on',
                 radars: formData.getAll('radar'),
             });
             await adminApi.createOrganization(payload);
             await renderSection();
-            showMessage(`Institución ${payload.name} creada${payload.admin ? ' con su administrador' : ''}`, 'success');
+            const inviting = payload.admin && payload.admin.mode === 'invite';
+            showMessage(
+                inviting
+                    ? `Institución ${payload.name} creada: invitamos a ${payload.admin.email} como administrador`
+                    : `Institución ${payload.name} creada${payload.admin ? ' con su administrador' : ''}`,
+                'success',
+            );
         },
     );
     if (!isEdit) {
@@ -2669,6 +2792,7 @@ async function renderSection() {
         'colormap-options': 'Opciones de mapa de colores',
         users: 'Usuarios',
         organizations: 'Instituciones',
+        invitations: 'Invitaciones',
         profile: 'Mi perfil',
     };
     elements.sectionTitle.textContent = titleBySection[state.section] || 'Panel';
@@ -2686,6 +2810,7 @@ async function renderSection() {
         if (state.section === 'colormap-options') await renderColormapOptions();
         if (state.section === 'users') await renderUsers();
         if (state.section === 'organizations') await renderOrganizations();
+        if (state.section === 'invitations') await renderInvitations();
         if (state.section === 'profile') await renderProfile();
         decorateSortHeaders(state.section);
     } catch (error) {

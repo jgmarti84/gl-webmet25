@@ -32,6 +32,13 @@ export const empresaApi = {
     },
     revokeSessions(id) { return request(`/users/${id}/revoke-sessions`, { method: 'POST' }); },
     unlinkUser(id) { return request(`/users/${id}/unlink`, { method: 'POST' }); },
+    // Invitations by mail (spec E): always for a viewer of the admin's own institution.
+    listInvitations() { return request('/invitations'); },
+    createInvitation(payload) {
+        return request('/invitations', { method: 'POST', body: JSON.stringify(payload) });
+    },
+    resendInvitation(id) { return request(`/invitations/${id}/resend`, { method: 'POST' }); },
+    cancelInvitation(id) { return request(`/invitations/${id}/cancel`, { method: 'POST' }); },
     setRadarViews(id, views) {
         return request(`/users/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ radar_detail_view: views }) });
     },

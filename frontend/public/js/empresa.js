@@ -13,7 +13,7 @@ const ROLE_LABELS = { org_admin: 'Admin de institución', viewer: 'Lector' };
 // How long a success notice stays before it closes by itself (errors stay until the × is pressed).
 const SUCCESS_MESSAGE_MS = 4000;
 
-const state = { company: null, users: [], me: null };
+const state = { company: null, users: [], invitations: [], me: null };
 let messageTimer = null;
 
 const $ = (id) => document.getElementById(id);
@@ -96,21 +96,31 @@ function openModal(title, html, onSubmit) {
 /** Reload the company and its users and draw everything. The notice is cleared first, so show a new one AFTER. */
 async function render() {
     hideMessage();
-    const [company, users] = await Promise.all([empresaApi.company(), empresaApi.listUsers()]);
+    const [company, users, invitations] = await Promise.all([
+        empresaApi.company(),
+        empresaApi.listUsers(),
+        empresaApi.listInvitations(),
+    ]);
     state.company = company;
     state.users = users;
+    state.invitations = invitations;
 
     $('empresa-name').textContent = company.name;
     // Summary cards, drawn like the admin dashboard cards: a big number and a small line under it.
     const card = (num, sub) => `<span class="num">${safeText(num)}</span> <span class="sub">${safeText(sub)}</span>`;
-    $('empresa-seats').innerHTML = card(`${company.seats_used} de ${company.seat_limit}`, 'lugares');
+    // A pending invitation reserves a seat (spec E): the card says how many are held.
+    const held = company.pending_invitations || 0;
+    $('empresa-seats').innerHTML = card(
+        `${company.seats_used} de ${company.seat_limit}`,
+        held ? `lugares (+${held} reservado${held === 1 ? '' : 's'} por invitaciones)` : 'lugares',
+    );
     const activeUsers = users.filter((user) => user.is_active).length;
     $('empresa-active').innerHTML = card(activeUsers, `de ${users.length} en total`);
     const views = company.radar_detail_views;
     $('empresa-views').innerHTML = views.includes(ALL_RADARS)
         ? card('Todas', 'incluidas las de radares futuros')
         : card(views.length, views.length ? views.join(', ') : 'ninguna');
-    const full = company.seats_used >= company.seat_limit;
+    const full = company.seats_used + held >= company.seat_limit;
     const addButton = $('empresa-add');
     addButton.disabled = full;
     addButton.title = full ? 'No quedan lugares: desactivá a alguien o pedí más lugares' : '';
@@ -138,6 +148,53 @@ async function render() {
             </tr>`;
     }).join('');
     wireRowButtons();
+    renderInvitations();
+}
+
+/** The pending invitations: who, with which views, until when, and the Reenviar / Cancelar buttons. */
+function renderInvitations() {
+    const rows = state.invitations.map((invitation) => `
+        <tr>
+            <td>${safeText(invitation.email)}</td>
+            <td>${safeText(viewsSummary(invitation.radar_views || state.company.radar_detail_views))}</td>
+            <td>${safeText(new Date(invitation.expires_at).toLocaleDateString('es-AR'))}</td>
+            <td class="table-actions">
+                <button class="btn-secondary" data-resend-invitation="${safeText(invitation.id)}">Reenviar</button>
+                <button class="btn-secondary" data-cancel-invitation="${safeText(invitation.id)}">Cancelar</button>
+            </td>
+        </tr>`).join('');
+    $('empresa-invitations').innerHTML = rows
+        || '<tr><td colspan="4" class="toolbar-note">No hay invitaciones pendientes</td></tr>';
+    $('empresa-invitations').querySelectorAll('[data-resend-invitation]').forEach((el) => {
+        el.onclick = () => resendInvitation(el.dataset.resendInvitation);
+    });
+    $('empresa-invitations').querySelectorAll('[data-cancel-invitation]').forEach((el) => {
+        el.onclick = () => cancelInvitation(el.dataset.cancelInvitation);
+    });
+}
+
+/** A new link for the same person (the old one stops working). */
+async function resendInvitation(id) {
+    try {
+        const invitation = await empresaApi.resendInvitation(id);
+        await render();
+        showMessage(`Invitación reenviada a ${invitation.email}`);
+    } catch (error) {
+        showMessage(error.message, 'error');
+    }
+}
+
+/** Close an invitation: its link stops working and its seat is free again. */
+async function cancelInvitation(id) {
+    const invitation = state.invitations.find((item) => String(item.id) === String(id));
+    if (!window.confirm(`¿Cancelar la invitación a ${invitation ? invitation.email : 'esta persona'}? El link deja de funcionar.`)) return;
+    try {
+        await empresaApi.cancelInvitation(id);
+        await render();
+        showMessage('Invitación cancelada');
+    } catch (error) {
+        showMessage(error.message, 'error');
+    }
 }
 
 const byId = (id) => state.users.find((u) => String(u.id) === String(id));
@@ -156,19 +213,73 @@ function wireRowButtons() {
     each('[data-unlink]', unlinkUser);
 }
 
-function openAddForm() {
+/**
+ * Radar views the invited person starts with: only what the institution has can be offered (decision C4), as in the
+ * views form. Everything starts ticked (the institution's own list, which is what a new member gets).
+ */
+async function invitationViewsHtml() {
+    const companyViews = state.company.radar_detail_views;
+    const companyHasAll = companyViews.includes(ALL_RADARS);
+    const radars = (await api.getRadars(false)).filter((radar) => radar.detail_view_enabled);
+    const offered = radars.filter((radar) => companyHasAll || companyViews.includes(radar.code));
+    const allRow = companyHasAll
+        ? '<label class="checkbox-row"><input type="checkbox" name="all" checked> Todas</label>'
+        : '';
+    const rows = offered.length
+        ? offered.map((radar) => `
+            <label class="checkbox-row">
+                <input type="checkbox" name="radar" value="${safeText(radar.code)}"${companyHasAll ? '' : ' checked'}>
+                ${safeText(radar.code)} - ${safeText(radar.title)}
+            </label>`).join('')
+        : '<p class="toolbar-note">La institución no tiene vistas de radar para repartir.</p>';
+    return `${allRow}<fieldset class="views-radars"><legend>${companyHasAll ? 'O elegir radares' : 'Vistas de radar'}</legend>${rows}</fieldset>`;
+}
+
+/**
+ * "Agregar usuario": create the account now with an initial password, or invite the person by mail (spec E): they get
+ * a link, fill in their own data (or use Google) and come in as a viewer of this institution with the views chosen here.
+ */
+async function openAddForm() {
+    let viewsHtml;
+    try {
+        viewsHtml = await invitationViewsHtml();
+    } catch (error) {
+        showMessage(error.message || 'No se pudo preparar el formulario', 'error');
+        return;
+    }
     openModal(
         'Agregar usuario',
         `
-            <label>Usuario <input name="username" type="text" minlength="3" maxlength="32" pattern="[a-zA-Z0-9._-]+" required></label>
-            <label>Nombre <input name="full_name" type="text" maxlength="128"></label>
-            <label>Email <input name="email" type="email" maxlength="254"></label>
-            <label>Contraseña inicial <input name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required></label>
-            <p class="toolbar-note">Mínimo 10 caracteres, con al menos un carácter especial (por ejemplo ! - _ . @ #).</p>
-            <p class="toolbar-note">Entra como lector de tu institución y empieza con las vistas de la institución.</p>
-            <div class="form-actions"><button class="btn" type="submit">Crear</button></div>
+            <label class="checkbox-row"><input type="radio" name="create_mode" value="password" checked> Crear con una contraseña inicial</label>
+            <label class="checkbox-row"><input type="radio" name="create_mode" value="invite"> Invitar por mail</label>
+            <div id="add-password-fields">
+                <label>Usuario <input name="username" type="text" minlength="3" maxlength="32" pattern="[a-zA-Z0-9._-]+"></label>
+                <label>Nombre <input name="full_name" type="text" maxlength="128"></label>
+                <label>Email <input name="email" type="email" maxlength="254"></label>
+                <label>Contraseña inicial <input name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password"></label>
+                <p class="toolbar-note">Mínimo 10 caracteres, con al menos un carácter especial (por ejemplo ! - _ . @ #).</p>
+                <p class="toolbar-note">Entra como lector de tu institución y empieza con las vistas de la institución.</p>
+            </div>
+            <div id="add-invite-fields" hidden>
+                <label>Mail de la persona <input name="invite_email" type="email" maxlength="254" autocomplete="off"></label>
+                ${viewsHtml}
+                <p class="toolbar-note">Le mandamos un mail con un link (vale 7 días). Completa sus datos o entra con Google y queda como lector de tu institución, con las vistas que marcaste. Mientras no lo acepte, la invitación reserva un lugar.</p>
+            </div>
+            <div class="form-actions"><button class="btn" type="submit">Continuar</button></div>
         `,
         async (formData) => {
+            if (formData.get('create_mode') === 'invite') {
+                const views = formData.get('all') ? [ALL_RADARS] : formData.getAll('radar');
+                const email = String(formData.get('invite_email') || '').trim();
+                if (!email) throw new Error('Escribí el mail de la persona a invitar');
+                await empresaApi.createInvitation({ email, radar_views: views });
+                await render();
+                showMessage(`Invitación enviada a ${email}`);
+                return;
+            }
+            if (!formData.get('username') || !formData.get('password')) {
+                throw new Error('Completá el usuario y la contraseña inicial');
+            }
             const payload = {
                 username: formData.get('username'),
                 password: formData.get('password'),
@@ -180,6 +291,15 @@ function openAddForm() {
             showMessage(`Usuario ${payload.username.toLowerCase()} creado`);
         },
     );
+    // Show only the fields of the chosen way (the other block stays hidden and is not read).
+    const form = $('form-modal-body');
+    const switchMode = () => {
+        const inviting = form.querySelector('input[name="create_mode"]:checked').value === 'invite';
+        $('add-password-fields').hidden = inviting;
+        $('add-invite-fields').hidden = !inviting;
+    };
+    form.querySelectorAll('input[name="create_mode"]').forEach((radio) => radio.addEventListener('change', switchMode));
+    switchMode();
 }
 
 function openEditForm(user) {

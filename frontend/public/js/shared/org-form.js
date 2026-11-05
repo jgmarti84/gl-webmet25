@@ -63,6 +63,12 @@ function adminBlock(values) {
             email: admin.email ? admin.email : null,
         };
     }
+    if (values.adminMode === 'invite') {
+        // The admin is invited by mail (spec E): the person creates the account from the link.
+        const email = String(values.inviteEmail || '').trim();
+        if (!email) throw new Error('Escribí el mail de la persona a invitar como administrador');
+        return { mode: 'invite', email };
+    }
     if (values.adminMode === 'existing') {
         if (!values.existingUserId) throw new Error('Elegí el usuario que va a ser administrador de la institución');
         return { mode: 'existing', user_id: Number(values.existingUserId) };
@@ -74,8 +80,8 @@ function adminBlock(values) {
  * The body of POST /admin/organizations from the values of the form. `admin` and `radar_detail_view` are only sent
  * when they were chosen, so a company without them is created exactly as before. "Todas" wins over single radars.
  *
- * @param {{name: string, seatLimit: string|number, isActive: boolean, adminMode: 'new'|'existing'|'none',
- *          newAdmin?: object, existingUserId?: string, allViews: boolean, radars: string[]}} values
+ * @param {{name: string, seatLimit: string|number, isActive: boolean, adminMode: 'new'|'existing'|'invite'|'none',
+ *          newAdmin?: object, existingUserId?: string, inviteEmail?: string, allViews: boolean, radars: string[]}} values
  */
 export function buildOrganizationPayload(values) {
     const payload = {

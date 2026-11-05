@@ -172,6 +172,11 @@ export const adminApi = {
     setOrganizationRadarViews(id, views) {
         return request(`/organizations/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ radar_detail_view: views }) });
     },
+    // Invitations by mail (spec E): the pending ones, a new one, a new link for the same person, and cancel.
+    listInvitations() { return request('/invitations'); },
+    createInvitation(payload) { return request('/invitations', { method: 'POST', body: JSON.stringify(payload) }); },
+    resendInvitation(id) { return request(`/invitations/${id}/resend`, { method: 'POST' }); },
+    cancelInvitation(id) { return request(`/invitations/${id}/cancel`, { method: 'POST' }); },
     // Replace the user's whole list of one-radar detail views: radar codes, ['*'] for all, [] for none.
     setUserRadarViews(id, views) {
         return request(`/users/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ radar_detail_view: views }) });

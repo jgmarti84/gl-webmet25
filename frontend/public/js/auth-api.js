@@ -14,9 +14,12 @@ const DEFAULT_OPTIONS = {
     google_client_id: null,
 };
 
+// The invitation endpoints (spec E) live next to the auth ones, not under them.
+const INVITATIONS_BASE = 'api/v1/invitations';
+
 /** POST a JSON body to a public endpoint. Resolves { ok, status, data }; `data` is {} for an empty (204) answer. */
-async function postJson(path, body) {
-    const response = await fetch(`${AUTH_BASE}${path}`, {
+async function postJson(path, body, base = AUTH_BASE) {
+    const response = await fetch(`${base}${path}`, {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
@@ -211,6 +214,10 @@ export const authApi = {
     // Sign in (or sign up) with the ID token Google gave the browser; the API checks it and opens the session.
     google: (credential) => postJson('/google', { credential }),
     register: (payload) => postJson('/register', payload),
+    // Invitations by mail: the token comes from the link (#token=...) and goes in the body, never in a URL.
+    invitationDetails: (token) => postJson('/details', { token }, INVITATIONS_BASE),
+    acceptInvitation: (payload) => postJson('/accept', payload, INVITATIONS_BASE),
+    acceptInvitationWithGoogle: (token, credential) => postJson('/accept-google', { token, credential }, INVITATIONS_BASE),
     verifyEmail: (token) => postJson('/verify-email', { token }),
     resendVerification: (identifier) => postJson('/resend-verification', { identifier }),
     forgotPassword: (email) => postJson('/forgot-password', { email }),
