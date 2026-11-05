@@ -30,11 +30,11 @@ assert(formatDate('2026-10-20T14:30:00Z').includes('2026'), 'a real date shows i
 console.log('T2: rows of the account data');
 const rows = Object.fromEntries(profileRows(profile));
 assert(rows['Usuario'] === 'ana' && rows['Nombre'] === 'Ana Pérez' && rows['Mail'] === 'ana@example.com', 'user, name and mail');
-assert(rows['Rol'] === 'Admin de empresa', 'the role is shown with its label, not its code');
-assert(rows['Empresa'] === 'EPEC', 'the company name');
+assert(rows['Rol'] === 'Admin de institución', 'the role is shown with its label, not its code');
+assert(rows['Institución'] === 'EPEC', 'the company name');
 assert(rows['Último ingreso'] === '—', 'a user who never logged in: a dash');
 const bare = Object.fromEntries(profileRows({ ...profile, full_name: null, email: null, organization_name: null, role: 'viewer' }));
-assert(bare['Nombre'] === '—' && bare['Mail'] === '—' && bare['Empresa'] === '—', 'missing name, mail and company: dashes');
+assert(bare['Nombre'] === '—' && bare['Mail'] === '—' && bare['Institución'] === '—', 'missing name, mail and company: dashes');
 
 console.log('T3: the note under the radar views');
 assert(viewsNote('admin').includes('administrador general'), 'the general admin sees every enabled radar');

@@ -445,6 +445,12 @@ Pipeline de composición en canvas:
 
 `auth-api.js` también habla con los endpoints públicos del registro (DATA_FLOW §4.10): `login(username, password)` (el campo de usuario también acepta el mail, y la respuesta trae el `code` del fallo, por ejemplo `email_not_verified`), `options()` (qué pueden ofrecer las páginas; nunca lanza error y, si falla, devuelve "nada extra"), `register(payload)`, `verifyEmail(token)`, `resendVerification(identifier)`, `forgotPassword(email)` y `resetPassword(token, password)`. Los últimos cinco devuelven `{ ok, status, data }` y dejan los textos a cargo de la página.
 
+### **shared/org-form.js** — Lógica del formulario "Agregar institución"
+
+**Archivo:** [`frontend/public/js/shared/org-form.js`](../../frontend/public/js/shared/org-form.js)
+
+**Responsabilidad:** `eligibleAdmins(users)` lista a quién se puede ofrecer como admin de una empresa nueva (lectores activos que no están en ninguna empresa, ordenados por nombre), `filterAdmins(users, query)` los filtra para la caja de búsqueda (por usuario, nombre o mail, sin distinguir mayúsculas ni tildes) y `buildOrganizationPayload(values)` arma el cuerpo de `POST /admin/organizations` desde el formulario: la empresa y, solo si se eligió, el bloque `admin` (`mode: "new"` con los datos del usuario, o `mode: "existing"` con `user_id`) y `radar_detail_view` (`["*"]` para "Todas"). Lanza un mensaje en español cuando una opción está incompleta. `admin.js` dibuja el formulario; la lógica vive acá para poder probarla (`tests/js/test_org_form.mjs`).
+
 ### **shared/profile-section.js** — El perfil, dibujado dentro de cualquier página (spec D)
 
 **Archivo:** [`frontend/public/js/shared/profile-section.js`](../../frontend/public/js/shared/profile-section.js)
@@ -464,6 +470,18 @@ Pipeline de composición en canvas:
 **Archivo:** [`frontend/public/js/auth-pages.js`](../../frontend/public/js/auth-pages.js) — tests unitarios: `tests/js/test_auth_pages.mjs`
 
 **Responsabilidad:** Ayudas solo de presentación compartidas por el login y las cuatro páginas públicas; el servidor vuelve a validar todo. Exporta las mismas formas que exige el servidor (`USERNAME_RE`, un `EMAIL_RE` flexible, de 10 a 128 caracteres y un carácter especial para las contraseñas), `validatePassword()` y `validateRegistration()` (null si está bien, si no el mensaje), `errorText()` / `statusMessage()` (el texto del propio servidor, o uno fijo para 429 y 503) y las ayudas de interfaz `showMessage()` / `hideMessage()` (siempre `textContent`, nunca `innerHTML`) y `startCooldown()` (un botón que cuenta hacia atrás, usado por "Reenviar mail").
+
+---
+
+### **invitacion.html / invitacion.js** — Página pública de una invitación (spec E)
+
+**Archivos:** [`frontend/public/invitacion.html`](../../frontend/public/invitacion.html), `js/invitacion.js` (más `authApi.invitationDetails / acceptInvitation / acceptInvitationWithGoogle` en `auth-api.js` y la opción `signIn` de `setupGoogleSignIn` en `login-google.js`)
+
+**Responsabilidad:** Destino del link del mail de invitación (`/invitacion#token=...`, servida por nginx sin sesión, con `Cache-Control: no-store` y sin `Referer`). Lee el token de la dirección, lo saca de la barra y del historial, le pregunta a la API quién te invitó (`POST /api/v1/invitations/details`) y muestra la institución, el mail invitado y el rol. Después la persona crea la cuenta con el formulario o con Google (la cuenta de Google tiene que ser la del mail invitado). Al terminar la sesión ya está abierta: un admin de institución va a `empresa` y un lector al mapa. Un link inválido, vencido, usado o cancelado muestra el aviso y **saca el formulario de la página**.
+
+**Ids principales:** `#invitation-company`, `#invitation-email`, `#invitation-role`, `#invitation-form` (campos `username`, `full_name`, `password`, `repeat`, `accept_terms`), `#invitation-submit`, `#invitation-invalid`, `#invitation-google`.
+
+**Paneles.** Panel de admin: sección **Invitaciones** (`renderInvitations`, `openInvitationForm`, con el buscador de instituciones de `wireOrgCombobox`) y la opción **Invitar por mail** del admin en "Agregar institución". Panel de la institución (`/empresa`): el formulario **Agregar usuario** elige entre una contraseña y una invitación (con las vistas de radar a dar), y la tabla **Invitaciones pendientes** tiene `data-resend-invitation` / `data-cancel-invitation`.
 
 ---
 

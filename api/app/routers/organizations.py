@@ -3,7 +3,7 @@
 
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from radar_db import get_db
@@ -11,9 +11,12 @@ from radar_db.models import Organization, User
 
 from ..auth import organizations as orgs
 from ..auth import permissions
+from ..auth.invitations import InvitationError
 from ..auth.dependencies import check_origin, require_admin
+from ..mail.service import Mailer, get_mailer
 from ..schemas.organizations import OrganizationCreate, OrganizationResponse, OrganizationUpdate
 from ..schemas.permissions import RadarViewsUpdate
+from .registration import _require_mail, _send_later
 
 router = APIRouter(
     prefix="/admin/organizations",
@@ -29,6 +32,7 @@ def org_response(db: Session, org: Organization) -> OrganizationResponse:
         name=org.name,
         seat_limit=org.seat_limit,
         seats_used=orgs.seats_used(db, org),
+        pending_invitations=orgs.pending_invitations(db, org.id),
         is_active=org.is_active,
         radar_detail_views=permissions.stored_org_radar_views(org),
         created_at=org.created_at,
@@ -39,7 +43,7 @@ def org_response(db: Session, org: Organization) -> OrganizationResponse:
 def _get_or_404(db: Session, org_id: int) -> Organization:
     org = db.get(Organization, org_id)
     if org is None:
-        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+        raise HTTPException(status_code=404, detail="Institución no encontrada")
     return org
 
 
@@ -53,12 +57,26 @@ def list_organizations(db: Session = Depends(get_db)) -> List[OrganizationRespon
 
 
 @router.post("", response_model=OrganizationResponse, status_code=201)
-def create_organization(payload: OrganizationCreate, db: Session = Depends(get_db)) -> OrganizationResponse:
+def create_organization(
+    payload: OrganizationCreate,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_admin),
+    mailer: Mailer = Depends(get_mailer),
+) -> OrganizationResponse:
+    """Create a company, optionally with its radar views and its admin (a new user, or an existing viewer without a
+    company), all in one transaction: if any part is refused, nothing is created."""
+    data = payload.model_dump(exclude={"admin", "radar_detail_view"})
+    inviting = payload.admin is not None and payload.admin.mode == "invite"
+    if inviting:
+        _require_mail()
+    mails: list = []  # the invitation mail, if any: sent after the commit
     try:
-        org = orgs.create_org(db, payload.model_dump())
-    except orgs.OrgRuleError as exc:
+        org = orgs.create_org_with_admin(db, actor, data, payload.admin, payload.radar_detail_view, mails)
+    except (orgs.OrgRuleError, permissions.PermissionRuleError, InvitationError) as exc:
         raise _rule(exc)
     db.commit()
+    _send_later(background, mailer, mails)
     db.refresh(org)
     return org_response(db, org)
 

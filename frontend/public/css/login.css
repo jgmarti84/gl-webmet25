@@ -657,6 +657,21 @@
     color: #d6e3f2;
 }
 
+/* Credit of the radar network: fine print under the status line, small and in a muted grey-blue so it does not draw
+   the eye (a little dimmer than the status line above it, but still readable). The selector has the weight of the rule
+   that styles every <p> of the panel (".login-hero p:not(...)", 15.5 px and light), which it must beat. */
+.login-page--radar .login-hero p.login-credit {
+    margin: 0;
+    max-width: none;
+    /* One single line. The size follows the width of the screen (the radar panel is 58 % of it) so the whole text
+       fits: 9.5 px on a wide screen, smaller on a narrow one. Phones wrap it (see the rule at the end). */
+    white-space: nowrap;
+    font-size: clamp(7px, 0.74vw, 9.5px);
+    line-height: 1.5;
+    letter-spacing: 0.01em;
+    color: #667891;
+}
+
 /* Blinking dot next to the clock. */
 .login-page--radar .login-dot {
     display: inline-block;
@@ -916,6 +931,9 @@
     .login-page--radar .login-hero p:not(.login-hero-title),
     .login-page--radar .login-dbz { display: none; }
 
+    /* ... except the small credit line, which stays under the status line (it is a <p>, so the rule above hid it). */
+    .login-page--radar .login-hero p.login-credit:not(.login-hero-title) { display: block; font-size: 9px; max-width: none; }
+
     .login-page--radar .login-panel {
         padding-block: 36px 24px;
         padding-left: max(24px, env(safe-area-inset-left, 0px));
@@ -999,6 +1017,18 @@
         font-size: 11px;
         line-height: 1.3;
         gap: 1px;
+    }
+}
+
+/* Phones: the credit line stays on ONE line too. The width of the screen minus the 24 px of side padding of the strip
+   is shared out between the characters: the text is about 57.6 times as wide as its font size, so the size is the
+   available width divided by 58.5 (a little margin), never above 9 px. It is very small on a narrow phone (about
+   5.7 px at 375 px); that is the price of one line. Being a single line it also fits on short screens. */
+@media (max-width: 640px) {
+    .login-page--radar .login-hero p.login-credit:not(.login-hero-title) {
+        white-space: nowrap;
+        letter-spacing: 0;
+        font-size: min(9px, calc((100vw - 48px) / 58.5));
     }
 }
 

@@ -13,6 +13,9 @@ from .users import router as users_router
 from .permissions import router as permissions_router
 from .organizations import router as organizations_router
 from .org import router as org_router
+from .invitations import admin_router as invitations_admin_router
+from .invitations import org_router as invitations_org_router
+from .invitations import public_router as invitations_public_router
 from .profile import router as profile_router
 
 __all__ = [
@@ -30,5 +33,8 @@ __all__ = [
     "permissions_router",
     "organizations_router",
     "org_router",
+    "invitations_admin_router",
+    "invitations_org_router",
+    "invitations_public_router",
     "profile_router",
 ]
