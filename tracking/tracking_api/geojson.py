@@ -29,6 +29,9 @@ import logging
 import math
 from typing import Any, Dict, List, Optional
 
+from tracking_api.config import settings
+from tracking_api.shapes import display_geometry
+
 logger = logging.getLogger(__name__)
 
 #: Attached by StatisticalDescriptor(rasterOut=True) — a per-system crop of the
@@ -80,8 +83,14 @@ def system_to_feature(
     system,
     kind: str = "system",
     lead_min: Optional[int] = None,
+    smooth_sigma_km: Optional[float] = None,
 ) -> Optional[Dict[str, Any]]:
-    """One ConvectiveSystem as a GeoJSON Feature, or None if it has no geometry."""
+    """One ConvectiveSystem as a GeoJSON Feature, or None if it has no geometry.
+
+    The geometry is the *display* geometry: holes filled and edges smoothed
+    (``shapes.display_geometry``). ``smooth_sigma_km`` defaults to the
+    service setting; 0 fills holes without smoothing.
+    """
     geom = getattr(system, "geom", None)
     if geom is None:
         return None
@@ -91,6 +100,10 @@ def system_to_feature(
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning("could not serialise geometry for %s: %s", system.name, exc)
         return None
+
+    if smooth_sigma_km is None:
+        smooth_sigma_km = settings.shape_smooth_sigma_km
+    geometry = display_geometry(geometry, smooth_sigma_km)
 
     props: Dict[str, Any] = {
         "kind": kind,

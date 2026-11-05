@@ -66,13 +66,34 @@ class TrackingConfig(BaseModel):
     )
 
 
-class VolumeWindow(BaseModel):
-    """A tracking request."""
+class RadarJobRequest(BaseModel):
+    """A tracking request for the radar named in the URL."""
 
-    radar: str = Field(..., description="Radar code, e.g. RMA1")
     start: datetime = Field(..., description="Window start (UTC, inclusive)")
     end: datetime = Field(..., description="Window end (UTC, inclusive)")
+    last_n: Optional[int] = Field(
+        None, ge=1,
+        description="Track only the newest N volumes of the window (the service caps N, "
+                    "see max_last_n in availability). Null = every volume in the window.",
+    )
     config: TrackingConfig = Field(default_factory=TrackingConfig)
+
+
+class VolumeWindow(RadarJobRequest):
+    """A tracking request with the radar in the body (the original route)."""
+
+    radar: str = Field(..., description="Radar code, e.g. RMA1")
+
+
+class RadarAvailability(BaseModel):
+    """Cube coverage for one radar, plus the limits a client must respect."""
+
+    radar_code: str
+    count: int
+    min_time: Optional[datetime] = None
+    max_time: Optional[datetime] = None
+    #: Largest last_n the service accepts.
+    max_last_n: int
 
 
 class JobCreated(BaseModel):
@@ -83,6 +104,7 @@ class JobCreated(BaseModel):
     radar: str
     start: datetime
     end: datetime
+    last_n: Optional[int] = None
     volumes_total: int
     #: True when an identical run was already cached and no work was queued.
     cached: bool = False
@@ -106,6 +128,7 @@ class JobResult(BaseModel):
     radar: str
     start: datetime
     end: datetime
+    last_n: Optional[int] = None
     progress: JobProgress
     created_at: datetime
     finished_at: Optional[datetime] = None

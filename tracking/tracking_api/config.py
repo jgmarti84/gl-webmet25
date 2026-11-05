@@ -38,6 +38,15 @@ class TrackingSettings(BaseSettings):
     # reached. Matches gl-tracker's Config.velocity_history_len.
     lead_in_volumes: int = Field(default=4, alias="LEAD_IN_VOLUMES")
 
+    # Largest "track the last N volumes of the window" a client may ask for.
+    # Bounds the work one request can queue on the single worker.
+    max_last_n: int = Field(default=10, alias="MAX_LAST_N")
+
+    # Display only: Gaussian smoothing of polygon edges, in km along the
+    # outline (about one grid pixel). 0 disables smoothing; holes are filled
+    # either way. See tracking_api/shapes.py.
+    shape_smooth_sigma_km: float = Field(default=1.0, alias="SHAPE_SMOOTH_SIGMA_KM")
+
     class Config:
         env_file = ".env"
         extra = "ignore"
