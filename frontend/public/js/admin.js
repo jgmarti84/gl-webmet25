@@ -2597,6 +2597,20 @@ async function renderMails() {
         previewTimer = setTimeout(refreshPreview, MAIL_PREVIEW_DELAY_MS);
     };
 
+    /** True when a field differs from the text saved for this mail (what "Guardar" would change). */
+    const isDirty = () => {
+        const form = $('mail-form');
+        const saved = current && itemOf(current);
+        return Boolean(form && saved) && MAIL_FIELDS.some(([name]) => form.elements[name].value !== saved.texts[name]);
+    };
+    /** Show "Volver" and the unsaved note, and enable "Guardar", only while there are changes to save or undo. */
+    const syncButtons = () => {
+        const dirty = isDirty();
+        $('mail-save').disabled = !dirty;
+        $('mail-revert').hidden = !dirty;
+        $('mail-dirty').hidden = !dirty;
+    };
+
     /** Put the texts of `item` in the fields, and enable "Restaurar" only when the mail is customized. */
     const fillForm = (item) => {
         MAIL_FIELDS.forEach(([name]) => { $('mail-form').elements[name].value = item.texts[name]; });
@@ -2605,16 +2619,19 @@ async function renderMails() {
             ? `Personalizado${item.updated_by_username ? ` por ${item.updated_by_username}` : ''} el ${new Date(item.updated_at).toLocaleString('es-AR')}`
             : 'Texto original';
         $('mail-state').textContent = stamp;
+        syncButtons();
     };
 
     const select = (key) => {
+        // Do not lose what was typed by changing mail by mistake.
+        if (current && current !== key && isDirty() && !window.confirm('Tenés cambios sin guardar en este mail. ¿Querés descartarlos?')) return;
         current = key;
         const item = itemOf(key);
         lastField = null;
         $('mail-main').innerHTML = `
             <h3>${safeText(item.title)}</h3>
             <p id="mail-state" class="toolbar-note"></p>
-            <form id="mail-form" class="mail-form" novalidate>
+            <form id="mail-form" class="form-grid mail-form" novalidate>
                 ${MAIL_FIELDS.map(([name, label, kind]) => `
                     <label>${safeText(label)}
                         ${kind === 'area' ? `<textarea name="${name}" rows="7"></textarea>` : `<input name="${name}" type="text" autocomplete="off">`}
@@ -2626,9 +2643,11 @@ async function renderMails() {
                     </div>
                 </div>
                 <div id="mail-error" class="form-error" role="alert" hidden></div>
-                <div class="form-actions">
+                <div class="mail-actions">
                     <button id="mail-save" class="btn" type="submit">Guardar</button>
-                    <button id="mail-restore" class="btn-secondary" type="button">Restaurar original</button>
+                    <button id="mail-revert" class="btn-secondary" type="button" hidden>Volver</button>
+                    <span id="mail-dirty" class="mail-dirty" hidden>Cambios sin guardar</span>
+                    <button id="mail-restore" class="btn-secondary mail-restore" type="button">Restaurar original</button>
                 </div>
             </form>
             <p id="mail-preview-subject" class="mail-preview-subject"></p>
@@ -2636,7 +2655,7 @@ async function renderMails() {
         fillForm(item);
         const form = $('mail-form');
         form.addEventListener('focusin', (event) => { if (MAIL_FIELDS.some(([name]) => name === event.target.name)) lastField = event.target; });
-        form.addEventListener('input', schedulePreview);
+        form.addEventListener('input', () => { syncButtons(); schedulePreview(); });
         // A marker button inserts "{name}" where the cursor is in the last field the admin was in (the body by default).
         $('mail-placeholders').querySelectorAll('[data-placeholder]').forEach((button) => {
             button.onmousedown = (event) => event.preventDefault();  // keep the focus in the field
@@ -2648,6 +2667,7 @@ async function renderMails() {
                 field.value = field.value.slice(0, start) + marker + field.value.slice(end);
                 field.focus();
                 field.setSelectionRange(start + marker.length, start + marker.length);
+                syncButtons();
                 schedulePreview();
             };
         });
@@ -2665,6 +2685,12 @@ async function renderMails() {
                 showError(error.message);
             }
         };
+        $('mail-revert').onclick = () => {
+            fillForm(itemOf(current));
+            showError('');
+            refreshPreview();
+        };
+        // Restaurar original: delete the customization, so the mail goes back to its default text.
         $('mail-restore').onclick = async () => {
             if (!window.confirm('¿Volver al texto original de este mail? Se pierde el texto personalizado.')) return;
             try {
