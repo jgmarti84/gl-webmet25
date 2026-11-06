@@ -333,6 +333,18 @@ accepted_at, cancelled_at: datetime | None
 e invitación cerrada). Las filas nunca se borran. Los topes de envío las cuentan (por dirección y de todo el sitio).
 Código: [`api/app/auth/invitations.py`](../api/app/auth/invitations.py), [`api/app/routers/invitations.py`](../api/app/routers/invitations.py).
 
+#### **MailTemplate** (el texto personalizado de uno de los cuatro mails, spec F)
+```python
+key: str (PK)                         # 'verify_email' | 'reset_password' | 'account_exists' | 'invitation' (CHECK)
+subject, heading, button: str         # una línea cada uno (150, 120 y 40 caracteres como máximo)
+body: str                             # párrafos separados por una línea en blanco (2000 caracteres como máximo)
+footer, fallback: str                 # 400 y 200 caracteres como máximo
+updated_by: int | None (FK → users.id, ON DELETE SET NULL)
+updated_at: datetime
+# CHECK: cada texto tiene de 1 caracter a su máximo
+```
+Hay una fila **solo cuando el mail fue personalizado**; sin ella el mail sale con el texto por defecto de [`api/app/mail/texts.py`](../api/app/mail/texts.py). Restaurar borra la fila. Solo se guarda texto: el diseño, el botón y su link quedan en [`api/app/mail/templates.py`](../api/app/mail/templates.py). Los textos llevan marcas como `{usuario}` (las reemplaza una regex con una lista blanca por mail; no hay motor de plantillas). Endpoints: `GET/PUT/DELETE /api/v1/admin/mail-templates[/{key}]` y `POST .../{key}/preview`, solo para el admin general ([`api/app/routers/mail_templates.py`](../api/app/routers/mail_templates.py)).
+
 ### 3.2 Índices (Rendimiento)
 
 ```sql

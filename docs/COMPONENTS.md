@@ -523,6 +523,14 @@ settings), and animation controls (bottom-center).
 
 ---
 
+### **Textos de los mails** — Admin panel section (spec F)
+
+**Files:** `renderMails()` in [`frontend/public/js/admin.js`](../../frontend/public/js/admin.js), four functions in `admin-api.js`, the entry "Textos de los mails" (group Configuración) in `admin.html` and the `.mail-*` styles in `css/admin.css`.
+
+**Responsibility:** The general admin edits the **text** of the four mails. Left, the list `#mail-list` (an entry `[data-mail-key]` per mail, with the tag "personalizado" when it was customized). Right, the form `#mail-form` (fields `subject`, `heading`, `body`, `button`, `footer`, `fallback`), the marker buttons `#mail-placeholders [data-placeholder]` (they insert `{name}` where the cursor is), the buttons `#mail-save` and `#mail-restore` (the latter asks for confirmation), the error box `#mail-error` and the preview `#mail-preview` (an `iframe` with `sandbox=""`) under `#mail-preview-subject`. The preview is asked from the server (`POST .../preview`) 350 ms after the last key, so it is built by the same code as the real mail. Texts go into the page with `.value` / `textContent`, never `innerHTML`; the preview HTML only goes to the iframe's `srcdoc`.
+
+---
+
 ### **admin.html** — Admin Panel SPA
 
 **File:** [`frontend/public/admin.html`](../../frontend/public/admin.html)
