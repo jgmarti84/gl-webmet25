@@ -5,7 +5,7 @@ Only GET /permissions/me and the admin endpoints call this module. Data endpoint
 user keeps seeing every radar on the main map; the permission only opens radar.html.
 """
 
-from typing import Iterable, List, Set
+from typing import Iterable, List, Optional, Set
 
 from sqlalchemy.orm import Session
 
@@ -85,6 +85,18 @@ def _replace_rows(db: Session, rows: list, wanted: Set[str], granted_by: User) -
     db.flush()
 
 
+def ensure_within_org(org: Optional[Organization], wanted: Set[str]) -> None:
+    """A company admin may only give views the company has: 403 when `wanted` goes beyond its list.
+
+    A company with "*" allows anything, "*" included. No company (None) has no views to give. Used when a company
+    admin sets a member's views and when it invites someone (the invitation carries the views the person will start
+    with, so they must be checked when the invitation is made, not only when the account exists).
+    """
+    company = set(stored_org_radar_views(org)) if org is not None else set()
+    if PERMISSION_ALL not in company and not wanted <= company:
+        raise PermissionRuleError(403, "Solo podés asignar vistas que tenga tu institución")
+
+
 def replace_user_radar_views(
     db: Session, user: User, resources: Iterable[str], granted_by: User, within_company: bool = False
 ) -> List[str]:
@@ -101,9 +113,7 @@ def replace_user_radar_views(
     db.refresh(user, with_for_update=True)
     wanted = _wanted_resources(db, resources)
     if within_company:
-        company = set(stored_org_radar_views(user.organization)) if user.organization is not None else set()
-        if PERMISSION_ALL not in company and not wanted <= company:
-            raise PermissionRuleError(403, "Solo podés asignar vistas que tenga tu institución")
+        ensure_within_org(user.organization, wanted)
     _replace_rows(db, user.permissions, wanted, granted_by)
     return stored_radar_views(user)
 
