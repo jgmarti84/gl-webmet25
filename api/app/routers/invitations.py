@@ -72,11 +72,16 @@ def _invite(
     email: str,
     role: str,
     radar_views: Optional[List[str]],
+    within_company: bool = False,
 ) -> InvitationResponse:
-    """Create the invitation, commit, and send the mail after the response (shared by both inviters)."""
+    """Create the invitation, commit, and send the mail after the response (shared by both inviters).
+
+    `within_company` is the institution admin's case: the views it picks must fit inside its institution's list."""
     _require_mail()
     try:
-        invitation, mail = service.create_invitation(db, actor, organization_id, email, role, radar_views)
+        invitation, mail = service.create_invitation(
+            db, actor, organization_id, email, role, radar_views, within_company=within_company
+        )
     except service.InvitationError as exc:
         raise _rule(exc)
     db.commit()
@@ -158,7 +163,9 @@ def org_create(
     mailer: Mailer = Depends(get_mailer),
 ) -> InvitationResponse:
     """Invite a viewer to the caller's institution. Any institution or role in the body is ignored."""
-    return _invite(db, background, mailer, actor, actor.organization_id, payload.email, "viewer", payload.radar_views)
+    return _invite(
+        db, background, mailer, actor, actor.organization_id, payload.email, "viewer", payload.radar_views, True
+    )
 
 
 @org_router.get("", response_model=List[InvitationResponse])

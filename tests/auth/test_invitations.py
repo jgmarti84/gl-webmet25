@@ -196,11 +196,15 @@ def test_an_unknown_company_is_404(app_client, boss, org):
     assert _invite(_as(app_client, "boss"), org, organization_id=999999999).status_code == 404
 
 
-def test_a_viewer_needs_an_active_admin_in_the_company(app_client, boss, org, make_user):
+def test_a_viewer_needs_an_active_admin_in_the_company(app_client, boss, org, make_user, make_radar):
     client = _as(app_client, "boss")
     assert _invite(client, org, role="viewer").status_code == 409  # the company has nobody yet
     make_user(username="orgboss", role="org_admin", organization_id=org.id)
     assert _invite(client, org, role="viewer").status_code == 201
+    # The general admin is not held to the institution's list (only an institution admin is).
+    make_radar("TSTC")
+    other = f"otro@{TEST_EMAIL_DOMAIN}"
+    assert _invite(client, org, role="viewer", email=other, radar_views=["TSTC"]).status_code == 201
 
 
 def test_a_pending_admin_invitation_does_not_count_as_an_admin(app_client, boss, org):
@@ -360,13 +364,22 @@ def test_a_viewer_cannot_invite(app_client, org, make_user):
 # --- the company admin invites a viewer ----------------------------------------------------------------------
 
 
-def test_a_company_admin_invites_a_viewer_of_its_own_company(app_client, org, org_boss, mailer, test_db_session):
-    response = _org_invite(_as(app_client, "orgboss"), radar_views=["TSTA"])
+def test_a_company_admin_invites_a_viewer_of_its_own_company(
+    app_client, org, org_boss, mailer, test_db_session, make_radar
+):
+    client = _as(app_client, "orgboss")
+    response = _org_invite(client, radar_views=["TSTA"])
     assert response.status_code == 201, response.text
     body = response.json()
     assert body["role"] == "viewer" and body["organization_id"] == org.id and body["radar_views"] == ["TSTA"]
     assert [mail.to for mail in mailer.sent] == [INVITED]
     assert _invitation(test_db_session).invited_by == org_boss.id
+    # It can only hand out views its institution has (decision C4), like when it creates a user: nothing is sent.
+    make_radar("TSTC")  # a radar the institution does not have
+    other = f"otro@{TEST_EMAIL_DOMAIN}"
+    for views in (["TSTC"], ["TSTA", "TSTC"], ["*"]):
+        assert _org_invite(client, email=other, radar_views=views).status_code == 403
+    assert len(mailer.sent) == 1 and _invitation(test_db_session, other) is None
 
 
 def test_the_company_admin_cannot_choose_the_company_or_the_role(app_client, org, org_boss, make_org):

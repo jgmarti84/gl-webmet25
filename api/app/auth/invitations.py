@@ -102,6 +102,7 @@ def create_invitation(
     role: str,
     radar_views: Optional[List[str]],
     now: Optional[datetime] = None,
+    within_company: bool = False,
 ) -> Tuple[Invitation, OutgoingMail]:
     """Invite `email` to the institution with `role`. Returns the invitation and the mail to send.
 
@@ -120,6 +121,12 @@ def create_invitation(
     if not org.is_active:
         raise InvitationError(409, f"La institución {org.name} está inactiva")
     views = _clean_views(db, role, radar_views)
+    if within_company and views is not None:
+        # An institution admin may only hand out views its institution has, as when it creates a user.
+        try:
+            permissions.ensure_within_org(org, set(views))
+        except permissions.PermissionRuleError as exc:
+            raise InvitationError(exc.status_code, exc.detail) from exc
 
     if get_user_by_email(db, email) is not None:
         raise InvitationError(409, "Ya existe una cuenta con ese mail")
