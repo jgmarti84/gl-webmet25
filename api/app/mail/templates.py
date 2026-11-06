@@ -5,9 +5,12 @@ from datetime import datetime, timezone
 from html import escape
 from typing import List, Optional
 
+from sqlalchemy.orm import Session
+
 from radar_db.models import User
 
 from ..config import settings
+from . import texts
 from .service import LOGO_CID, OutgoingMail
 
 
@@ -92,94 +95,111 @@ def _build(
     return OutgoingMail(to=to, subject=subject, text=text, html=html)
 
 
-def verification_mail(user: User, token: str) -> OutgoingMail:
+# Where each mail's button and its fallback point: (path of the button, path named in the fallback sentence).
+# The button's link is fixed here, never taken from the editable text.
+_PAGES = {
+    "verify_email": ("/verify", "/login"),  # a new mail is asked for from the login page
+    "reset_password": ("/reset", "/forgot"),
+    "account_exists": ("/forgot", "/forgot"),
+    "invitation": ("/invitacion", "/login"),
+}
+
+
+def _mail(db: Session, key: str, to: str, values: dict, token: Optional[str] = None) -> OutgoingMail:
+    """Build the mail `key`: the saved (or default) text with its markers replaced, inside the fixed layout.
+
+    The texts come from `texts.get_texts` (the general admin may have customized them, spec F); the layout, the button
+    and its link are the ones of `_build`, so editing a text can never change them.
+    """
+    t = texts.render_texts(texts.get_texts(db, key), values)
+    button_path, fallback_path = _PAGES[key]
+    return _build(
+        to,
+        t["subject"],
+        t["heading"],
+        t["paragraphs"],
+        t["button"],
+        link(button_path, token),
+        t["footer"],
+        fallback_path,
+        t["fallback"],
+    )
+
+
+def verification_mail(db: Session, user: User, token: str) -> OutgoingMail:
     """Sent after signing up: the link proves the person controls the address."""
-    return _build(
-        user.email,
-        "Verificá tu mail - WebMet25",
-        "Verificá tu mail",
-        [
-            f"Hola {user.username}, gracias por crear tu cuenta en WebMet25.",
-            f"Para activarla, verificá tu mail. El link sirve una sola vez y vence en "
-            f"{settings.email_verify_ttl_hours} horas.",
-        ],
-        "Verificar mi mail",
-        link("/verify", token),
-        "Si no creaste una cuenta, ignorá este mensaje.",
-        # A new verification mail is asked for from the login page ("Reenviar mail de verificación").
-        "/login",
-        "Si el botón no funciona, entrá a",
-    )
+    values = {"usuario": user.username, "horas": settings.email_verify_ttl_hours}
+    return _mail(db, "verify_email", user.email, values, token)
 
 
-def reset_mail(user: User, token: str) -> OutgoingMail:
+def reset_mail(db: Session, user: User, token: str) -> OutgoingMail:
     """Sent by "forgot my password": the link opens the page to choose a new one."""
-    return _build(
-        user.email,
-        "Recuperá tu contraseña - WebMet25",
-        "Recuperá tu contraseña",
-        [
-            f"Hola {user.username}, recibimos un pedido para cambiar tu contraseña.",
-            f"El link sirve una sola vez y vence en {settings.password_reset_ttl_minutes} minutos. "
-            "Al cambiarla se cierran todas tus sesiones.",
-        ],
-        "Elegir una contraseña nueva",
-        link("/reset", token),
-        "Si no fuiste vos, ignorá este mensaje: tu contraseña no cambia.",
-        "/forgot",
-        "Si el botón no funciona, pedí un mail nuevo en",
-    )
+    values = {"usuario": user.username, "minutos": settings.password_reset_ttl_minutes}
+    return _mail(db, "reset_password", user.email, values, token)
 
 
 def invitation_mail(
-    to: str, organization_name: str, role: str, inviter: Optional[str], token: str, expires_at: datetime
+    db: Session,
+    to: str,
+    organization_name: str,
+    role: str,
+    inviter: Optional[str],
+    token: str,
+    expires_at: datetime,
 ) -> OutgoingMail:
     """Sent when someone is invited to an institution: the link opens the page to create the account.
 
-    The token goes in the fragment, like the verify and reset links (see `link`). The text says what the person will
-    be in the institution (admin or reader) and until when the link works.
+    The token goes in the fragment, like the verify and reset links (see `link`). The markers say who invited, which
+    institution, what the person will be there (admin or reader) and until when the link works.
     """
-    who = f"{inviter} te invitó" if inviter else "Te invitaron"
-    role_text = (
-        "como administrador de la institución: vas a poder agregar y administrar a sus usuarios."
-        if role == "org_admin"
-        else "como usuario de la institución."
-    )
-    until = expires_at.astimezone(timezone.utc).strftime("%d/%m/%Y")
-    return _build(
-        to,
-        f"Te invitaron a {organization_name} en WebMet25",
-        f"Te invitaron a {organization_name}",
-        [
-            f"{who} a unirte a {organization_name} en WebMet25, {role_text}",
-            f"Para crear tu cuenta (con una contraseña o con Google) abrí el link. Sirve una sola vez y vence "
-            f"el {until}.",
-        ],
-        "Aceptar la invitación",
-        link("/invitacion", token),
-        "Si no esperabas esta invitación, ignorá este mensaje: no se crea ninguna cuenta.",
-        "/login",
-        "Si el botón no funciona, pedile a quien te invitó que te envíe una invitación nueva. Sitio:",
-    )
+    values = {
+        "institucion": organization_name,
+        "invitador": f"{inviter} te invitó" if inviter else "Te invitaron",
+        "rol": INVITATION_ROLE_TEXT["org_admin" if role == "org_admin" else "viewer"],
+        "vence": expires_at.astimezone(timezone.utc).strftime("%d/%m/%Y"),
+    }
+    return _mail(db, "invitation", to, values, token)
 
 
-def account_exists_mail(user: User) -> OutgoingMail:
+def account_exists_mail(db: Session, user: User) -> OutgoingMail:
     """Sent when someone signs up with a mail that already has an account.
 
     The sign-up form answers the same either way (so nobody can tell which mails have an account); the
     owner of the address learns it here. It carries no token, only a link to the recovery page.
     """
-    return _build(
-        user.email,
-        "Ya tenés una cuenta - WebMet25",
-        "Ya tenés una cuenta",
-        [
-            f"Alguien intentó crear una cuenta con este mail, pero ya existe una con el usuario {user.username}.",
-            "Si fuiste vos, podés entrar con ese usuario o recuperar tu contraseña.",
-        ],
-        "Recuperar mi contraseña",
-        link("/forgot"),
-        "Si no fuiste vos, ignorá este mensaje: no se hizo ningún cambio.",
-        "/forgot",
-        "Si el botón no funciona, entrá a",
+    return _mail(db, "account_exists", user.email, {"usuario": user.username})
+
+
+# What {rol} says in the invitation, by role. Fixed text: the role itself is not editable, only the words around it.
+INVITATION_ROLE_TEXT = {
+    "org_admin": "administrador de la institución (vas a poder agregar y administrar a sus usuarios)",
+    "viewer": "usuario de la institución",
+}
+
+
+def preview_mail(key: str, draft: dict) -> OutgoingMail:
+    """The mail `key` built from a DRAFT (not saved) and the example data, for the admin's preview. Sends nothing.
+
+    It is built by the same `_build` as a real mail, so what the admin sees is what people get. The logo is an inline
+    attachment (`cid:`) in a real mail, which a screen cannot show: here it points to the site's public image.
+    """
+    t = texts.render_texts(draft, texts.PLACEHOLDERS[key])
+    button_path, fallback_path = _PAGES[key]
+    token = "T" * 43 if key != "account_exists" else None
+    mail = _build(
+        "ana.perez@ejemplo.com.ar",
+        t["subject"],
+        t["heading"],
+        t["paragraphs"],
+        t["button"],
+        link(button_path, token),
+        t["footer"],
+        fallback_path,
+        t["fallback"],
     )
+    html = mail.html.replace(f"cid:{LOGO_CID}", PREVIEW_LOGO_PATH)
+    return OutgoingMail(to=mail.to, subject=mail.subject, text=mail.text, html=html)
+
+
+# The site's own copy of the logo (relative: <base href> adds the prefix when the site is served under one).
+PREVIEW_LOGO_PATH = "assets/images/logos/OHMC@3x.png"

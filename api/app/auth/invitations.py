@@ -154,7 +154,9 @@ def create_invitation(
     )
     db.add(invitation)
     db.flush()
-    mail = invitation_mail(email, org.name, role, actor.full_name or actor.username, token, invitation.expires_at)
+    mail = invitation_mail(
+        db, email, org.name, role, actor.full_name or actor.username, token, invitation.expires_at
+    )
     return invitation, mail
 
 

@@ -48,7 +48,7 @@ def _now(now: Optional[datetime]) -> datetime:
 def _verification(db: Session, user: User, now: datetime) -> OutgoingMail:
     """A fresh verification link for the user (the previous one stops working) wrapped in its mail."""
     token = issue_token(db, user, PURPOSE_VERIFY, timedelta(hours=settings.email_verify_ttl_hours), now)
-    return verification_mail(user, token)
+    return verification_mail(db, user, token)
 
 
 def _link_still_valid(user: User, now: datetime) -> bool:
@@ -145,7 +145,7 @@ def register(
         if not may_send_mail(db, holder, now):
             return []
         record_notice(db, holder, now)
-        return [account_exists_mail(holder)]
+        return [account_exists_mail(db, holder)]
 
     # An unverified account is protected while its verification link is still valid (the person may be about to
     # click it). Replacing it earlier would let anyone push a pending person out, and would also delete the
@@ -230,7 +230,7 @@ def forgot_password(db: Session, email: str, now: Optional[datetime] = None) -> 
     if user.email_verified_at is None:
         return [_verification(db, user, now)]
     token = issue_token(db, user, PURPOSE_RESET, timedelta(minutes=settings.password_reset_ttl_minutes), now)
-    return [reset_mail(user, token)]
+    return [reset_mail(db, user, token)]
 
 
 def reset_password(db: Session, token: str, new_password: str, now: Optional[datetime] = None) -> None:
