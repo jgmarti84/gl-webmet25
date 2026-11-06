@@ -249,6 +249,17 @@ Los tres mails de la cuenta (verificar el mail, recuperar la contraseña, "ya te
 - **El logo viaja dentro del mail** (una imagen en línea de unos 30 KB, `api/app/mail/assets/ohmc-logo.png`), no como un link al sitio, porque los programas de correo suelen bloquear las imágenes remotas hasta que la persona las autoriza.
 - **Para verlos:** en desarrollo, Mailpit muestra cada mail en http://localhost:8025 (ver §7.4).
 
+### 7.2c Editar los textos de los mails
+
+El admin general puede cambiar el **texto** de los cuatro mails (verificar el mail, recuperar la contraseña, "ya tenés una cuenta" y la invitación a una institución) desde **panel de admin, Configuración, Textos de los mails**, sin tocar el código ni redeployar. Solo el admin general puede abrirlo o cambiarlo (un admin de institución o un lector recibe 403).
+
+- **Qué se puede cambiar:** el asunto, el título, los párrafos (separados por una línea en blanco), el texto del botón, el pie y el texto del link alternativo. **Qué no:** el logo, los colores y el diseño, el botón y su link (vienen del código y del token) y el aviso "no respondas a este mail".
+- **Marcas:** el texto puede usar marcas que se reemplazan al enviar, por ejemplo `{usuario}`, `{horas}` o `{institucion}`. La pantalla muestra las que acepta cada mail (los botones las insertan donde está el cursor). Una marca que el mail no tiene se rechaza al guardar, así un error de tipeo nunca llega a un mail real. Cualquier otra cosa con llaves queda como texto.
+- **Vista previa:** la pantalla muestra el mail con datos de ejemplo mientras se escribe, armado por el mismo código que arma el mail real. No envía ni guarda nada. **Restaurar original** vuelve al texto escrito en el código.
+- **Dónde se guarda:** tabla `mail_templates`, una fila por cada mail personalizado (queda registrado quién y cuándo). Sin fila el mail sale con su texto original, así que un deploy no cambia ningún mail. Si no se puede leer la tabla, el mail sale con el texto original y el error queda en el log.
+- **Seguridad:** el texto es texto plano (el HTML que se escriba se muestra como texto, no se ejecuta), el asunto no puede tener saltos de línea y la base solo se consulta con parámetros enlazados. La vista previa se ve en un iframe sin permisos.
+- **Despliegue:** reconstruir API y frontend. `db-init` aplica la migración `f7a8b9c0d1e2` (tabla `mail_templates`). Sin claves nuevas en `.env`.
+
 ### 7.3 Encenderlo en producción
 
 1. Si hay un proxy delante de nginx, configurar antes `set_real_ip_from` / `real_ip_header`. Los límites de estos endpoints (10 pedidos por minuto por IP) son por IP del cliente: sin la IP real todos los visitantes comparten la del proxy y la cuota se agota para todos.

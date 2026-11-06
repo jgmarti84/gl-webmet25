@@ -614,3 +614,42 @@ class Invitation(Base):
 
     def __repr__(self):
         return f"<Invitation(email='{self.email}', organization_id={self.organization_id}, role='{self.role}')>"
+
+
+class MailTemplate(Base):
+    """The text of one of the mails the app sends, as customized by the general admin (spec F).
+
+    A row exists ONLY when that mail was customized: without a row the mail goes out with the default text that lives
+    in the code (api/app/mail/texts.py). "Restore" deletes the row. Only text is stored, never layout: the logo, the
+    colors, the button with its link and the no-reply notice are fixed in the code. The text may carry markers like
+    {usuario}; which ones each mail accepts is checked when it is saved.
+    """
+    __tablename__ = 'mail_templates'
+
+    # verify_email | reset_password | account_exists | invitation. It is the primary key: one row per mail.
+    key = Column(String(32), primary_key=True)
+    subject = Column(String(150), nullable=False)
+    heading = Column(String(120), nullable=False)
+    # Paragraphs separated by a blank line.
+    body = Column(Text, nullable=False)
+    button = Column(String(40), nullable=False)
+    footer = Column(String(400), nullable=False)
+    fallback = Column(String(200), nullable=False)
+    updated_by = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "key IN ('verify_email', 'reset_password', 'account_exists', 'invitation')", name='ck_mail_templates_key'
+        ),
+        # Never empty and never longer than the column: the service checks it too, this is the last line of defense.
+        CheckConstraint("char_length(subject) BETWEEN 1 AND 150", name='ck_mail_templates_subject_len'),
+        CheckConstraint("char_length(heading) BETWEEN 1 AND 120", name='ck_mail_templates_heading_len'),
+        CheckConstraint("char_length(body) BETWEEN 1 AND 2000", name='ck_mail_templates_body_len'),
+        CheckConstraint("char_length(button) BETWEEN 1 AND 40", name='ck_mail_templates_button_len'),
+        CheckConstraint("char_length(footer) BETWEEN 1 AND 400", name='ck_mail_templates_footer_len'),
+        CheckConstraint("char_length(fallback) BETWEEN 1 AND 200", name='ck_mail_templates_fallback_len'),
+    )
+
+    def __repr__(self):
+        return f"<MailTemplate(key='{self.key}')>"

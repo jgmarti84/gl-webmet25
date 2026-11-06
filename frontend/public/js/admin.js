@@ -4,7 +4,7 @@ import { buildOrganizationPayload, eligibleAdmins, filterAdmins, filterOrganizat
 import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
 
-const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'colormaps', 'colormap-options', 'users', 'organizations', 'invitations', 'profile'];
+const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'colormaps', 'colormap-options', 'users', 'organizations', 'invitations', 'mails', 'profile'];
 const STATUS_OPTIONS = ['available', 'missing', 'error', 'pending', 'processing', 'archived'];
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
@@ -2529,6 +2529,189 @@ function openInvitationForm() {
     wireOrgCombobox(orgs.length ? orgs : []);
 }
 
+// The fields of a mail, in the order of the form: [name, label, kind]. `body` is a text area (paragraphs separated
+// by a blank line); the others are one line.
+const MAIL_FIELDS = [
+    ['subject', 'Asunto', 'line'],
+    ['heading', 'Título', 'line'],
+    ['body', 'Párrafos (separados por una línea en blanco)', 'area'],
+    ['button', 'Texto del botón', 'line'],
+    ['footer', 'Pie', 'line'],
+    ['fallback', 'Texto del link alternativo', 'line'],
+];
+// Wait this long after the last key before asking for a new preview.
+const MAIL_PREVIEW_DELAY_MS = 350;
+
+/**
+ * "Textos de los mails" (spec F): the general admin changes the TEXT of the four mails the app sends. The design (logo,
+ * colors, the button with its link) is not editable. Left: the four mails. Right: the fields of the chosen one, the
+ * markers that can be inserted, Guardar / Restaurar original, and a preview that the server builds with the same code
+ * that builds the real mail. The preview is shown in an iframe with `sandbox=""` (no scripts, no forms, no navigation),
+ * and the texts are put in the fields with `.value` and in the page with `textContent`, never with innerHTML.
+ */
+async function renderMails() {
+    let items = await adminApi.listMailTemplates();
+    let current = null;  // the key of the mail being edited
+    let lastField = null;  // where the marker buttons insert: the field the admin was in last
+    let previewTimer = null;
+
+    elements.sectionContent.innerHTML = `
+        <div class="mail-editor">
+            <div class="mail-side">
+                <p class="toolbar-note">Elegí un mail para cambiar su texto. El diseño no se puede cambiar.</p>
+                <ul id="mail-list" class="mail-list"></ul>
+            </div>
+            <div id="mail-main" class="mail-main"><p class="toolbar-note">Elegí un mail de la lista.</p></div>
+        </div>`;
+    const $ = (id) => document.getElementById(id);
+
+    const drawList = () => {
+        $('mail-list').innerHTML = items.map((item) => `
+            <li><button type="button" class="mail-item${item.key === current ? ' active' : ''}" data-mail-key="${safeText(item.key)}">
+                <span>${safeText(item.title)}</span>
+                ${item.customized ? '<small class="mail-tag">personalizado</small>' : ''}
+            </button></li>`).join('');
+        $('mail-list').querySelectorAll('[data-mail-key]').forEach((button) => {
+            button.onclick = () => select(button.dataset.mailKey);
+        });
+    };
+
+    const itemOf = (key) => items.find((item) => item.key === key);
+    const draft = () => Object.fromEntries(MAIL_FIELDS.map(([name]) => [name, $('mail-form').elements[name].value]));
+    const showError = (text) => { $('mail-error').textContent = text || ''; $('mail-error').hidden = !text; };
+
+    /** Ask the server for the preview of the draft; a refused draft shows its message instead of a preview. */
+    const refreshPreview = async () => {
+        if (!current) return;
+        try {
+            const preview = await adminApi.previewMailTemplate(current, draft());
+            $('mail-preview-subject').textContent = `Asunto: ${preview.subject}`;
+            $('mail-preview').srcdoc = preview.html;
+            showError('');
+        } catch (error) {
+            showError(error.message);
+        }
+    };
+    const schedulePreview = () => {
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(refreshPreview, MAIL_PREVIEW_DELAY_MS);
+    };
+
+    /** True when a field differs from the text saved for this mail (what "Guardar" would change). */
+    const isDirty = () => {
+        const form = $('mail-form');
+        const saved = current && itemOf(current);
+        return Boolean(form && saved) && MAIL_FIELDS.some(([name]) => form.elements[name].value !== saved.texts[name]);
+    };
+    /** Show "Volver" and the unsaved note, and enable "Guardar", only while there are changes to save or undo. */
+    const syncButtons = () => {
+        const dirty = isDirty();
+        $('mail-save').disabled = !dirty;
+        $('mail-revert').hidden = !dirty;
+        $('mail-dirty').hidden = !dirty;
+    };
+
+    /** Put the texts of `item` in the fields, and enable "Restaurar" only when the mail is customized. */
+    const fillForm = (item) => {
+        MAIL_FIELDS.forEach(([name]) => { $('mail-form').elements[name].value = item.texts[name]; });
+        $('mail-restore').disabled = !item.customized;
+        const stamp = item.customized && item.updated_at
+            ? `Personalizado${item.updated_by_username ? ` por ${item.updated_by_username}` : ''} el ${new Date(item.updated_at).toLocaleString('es-AR')}`
+            : 'Texto original';
+        $('mail-state').textContent = stamp;
+        syncButtons();
+    };
+
+    const select = (key) => {
+        // Do not lose what was typed by changing mail by mistake.
+        if (current && current !== key && isDirty() && !window.confirm('Tenés cambios sin guardar en este mail. ¿Querés descartarlos?')) return;
+        current = key;
+        const item = itemOf(key);
+        lastField = null;
+        $('mail-main').innerHTML = `
+            <h3>${safeText(item.title)}</h3>
+            <p id="mail-state" class="toolbar-note"></p>
+            <form id="mail-form" class="form-grid mail-form" novalidate>
+                ${MAIL_FIELDS.map(([name, label, kind]) => `
+                    <label>${safeText(label)}
+                        ${kind === 'area' ? `<textarea name="${name}" rows="7"></textarea>` : `<input name="${name}" type="text" autocomplete="off">`}
+                    </label>`).join('')}
+                <div>
+                    <p class="toolbar-note">Marcas que podés usar (se reemplazan al enviar; con el cursor en un campo, tocá una para insertarla):</p>
+                    <div id="mail-placeholders" class="mail-placeholders">
+                        ${item.placeholders.map((p) => `<button type="button" class="btn-secondary btn-sm" data-placeholder="${safeText(p.name)}" title="Ejemplo: ${safeText(p.example)}">{${safeText(p.name)}}</button>`).join('')}
+                    </div>
+                </div>
+                <div id="mail-error" class="form-error" role="alert" hidden></div>
+                <div class="mail-actions">
+                    <button id="mail-save" class="btn" type="submit">Guardar</button>
+                    <button id="mail-revert" class="btn-secondary" type="button" hidden>Volver</button>
+                    <span id="mail-dirty" class="mail-dirty" hidden>Cambios sin guardar</span>
+                    <button id="mail-restore" class="btn-secondary mail-restore" type="button">Restaurar original</button>
+                </div>
+            </form>
+            <p id="mail-preview-subject" class="mail-preview-subject"></p>
+            <iframe id="mail-preview" class="mail-preview" title="Vista previa del mail" sandbox=""></iframe>`;
+        fillForm(item);
+        const form = $('mail-form');
+        form.addEventListener('focusin', (event) => { if (MAIL_FIELDS.some(([name]) => name === event.target.name)) lastField = event.target; });
+        form.addEventListener('input', () => { syncButtons(); schedulePreview(); });
+        // A marker button inserts "{name}" where the cursor is in the last field the admin was in (the body by default).
+        $('mail-placeholders').querySelectorAll('[data-placeholder]').forEach((button) => {
+            button.onmousedown = (event) => event.preventDefault();  // keep the focus in the field
+            button.onclick = () => {
+                const field = lastField || form.elements.body;
+                const marker = `{${button.dataset.placeholder}}`;
+                const start = field.selectionStart ?? field.value.length;
+                const end = field.selectionEnd ?? start;
+                field.value = field.value.slice(0, start) + marker + field.value.slice(end);
+                field.focus();
+                field.setSelectionRange(start + marker.length, start + marker.length);
+                syncButtons();
+                schedulePreview();
+            };
+        });
+        form.onsubmit = async (event) => {
+            event.preventDefault();
+            showError('');
+            try {
+                const saved = await adminApi.saveMailTemplate(current, draft());
+                items = items.map((entry) => (entry.key === current ? saved : entry));
+                drawList();
+                fillForm(saved);
+                showMessage(`Texto de «${saved.title}» guardado`, 'success');
+                refreshPreview();
+            } catch (error) {
+                showError(error.message);
+            }
+        };
+        $('mail-revert').onclick = () => {
+            fillForm(itemOf(current));
+            showError('');
+            refreshPreview();
+        };
+        // Restaurar original: delete the customization, so the mail goes back to its default text.
+        $('mail-restore').onclick = async () => {
+            if (!window.confirm('¿Volver al texto original de este mail? Se pierde el texto personalizado.')) return;
+            try {
+                await adminApi.restoreMailTemplate(current);
+                items = await adminApi.listMailTemplates();
+                drawList();
+                fillForm(itemOf(current));
+                showError('');
+                showMessage('Texto original restaurado', 'success');
+                refreshPreview();
+            } catch (error) {
+                showError(error.message);
+            }
+        };
+        drawList();
+        refreshPreview();
+    };
+
+    drawList();
+}
+
 /**
  * The extra blocks of the form that CREATES a company (not shown when editing): who administers it and which radar
  * views it has. Both are optional and are sent in the same request as the company, which is created all or nothing.
@@ -2793,6 +2976,7 @@ async function renderSection() {
         users: 'Usuarios',
         organizations: 'Instituciones',
         invitations: 'Invitaciones',
+        mails: 'Textos de los mails',
         profile: 'Mi perfil',
     };
     elements.sectionTitle.textContent = titleBySection[state.section] || 'Panel';
@@ -2811,6 +2995,7 @@ async function renderSection() {
         if (state.section === 'users') await renderUsers();
         if (state.section === 'organizations') await renderOrganizations();
         if (state.section === 'invitations') await renderInvitations();
+        if (state.section === 'mails') await renderMails();
         if (state.section === 'profile') await renderProfile();
         decorateSortHeaders(state.section);
     } catch (error) {

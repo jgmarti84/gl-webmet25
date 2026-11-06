@@ -289,6 +289,17 @@ The three account mails (verify the mail, recover the password, "you already hav
 - **The logo travels inside the mail** (an inline image of about 30 KB, `api/app/mail/assets/ohmc-logo.png`), not as a link to the site, because mail programs usually block remote images until the person allows them.
 - **Seeing them:** in development, Mailpit shows every mail at http://localhost:8025 (see §9.4).
 
+### 9.2c Editing the mail texts
+
+The general admin can change the **text** of the four mails (verify the mail, recover the password, "you already have an account" and the institution invitation) from **Admin panel, Configuración, Textos de los mails**, without touching the code or redeploying. Only the general admin can open or change it (an institution admin or a reader gets 403).
+
+- **What can change:** the subject, the title, the paragraphs (separated by a blank line), the text of the button, the footer and the text of the alternative link. **What cannot:** the logo, the colors and the layout, the button and its link (they come from the code and the token), and the "no respondas a este mail" notice.
+- **Markers:** the text may use markers that are replaced when the mail is sent, for example `{usuario}`, `{horas}` or `{institucion}`. The screen shows the ones each mail accepts (buttons insert them where the cursor is). A marker that the mail does not have is refused when saving, so a typo never reaches a real mail. Any other braces stay as plain text.
+- **Preview:** the screen shows the mail with example data while the admin types, built by the same code that builds the real mail. It sends nothing and saves nothing. **Restaurar original** goes back to the text written in the code.
+- **Where it is stored:** table `mail_templates`, one row per mail that was customized (who and when are recorded). With no row the mail goes out with its original text, so a deploy changes no mail. If the table cannot be read, the mail goes out with the original text and the error is logged.
+- **Safety:** the text is plain text (HTML in it is shown as text, not run), the subject cannot contain line breaks, and the database is only reached with bound parameters. The preview is shown in an iframe without permissions.
+- **Deployment:** rebuild API and frontend. `db-init` applies the migration `f7a8b9c0d1e2` (table `mail_templates`). No new `.env` keys.
+
 ### 9.3 Turning it on in production
 
 1. If a proxy sits in front of nginx, configure `set_real_ip_from` / `real_ip_header` first. The limits of these endpoints (10 requests/minute per IP) are per client IP: without the real IP every visitor shares the proxy's and the quota runs out for everybody.

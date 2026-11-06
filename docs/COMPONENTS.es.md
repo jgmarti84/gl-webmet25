@@ -504,6 +504,14 @@ Pipeline de composición en canvas:
 
 ---
 
+### **Textos de los mails** — Sección del panel de admin (spec F)
+
+**Archivos:** `renderMails()` en [`frontend/public/js/admin.js`](../../frontend/public/js/admin.js), cuatro funciones en `admin-api.js`, la entrada "Textos de los mails" (grupo Configuración) en `admin.html` y los estilos `.mail-*` en `css/admin.css`.
+
+**Responsabilidad:** El admin general edita el **texto** de los cuatro mails. A la izquierda, la lista `#mail-list` (una entrada `[data-mail-key]` por mail, con la marca "personalizado" cuando fue personalizado). A la derecha, el formulario `#mail-form` (campos `subject`, `heading`, `body`, `button`, `footer`, `fallback`), los botones de marcas `#mail-placeholders [data-placeholder]` (insertan `{nombre}` donde está el cursor), los botones `#mail-save` y `#mail-restore` (este pide confirmación), la caja de errores `#mail-error` y la vista previa `#mail-preview` (un `iframe` con `sandbox=""`) bajo `#mail-preview-subject`. La vista previa se pide al servidor (`POST .../preview`) 350 ms después de la última tecla, así que la arma el mismo código que arma el mail real. Los textos entran a la página con `.value` / `textContent`, nunca con `innerHTML`; el HTML de la vista previa solo va al `srcdoc` del iframe.
+
+---
+
 ### **admin.html** — SPA del panel de administración
 
 **Archivo:** [`frontend/public/admin.html`](../../frontend/public/admin.html)

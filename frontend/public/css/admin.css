@@ -758,3 +758,31 @@ th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
 .combo-name { color: var(--muted, #64748b); }
 .combo-mail { color: var(--muted, #64748b); font-size: 12px; overflow-wrap: anywhere; }
 .combo-empty { padding: 8px; color: var(--muted, #64748b); font-size: 13px; }
+
+/* "Textos de los mails" (spec F): the list of mails on the left, the editor and the preview on the right. */
+.mail-editor { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 20px; align-items: start; }
+.mail-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.mail-item { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; text-align: left; border: 1px solid var(--border-strong, #cbd5e1); border-radius: 6px; background: #fff; cursor: pointer; font: inherit; }
+.mail-item:hover { background: var(--primary-soft, #eff6ff); }
+.mail-item.active { border-color: var(--primary, #2563eb); background: var(--primary-soft, #eff6ff); font-weight: 600; }
+.mail-tag { color: var(--primary, #2563eb); font-weight: 600; }
+/* The editor sits in a white card like the other panels; its form reuses .form-grid (a label above each field, fields
+   as wide as the card) so it looks like the rest of the admin forms. */
+.mail-main { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 18px; min-width: 0; }
+.mail-main h3 { margin: 0 0 4px; font-size: 17px; }
+.mail-form { gap: 20px; padding: 0; overflow: visible; }
+/* The field name sits well above its field, and every field (the one-line ones and the paragraphs) is as wide as the card
+   and rounded the same way. */
+.mail-form label { gap: 8px; font-size: 13px; }
+.mail-form label input, .mail-form label textarea { width: 100%; box-sizing: border-box; padding: 11px 14px; border: 1px solid var(--border-strong, #cbd5e1); border-radius: 10px; background: #fff; font: inherit; font-weight: 400; color: var(--text); }
+.mail-form label input:focus, .mail-form label textarea:focus { outline: none; border-color: var(--primary, #2563eb); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15); }
+.mail-form label textarea { resize: vertical; line-height: 1.5; }
+/* Guardar and Volver together on the left; Restaurar original (the default text) pushed to the right. */
+.mail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.mail-restore { margin-left: auto; }
+.mail-dirty { color: var(--muted); font-size: 12.5px; }
+.mail-actions .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.mail-placeholders { display: flex; flex-wrap: wrap; gap: 6px; }
+.mail-preview-subject { margin: 16px 0 6px; font-weight: 600; }
+.mail-preview { width: 100%; height: 560px; border: 1px solid var(--border-strong, #cbd5e1); border-radius: 6px; background: #eef2f7; }
+@media (max-width: 900px) { .mail-editor { grid-template-columns: 1fr; } }
