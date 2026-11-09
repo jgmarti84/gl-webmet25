@@ -346,6 +346,8 @@ accepted_at, cancelled_at: datetime | None
 e invitación cerrada). Las filas nunca se borran. Los topes de envío las cuentan (por dirección y de todo el sitio).
 Código: [`api/app/auth/invitations.py`](../api/app/auth/invitations.py), [`api/app/routers/invitations.py`](../api/app/routers/invitations.py).
 
+**Aceptar con una cuenta que ya existe.** La tabla `invitations` no cambia: si un mail tiene cuenta se calcula cuando se pregunta (`POST /api/v1/invitations/details` devuelve `account_exists`; las respuestas de quien invita y las listas de pendientes devuelven `existing_account` y, para el admin general, `leaves_organization`). `POST /api/v1/invitations/accept-existing {token}` necesita sesión; la cuenta de la sesión tiene que tener el mail invitado (si no, 403). En una transacción y con la institución bloqueada, vuelve a comprobar las reglas (un lector activo común, que no esté ya en esa institución, institución activa con lugar libre y con un admin para un lector; un lector de otra institución solo si quien invitó es admin general, y un invitador que ya no existe cuenta como que no lo es), mueve la cuenta (al salir de la institución vieja se libera su lugar solo), le pone el rol si la invitación es de admin de institución, aplica las vistas (la lista de la invitación, o una copia de las de la institución), cierra las sesiones de la persona y marca la invitación como aceptada; después el router abre una sesión nueva.
+
 #### **MailTemplate** (el texto personalizado de uno de los cuatro mails, spec F)
 ```python
 key: str (PK)                         # 'verify_email' | 'reset_password' | 'account_exists' | 'invitation' (CHECK)

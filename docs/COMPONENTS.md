@@ -506,6 +506,8 @@ settings), and animation controls (bottom-center).
 
 **Main ids:** `#invitation-company`, `#invitation-email`, `#invitation-role`, `#invitation-form` (fields `username`, `full_name`, `password`, `repeat`, `accept_terms`), `#invitation-submit`, `#invitation-invalid`, `#invitation-google`.
 
+**Existing account.** When `details` says `account_exists`, the page removes the sign-up form and shows `#invitation-existing`: the login `#invitation-login-form` (`username`, `password`, `#invitation-login-submit`, error `#invitation-login-error`) and Google; if the person is already logged in, `#invitation-join` instead; if the session is of another account, `#invitation-wrong-account` with `#invitation-logout`. After logging in the page calls `authApi.acceptExistingInvitation(token)` (the token stays in memory) and goes into the app. In the panels, inviting a mail with an account shows a warning (admin: `invitationSentMessage`; institution panel: `#empresa-message`) and the pending tables show the tag "Ya tiene cuenta".
+
 **Panels.** Admin panel: section **Invitaciones** (`renderInvitations`, `openInvitationForm`, with the institution search box of `wireOrgCombobox`) and the **Invitar por mail** option of the admin in "Agregar institución". Institution panel (`/empresa`): the **Agregar usuario** form chooses between a password and an invitation (with the radar views to give), and the **Invitaciones pendientes** table has `data-resend-invitation` / `data-cancel-invitation`.
 
 ---

@@ -343,6 +343,8 @@ locked, invitation locked with `FOR UPDATE`, account created with a confirmed ma
 Rows are never deleted. The mail caps count them (per address and site-wide). Code: [`api/app/auth/invitations.py`](../api/app/auth/invitations.py),
 [`api/app/routers/invitations.py`](../api/app/routers/invitations.py).
 
+**Accepting with an account that already exists.** The `invitations` table does not change: whether a mail has an account is worked out when asked (`POST /api/v1/invitations/details` returns `account_exists`; the inviter's answers and the pending lists return `existing_account` and, for the general admin, `leaves_organization`). `POST /api/v1/invitations/accept-existing {token}` needs a session; the account of the session must have the invited mail (403 otherwise). In one transaction, with the institution locked, it re-checks the rules (a plain active reader, not already in that institution, institution active with a free seat and an admin for a reader; a reader of another institution only if the inviter is a general admin, and an inviter that no longer exists counts as not being one), moves the account (leaving the old institution frees its seat by itself), sets its role when the invitation is for institution admin, applies the views (the invitation's list, or a copy of the institution's), closes the person's sessions and marks the invitation accepted; the router then opens a new session.
+
 #### **MailTemplate** (the customized text of one of the four mails, spec F)
 ```python
 key: str (PK)                         # 'verify_email' | 'reset_password' | 'account_exists' | 'invitation' (CHECK constraint)

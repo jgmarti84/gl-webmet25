@@ -489,6 +489,8 @@ Pipeline de composición en canvas:
 
 **Ids principales:** `#invitation-company`, `#invitation-email`, `#invitation-role`, `#invitation-form` (campos `username`, `full_name`, `password`, `repeat`, `accept_terms`), `#invitation-submit`, `#invitation-invalid`, `#invitation-google`.
 
+**Cuenta existente.** Cuando `details` dice `account_exists`, la página quita el formulario de cuenta nueva y muestra `#invitation-existing`: el inicio de sesión `#invitation-login-form` (`username`, `password`, `#invitation-login-submit`, error `#invitation-login-error`) y Google; si la persona ya tiene la sesión abierta, `#invitation-join` en su lugar; si la sesión es de otra cuenta, `#invitation-wrong-account` con `#invitation-logout`. Después de iniciar sesión la página llama a `authApi.acceptExistingInvitation(token)` (el token queda en memoria) y entra a la app. En los paneles, invitar a un mail con cuenta muestra un aviso (admin: `invitationSentMessage`; panel de la institución: `#empresa-message`) y las tablas de pendientes muestran la marca "Ya tiene cuenta".
+
 **Paneles.** Panel de admin: sección **Invitaciones** (`renderInvitations`, `openInvitationForm`, con el buscador de instituciones de `wireOrgCombobox`) y la opción **Invitar por mail** del admin en "Agregar institución". Panel de la institución (`/empresa`): el formulario **Agregar usuario** elige entre una contraseña y una invitación (con las vistas de radar a dar), y la tabla **Invitaciones pendientes** tiene `data-resend-invitation` / `data-cancel-invitation`.
 
 ---
