@@ -275,6 +275,19 @@ email_verified_at: datetime (nullable) # NULL = se registró sola y todavía no 
 terms_accepted_at: datetime (nullable) # cuándo aceptó los términos al registrarse (constancia del consentimiento)
 ```
 
+**Borrar un usuario (spec G).** Un usuario se borra con una sola sentencia SQL `DELETE` sobre `users` (no con `session.delete()` del ORM), así que la base aplica sus propias claves foráneas:
+
+| Tabla | Columna | Efecto |
+|---|---|---|
+| `user_sessions` | `user_id` | se borra (cascada) |
+| `email_tokens` | `user_id` | se borra (cascada) |
+| `permissions` | `user_id` | se borran las vistas propias (cascada) |
+| `permissions` | `granted_by` (filas de otros) | queda vacío |
+| `invitations` | `invited_by` | queda vacío; las invitaciones que mandó siguen pendientes |
+| `mail_templates` | `updated_by` | queda vacío |
+
+Las reglas (a quién se puede borrar, el único admin activo de una institución, un admin general borrándose a sí mismo) están en `user_admin.delete_user`, que usan `DELETE /api/v1/admin/users/{id}` (admin general) y `DELETE /api/v1/profile` (el usuario con sesión; no recibe id).
+
 #### **UserSession** (una fila por login)
 ```python
 id: UUID (PK)                         # id del login; el refresh token es "<id>.<secreto>"

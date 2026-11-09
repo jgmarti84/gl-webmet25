@@ -170,3 +170,41 @@ def verify_email(db: Session, user: User) -> User:
         user.email_verified_at = datetime.now(timezone.utc)
         db.flush()
     return user
+
+
+def delete_user(db: Session, actor: User, user: User) -> None:
+    """Delete an account for good. Used by the general admin (deleting someone else) and by a person deleting
+    their own account (`actor` is `user`). Functions flush; the router commits.
+
+    Rules (409/403 with a message in Spanish, nothing is deleted):
+    * Only the general admin deletes OTHER people (defense in depth: the admin endpoint already requires the role).
+    * A general admin cannot delete its own account (like it cannot deactivate or demote itself): another general admin
+      does it. The last active general admin cannot be deleted either (this cannot be reached today, because the one
+      deleting is an active general admin, but the rule belongs here).
+    * An active institution admin cannot be deleted when the institution would be left with active users and no active
+      admin: name another admin first. If it is the only active user, or it is inactive, it can go.
+    The institution row is locked for that check (see ensure_org_keeps_admin), so two admins deleting each other at the
+    same moment cannot leave it without admin.
+
+    The delete is one SQL DELETE on users (not the ORM's delete), so the DATABASE applies its own foreign keys:
+    sessions, mail tokens and the user's own views are deleted with it, and "granted by", "invited by" and "text edited
+    by" in other rows become empty. Pending invitations the user sent stay valid. The seat is free again by itself:
+    seats are the active users of the institution.
+    """
+    if actor.id != user.id and actor.role != "admin":
+        raise UserRuleError(403, "Solo el administrador general puede borrar a otros usuarios")
+    if user.role == "admin":
+        if user.id == actor.id:
+            raise UserRuleError(
+                403, "Un administrador general no puede borrar su propia cuenta: pedile a otro administrador general"
+            )
+        if user.is_active and count_active_admins(db) <= 1:
+            raise UserRuleError(409, "Tiene que quedar al menos un administrador activo")
+    elif user.role == "org_admin" and user.is_active and user.organization_id is not None:
+        try:
+            organizations.ensure_org_keeps_admin(db, user, stays_as_user=False)
+        except organizations.OrgRuleError as exc:
+            raise UserRuleError(exc.status_code, exc.detail) from exc
+    db.query(User).filter(User.id == user.id).delete(synchronize_session=False)
+    db.flush()
+    db.expunge(user)  # the row is gone: the session must not keep an object that points at it

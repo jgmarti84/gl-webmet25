@@ -786,3 +786,11 @@ th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
 .mail-preview-subject { margin: 16px 0 6px; font-weight: 600; }
 .mail-preview { width: 100%; height: 560px; border: 1px solid var(--border-strong, #cbd5e1); border-radius: 6px; background: #eef2f7; }
 @media (max-width: 900px) { .mail-editor { grid-template-columns: 1fr; } }
+
+/* Deleting an account (spec G): the red button sits apart from Guardar, in its own block. */
+.form-danger { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--border); }
+.form-danger .toolbar-note { margin: 0; }
+/* The button text stays on one line: the note beside it is the one that wraps, never the button. */
+.form-danger .btn-danger, .profile-danger .btn-danger { white-space: nowrap; flex-shrink: 0; }
+.profile-danger { display: grid; gap: 12px; }
+.profile-danger .toolbar-note { margin: 0; }

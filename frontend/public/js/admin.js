@@ -2147,6 +2147,10 @@ function openUserForm(user = null) {
             ${orgField}
             ${isEdit ? '' : '<label>Contraseña inicial <input name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required></label><p class="toolbar-note">Mínimo 10 caracteres, con al menos un carácter especial (por ejemplo ! - _ . @ #).</p>'}
             <div class="form-actions"><button class="btn" type="submit">${isEdit ? 'Guardar' : 'Crear'}</button></div>
+            ${isEdit && !isSelf ? `<div class="form-danger">
+                <p class="toolbar-note">Eliminar la cuenta la borra para siempre, con sus sesiones y sus vistas.</p>
+                <button id="user-delete" class="btn-danger" type="button">Eliminar usuario</button>
+            </div>` : ''}
         `,
         async (formData) => {
             const payload = {
@@ -2185,6 +2189,21 @@ function openUserForm(user = null) {
             showMessage(message, 'success');
         },
     );
+    // Eliminar usuario (spec G): a manual confirmation that names the user; the server may refuse (an institution's only admin).
+    const deleteButton = document.getElementById('user-delete');
+    if (deleteButton) {
+        deleteButton.onclick = async () => {
+            if (!window.confirm(`¿Eliminar a ${user.username}? Se borra su cuenta, sus sesiones y sus vistas. No se puede deshacer.`)) return;
+            try {
+                await adminApi.deleteUser(user.id);
+                closeFormModal();
+                await renderSection();
+                showMessage(`Usuario ${user.username} eliminado`, 'success');
+            } catch (error) {
+                setFormModalError(error.message);
+            }
+        };
+    }
     if (orgItems.length) wireOrgCombobox(orgItems);
     if (canMove) wireMoveNote(user, currentOrgId);
     if (canLeave) wireLeaveNote(user);
