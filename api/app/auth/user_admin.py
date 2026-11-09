@@ -70,7 +70,9 @@ def update_user(db: Session, actor: User, user: User, changes: dict) -> User:
             changes = {**changes, "role": None}
         # Moving the account between companies goes first: the role rules below must see the company it ends up in.
         if "organization_id" in changes:
-            organizations.move_user(db, actor, user, changes["organization_id"])
+            # A loose account that joins AS the company admin may be the first admin of a company that has none.
+            joining_as_admin = changes.get("role") == "org_admin"
+            organizations.move_user(db, actor, user, changes["organization_id"], becoming_admin=joining_as_admin)
     except organizations.OrgRuleError as exc:
         raise UserRuleError(exc.status_code, exc.detail) from exc
 
