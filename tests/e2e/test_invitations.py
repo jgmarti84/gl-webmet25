@@ -173,3 +173,59 @@ def test_the_admin_panel_lists_the_pending_invitations_and_cancels_one(browser, 
         expect(page.locator("tr", has_text=email)).to_have_count(0)
     finally:
         context.close()
+
+
+def _create_account(api, username: str, email: str) -> int:
+    """An existing account with a mail (verified: accounts made by the admin are)."""
+    created = api.post(
+        f"{ADMIN_API}/users", data={"username": username, "password": PASSWORD, "role": "viewer", "email": email}
+    )
+    assert created.status == 201, created.text()
+    return created.json()["id"]
+
+
+def test_an_existing_account_logs_in_from_the_link_and_lands_in_the_institution(browser, admin_api, person):
+    username, email = person
+    _create_account(admin_api, username, email)
+    org_id = _invite_company(admin_api)
+    invited = admin_api.post(
+        f"{ADMIN_API}/invitations", data={"email": email, "organization_id": org_id, "role": "org_admin"}
+    )
+    assert invited.status == 201, invited.text()
+    assert invited.json()["existing_account"] is True
+    context = browser.new_context(ignore_https_errors=True)
+    page = context.new_page()
+    try:
+        page.goto(_invitation_link(email), wait_until="networkidle")
+        # The mail has an account: no sign-up form, a login instead.
+        expect(page.locator("#invitation-existing")).to_be_visible()
+        expect(page.locator("#invitation-form")).to_have_count(0)
+        expect(page.locator("#invitation-company")).to_contain_text(INVITE_ORG)
+        page.fill("#invitation-login-form input[name=username]", username)
+        page.fill("#invitation-login-form input[name=password]", PASSWORD)
+        page.click("#invitation-login-submit")
+        page.wait_for_url(lambda url: urlparse(url).path.rstrip("/").endswith("/empresa"))
+        expect(page.locator("#empresa-name")).to_have_text(INVITE_ORG)
+    finally:
+        context.close()
+
+
+def test_the_company_admin_is_warned_when_the_mail_already_has_an_account(browser, admin_api, person):
+    username, email = person
+    _create_account(admin_api, username, email)
+    org_id = _ensure_company(admin_api)
+    org_admin_id = _ensure_org_admin(admin_api, org_id)
+    page = _login(browser, ORG_ADMIN, ORG_ADMIN_PASSWORD)
+    try:
+        page.goto(f"{FRONTEND_URL}/empresa", wait_until="networkidle")
+        page.click("#empresa-add")
+        page.check("#form-modal-body input[name=create_mode][value=invite]")
+        page.fill("#form-modal-body input[name=invite_email]", email)
+        page.click("#form-modal-body button[type=submit]")
+        # A warning, not an error: the invitation was sent anyway and it is in the list with a tag.
+        expect(page.locator("#empresa-message")).to_contain_text("ya tiene una cuenta")
+        expect(page.locator("#empresa-invitations")).to_contain_text(email)
+        expect(page.locator("#empresa-invitations")).to_contain_text("Ya tiene cuenta")
+    finally:
+        page.close()
+        admin_api.patch(f"{ADMIN_API}/users/{org_admin_id}", data={"is_active": False})

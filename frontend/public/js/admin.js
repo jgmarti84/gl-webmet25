@@ -2469,7 +2469,7 @@ async function renderInvitations() {
             <tbody>
                 ${items.map((invitation) => `
                     <tr${rowFacetAttr('invitations', invitation)}>
-                        <td>${safeText(invitation.email)}</td>
+                        <td>${safeText(invitation.email)}${invitation.existing_account ? ' <span class="status-pill">Ya tiene cuenta</span>' : ''}</td>
                         <td>${safeText(invitation.organization_name)}</td>
                         <td>${safeText(invitation.role_label)}</td>
                         <td>${safeText(views(invitation))}</td>
@@ -2513,6 +2513,17 @@ async function renderInvitations() {
     });
 }
 
+/**
+ * What to tell the admin after inviting. When the mail already has an account it is a WARNING, not an error: the
+ * invitation was sent anyway, and the person will join with the account it has (leaving another institution if it is in one).
+ */
+function invitationSentMessage(sent) {
+    if (!sent.existing_account) return `Invitación enviada a ${sent.email}`;
+    const leaves = sent.leaves_organization ? ` y saldrá de ${sent.leaves_organization}` : '';
+    return `Invitación enviada a ${sent.email}. Ese mail ya tiene una cuenta: la invitación se envió igual. `
+        + `Al aceptarla, entrará a ${sent.organization_name} con su cuenta actual${leaves}.`;
+}
+
 /** Form "Invitar por mail": the mail, the institution (search box) and the role it will have. */
 function openInvitationForm() {
     const orgs = (state.organizations || []).filter((org) => org.is_active);
@@ -2542,7 +2553,7 @@ function openInvitationForm() {
                 role: formData.get('role'),
             });
             await renderSection();
-            showMessage(`Invitación enviada a ${sent.email}`, 'success');
+            showMessage(invitationSentMessage(sent), 'success');
         },
     );
     wireOrgCombobox(orgs.length ? orgs : []);
@@ -2931,12 +2942,15 @@ async function openOrganizationForm(org = null) {
                 allViews: formData.get('all') === 'on',
                 radars: formData.getAll('radar'),
             });
-            await adminApi.createOrganization(payload);
+            const created = await adminApi.createOrganization(payload);
             await renderSection();
             const inviting = payload.admin && payload.admin.mode === 'invite';
+            const hasAccount = inviting && created.invited_admin_has_account
+                ? '. Ese mail ya tiene una cuenta: la invitación se envió igual y entrará con su cuenta actual'
+                : '';
             showMessage(
                 inviting
-                    ? `Institución ${payload.name} creada: invitamos a ${payload.admin.email} como administrador`
+                    ? `Institución ${payload.name} creada: invitamos a ${payload.admin.email} como administrador${hasAccount}`
                     : `Institución ${payload.name} creada${payload.admin ? ' con su administrador' : ''}`,
                 'success',
             );
