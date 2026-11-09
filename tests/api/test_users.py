@@ -555,3 +555,39 @@ def test_set_permissions_foreign_origin_returns_403():
             f"{PREFIX}/{UNKNOWN_ID}/permissions", json={"radar_detail_view": []}, headers=FOREIGN_ORIGIN
         )
     assert response.status_code == 403
+
+
+# --- DELETE /admin/users/{id} (spec G) -------------------------------------------------------------------------
+# Never sent with a real id: an unknown id, a malformed one, no session or a foreign Origin. The happy path and the
+# rules (who can be deleted) run on the test database in tests/auth/test_user_delete.py.
+
+
+def test_delete_user_without_session_returns_401():
+    """Deleting a user without a session must return 401 (the id is unknown on purpose)."""
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.delete(f"{PREFIX}/{UNKNOWN_ID}")
+    assert response.status_code == 401
+
+
+def test_delete_user_unknown_id_returns_404_json():
+    """Deleting an unknown user must return 404, with the usual JSON error."""
+    with _admin_client() as client:
+        response = client.delete(f"{PREFIX}/{UNKNOWN_ID}")
+    assert response.status_code == 404
+    assert response.headers["content-type"].startswith("application/json")
+    assert isinstance(response.json()["detail"], str)
+
+
+def test_delete_user_with_a_malformed_id_returns_422():
+    """An id that is not a number is refused before anything is looked up."""
+    with _admin_client() as client:
+        assert client.delete(f"{PREFIX}/abc").status_code == 422
+        assert client.delete(f"{PREFIX}/1;DROP TABLE users").status_code == 422
+
+
+@needs_admin
+def test_delete_user_foreign_origin_returns_403():
+    """A delete from a foreign Origin must be rejected (the id is unknown on purpose)."""
+    with _admin_client() as client:
+        response = client.delete(f"{PREFIX}/{UNKNOWN_ID}", headers=FOREIGN_ORIGIN)
+    assert response.status_code == 403
