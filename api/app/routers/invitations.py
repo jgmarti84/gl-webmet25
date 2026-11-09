@@ -18,7 +18,7 @@ from radar_db.models import Invitation, User
 from ..auth import invitations as service
 from ..auth import service as auth_service
 from ..auth.cookies import request_base_path, set_auth_cookies
-from ..auth.dependencies import check_origin, require_admin, require_org_admin
+from ..auth.dependencies import check_origin, get_current_user, require_admin, require_org_admin
 from ..auth.google import GoogleIdentity, GoogleTokenError, GoogleVerifier, get_google_verifier
 from ..auth.google_login import GoogleLoginError
 from ..auth.security import create_access_token
@@ -46,8 +46,13 @@ org_router = APIRouter(prefix="/org/invitations", tags=["Company admin"], depend
 public_router = APIRouter(prefix="/invitations", tags=["Invitations"], dependencies=[Depends(check_origin)])
 
 
-def _response(invitation: Invitation) -> InvitationResponse:
+def _response(invitation: Invitation, info=(False, None), show_leaves: bool = False) -> InvitationResponse:
+    """The answer for one invitation. `info` is (the mail has an account, institution it would leave) from
+    service.account_info; the second one is only given to the general admin (`show_leaves`)."""
+    existing, leaves = info
     return InvitationResponse(
+        existing_account=existing,
+        leaves_organization=leaves if show_leaves else None,
         id=invitation.id,
         email=invitation.email,
         organization_id=invitation.organization_id,
@@ -57,6 +62,12 @@ def _response(invitation: Invitation) -> InvitationResponse:
         created_at=invitation.created_at,
         expires_at=invitation.expires_at,
     )
+
+
+def _responses(db: Session, rows: List[Invitation], show_leaves: bool) -> List[InvitationResponse]:
+    """A list of invitations, with the account info of all their mails worked out in one query."""
+    info = service.account_info(db, rows)
+    return [_response(row, info.get(row.id, (False, None)), show_leaves) for row in rows]
 
 
 def _rule(exc: service.InvitationError) -> HTTPException:
@@ -86,7 +97,7 @@ def _invite(
         raise _rule(exc)
     db.commit()
     _send_later(background, mailer, [mail])
-    return _response(invitation)
+    return _responses(db, [invitation], actor.role == "admin")[0]
 
 
 def _renew(
@@ -101,7 +112,7 @@ def _renew(
         raise _rule(exc)
     db.commit()
     _send_later(background, mailer, [mail])
-    return _response(invitation)
+    return _responses(db, [invitation], actor.role == "admin")[0]
 
 
 def _cancel(db: Session, invitation_id: str, organization_id=None) -> Response:
@@ -132,7 +143,7 @@ def admin_create(
 
 @admin_router.get("", response_model=List[InvitationResponse])
 def admin_list(organization_id: Optional[int] = None, db: Session = Depends(get_db)) -> List[InvitationResponse]:
-    return [_response(row) for row in service.pending_of(db, organization_id)]
+    return _responses(db, service.pending_of(db, organization_id), True)
 
 
 @admin_router.post("/{invitation_id}/resend", response_model=InvitationResponse)
@@ -170,7 +181,7 @@ def org_create(
 
 @org_router.get("", response_model=List[InvitationResponse])
 def org_list(db: Session = Depends(get_db), actor: User = Depends(require_org_admin)) -> List[InvitationResponse]:
-    return [_response(row) for row in service.pending_of(db, actor.organization_id)]
+    return _responses(db, service.pending_of(db, actor.organization_id), False)
 
 
 @org_router.post("/{invitation_id}/resend", response_model=InvitationResponse)
@@ -204,6 +215,9 @@ def details(payload: InvitationToken, db: Session = Depends(get_db)) -> Invitati
         email=invitation.email,
         role=invitation.role,
         google_available=settings.google_login_available,
+        # Decides which screen the page shows: the login (the mail has an account) or the sign-up form. Only whoever has
+        # the link gets this, and the server checks everything again when the person accepts.
+        account_exists=service.account_info(db, [invitation])[invitation.id][0],
     )
 
 
@@ -253,3 +267,23 @@ def accept_google(
     except GoogleLoginError as exc:
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail, "code": exc.code})
     return _open_session(db, user, request, response)
+
+
+@public_router.post("/accept-existing", response_model=MeResponse)
+def accept_existing(
+    payload: InvitationToken,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> MeResponse:
+    """Join the institution with the account that is logged in: for a mail that already has an account.
+
+    It needs a session AND the link: the account of the session must be the one of the invited mail (403 otherwise), so
+    the link alone cannot enter anybody's account. It acts only on the account of the session. The rules are checked
+    again here (see service.accept_existing) and, when it works, a fresh session replaces the old ones."""
+    try:
+        joined = service.accept_existing(db, user, payload.token)
+    except service.InvitationError as exc:
+        raise _rule(exc)
+    return _open_session(db, joined, request, response)

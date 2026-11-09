@@ -70,6 +70,8 @@ class OrganizationResponse(BaseModel):
     seats_used: int
     # Open invitations (spec E): each one reserves a seat until it is accepted, cancelled or expires.
     pending_invitations: int = 0
+    # Only in the answer to "create an institution inviting its admin": that mail already has an account.
+    invited_admin_has_account: bool = False
     is_active: bool
     # The company's list as saved: radar codes, or ["*"].
     radar_detail_views: List[str]
