@@ -1,6 +1,7 @@
 # api/app/routers/users.py
 """User management (admin only)."""
 
+import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -14,6 +15,8 @@ from ..auth import organizations, permissions, user_admin
 from ..auth.dependencies import check_origin, require_admin
 from ..schemas.auth import PasswordReset, UserCreate, UserResponse, UserUpdate
 from ..schemas.permissions import RadarViewsUpdate
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin/users", tags=["Admin users"], dependencies=[Depends(check_origin)])
 
@@ -118,6 +121,19 @@ def revoke_sessions(user_id: int, db: Session = Depends(get_db), actor: User = D
     user = _get_or_404(db, user_id)
     revoke_all_sessions(db, user)
     db.commit()
+    return Response(status_code=204)
+
+
+@router.delete("/{user_id}", status_code=204)
+def delete_user(user_id: int, db: Session = Depends(get_db), actor: User = Depends(require_admin)) -> Response:
+    """Delete a user for good. Only the general admin; the rules are in user_admin.delete_user."""
+    user = _get_or_404(db, user_id)
+    try:
+        user_admin.delete_user(db, actor, user)
+    except user_admin.UserRuleError as exc:
+        raise _rule(exc)
+    db.commit()
+    logger.info("user deleted id=%s by=%s", user_id, actor.id)  # ids only: no name, no mail
     return Response(status_code=204)
 
 

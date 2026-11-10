@@ -457,6 +457,14 @@ Pipeline de composición en canvas:
 
 **Responsabilidad:** `mountProfile(container, {me, openModal, showMessage})` dibuja el perfil propio en un contenedor: los datos de la cuenta, los radares que la persona puede abrir y, para el admin de empresa, la tarjeta de su empresa, más la edición del nombre. La página que lo aloja le pasa sus propias funciones de modal y de avisos, así el formulario se comporta como el resto de esa página. Lo usan tres páginas: el panel de admin (sección `profile`), el panel de empresa (sección `perfil`) y `perfil.html`. Las funciones puras (`formatDate`, `profileRows`, `viewsNote`) tienen tests en `tests/js/test_profile_section.mjs`.
 
+### **Borrar cuentas** — "Eliminar usuario" y "Eliminar mi cuenta" (spec G)
+
+**Archivos:** `openUserForm()` en [`frontend/public/js/admin.js`](../../frontend/public/js/admin.js), `deleteBlock()` y `mountProfile()` en `js/shared/profile-section.js`, `deleteUser` en `admin-api.js`, `deleteAccount` en `perfil-api.js` y los estilos `.form-danger` / `.profile-danger` en `css/admin.css`.
+
+**Responsabilidad:** En el panel de admin, el formulario de edición de un usuario termina con un bloque con el botón rojo `#user-delete` ("Eliminar usuario"): no está en la fila de la tabla y no se muestra cuando el admin edita su propia cuenta. Pide `window.confirm` nombrando al usuario, llama a `DELETE /api/v1/admin/users/{id}`, y después cierra el formulario y actualiza la tabla; un rechazo del servidor (409) se muestra en la caja de errores del formulario. La sección de perfil (la misma en los tres paneles) termina con "Eliminar mi cuenta": el botón `#profile-delete`, el error `#profile-delete-error` y la nota `#profile-delete-note`. Pide `window.confirm`, llama a `DELETE /api/v1/profile` (sin id) y va a `login` (URL relativa). El admin general solo ve la nota, sin el botón.
+
+---
+
 ### **perfil.html / perfil.js / perfil-api.js** — Página de perfil para lectores (spec D)
 
 **Archivos:** [`frontend/public/perfil.html`](../../frontend/public/perfil.html), [`frontend/public/js/perfil.js`](../../frontend/public/js/perfil.js), [`frontend/public/js/perfil-api.js`](../../frontend/public/js/perfil-api.js)
@@ -501,6 +509,14 @@ Pipeline de composición en canvas:
 `login.html` también cambió: el campo es "Usuario o mail", muestra "¿Olvidaste tu contraseña?" y "Crear cuenta" solo cuando `options()` lo permite, y cuando el login responde `email_not_verified` muestra un aviso y un botón "Reenviar mail de verificación" (`#login-resend`).
 
 **Scripts cargados:** cada página carga `css/login.css`, `js/login-ui.js` (los botones de mostrar/ocultar contraseña apuntan a su campo con `data-target`) y su propio script.
+
+---
+
+### **Textos de los mails** — Sección del panel de admin (spec F)
+
+**Archivos:** `renderMails()` en [`frontend/public/js/admin.js`](../../frontend/public/js/admin.js), cuatro funciones en `admin-api.js`, la entrada "Textos de los mails" (grupo Configuración) en `admin.html` y los estilos `.mail-*` en `css/admin.css`.
+
+**Responsabilidad:** El admin general edita el **texto** de los cuatro mails. A la izquierda, la lista `#mail-list` (una entrada `[data-mail-key]` por mail, con la marca "personalizado" cuando fue personalizado). A la derecha, el formulario `#mail-form` (campos `subject`, `heading`, `body`, `button`, `footer`, `fallback`), los botones de marcas `#mail-placeholders [data-placeholder]` (insertan `{nombre}` donde está el cursor), los botones `#mail-save` y `#mail-restore` (este pide confirmación), la caja de errores `#mail-error` y la vista previa `#mail-preview` (un `iframe` con `sandbox=""`) bajo `#mail-preview-subject`. La vista previa se pide al servidor (`POST .../preview`) 350 ms después de la última tecla, así que la arma el mismo código que arma el mail real. Los textos entran a la página con `.value` / `textContent`, nunca con `innerHTML`; el HTML de la vista previa solo va al `srcdoc` del iframe.
 
 ---
 

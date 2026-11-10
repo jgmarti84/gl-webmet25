@@ -63,3 +63,16 @@ def test_patch_profile_from_a_foreign_origin_returns_403():
     with httpx.Client(base_url=API_BASE_URL) as client:
         response = client.patch(URL, json={"full_name": "x"}, headers=headers)
     assert response.status_code == 403
+
+
+# --- DELETE /profile (spec G) ----------------------------------------------------------------------------------
+# Only without a session. It is never sent with the bootstrap admin's session, even if a 403 is expected (the general
+# admin cannot delete itself): tests/api never sends destructive actions on the real admin. Everything else runs on
+# the test database in tests/auth/test_user_delete.py.
+
+
+def test_delete_profile_without_session_returns_401():
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.delete(URL)
+    assert response.status_code == 401
+    assert response.headers["content-type"].startswith("application/json")

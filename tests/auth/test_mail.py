@@ -157,11 +157,11 @@ def test_fake_mailer_keeps_what_it_was_given():
     assert mailer.sent == [MAIL]
 
 
-def test_verification_mail_has_the_link_and_the_expiry(smtp_settings, monkeypatch):
+def test_verification_mail_has_the_link_and_the_expiry(smtp_settings, monkeypatch, test_db_session):
     # A trailing slash in PUBLIC_BASE_URL must not produce "//verify".
     monkeypatch.setattr(settings, "public_base_url", "https://webmet.test/")
     user = SimpleNamespace(username="ana", email="ana@ejemplo.com.ar")
-    mail = templates.verification_mail(user, "T" * 43)
+    mail = templates.verification_mail(test_db_session, user, "T" * 43)
     assert mail.to == "ana@ejemplo.com.ar"
     # The token goes after "#": browsers never send that part to the server, so it cannot end up in a log.
     assert "https://webmet.test/verify#token=" + "T" * 43 in mail.text
@@ -170,24 +170,24 @@ def test_verification_mail_has_the_link_and_the_expiry(smtp_settings, monkeypatc
     assert "24 horas" in mail.text
 
 
-def test_reset_mail_points_to_the_reset_page(smtp_settings):
+def test_reset_mail_points_to_the_reset_page(smtp_settings, test_db_session):
     user = SimpleNamespace(username="ana", email="ana@ejemplo.com.ar")
-    mail = templates.reset_mail(user, "R" * 43)
+    mail = templates.reset_mail(test_db_session, user, "R" * 43)
     assert "https://webmet.test/reset#token=" + "R" * 43 in mail.text
     assert "60 minutos" in mail.text
 
 
-def test_account_exists_mail_points_to_recovery(smtp_settings):
+def test_account_exists_mail_points_to_recovery(smtp_settings, test_db_session):
     user = SimpleNamespace(username="ana", email="ana@ejemplo.com.ar")
-    mail = templates.account_exists_mail(user)
+    mail = templates.account_exists_mail(test_db_session, user)
     assert "https://webmet.test/forgot" in mail.text
     assert "ana" in mail.text
     assert "token=" not in mail.text
 
 
-def test_values_are_escaped_in_the_html(smtp_settings):
+def test_values_are_escaped_in_the_html(smtp_settings, test_db_session):
     user = SimpleNamespace(username="<script>alert(1)</script>", email="ana@ejemplo.com.ar")
-    mail = templates.verification_mail(user, "T" * 43)
+    mail = templates.verification_mail(test_db_session, user, "T" * 43)
     assert "<script>" not in mail.html
     assert "&lt;script&gt;" in mail.html
 
@@ -200,17 +200,17 @@ def _visible_text(html: str) -> str:
     return re.sub(r"<[^>]+>", " ", html)
 
 
-def _all_mails(smtp_settings):
+def _all_mails(smtp_settings, db):
     user = SimpleNamespace(username="ana", email="ana@ejemplo.com.ar")
     return {
-        "verification": templates.verification_mail(user, "T" * 43),
-        "reset": templates.reset_mail(user, "R" * 43),
-        "exists": templates.account_exists_mail(user),
+        "verification": templates.verification_mail(db, user, "T" * 43),
+        "reset": templates.reset_mail(db, user, "R" * 43),
+        "exists": templates.account_exists_mail(db, user),
     }
 
 
-def test_the_token_is_inside_the_button_but_never_shown_as_text(smtp_settings):
-    mails = _all_mails(smtp_settings)
+def test_the_token_is_inside_the_button_but_never_shown_as_text(smtp_settings, test_db_session):
+    mails = _all_mails(smtp_settings, test_db_session)
     for name, token in (("verification", "T" * 43), ("reset", "R" * 43)):
         mail = mails[name]
         assert (
@@ -220,42 +220,46 @@ def test_the_token_is_inside_the_button_but_never_shown_as_text(smtp_settings):
         assert "#token" not in _visible_text(mail.html), name
 
 
-def test_the_text_version_keeps_the_full_link_for_clients_without_html(smtp_settings):
-    mails = _all_mails(smtp_settings)
+def test_the_text_version_keeps_the_full_link_for_clients_without_html(smtp_settings, test_db_session):
+    mails = _all_mails(smtp_settings, test_db_session)
     assert "https://webmet.test/verify#token=" + "T" * 43 in mails["verification"].text
     assert "https://webmet.test/reset#token=" + "R" * 43 in mails["reset"].text
 
 
-def test_the_html_fallback_names_the_site_without_a_token(smtp_settings):
-    mails = _all_mails(smtp_settings)
+def test_the_html_fallback_names_the_site_without_a_token(smtp_settings, test_db_session):
+    mails = _all_mails(smtp_settings, test_db_session)
     # If the button does not work the person is sent to the page where a new mail can be asked for.
     assert "https://webmet.test/login" in _visible_text(mails["verification"].html)  # where "Reenviar mail" lives
     assert "https://webmet.test/forgot" in _visible_text(mails["reset"].html)
     assert "https://webmet.test/forgot" in _visible_text(mails["exists"].html)
 
 
-def test_every_mail_says_not_to_reply_and_where_to_write(smtp_settings):
-    for name, mail in _all_mails(smtp_settings).items():
+def test_every_mail_says_not_to_reply_and_where_to_write(smtp_settings, test_db_session):
+    for name, mail in _all_mails(smtp_settings, test_db_session).items():
         for body in (mail.text, _visible_text(mail.html)):
             assert "no respondas a este mail" in body.lower(), name
             assert "info@ohmc.ar" in body, name
 
 
-def test_every_html_mail_shows_the_logo(smtp_settings):
-    for name, mail in _all_mails(smtp_settings).items():
+def test_every_html_mail_shows_the_logo(smtp_settings, test_db_session):
+    for name, mail in _all_mails(smtp_settings, test_db_session).items():
         assert 'src="cid:logo-ohmc"' in mail.html, name
         assert 'alt="Observatorio Hidro-Meteorológico de la Provincia de Córdoba"' in mail.html, name
 
 
-def test_the_html_mail_is_a_complete_document(smtp_settings):
-    for name, mail in _all_mails(smtp_settings).items():
+def test_the_html_mail_is_a_complete_document(smtp_settings, test_db_session):
+    for name, mail in _all_mails(smtp_settings, test_db_session).items():
         assert mail.html.lstrip().lower().startswith("<!doctype html>"), name
         assert '<meta charset="utf-8">' in mail.html.lower(), name
 
 
-def test_a_username_cannot_break_out_of_the_new_layout(smtp_settings):
+def test_a_username_cannot_break_out_of_the_new_layout(smtp_settings, test_db_session):
     user = SimpleNamespace(username='"><img src=x onerror=alert(1)>', email="ana@ejemplo.com.ar")
-    for mail in (templates.verification_mail(user, "T" * 43), templates.reset_mail(user, "R" * 43)):
+    mails = (
+        templates.verification_mail(test_db_session, user, "T" * 43),
+        templates.reset_mail(test_db_session, user, "R" * 43),
+    )
+    for mail in mails:
         assert "<img src=x" not in mail.html  # the logo is the only <img>, and it is ours (src="cid:...")
         assert "&lt;img src=x onerror=alert(1)&gt;" in mail.html  # the hostile name is shown as plain text
 

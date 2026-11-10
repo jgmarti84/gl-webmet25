@@ -45,7 +45,7 @@ export function viewsNote(role) {
 }
 
 /** The skeleton of the section. The ids are the ones the tests and the page header look for. */
-function skeleton(isCompanyAdmin) {
+function skeleton(isCompanyAdmin, isGeneralAdmin) {
     const companyCard = isCompanyAdmin
         ? `
         <div id="perfil-company" hidden>
@@ -85,7 +85,23 @@ function skeleton(isCompanyAdmin) {
                 <tbody id="perfil-views"></tbody>
             </table>
         </div>
-        <p id="perfil-views-note" class="toolbar-note"></p>`;
+        <p id="perfil-views-note" class="toolbar-note"></p>
+        ${deleteBlock(isGeneralAdmin)}`;
+}
+
+/**
+ * "Eliminar mi cuenta" (spec G): deletes the account of the person for good. The general admin does not get the button (its
+ * account is deleted by another general admin), only a note that says so.
+ */
+function deleteBlock(isGeneralAdmin) {
+    const body = isGeneralAdmin
+        ? '<p id="profile-delete-note" class="toolbar-note">Un administrador general no puede borrar su propia cuenta: pedile a otro administrador general.</p>'
+        : `<p id="profile-delete-note" class="toolbar-note">Se borran tu cuenta, tus sesiones y tus vistas de radar. No se puede deshacer.</p>
+            <div id="profile-delete-error" class="form-error" role="alert" hidden></div>
+            <div><button class="btn-danger" id="profile-delete" type="button">Eliminar mi cuenta</button></div>`;
+    return `
+        <p class="section-subtitle">Eliminar mi cuenta</p>
+        <div class="card profile-danger">${body}</div>`;
 }
 
 /** Fill the account data, the avatar with the initials and the table of radar views. */
@@ -129,10 +145,28 @@ async function fillCompany(container) {
  * @param {{me: {role: string}, openModal: Function, showMessage: Function}} host
  */
 export async function mountProfile(container, { me, openModal, showMessage }) {
-    container.innerHTML = skeleton(me.role === 'org_admin');
+    container.innerHTML = skeleton(me.role === 'org_admin', me.role === 'admin');
     let profile = await perfilApi.get();
     fillProfile(container, profile);
     if (me.role === 'org_admin') await fillCompany(container);
+
+    // Eliminar mi cuenta: a manual confirmation, then the server decides (an institution's only admin is told to name another
+    // admin first). On success the session is gone, so the person goes to the login (relative URL, base path rule).
+    const deleteButton = container.querySelector('#profile-delete');
+    if (deleteButton) {
+        deleteButton.onclick = async () => {
+            const error = container.querySelector('#profile-delete-error');
+            error.hidden = true;
+            if (!window.confirm('¿Eliminar tu cuenta? Se borran tu cuenta, tus sesiones y tus vistas de radar. No se puede deshacer.')) return;
+            try {
+                await perfilApi.deleteAccount();
+                window.location.assign('login');
+            } catch (failure) {
+                error.textContent = failure.message;
+                error.hidden = false;
+            }
+        };
+    }
 
     container.querySelector('#perfil-edit-name').onclick = () => {
         openModal(
