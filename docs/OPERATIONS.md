@@ -382,6 +382,12 @@ The map shows every radar to every logged-in user, but the **one-radar page** (`
 
 **Deployment note:** after this version is applied, **nobody but the admin can open a one-radar view** until the admin assigns them. Assign the views before announcing the change, or tell the users. The migration (`c4d5e6f7a8b9`, table `permissions`) is applied by `db-init` on the next `docker compose up -d --build`; it needs no new `.env` key.
 
+### 11.1 Storm tracking tool
+
+Storm tracking (button in the one-radar view) is a **tool** that is given or not, like the views but yes/no: the general admin gives it to an institution (when creating it, or later with the button **Herramientas** of its row), and the institution admin gives it to its users from its own panel, only while the institution has it. A user uses it on each radar view they can open. Taking the tool from an institution takes it from all its members at once; taking a radar's view only removes tracking from that radar. Invitations carry the choice (a reader's); without a choice the person starts with a copy of the institution's. nginx enforces it: everything under `/api/tracking/` and the page `/tracking` need the tool (probe `/_auth_tracking`), and the per-radar routes (`/api/tracking/radars/CODE/...`) need the tool **and** that radar's view (probe `/_auth_tracking_radar`). Without it nginx answers 403 (the page goes back to the map).
+
+**Deployment note:** the migration `c8e1f4a7b2d9` (permissions constraint + `invitations.tracking`) is applied by `db-init`. After it, **nobody has tracking**, not even the people who use it today: the general admin must give it to the institutions (and, if needed, to users without an institution) from **Herramientas**. Tell the users before deploying. No new `.env` keys.
+
 ## 12. Company Accounts
 
 > **Names.** On screen (admin panel, company panel, map) a company is called **"institución"** (plural "instituciones"): "Instituciones" section, "Agregar institución", "Admin de institución", "Mi institución". In the code, the database and the URLs it keeps its own names (`organizations`, `org_admin`, `/api/v1/org`, `/empresa`). The Spanish messages the API sends also say "institución".
