@@ -2580,6 +2580,10 @@ async function renderOrganizations() {
             title: `Herramientas de ${org.name}`,
             stored: org.radar_detail_views,
             tools: org.tools,
+            // Turning a tool on gives it to every user of the institution; its admin can then switch it off by hand.
+            toolNotes: org.tools?.tracking
+                ? {}
+                : { tracking: 'Al activarla se habilita para todos los usuarios de la institución; el admin de la institución puede quitarla a mano.' },
             onSave: async (views, tools) => {
                 await adminApi.setOrganizationPermissions(org.id, { radar_detail_view: views, tools });
                 return `Herramientas de ${org.name} actualizadas`;

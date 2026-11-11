@@ -213,10 +213,28 @@ def set_user_tools(db: Session, user: User, tools: dict, granted_by: User, withi
     return stored_tools(user)
 
 
+def _give_tool_to_members(db: Session, org: Organization, action: str, granted_by: User) -> None:
+    """Give every user of the institution its own row for this tool (those that already have it keep theirs)."""
+    members = db.query(User).filter(User.organization_id == org.id).all()
+    for member in members:
+        if not stored_tool(member, action):
+            member.permissions.append(Permission(action=action, resource=PERMISSION_ALL, granted_by=granted_by.id))
+    db.flush()
+
+
 def set_org_tools(db: Session, org: Organization, tools: dict, granted_by: User) -> dict:
-    """Give or take an institution's tools. Members lose at once what the institution loses (intersection)."""
+    """Give or take an institution's tools.
+
+    Taking one takes it at once from every member (intersection: their own rows stay, but do not count). Giving one
+    that the institution did not have gives it to all its users right away; the institution admin can then switch it
+    off by hand for whoever should not have it. Saving a tool the institution already has changes nothing, so those
+    manual switch-offs are kept."""
     db.refresh(org, with_for_update=True)
+    before = stored_tools(org)
     _set_tools(db, org.permissions, tools, granted_by)
+    for name, on in tools.items():
+        if on and not before[name]:
+            _give_tool_to_members(db, org, TOOLS[name], granted_by)
     return stored_tools(org)
 
 

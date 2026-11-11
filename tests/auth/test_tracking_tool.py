@@ -265,3 +265,87 @@ def test_check_rejects_a_malformed_radar_code(app_client, make_user):
     make_user()
     login(app_client)
     assert app_client.get("/api/v1/auth/check", params={"tool": "tracking", "radar": "../x"}).status_code == 422
+
+
+# --- turning a tool on for an institution that already has users ---------------------------------------------------
+
+
+def _org_with_members(make_user, make_org):
+    """An institution with an admin and two readers, plus a reader of ANOTHER institution; none has the tool."""
+    org = make_org()
+    boss = make_user(username="orgboss", role="org_admin", organization_id=org.id)
+    ana = make_user(username="ana", organization_id=org.id)
+    beto = make_user(username="beto", organization_id=org.id)
+    other = make_user(username="otra", organization_id=make_org(name="Otra Org").id)
+    return org, boss, ana, beto, other
+
+
+def test_turning_a_tool_on_for_an_institution_enables_it_for_all_its_users(make_user, make_org, test_db_session):
+    admin = make_user(username="boss", role="admin")
+    org, boss, ana, beto, other = _org_with_members(make_user, make_org)
+    perms.set_org_tools(test_db_session, org, {"tracking": True}, admin)
+    for user in (boss, ana, beto):
+        assert perms.effective_tools(test_db_session, user) == {"tracking": True}, user.username
+    assert perms.stored_tool(ana, perms.TOOL_TRACKING) is True  # their own row was created, not only the institution's
+    assert perms.effective_tools(test_db_session, other) == {"tracking": False}  # another institution: untouched
+
+
+def test_the_institution_admin_can_then_disable_it_by_hand_for_one_user(make_user, make_org, test_db_session):
+    admin = make_user(username="boss", role="admin")
+    org, boss, ana, beto, _ = _org_with_members(make_user, make_org)
+    perms.set_org_tools(test_db_session, org, {"tracking": True}, admin)
+    perms.set_user_tools(test_db_session, ana, {"tracking": False}, boss, within_company=True)
+    assert perms.effective_tools(test_db_session, ana) == {"tracking": False}
+    assert perms.effective_tools(test_db_session, beto) == {"tracking": True}
+
+
+def test_saving_again_while_the_tool_is_already_on_does_not_give_it_back(make_user, make_org, test_db_session):
+    admin = make_user(username="boss", role="admin")
+    org, boss, ana, _, _ = _org_with_members(make_user, make_org)
+    perms.set_org_tools(test_db_session, org, {"tracking": True}, admin)
+    perms.set_user_tools(test_db_session, ana, {"tracking": False}, boss, within_company=True)
+    perms.set_org_tools(test_db_session, org, {"tracking": True}, admin)  # nothing changed for the institution
+    assert perms.effective_tools(test_db_session, ana) == {"tracking": False}
+
+
+def test_turning_it_off_takes_it_from_everybody_and_turning_it_on_again_gives_it_to_everybody(
+    make_user, make_org, test_db_session
+):
+    admin = make_user(username="boss", role="admin")
+    org, boss, ana, beto, _ = _org_with_members(make_user, make_org)
+    perms.set_org_tools(test_db_session, org, {"tracking": True}, admin)
+    perms.set_user_tools(test_db_session, ana, {"tracking": False}, boss, within_company=True)
+    perms.set_org_tools(test_db_session, org, {"tracking": False}, admin)
+    assert perms.effective_tools(test_db_session, beto) == {"tracking": False}
+    perms.set_org_tools(test_db_session, org, {"tracking": True}, admin)
+    # Back on: everybody has it again, also the one who had been switched off by hand.
+    for user in (ana, beto):
+        assert perms.effective_tools(test_db_session, user) == {"tracking": True}, user.username
+
+
+def test_creating_an_institution_with_the_tool_gives_it_to_the_users_created_after(make_user, test_db_session):
+    admin = make_user(username="boss", role="admin")
+    from api.app.auth import organizations as orgs
+
+    org = orgs.create_org_with_admin(
+        test_db_session,
+        admin,
+        {"name": "Nueva Org", "seat_limit": 3, "is_active": True},
+        None,
+        None,
+        tools={"tracking": True},
+    )
+    member = orgs.create_member(
+        test_db_session, org.id, {"username": "nuevo", "password": "una-clave-larga-1!"}, "org_admin", admin
+    )
+    assert perms.effective_tools(test_db_session, member) == {"tracking": True}
+
+
+def test_the_admin_turns_it_on_for_an_institution_through_the_api(app_client, make_user, make_org):
+    org, _, ana, _, _ = _org_with_members(make_user, make_org)
+    client = _as(app_client, make_user)
+    assert (
+        client.put(f"/api/v1/admin/organizations/{org.id}/permissions", json={"tools": {"tracking": True}}).status_code
+        == 200
+    )
+    assert client.get(f"/api/v1/admin/users/{ana.id}").json()["tools"] == {"tracking": True}
