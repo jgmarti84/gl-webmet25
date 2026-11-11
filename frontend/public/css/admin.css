@@ -742,6 +742,8 @@ th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
 /* "Agregar institución": the fields of the chosen admin option sit under their radio button, a little indented. */
 .org-admin-fields { display: grid; gap: 10px; padding: 4px 0 8px 26px; }
 .org-admin-fields[hidden] { display: none; }
+/* The role row of the "Agregar gente" block is a label (display is set by the form styles), so [hidden] needs help. */
+#member-role-row[hidden] { display: none; }
 /* The admin block has the frame of .views-radars but grows with its content (that one scrolls after 240 px). */
 .org-admin-block { border: 1px solid var(--border, #ccc); border-radius: 6px; padding: 8px 12px; margin: 8px 0; }
 

@@ -206,7 +206,13 @@ def make_org_admin(db: Session, actor: User, org: Organization, user: User) -> N
 
 
 def create_org_with_admin(
-    db: Session, actor: User, data: dict, admin, views: Optional[list], mails: Optional[list] = None
+    db: Session,
+    actor: User,
+    data: dict,
+    admin,
+    views: Optional[list],
+    mails: Optional[list] = None,
+    notes: Optional[dict] = None,
 ) -> Organization:
     """New company plus, optionally, its radar views and its admin, all or nothing.
 
@@ -227,9 +233,11 @@ def create_org_with_admin(
         elif admin is not None and admin.mode == "invite":
             from . import invitations  # here, not at the top: invitations imports this module
 
-            _, mail = invitations.create_invitation(db, actor, org.id, admin.email, "org_admin", None)
+            invitation, mail = invitations.create_invitation(db, actor, org.id, admin.email, "org_admin", None)
             if mails is not None:
                 mails.append(mail)
+            if notes is not None:  # the invited mail may already have an account; the panel says so
+                notes["existing_account"] = invitations.account_info(db, [invitation])[invitation.id][0]
         elif admin is not None:
             user = db.get(User, admin.user_id)
             if user is None:

@@ -1,6 +1,8 @@
 import { adminApi, EXPIRED_SESSION_MESSAGE } from './admin-api.js';
 import { authApi, redirectToLogin } from './auth-api.js';
-import { buildOrganizationPayload, eligibleAdmins, filterAdmins, filterOrganizations } from './shared/org-form.js';
+import {
+    buildMemberRequest, buildOrganizationPayload, eligibleAdmins, filterAdmins, filterOrganizations,
+} from './shared/org-form.js';
 import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
 
@@ -2469,7 +2471,7 @@ async function renderInvitations() {
             <tbody>
                 ${items.map((invitation) => `
                     <tr${rowFacetAttr('invitations', invitation)}>
-                        <td>${safeText(invitation.email)}</td>
+                        <td>${safeText(invitation.email)}${invitation.existing_account ? ' <span class="status-pill">Ya tiene cuenta</span>' : ''}</td>
                         <td>${safeText(invitation.organization_name)}</td>
                         <td>${safeText(invitation.role_label)}</td>
                         <td>${safeText(views(invitation))}</td>
@@ -2513,6 +2515,17 @@ async function renderInvitations() {
     });
 }
 
+/**
+ * What to tell the admin after inviting. When the mail already has an account it is a WARNING, not an error: the
+ * invitation was sent anyway, and the person will join with the account it has (leaving another institution if it is in one).
+ */
+function invitationSentMessage(sent) {
+    if (!sent.existing_account) return `Invitación enviada a ${sent.email}`;
+    const leaves = sent.leaves_organization ? ` y saldrá de ${sent.leaves_organization}` : '';
+    return `Invitación enviada a ${sent.email}. Ese mail ya tiene una cuenta: la invitación se envió igual. `
+        + `Al aceptarla, entrará a ${sent.organization_name} con su cuenta actual${leaves}.`;
+}
+
 /** Form "Invitar por mail": the mail, the institution (search box) and the role it will have. */
 function openInvitationForm() {
     const orgs = (state.organizations || []).filter((org) => org.is_active);
@@ -2542,7 +2555,7 @@ function openInvitationForm() {
                 role: formData.get('role'),
             });
             await renderSection();
-            showMessage(`Invitación enviada a ${sent.email}`, 'success');
+            showMessage(invitationSentMessage(sent), 'success');
         },
     );
     wireOrgCombobox(orgs.length ? orgs : []);
@@ -2799,11 +2812,14 @@ function wireAdminModeBlocks() {
  * which is what the form sends; typing again forgets the pick. The list is drawn inside the form (not floating over
  * it), so the modal can scroll with it.
  */
-function wireAdminCombobox(candidates) {
+function wireAdminCombobox(candidates, ids = {}) {
+    // The same box is used by the create form (admin of the new company) and by the edit form (person to add); only
+    // the element ids and the name of the hidden field change.
+    const { search = '#org-admin-search', list: listId = '#org-admin-list', hidden: hiddenName = 'admin_user_id' } = ids;
     const form = elements.formModalBody;
-    const input = form.querySelector('#org-admin-search');
-    const hidden = form.querySelector('input[name="admin_user_id"]');
-    const list = form.querySelector('#org-admin-list');
+    const input = form.querySelector(search);
+    const hidden = form.querySelector(`input[name="${hiddenName}"]`);
+    const list = form.querySelector(listId);
     let shown = [];
     let active = -1;
 
@@ -2882,16 +2898,20 @@ function wireAdminCombobox(candidates) {
 async function openOrganizationForm(org = null) {
     const isEdit = Boolean(org);
     let extras = '';
-    let candidates = [];  // the users that can be picked as the admin (the search box works on them)
-    if (!isEdit) {
-        try {
+    let candidates = [];  // the users that can be picked (the search box works on them)
+    try {
+        if (isEdit) {
+            // Editing: the block "Agregar gente" can pick a loose reader, so the users are needed here too.
+            candidates = eligibleAdmins(await adminApi.listUsers());
+            extras = membersBlockHtml();
+        } else {
             const [users, radars] = await Promise.all([adminApi.listUsers(), adminApi.listRadars()]);
             candidates = eligibleAdmins(users);
             extras = organizationExtrasHtml(radars.filter((radar) => radar.detail_view_enabled));
-        } catch (error) {
-            showMessage(error.message || 'No se pudo preparar el formulario', 'error');
-            return;
         }
+    } catch (error) {
+        showMessage(error.message || 'No se pudo preparar el formulario', 'error');
+        return;
     }
     openFormModal(
         isEdit ? `Editar institución ${org.name}` : 'Agregar institución',
@@ -2909,9 +2929,34 @@ async function openOrganizationForm(org = null) {
                     seat_limit: Number(formData.get('seat_limit')),
                     is_active: formData.get('is_active') === 'on',
                 };
+                // Checked BEFORE saving anything, so an option left without its data does not half-save the form.
+                const member = buildMemberRequest({
+                    mode: formData.get('member_mode') || 'none',
+                    role: formData.get('member_role'),
+                    organizationId: org.id,
+                    inviteEmail: formData.get('member_invite_email'),
+                    newUser: {
+                        username: formData.get('member_username'),
+                        password: formData.get('member_password'),
+                        fullName: formData.get('member_fullname'),
+                        email: formData.get('member_email'),
+                    },
+                    existingUserId: formData.get('member_user_id'),
+                });
+                // The company is saved first, so the seats can be raised and someone added in the same form.
                 await adminApi.patchOrganization(org.id, payload);
+                let added = '';
+                if (member) {
+                    try {
+                        added = await addMemberToOrganization(member, candidates, payload.name);
+                    } catch (error) {
+                        // The company data IS saved: redraw the list and say so, keeping the form open with the reason.
+                        await renderSection();
+                        throw new Error(`Los datos de la institución se guardaron, pero no se pudo agregar a la persona: ${error.message}`);
+                    }
+                }
                 await renderSection();
-                showMessage(`Institución ${payload.name} actualizada`, 'success');
+                showMessage(added ? `Institución ${payload.name} actualizada. ${added}` : `Institución ${payload.name} actualizada`, 'success');
                 return;
             }
             const adminMode = formData.get('admin_mode') || 'none';
@@ -2931,21 +2976,102 @@ async function openOrganizationForm(org = null) {
                 allViews: formData.get('all') === 'on',
                 radars: formData.getAll('radar'),
             });
-            await adminApi.createOrganization(payload);
+            const created = await adminApi.createOrganization(payload);
             await renderSection();
             const inviting = payload.admin && payload.admin.mode === 'invite';
+            const hasAccount = inviting && created.invited_admin_has_account
+                ? '. Ese mail ya tiene una cuenta: la invitación se envió igual y entrará con su cuenta actual'
+                : '';
             showMessage(
                 inviting
-                    ? `Institución ${payload.name} creada: invitamos a ${payload.admin.email} como administrador`
+                    ? `Institución ${payload.name} creada: invitamos a ${payload.admin.email} como administrador${hasAccount}`
                     : `Institución ${payload.name} creada${payload.admin ? ' con su administrador' : ''}`,
                 'success',
             );
         },
     );
-    if (!isEdit) {
+    if (isEdit) {
+        wireMemberBlocks();
+        wireAdminCombobox(candidates, { search: '#member-search', list: '#member-list', hidden: 'member_user_id' });
+    } else {
         wireAdminModeBlocks();
         wireAdminCombobox(candidates);
     }
+}
+
+/**
+ * The block "Agregar gente a esta institución" of the EDIT form: one optional person, added after the company data is
+ * saved. Options: nobody (default), invite by mail, a new user, or a loose reader that already exists; and the role the
+ * person gets (reader or admin of the company). Only the fields of the chosen option are shown (see wireMemberBlocks).
+ */
+function membersBlockHtml() {
+    return `
+        <fieldset class="org-admin-block">
+            <legend>Agregar gente a esta institución</legend>
+            <label class="checkbox-row"><input type="radio" name="member_mode" value="none" checked> No agregar a nadie</label>
+            <label class="checkbox-row"><input type="radio" name="member_mode" value="invite"> Invitar por mail</label>
+            <label class="checkbox-row"><input type="radio" name="member_mode" value="new"> Crear un usuario nuevo</label>
+            <label class="checkbox-row"><input type="radio" name="member_mode" value="existing"> Elegir uno que ya existe</label>
+            <label id="member-role-row">Rol
+                <select name="member_role">
+                    <option value="viewer">Lector</option>
+                    <option value="org_admin">Admin de institución</option>
+                </select>
+            </label>
+            <div id="member-invite" class="org-admin-fields" hidden>
+                <label>Mail de la persona <input name="member_invite_email" type="email" maxlength="254" autocomplete="off"></label>
+                <p class="toolbar-note">Le mandamos un mail con un link (vale 7 días). Completa sus datos o entra con Google, o con su cuenta si ya tiene una. Mientras no lo acepte, la invitación reserva un lugar.</p>
+            </div>
+            <div id="member-new" class="org-admin-fields" hidden>
+                <label>Usuario <input name="member_username" type="text" minlength="3" maxlength="32" pattern="[a-zA-Z0-9._-]+" autocomplete="off"></label>
+                <label>Nombre <input name="member_fullname" type="text" maxlength="128"></label>
+                <label>Email <input name="member_email" type="email" maxlength="254"></label>
+                <label>Contraseña inicial <input name="member_password" type="password" minlength="10" maxlength="128" autocomplete="new-password"></label>
+                <p class="toolbar-note">Mínimo 10 caracteres, con al menos un carácter especial (por ejemplo ! - _ . @ #).</p>
+            </div>
+            <div id="member-existing" class="org-admin-fields" hidden>
+                <label for="member-search">Usuario</label>
+                <div class="combo">
+                    <input id="member-search" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="member-list" autocomplete="off" placeholder="Escribí para buscar por usuario, nombre o mail…">
+                    <input type="hidden" name="member_user_id" value="">
+                    <ul id="member-list" class="combo-list" role="listbox" hidden></ul>
+                </div>
+                <p class="toolbar-note">Solo se ofrecen lectores activos que no están en ninguna institución. Al sumarse se le cierran las sesiones y sus vistas propias se reemplazan por las de la institución.</p>
+            </div>
+            <p class="toolbar-note">Un lector solo puede sumarse a una institución que ya tiene un admin activo. Cada lugar ocupado, o reservado por una invitación, cuenta contra el límite de lugares.</p>
+        </fieldset>`;
+}
+
+/** Show only the fields (and the role) of the chosen option of the block "Agregar gente". */
+function wireMemberBlocks() {
+    const form = elements.formModalBody;
+    const update = () => {
+        const mode = form.querySelector('input[name="member_mode"]:checked')?.value;
+        form.querySelector('#member-invite').hidden = mode !== 'invite';
+        form.querySelector('#member-new').hidden = mode !== 'new';
+        form.querySelector('#member-existing').hidden = mode !== 'existing';
+        form.querySelector('#member-role-row').hidden = mode === 'none';
+    };
+    form.querySelectorAll('input[name="member_mode"]').forEach((radio) => radio.addEventListener('change', update));
+    update();
+}
+
+/**
+ * Do the request that buildMemberRequest shaped (invite, create or move a user) and return the sentence that tells
+ * the admin what happened. The server applies the usual rules (seats, an active admin for a reader...) and a refusal
+ * comes back as an Error with its reason.
+ */
+async function addMemberToOrganization(member, candidates, orgName) {
+    if (member.kind === 'invite') {
+        return invitationSentMessage(await adminApi.createInvitation(member.body));
+    }
+    if (member.kind === 'create') {
+        await adminApi.createUser(member.body);
+        return `Usuario ${member.body.username} creado en ${orgName}`;
+    }
+    const user = candidates.find((candidate) => candidate.id === member.userId);
+    await adminApi.patchUser(member.userId, member.body);
+    return `${user ? user.username : 'El usuario'} se sumó a ${orgName}`;
 }
 
 function openPasswordResetForm(user) {
