@@ -23,6 +23,7 @@ from .routers import (
     invitations_admin_router,
     invitations_org_router,
     invitations_public_router,
+    mail_templates_router,
     org_router,
     organizations_router,
     permissions_router,
@@ -233,6 +234,8 @@ app.include_router(org_router, prefix=settings.api_prefix)
 app.include_router(invitations_admin_router, prefix=settings.api_prefix)
 app.include_router(invitations_org_router, prefix=settings.api_prefix)
 app.include_router(invitations_public_router, prefix=settings.api_prefix)
+# The text of the mails, editable by the general admin only (spec F): the router itself requires the admin role.
+app.include_router(mail_templates_router, prefix=settings.api_prefix)
 
 
 # Health check endpoints

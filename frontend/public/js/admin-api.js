@@ -179,6 +179,15 @@ export const adminApi = {
     setOrganizationRadarViews(id, views) {
         return request(`/organizations/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ radar_detail_view: views }) });
     },
+    // Delete a user for good (spec G). Only the general admin; 409 when the institution would be left without an admin.
+    deleteUser(id) { return request(`/users/${id}`, { method: 'DELETE' }); },
+    // The text of the mails (spec F): the four mails, save one, go back to the original, and a preview of a draft.
+    listMailTemplates() { return request('/mail-templates'); },
+    saveMailTemplate(key, texts) { return request(`/mail-templates/${key}`, { method: 'PUT', body: JSON.stringify(texts) }); },
+    restoreMailTemplate(key) { return request(`/mail-templates/${key}`, { method: 'DELETE' }); },
+    previewMailTemplate(key, texts) {
+        return request(`/mail-templates/${key}/preview`, { method: 'POST', body: JSON.stringify(texts) });
+    },
     // Invitations by mail (spec E): the pending ones, a new one, a new link for the same person, and cancel.
     listInvitations() { return request('/invitations'); },
     createInvitation(payload) { return request('/invitations', { method: 'POST', body: JSON.stringify(payload) }); },

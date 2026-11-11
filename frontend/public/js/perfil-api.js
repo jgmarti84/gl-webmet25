@@ -23,5 +23,7 @@ async function request(options = {}) {
 
 export const perfilApi = {
     get() { return request(); },
+    // Delete the account of the logged-in user (spec G). No id: it always acts on the user of the session.
+    deleteAccount() { return request({ method: 'DELETE' }); },
     setName(fullName) { return request({ method: 'PATCH', body: JSON.stringify({ full_name: fullName }) }); },
 };

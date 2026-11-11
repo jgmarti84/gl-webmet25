@@ -273,6 +273,19 @@ email_verified_at: datetime (nullable) # NULL = self-registered, mail not verifi
 terms_accepted_at: datetime (nullable) # when the person accepted the terms at sign-up (proof of consent)
 ```
 
+**Deleting a user (spec G).** A user is deleted with a single SQL `DELETE` on `users` (not the ORM's `session.delete()`), so the database applies its own foreign keys:
+
+| Table | Column | Effect |
+|---|---|---|
+| `user_sessions` | `user_id` | deleted (cascade) |
+| `email_tokens` | `user_id` | deleted (cascade) |
+| `permissions` | `user_id` | the user's own views are deleted (cascade) |
+| `permissions` | `granted_by` (rows of others) | becomes empty |
+| `invitations` | `invited_by` | becomes empty; the invitations it sent stay pending |
+| `mail_templates` | `updated_by` | becomes empty |
+
+The rules (who can be deleted, an institution's only active admin, a general admin deleting itself) are in `user_admin.delete_user`, used by `DELETE /api/v1/admin/users/{id}` (general admin) and `DELETE /api/v1/profile` (the logged-in user; it takes no id).
+
 #### **UserSession** (one row per login)
 ```python
 id: UUID (PK)                         # login id; the refresh token is "<id>.<secret>"
@@ -329,6 +342,18 @@ accepted_at, cancelled_at: datetime | None
 locked, invitation locked with `FOR UPDATE`, account created with a confirmed mail, views applied, invitation closed).
 Rows are never deleted. The mail caps count them (per address and site-wide). Code: [`api/app/auth/invitations.py`](../api/app/auth/invitations.py),
 [`api/app/routers/invitations.py`](../api/app/routers/invitations.py).
+
+#### **MailTemplate** (the customized text of one of the four mails, spec F)
+```python
+key: str (PK)                         # 'verify_email' | 'reset_password' | 'account_exists' | 'invitation' (CHECK constraint)
+subject, heading, button: str         # one line each (150, 120 and 40 characters at most)
+body: str                             # paragraphs separated by a blank line (2000 characters at most)
+footer, fallback: str                 # 400 and 200 characters at most
+updated_by: int | None (FK → users.id, ON DELETE SET NULL)
+updated_at: datetime
+# CHECK constraints: every text is 1 to its maximum length
+```
+A row exists **only when the mail was customized**; without it the mail goes out with the default text in [`api/app/mail/texts.py`](../api/app/mail/texts.py). Restoring deletes the row. Only text is stored: the layout, the button and its link stay in [`api/app/mail/templates.py`](../api/app/mail/templates.py). The texts carry markers like `{usuario}` (a regex and a whitelist per mail replace them; there is no template engine). Endpoints: `GET/PUT/DELETE /api/v1/admin/mail-templates[/{key}]` and `POST .../{key}/preview`, general admin only ([`api/app/routers/mail_templates.py`](../api/app/routers/mail_templates.py)).
 
 ### 3.2 Indexes (Performance)
 

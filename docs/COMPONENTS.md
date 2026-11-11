@@ -474,6 +474,14 @@ settings), and animation controls (bottom-center).
 
 **Responsibility:** `mountProfile(container, {me, openModal, showMessage})` draws the user's own profile into a container: the account data, the radars the person may open and, for company admins, the card of their company, plus the name edit. The host page passes its own modal and notice functions, so the form behaves like the rest of that page. It is used by three pages: the admin panel (section `profile`), the company panel (section `perfil`) and `perfil.html`. Pure helpers (`formatDate`, `profileRows`, `viewsNote`) are unit-tested in `tests/js/test_profile_section.mjs`.
 
+### **Deleting accounts** — "Eliminar usuario" and "Eliminar mi cuenta" (spec G)
+
+**Files:** `openUserForm()` in [`frontend/public/js/admin.js`](../../frontend/public/js/admin.js), `deleteBlock()` and `mountProfile()` in `js/shared/profile-section.js`, `deleteUser` in `admin-api.js`, `deleteAccount` in `perfil-api.js` and the `.form-danger` / `.profile-danger` styles in `css/admin.css`.
+
+**Responsibility:** In the admin panel, the edit form of a user ends with a block with the red button `#user-delete` ("Eliminar usuario"): it is not in the table row and it is not shown when the admin edits its own account. It asks `window.confirm` naming the user, calls `DELETE /api/v1/admin/users/{id}`, then closes the form and refreshes the table; a server refusal (409) shows in the form's error box. The profile section (the same one in the three panels) ends with "Eliminar mi cuenta": the button `#profile-delete`, the error `#profile-delete-error` and the note `#profile-delete-note`. It asks `window.confirm`, calls `DELETE /api/v1/profile` (no id) and goes to `login` (relative URL). The general admin gets only the note, without the button.
+
+---
+
 ### **perfil.html / perfil.js / perfil-api.js** — User profile page for viewers (spec D)
 
 **Files:** [`frontend/public/perfil.html`](../../frontend/public/perfil.html), [`frontend/public/js/perfil.js`](../../frontend/public/js/perfil.js), [`frontend/public/js/perfil-api.js`](../../frontend/public/js/perfil-api.js)
@@ -520,6 +528,14 @@ settings), and animation controls (bottom-center).
 **Sign in with Google.** When `options().google_client_id` is set, `login.js` calls `setupGoogleSignIn()` (`js/login-google.js`): it loads Google's script (`accounts.google.com/gsi/client`), draws the "Continuar con Google" button in `#login-google-button` and, when the person picks an account, sends the ID token to `POST /auth/google` (`authApi.google()`); on success it goes to the same destination as the password login. If Google's script cannot load, nothing is shown and the normal login stays. See [OPERATIONS §9.6](OPERATIONS.md#96-sign-in-with-google).
 
 **Loaded scripts:** each page loads `css/login.css`, `js/login-ui.js` (the show/hide password buttons point at their input with `data-target`) and its own script.
+
+---
+
+### **Textos de los mails** — Admin panel section (spec F)
+
+**Files:** `renderMails()` in [`frontend/public/js/admin.js`](../../frontend/public/js/admin.js), four functions in `admin-api.js`, the entry "Textos de los mails" (group Configuración) in `admin.html` and the `.mail-*` styles in `css/admin.css`.
+
+**Responsibility:** The general admin edits the **text** of the four mails. Left, the list `#mail-list` (an entry `[data-mail-key]` per mail, with the tag "personalizado" when it was customized). Right, the form `#mail-form` (fields `subject`, `heading`, `body`, `button`, `footer`, `fallback`), the marker buttons `#mail-placeholders [data-placeholder]` (they insert `{name}` where the cursor is), the buttons `#mail-save` and `#mail-restore` (the latter asks for confirmation), the error box `#mail-error` and the preview `#mail-preview` (an `iframe` with `sandbox=""`) under `#mail-preview-subject`. The preview is asked from the server (`POST .../preview`) 350 ms after the last key, so it is built by the same code as the real mail. Texts go into the page with `.value` / `textContent`, never `innerHTML`; the preview HTML only goes to the iframe's `srcdoc`.
 
 ---
 

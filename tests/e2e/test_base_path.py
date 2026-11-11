@@ -72,7 +72,7 @@ def test_logged_in_walk_never_leaves_the_prefix(browser):
             page.goto(f"{PREFIX_URL}{path}", wait_until="networkidle")
 
         page.goto(f"{PREFIX_URL}/admin", wait_until="networkidle")
-        for section in ("users", "radars", "invitations", "profile"):
+        for section in ("users", "radars", "invitations", "mails", "profile"):
             page.click(f"#sidebar-nav [data-section={section}]")
             page.wait_for_load_state("networkidle")
             assert urlsplit(page.url).path == f"{PREFIX}/admin"
