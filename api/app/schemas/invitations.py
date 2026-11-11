@@ -50,6 +50,10 @@ class InvitationResponse(BaseModel):
     radar_views: Optional[List[str]] = None
     created_at: datetime
     expires_at: datetime
+    # The mail already has an account (worked out when asked, not stored), and, for the general admin only, the
+    # name of the institution that account is in and would leave by accepting.
+    existing_account: bool = False
+    leaves_organization: Optional[str] = None
 
 
 class InvitationToken(StrictText):
@@ -66,6 +70,8 @@ class InvitationDetails(BaseModel):
     email: str
     role: str
     google_available: bool
+    # The mail has an account: the page shows the login instead of the sign-up form.
+    account_exists: bool = False
 
 
 class AcceptInvitation(InvitationToken):

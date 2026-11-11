@@ -112,7 +112,30 @@ def test_accept_without_the_required_fields_returns_422():
         assert client.post(f"{PUBLIC}/details", json={}).status_code == 422
 
 
-@pytest.mark.parametrize("path", ["/details", "/accept", "/accept-google"])
+@pytest.mark.parametrize("path", ["/details", "/accept", "/accept-google", "/accept-existing"])
 def test_public_posts_from_a_foreign_origin_return_403(path):
     with httpx.Client(base_url=API_BASE_URL) as client:
         assert client.post(f"{PUBLIC}{path}", json={}, headers=FOREIGN_ORIGIN).status_code == 403
+
+
+# --- accept-existing: joining with an account that already exists ---------------------------------------
+# It needs a session of the account of the invited mail. Here only its error paths: nothing is accepted or changed.
+
+
+def test_accept_existing_without_a_session_returns_401_json():
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.post(f"{PUBLIC}/accept-existing", json={"token": UNKNOWN_TOKEN})
+    assert response.status_code == 401
+    assert response.headers["content-type"].startswith("application/json")
+
+
+def test_accept_existing_with_a_session_but_an_unusable_link_returns_404():
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.post(f"{PUBLIC}/accept-existing", json={"token": UNKNOWN_TOKEN}, headers=session_headers())
+    assert response.status_code == 404
+    assert isinstance(response.json()["detail"], str)
+
+
+def test_accept_existing_with_an_invalid_body_returns_422():
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        assert client.post(f"{PUBLIC}/accept-existing", json={}, headers=session_headers()).status_code == 422

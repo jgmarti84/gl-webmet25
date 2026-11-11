@@ -66,6 +66,41 @@
                         <p id="invitation-role"></p>
                     </div>
 
+                    <!-- The mail already has an account: log in with it and join; there is no sign-up form. Hidden
+                         until js/invitacion.js sees account_exists; the sign-up form is removed from the page in that case. -->
+                    <div id="invitation-existing" hidden>
+                        <div id="invitation-existing-google" class="login-google" hidden>
+                            <div id="invitation-existing-google-button" class="login-google-button"></div>
+                            <div class="login-or" aria-hidden="true"><span>o iniciá sesión con tu usuario y contraseña</span></div>
+                        </div>
+
+                        <form id="invitation-login-form" class="login-form" autocomplete="on" novalidate hidden>
+                            <div class="login-field">
+                                <label for="inv-login-username">Usuario o mail</label>
+                                <input id="inv-login-username" class="login-input" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+                            </div>
+                            <div class="login-field">
+                                <label for="inv-login-password">Contraseña</label>
+                                <input id="inv-login-password" class="login-input" name="password" type="password" autocomplete="current-password" maxlength="128" required>
+                            </div>
+                            <div id="invitation-login-error" class="login-error hidden" role="alert"></div>
+                            <button id="invitation-login-submit" class="login-submit" type="submit">Iniciar sesión y sumarme</button>
+                        </form>
+
+                        <!-- Already logged in (with the right account): one button. -->
+                        <div id="invitation-join-block" hidden>
+                            <p id="invitation-join-text" class="login-hint"></p>
+                            <div id="invitation-join-error" class="login-error hidden" role="alert"></div>
+                            <button id="invitation-join" class="login-submit" type="button">Sumarme con esta cuenta</button>
+                        </div>
+
+                        <!-- The session is of ANOTHER account than the invited mail. -->
+                        <div id="invitation-wrong-account" class="login-info" role="alert" hidden>
+                            <p id="invitation-wrong-account-text"></p>
+                            <button id="invitation-logout" class="login-secondary" type="button">Cerrar sesión</button>
+                        </div>
+                    </div>
+
                     <!-- Google first (when the site has it): the account of the invited mail comes in with one click. -->
                     <div id="invitation-google" class="login-google" hidden>
                         <div id="invitation-google-button" class="login-google-button"></div>

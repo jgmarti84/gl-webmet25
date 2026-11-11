@@ -71,14 +71,17 @@ def create_organization(
     if inviting:
         _require_mail()
     mails: list = []  # the invitation mail, if any: sent after the commit
+    notes: dict = {}  # facts about the invited admin: does that mail already have an account
     try:
-        org = orgs.create_org_with_admin(db, actor, data, payload.admin, payload.radar_detail_view, mails)
+        org = orgs.create_org_with_admin(db, actor, data, payload.admin, payload.radar_detail_view, mails, notes)
     except (orgs.OrgRuleError, permissions.PermissionRuleError, InvitationError) as exc:
         raise _rule(exc)
     db.commit()
     _send_later(background, mailer, mails)
     db.refresh(org)
-    return org_response(db, org)
+    answer = org_response(db, org)
+    answer.invited_admin_has_account = bool(notes.get("existing_account"))
+    return answer
 
 
 @router.get("/{org_id}", response_model=OrganizationResponse)

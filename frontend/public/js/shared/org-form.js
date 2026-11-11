@@ -77,6 +77,51 @@ function adminBlock(values) {
 }
 
 /**
+ * The request that adds ONE person to a company that already exists (the "Agregar gente" block of "Editar institución"),
+ * or null when nothing was chosen. The server rules are the same as for any other way of adding people, so this only
+ * shapes the call and checks that the chosen option has its data (throws a Spanish message when it does not):
+ *   - invite   -> { kind: 'invite', body }  for POST /admin/invitations
+ *   - new      -> { kind: 'create', body }  for POST /admin/users
+ *   - existing -> { kind: 'move', userId, body }  for PATCH /admin/users/{id}; the role is sent only for an admin,
+ *                 because a reader keeps the role it has and the server needs it to let the first admin in.
+ *
+ * @param {{mode: 'none'|'invite'|'new'|'existing', role: 'viewer'|'org_admin', organizationId: number,
+ *          inviteEmail?: string, newUser?: object, existingUserId?: string}} values
+ */
+export function buildMemberRequest(values) {
+    const organization_id = Number(values.organizationId);
+    const role = values.role;
+    if (values.mode === 'invite') {
+        const email = String(values.inviteEmail || '').trim();
+        if (!email) throw new Error('Escribí el mail de la persona a invitar');
+        return { kind: 'invite', body: { email, organization_id, role } };
+    }
+    if (values.mode === 'new') {
+        const user = values.newUser || {};
+        const username = String(user.username || '').trim();
+        if (!username || !user.password) throw new Error('El usuario nuevo necesita un usuario y una contraseña');
+        return {
+            kind: 'create',
+            body: {
+                username,
+                password: user.password,
+                full_name: user.fullName ? user.fullName : null,
+                email: user.email ? user.email : null,
+                role,
+                organization_id,
+            },
+        };
+    }
+    if (values.mode === 'existing') {
+        if (!values.existingUserId) throw new Error('Elegí el usuario que se suma a la institución');
+        const body = { organization_id };
+        if (role === 'org_admin') body.role = role;
+        return { kind: 'move', userId: Number(values.existingUserId), body };
+    }
+    return null;
+}
+
+/**
  * The body of POST /admin/organizations from the values of the form. `admin` and `radar_detail_view` are only sent
  * when they were chosen, so a company without them is created exactly as before. "Todas" wins over single radars.
  *
