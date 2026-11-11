@@ -162,11 +162,15 @@ def test_without_the_mail_configured_it_is_503_and_nothing_is_stored(
     assert test_db_session.query(Invitation).count() == 0
 
 
-def test_a_mail_that_already_has_an_account_is_409(app_client, boss, org, make_user, mailer, test_db_session):
+def test_a_mail_that_already_has_an_account_is_invited_with_a_warning(
+    app_client, boss, org, make_user, mailer, test_db_session
+):
+    # Not an error any more. The invitation is made, the mail goes out and the answer says the account exists.
     make_user(username="yaexiste", email=INVITED)
     response = _invite(_as(app_client, "boss"), org)
-    assert response.status_code == 409
-    assert not mailer.sent and test_db_session.query(Invitation).count() == 0
+    assert response.status_code == 201 and response.json()["existing_account"] is True
+    assert [mail.to for mail in mailer.sent] == [INVITED]
+    assert test_db_session.query(Invitation).count() == 1
 
 
 def test_a_pending_invitation_of_another_company_is_409(app_client, boss, org, make_org, mailer):
@@ -416,9 +420,11 @@ def test_the_company_admin_cannot_invite_over_the_seat_limit(app_client, make_or
     assert _org_invite(_as(app_client, "orgboss")).status_code == 409
 
 
-def test_a_mail_with_an_account_is_409_for_the_company_admin_too(app_client, org, org_boss, make_user):
+def test_a_company_admin_can_invite_an_account_that_has_no_institution(app_client, org, org_boss, make_user, mailer):
     make_user(username="yaexiste", email=INVITED)
-    assert _org_invite(_as(app_client, "orgboss")).status_code == 409
+    response = _org_invite(_as(app_client, "orgboss"))
+    assert response.status_code == 201 and response.json()["existing_account"] is True
+    assert [mail.to for mail in mailer.sent] == [INVITED]
 
 
 # --- the person opens the link --------------------------------------------------------------------------------
@@ -433,6 +439,7 @@ def test_the_link_shows_the_company_the_mail_and_the_role(app_client, boss, org,
         "email": INVITED,
         "role": "org_admin",
         "google_available": True,
+        "account_exists": False,
     }
 
 
@@ -735,7 +742,7 @@ def test_if_the_invitation_cannot_be_made_the_company_is_not_created_either(
 ):
     from radar_db.models import Organization
 
-    make_user(username="yaexiste", email=INVITED)
+    make_user(username="yaexiste", email=INVITED, role="admin")  # an account that cannot join an institution
     response = _create_org(_as(app_client, "boss"))
     assert response.status_code == 409
     assert test_db_session.query(Organization).filter(Organization.name == "Test Org Nueva").count() == 0

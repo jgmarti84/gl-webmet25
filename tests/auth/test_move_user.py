@@ -313,3 +313,43 @@ def test_the_general_admin_creating_a_taken_account_keeps_the_plain_message(app_
     response = app_client.post("/api/v1/admin/users", json=body)
     assert response.status_code == 409
     assert "administrador general" not in response.json()["detail"]
+
+
+# --- a loose account joins an existing company as its admin (the "Editar institución" form) ---------------------
+
+
+def test_a_loose_account_becomes_the_admin_of_a_company_that_has_none(make_user, make_org, boss, test_db_session):
+    org = make_org()  # no admin yet
+    loner = make_user(username="suelto")
+    user_admin.update_user(test_db_session, boss, loner, {"organization_id": org.id, "role": "org_admin"})
+    assert loner.organization_id == org.id and loner.role == "org_admin"
+    assert orgs.seats_used(test_db_session, org) == 1
+
+
+def test_a_loose_account_can_be_a_second_admin_of_a_company(make_user, make_org, boss, test_db_session):
+    org = make_org()
+    _give_admin(test_db_session, org, boss, "jefe")
+    loner = make_user(username="suelto")
+    user_admin.update_user(test_db_session, boss, loner, {"organization_id": org.id, "role": "org_admin"})
+    assert loner.role == "org_admin" and orgs.seats_used(test_db_session, org) == 2
+
+
+def test_a_loose_account_joining_as_viewer_still_needs_an_admin_in_the_company(
+    make_user, make_org, boss, test_db_session
+):
+    org = make_org()  # no admin yet
+    loner = make_user(username="suelto")
+    with pytest.raises(user_admin.UserRuleError) as exc:
+        user_admin.update_user(test_db_session, boss, loner, {"organization_id": org.id})
+    assert exc.value.status_code == 409
+    assert loner.organization_id is None
+
+
+def test_a_full_company_refuses_a_new_admin_and_the_account_stays_loose(make_user, make_org, boss, test_db_session):
+    org = make_org(seat_limit=1)
+    _give_admin(test_db_session, org, boss, "jefe")
+    loner = make_user(username="suelto")
+    with pytest.raises(user_admin.UserRuleError) as exc:
+        user_admin.update_user(test_db_session, boss, loner, {"organization_id": org.id, "role": "org_admin"})
+    assert exc.value.status_code == 409
+    assert loner.organization_id is None and loner.role == "viewer"
