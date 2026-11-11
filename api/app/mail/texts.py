@@ -97,8 +97,8 @@ DEFAULT_TEXTS: Dict[str, Dict[str, str]] = {
         "heading": "Te invitaron a {institucion}",
         "body": (
             "{invitador} a unirte a {institucion} en WebMet25 como {rol}.\n\n"
-            "Para crear tu cuenta (con una contraseña o con Google) abrí el link. "
-            "Sirve una sola vez y vence el {vence}."
+            "Para sumarte, abrí el link: si todavía no tenés cuenta, la creás (con una contraseña o con Google); "
+            "si ya tenés una, iniciás sesión con ella. Sirve una sola vez y vence el {vence}."
         ),
         "button": "Aceptar la invitación",
         "footer": "Si no esperabas esta invitación, ignorá este mensaje: no se crea ninguna cuenta.",

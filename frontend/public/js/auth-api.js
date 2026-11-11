@@ -217,6 +217,8 @@ export const authApi = {
     // Invitations by mail: the token comes from the link (#token=...) and goes in the body, never in a URL.
     invitationDetails: (token) => postJson('/details', { token }, INVITATIONS_BASE),
     acceptInvitation: (payload) => postJson('/accept', payload, INVITATIONS_BASE),
+    // The mail already has an account: joins with the account that is logged in (needs the session).
+    acceptExistingInvitation: (token) => postJson('/accept-existing', { token }, INVITATIONS_BASE),
     acceptInvitationWithGoogle: (token, credential) => postJson('/accept-google', { token, credential }, INVITATIONS_BASE),
     verifyEmail: (token) => postJson('/verify-email', { token }),
     resendVerification: (identifier) => postJson('/resend-verification', { identifier }),

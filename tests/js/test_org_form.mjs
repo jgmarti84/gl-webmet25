@@ -3,7 +3,7 @@
  * optional admin and radar views, in one request).
  * Run with: node tests/js/test_org_form.mjs
  */
-const { eligibleAdmins, buildOrganizationPayload } = await import('../../frontend/public/js/shared/org-form.js');
+const { eligibleAdmins, buildOrganizationPayload, buildMemberRequest } = await import('../../frontend/public/js/shared/org-form.js');
 
 let passed = 0;
 let failed = 0;
@@ -68,6 +68,36 @@ const full = buildOrganizationPayload({
     radars: ['RMA1'],
 });
 assert(full.admin.user_id === 2 && full.radar_detail_view[0] === 'RMA1' && full.seat_limit === 5, 'admin and views in one payload');
+
+console.log('T7: adding one person to a company that already exists (the "Editar institución" form)');
+const member = { organizationId: 7, role: 'viewer' };
+assert(buildMemberRequest({ ...member, mode: 'none' }) === null, '"none" (the default) adds nobody');
+
+const invite = buildMemberRequest({ ...member, mode: 'invite', role: 'org_admin', inviteEmail: '  ana@ejemplo.com.ar ' });
+assert(invite.kind === 'invite', 'inviting by mail is its own kind of request');
+assert(invite.body.email === 'ana@ejemplo.com.ar' && invite.body.organization_id === 7 && invite.body.role === 'org_admin',
+    'the invitation carries the trimmed mail, the company and the chosen role');
+assert(throws(() => buildMemberRequest({ ...member, mode: 'invite', inviteEmail: '  ' })) !== null,
+    'inviting without a mail is an error');
+
+const created = buildMemberRequest({
+    ...member,
+    mode: 'new',
+    newUser: { username: ' lucia ', password: 'clave-larga-1!', fullName: 'Lucía', email: '' },
+});
+assert(created.kind === 'create' && created.body.username === 'lucia', 'a new user is created with a trimmed username');
+assert(created.body.role === 'viewer' && created.body.organization_id === 7, 'it goes into the company with the chosen role');
+assert(created.body.full_name === 'Lucía' && created.body.email === null, 'an empty optional field is sent as null');
+assert(throws(() => buildMemberRequest({ ...member, mode: 'new', newUser: { username: 'lucia', password: '' } })) !== null,
+    'a new user needs a username and a password');
+
+const asViewer = buildMemberRequest({ ...member, mode: 'existing', existingUserId: '12' });
+assert(asViewer.kind === 'move' && asViewer.userId === 12, 'an existing user is moved: its id as a number');
+assert(asViewer.body.organization_id === 7 && !('role' in asViewer.body), 'as a viewer only the company is sent (the role stays)');
+const asAdmin = buildMemberRequest({ ...member, mode: 'existing', role: 'org_admin', existingUserId: '12' });
+assert(asAdmin.body.organization_id === 7 && asAdmin.body.role === 'org_admin', 'as admin the role is sent with the company');
+assert(throws(() => buildMemberRequest({ ...member, mode: 'existing', existingUserId: '' })) !== null,
+    'choosing "existing" without choosing a user is an error');
 
 console.log(`\n${'─'.repeat(40)}`);
 console.log(`Results: ${passed} passed, ${failed} failed`);

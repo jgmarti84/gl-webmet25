@@ -155,7 +155,7 @@ async function render() {
 function renderInvitations() {
     const rows = state.invitations.map((invitation) => `
         <tr>
-            <td>${safeText(invitation.email)}</td>
+            <td>${safeText(invitation.email)}${invitation.existing_account ? ' <span class="status-pill">Ya tiene cuenta</span>' : ''}</td>
             <td>${safeText(viewsSummary(invitation.radar_views || state.company.radar_detail_views))}</td>
             <td>${safeText(new Date(invitation.expires_at).toLocaleDateString('es-AR'))}</td>
             <td class="table-actions">
@@ -273,9 +273,12 @@ async function openAddForm() {
             if (formData.get('create_mode') === 'invite') {
                 const email = String(formData.get('invite_email') || '').trim();
                 if (!email) throw new Error('Escribí el mail de la persona a invitar');
-                await empresaApi.createInvitation({ email, radar_views: views });
+                const sent = await empresaApi.createInvitation({ email, radar_views: views });
                 await render();
-                showMessage(`Invitación enviada a ${email}`);
+                // The mail already has an account: a warning, the invitation was sent anyway.
+                showMessage(sent.existing_account
+                    ? `Invitación enviada a ${email}. Ese mail ya tiene una cuenta: la invitación se envió igual. Al aceptarla, entrará a ${sent.organization_name} con su cuenta actual.`
+                    : `Invitación enviada a ${email}`);
                 return;
             }
             if (!formData.get('username') || !formData.get('password')) {

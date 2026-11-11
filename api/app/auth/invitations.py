@@ -10,7 +10,7 @@ after committing, so the response never depends on the mail server.
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -22,6 +22,7 @@ from radar_db.accounts import (
     get_user_by_email,
     normalize_email,
     normalize_full_name,
+    revoke_all_sessions,
 )
 from radar_db.models import Invitation, Organization, User
 from radar_db.passwords import PasswordPolicyError
@@ -94,6 +95,58 @@ def _clean_views(db: Session, role: str, radar_views: Optional[List[str]]) -> Op
         raise InvitationError(exc.status_code, exc.detail) from exc
 
 
+def _check_account_can_join(user: User, org_id: int) -> None:
+    """Whether an EXISTING account can join the institution, without looking at who invites. 409 otherwise.
+
+    Administrators cannot (a general admin has no institution; an institution admin cannot change institution), nor can
+    a deactivated account or one that never verified its mail (it could not even log in to accept), nor an account that
+    is already a member of this institution (its role is changed from Usuarios).
+    """
+    if user.role == "admin":
+        raise InvitationError(409, "Esa cuenta es de un administrador general y no puede unirse a una institución")
+    if user.role == "org_admin":
+        raise InvitationError(409, "Esa cuenta es administradora de una institución y no puede cambiar de institución")
+    if not user.is_active:
+        raise InvitationError(409, "La cuenta de ese mail está desactivada")
+    if user.email_verified_at is None:
+        raise InvitationError(409, "La cuenta de ese mail todavía no verificó su mail: que lo verifique primero")
+    if user.organization_id == org_id:
+        raise InvitationError(409, "Esa cuenta ya pertenece a esta institución: cambiale el rol desde Usuarios")
+
+
+def _check_existing_account(actor: User, org: Organization, user: User) -> None:
+    """The rules when `actor` invites a mail that has an account. Besides _check_account_can_join: an
+    institution admin cannot take someone from ANOTHER institution (only the general admin moves people)."""
+    _check_account_can_join(user, org.id)
+    if user.organization_id is not None and actor.role != "admin":
+        raise InvitationError(
+            409, "Esa cuenta ya pertenece a otra institución: pedile al administrador general que la mueva"
+        )
+
+
+def account_info(db: Session, invitations: List[Invitation]) -> Dict[object, Tuple[bool, Optional[str]]]:
+    """For each invitation: does its mail have an account NOW, and the name of the institution that account is in
+    when it is a different one (the one it would leave). One query for all of them. Worked out when asked (the account
+    may have been created or deleted after the invitation), never stored."""
+    emails = {row.email for row in invitations}
+    if not emails:
+        return {}
+    found = {
+        email: org_name
+        for email, org_name in db.query(User.email, Organization.name)
+        .outerjoin(Organization, Organization.id == User.organization_id)
+        .filter(User.email.in_(emails))
+        .all()
+    }
+    info = {}
+    for row in invitations:
+        exists = row.email in found
+        org_name = found.get(row.email)
+        leaves = org_name if exists and org_name is not None and org_name != row.organization.name else None
+        info[row.id] = (exists, leaves)
+    return info
+
+
 def create_invitation(
     db: Session,
     actor: User,
@@ -107,10 +160,12 @@ def create_invitation(
     """Invite `email` to the institution with `role`. Returns the invitation and the mail to send.
 
     Rules (all checked with the institution row locked, so two simultaneous invitations cannot both take the last
-    seat): the institution is active (409), the mail has no account (409) and no pending invitation of another
-    institution (409; one of the same institution is REPLACED, which is what "resend" does), a viewer needs an
-    active admin in the institution (409), a seat is free counting the pending invitations (409), and the sending
-    caps are respected (429).
+    seat): the institution is active (409), no pending invitation of another institution (409; one of the same
+    institution is REPLACED, which is what "resend" does), a viewer needs an active admin in the institution (409), a
+    seat is free counting the pending invitations (409), and the sending caps are respected (429).
+
+    A mail that already has an account is NOT refused any more: the invitation is made and the mail goes out;
+    the answer says the account exists. It is refused only for accounts that cannot join (see _check_existing_account).
     """
     now = _now(now)
     email = normalize_email(email)
@@ -128,8 +183,9 @@ def create_invitation(
         except permissions.PermissionRuleError as exc:
             raise InvitationError(exc.status_code, exc.detail) from exc
 
-    if get_user_by_email(db, email) is not None:
-        raise InvitationError(409, "Ya existe una cuenta con ese mail")
+    existing = get_user_by_email(db, email)
+    if existing is not None:
+        _check_existing_account(actor, org, existing)
     open_ones = db.query(Invitation).filter(Invitation.email == email, *_pending_filters(now)).all()
     if any(row.organization_id != org.id for row in open_ones):
         raise InvitationError(409, "Ese mail ya tiene una invitación pendiente de otra institución")
@@ -161,9 +217,7 @@ def create_invitation(
     )
     db.add(invitation)
     db.flush()
-    mail = invitation_mail(
-        db, email, org.name, role, actor.full_name or actor.username, token, invitation.expires_at
-    )
+    mail = invitation_mail(db, email, org.name, role, actor.full_name or actor.username, token, invitation.expires_at)
     return invitation, mail
 
 
@@ -223,9 +277,9 @@ def find_by_token(db: Session, token: str, lock: bool = False, now: Optional[dat
     return row
 
 
-def _prepare_accept(db: Session, invitation: Invitation) -> Organization:
-    """Checks shared by both ways of accepting, under the institution lock: active, a seat for this person (its own
-    reservation is not counted against it), an admin for a viewer, and the mail still free (409)."""
+def _check_institution(db: Session, invitation: Invitation) -> Organization:
+    """Checks of the institution when accepting, under its lock: active, a seat for this person (its own reservation is
+    not counted against it) and an admin for a viewer (409)."""
     try:
         org = organizations.reserve_seat(db, invitation.organization_id, excluding_invitation=invitation.id)
         if invitation.role == "viewer":
@@ -234,6 +288,12 @@ def _prepare_accept(db: Session, invitation: Invitation) -> Organization:
         raise InvitationError(exc.status_code, exc.detail) from exc
     if not org.is_active:
         raise InvitationError(409, f"La institución {org.name} está inactiva")
+    return org
+
+
+def _prepare_accept(db: Session, invitation: Invitation) -> Organization:
+    """Checks for accepting by CREATING an account (form or Google): the institution's, and the mail free (409)."""
+    org = _check_institution(db, invitation)
     if get_user_by_email(db, invitation.email) is not None:
         raise InvitationError(409, "Ya existe una cuenta con ese mail")
     return org
@@ -329,3 +389,49 @@ def accept_with_google(db: Session, token: str, identity: GoogleIdentity, now: O
         raise InvitationError(409, "Ya existe una cuenta con ese mail") from exc
     except (AccountError, PasswordPolicyError) as exc:
         raise InvitationError(422, str(exc)) from exc
+
+
+def accept_existing(db: Session, session_user: User, token: str, now: Optional[datetime] = None) -> User:
+    """Join the institution with the account that is logged in. The router has already authenticated it.
+
+    It takes BOTH the link and a session of the account of the invited mail (403 otherwise, without showing the mail):
+    the link alone cannot enter anybody's account, and knowing a password alone cannot join an institution. Everything
+    is checked again at this moment, with the institution locked: the account is still a plain active viewer, it is not
+    already in this institution, the institution is active, has a free seat and an admin for a viewer, and, if the
+    person is in ANOTHER institution, only a general admin may have invited it (the inviter is read now; if it no
+    longer exists the most restrictive rule applies).
+
+    Then the person leaves the old institution (its seat is free again by itself, seats being the active users),
+    enters the new one, becomes its admin if the invitation says so, and gets the views of the invitation (a copy of the
+    institution's list when none was chosen, replacing the ones it had). All its sessions are closed; the router opens a
+    new one, so the person is inside with the new permissions.
+    """
+    now = _now(now)
+    invitation = find_by_token(db, token, lock=True, now=now)
+    if session_user.email is None or normalize_email(session_user.email) != invitation.email:
+        raise InvitationError(
+            403, "Esta invitación es para otra cuenta. Cerrá sesión e ingresá con la cuenta del mail invitado"
+        )
+    user = session_user
+    _check_account_can_join(user, invitation.organization_id)
+    inviter = db.get(User, invitation.invited_by) if invitation.invited_by else None
+    if user.organization_id is not None and (inviter is None or inviter.role != "admin"):
+        raise InvitationError(
+            409, "Esa cuenta ya pertenece a otra institución: pedile al administrador general que te mueva"
+        )
+    org = _check_institution(db, invitation)
+
+    granter = inviter or user
+    user.organization = org
+    if invitation.role == "org_admin":
+        user.role = "org_admin"
+    db.flush()  # the institution and the role first: the views below lock and reload the user
+    if invitation.role == "viewer" and invitation.radar_views is not None:
+        permissions.replace_user_radar_views(db, user, invitation.radar_views, granter)
+    else:
+        permissions.copy_company_views_to(db, user, granter)
+    invitation.accepted_at = now
+    user.last_login_at = now
+    revoke_all_sessions(db, user)
+    db.flush()
+    return user
