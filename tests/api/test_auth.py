@@ -429,6 +429,26 @@ def test_check_unknown_role_returns_422():
         assert client.get(f"{PREFIX}/check", params={"role": "superuser"}).status_code == 422
 
 
+@needs_admin
+def test_check_tracking_tool_returns_204_for_the_admin():
+    """?tool=tracking answers 204 for the general admin (who always has the tool); a radar code adds the view check."""
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        _login(client)
+        assert client.get(f"{PREFIX}/check", params={"tool": "tracking"}).status_code == 204
+
+
+def test_check_tracking_tool_without_session_returns_401():
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        assert client.get(f"{PREFIX}/check", params={"tool": "tracking"}).status_code == 401
+
+
+@needs_admin
+def test_check_unknown_tool_returns_422():
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        _login(client)
+        assert client.get(f"{PREFIX}/check", params={"tool": "other"}).status_code == 422
+
+
 # ---------------------------------------------------------------------------
 # GET /api/v1/auth/check-token   (204: no body; light probe of the tile proxies)
 # ---------------------------------------------------------------------------

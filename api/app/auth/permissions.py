@@ -1,8 +1,14 @@
 # api/app/auth/permissions.py
-"""Who may open which one-radar detail view (spec C). Functions flush; routers commit.
+"""Who may open which one-radar detail view, and who has which tool (the storm tracking tool). Functions flush;
+routers commit.
 
-Only GET /permissions/me and the admin endpoints call this module. Data endpoints never do (decision C1): every
-user keeps seeing every radar on the main map; the permission only opens radar.html.
+Radar views are lists of radar codes; tools are yes/no (one row with resource "*" means "has it"). Both live in the
+permissions table and follow the same rules: a member of an institution has what it was given AND what the
+institution has (worked out when read, so taking something from an institution takes it from every member at once),
+and an institution admin can only hand out what its institution has.
+
+The map's data endpoints never call this module: every user sees every radar on the main map. Views decide who opens
+radar.html; the tracking tool is enforced by nginx, which asks /auth/check before letting a request reach the service.
 """
 
 from typing import Iterable, List, Optional, Set
@@ -12,6 +18,9 @@ from sqlalchemy.orm import Session
 from radar_db.models import PERMISSION_ALL, Organization, Permission, Radar, User
 
 RADAR_DETAIL_VIEW = "radar.detail_view"
+TOOL_TRACKING = "tool.tracking"
+# The tools the API knows, by the name the frontend uses ("tracking") and the permission action behind it.
+TOOLS = {"tracking": TOOL_TRACKING}
 
 
 class PermissionRuleError(Exception):
@@ -34,7 +43,7 @@ def stored_org_radar_views(org: Organization) -> List[str]:
 
 
 def _enabled_radar_codes(db: Session) -> Set[str]:
-    """Codes of the radars whose detail view is switched on (decision C2: the flag is always required)."""
+    """Codes of the radars whose detail view is switched on (a view needs its flag switched on)."""
     return {code for (code,) in db.query(Radar.code).filter(Radar.detail_view_enabled.is_(True)).all()}
 
 
@@ -44,10 +53,10 @@ def _expand(stored: Set[str], enabled: Set[str]) -> Set[str]:
 
 
 def effective_radar_views(db: Session, user: User) -> List[str]:
-    """Radar codes whose detail view this user may open now (spec C §4), sorted.
+    """Radar codes whose detail view this user may open now, sorted.
 
     admin: every enabled view. No company: their own list. Company admin: the company's list. Company member:
-    their own list intersected with the company's (decision C6: computed here, so a radar the company loses
+    their own list intersected with the company's (computed here, so a radar the company loses
     disappears for every member without touching their lists).
     """
     enabled = _enabled_radar_codes(db)
@@ -74,14 +83,14 @@ def _wanted_resources(db: Session, resources: Iterable[str]) -> Set[str]:
     return wanted
 
 
-def _replace_rows(db: Session, rows: list, wanted: Set[str], granted_by: User) -> None:
-    """Swap the detail-view rows of a user's or a company's `permissions` collection for `wanted`."""
-    for permission in [p for p in rows if p.action == RADAR_DETAIL_VIEW]:
+def _replace_rows(db: Session, rows: list, wanted: Set[str], granted_by: User, action: str = RADAR_DETAIL_VIEW) -> None:
+    """Swap the rows of one `action` in a user's or an institution's `permissions` collection for `wanted`."""
+    for permission in [p for p in rows if p.action == action]:
         rows.remove(permission)  # delete-orphan: the row is deleted
-    # Deletes first: SQLAlchemy inserts before it deletes, and re-adding a code would break the unique constraint.
+    # Deletes first: SQLAlchemy inserts before it deletes, and re-adding a row would break the unique constraint.
     db.flush()
     for resource in sorted(wanted):
-        rows.append(Permission(action=RADAR_DETAIL_VIEW, resource=resource, granted_by=granted_by.id))
+        rows.append(Permission(action=action, resource=resource, granted_by=granted_by.id))
     db.flush()
 
 
@@ -100,9 +109,9 @@ def ensure_within_org(org: Optional[Organization], wanted: Set[str]) -> None:
 def replace_user_radar_views(
     db: Session, user: User, resources: Iterable[str], granted_by: User, within_company: bool = False
 ) -> List[str]:
-    """Replace the user's whole list (decision C16) and return it as stored.
+    """Replace the user's whole list and return it as stored.
 
-    within_company=True is the company admin's case (decision C4): the new list must fit inside the company's
+    within_company=True is the company admin's case: the new list must fit inside the company's
     list, otherwise PermissionRuleError(403). A company with "*" allows anything, "*" included.
 
     The user row is locked first (SELECT ... FOR UPDATE) and reloaded. Two admins saving the same user at the same
@@ -129,8 +138,88 @@ def replace_org_radar_views(db: Session, org: Organization, resources: Iterable[
 
 
 def copy_company_views_to(db: Session, user: User, granted_by: User) -> None:
-    """Give a company user the company's current list (decision C5: new members start with everything)."""
+    """Give an institution member the institution's current radar views and tools: a new member (or one that moves in)
+    starts with everything the institution has."""
     _replace_rows(db, user.permissions, set(stored_org_radar_views(user.organization)), granted_by)
+    copy_company_tools_to(db, user, granted_by)
+
+
+def stored_tool(owner, action: str) -> bool:
+    """True when the user or institution `owner` has its own row for this tool (not intersected)."""
+    return any(p.action == action for p in owner.permissions)
+
+
+def stored_tools(owner) -> dict:
+    """The tools of a user or institution as saved: {"tracking": bool}."""
+    return {name: stored_tool(owner, action) for name, action in TOOLS.items()}
+
+
+def effective_tools(db: Session, user: User) -> dict:
+    """The tools this user has now: {"tracking": bool}.
+
+    General admin: all. No institution: their own. Institution admin: the institution's. Member: their own AND the
+    institution's. nginx asks this (through /auth/check) on every request to the tracking service, polling included,
+    so it only reads the user's and the institution's rows (relationships already loaded with the user, or one query
+    each).
+    """
+    if user.role == "admin":
+        return {name: True for name in TOOLS}
+    org = user.organization
+    result = {}
+    for name, action in TOOLS.items():
+        own = stored_tool(user, action)
+        if org is None:
+            result[name] = own
+        elif user.role == "org_admin":
+            result[name] = stored_tool(org, action)
+        else:
+            result[name] = own and stored_tool(org, action)
+    return result
+
+
+def can_use_tracking_on(db: Session, user: User, radar_code: str) -> bool:
+    """Tracking on one radar: the tool AND that radar's view. What nginx asks for the per-radar tracking routes.
+
+    A tracking job costs seconds of CPU, so hiding the button is not enough: the server checks the view too."""
+    return effective_tools(db, user)["tracking"] and radar_code.upper() in effective_radar_views(db, user)
+
+
+def _set_tools(db: Session, rows: list, tools: dict, granted_by: User) -> None:
+    """Put or remove the row of each tool named in `tools` (tools not named are left as they are)."""
+    for name, on in tools.items():
+        if on is None:
+            continue
+        _replace_rows(db, rows, {PERMISSION_ALL} if on else set(), granted_by, action=TOOLS[name])
+
+
+def set_user_tools(db: Session, user: User, tools: dict, granted_by: User, within_company: bool = False) -> dict:
+    """Give or take the user's tools and return them as stored.
+
+    within_company=True is the institution admin's case: it can only give a tool its institution has (403); taking one
+    away is always allowed. The user row is locked first, like replace_user_radar_views, so two admins saving at once
+    do not break the unique constraint."""
+    db.refresh(user, with_for_update=True)
+    if within_company:
+        org = user.organization
+        for name, on in tools.items():
+            if on and (org is None or not stored_tool(org, TOOLS[name])):
+                raise PermissionRuleError(403, "Solo podés asignar herramientas que tenga tu institución")
+    _set_tools(db, user.permissions, tools, granted_by)
+    return stored_tools(user)
+
+
+def set_org_tools(db: Session, org: Organization, tools: dict, granted_by: User) -> dict:
+    """Give or take an institution's tools. Members lose at once what the institution loses (intersection)."""
+    db.refresh(org, with_for_update=True)
+    _set_tools(db, org.permissions, tools, granted_by)
+    return stored_tools(org)
+
+
+def copy_company_tools_to(db: Session, user: User, granted_by: User) -> None:
+    """Give an institution member the institution's current tools (a new member starts with what it has)."""
+    org = user.organization
+    tools = {name: org is not None and stored_tool(org, action) for name, action in TOOLS.items()}
+    _set_tools(db, user.permissions, tools, granted_by)
 
 
 def delete_radar_permissions(db: Session, radar_code: str) -> None:

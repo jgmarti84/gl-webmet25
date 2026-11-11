@@ -144,7 +144,7 @@ def test_my_permissions_lists_the_resolved_views(app_client, make_user, make_rad
     login(app_client)
     response = app_client.get("/api/v1/permissions/me")
     assert response.status_code == 200
-    assert response.json() == {"radar_detail_views": ["TSTA"]}
+    assert response.json() == {"radar_detail_views": ["TSTA"], "tools": {"tracking": False}}
 
 
 def test_an_account_created_with_google_starts_without_views(
@@ -156,7 +156,7 @@ def test_an_account_created_with_google_starts_without_views(
     assert app_client.post("/api/v1/auth/google", json={"credential": "t"}).status_code == 200
     response = app_client.get("/api/v1/permissions/me")
     assert response.status_code == 200
-    assert response.json() == {"radar_detail_views": []}
+    assert response.json() == {"radar_detail_views": [], "tools": {"tracking": False}}
 
 
 # --- PUT /api/v1/admin/users/{id}/permissions -------------------------------------------

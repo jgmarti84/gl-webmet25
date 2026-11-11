@@ -752,3 +752,53 @@ def test_if_the_invitation_cannot_be_made_the_company_is_not_created_either(
 def test_a_bad_mail_when_creating_a_company_is_422(app_client, boss, mailer):
     assert _create_org(_as(app_client, "boss"), email="no-es-un-mail").status_code == 422
     assert not mailer.sent
+
+
+# --- the tracking tool an invitation carries -----------------------------------------------------------------------
+
+
+def test_an_invitation_with_the_tool_gives_the_new_account_the_tool(
+    app_client, boss, org, org_boss, mailer, test_db_session
+):
+    perms.set_org_tools(test_db_session, org, {"tracking": True}, boss)
+    response = _invite(_as(app_client, "boss"), org, role="viewer", tools={"tracking": True})
+    assert response.status_code == 201 and response.json()["tools"] == {"tracking": True}
+    app_client.cookies.clear()
+    _accept(app_client, token_from(mailer.sent[0]))
+    assert perms.stored_tool(_user(test_db_session, "nuevo"), perms.TOOL_TRACKING) is True
+
+
+def test_an_invitation_without_a_choice_copies_the_institution_tool(
+    app_client, boss, org, org_boss, mailer, test_db_session
+):
+    perms.set_org_tools(test_db_session, org, {"tracking": True}, boss)
+    response = _invite(_as(app_client, "boss"), org, role="viewer")
+    assert response.json()["tools"] is None  # no choice made: "a copy of the institution's"
+    app_client.cookies.clear()
+    _accept(app_client, token_from(mailer.sent[0]))
+    assert perms.stored_tool(_user(test_db_session, "nuevo"), perms.TOOL_TRACKING) is True
+
+
+def test_an_explicit_no_wins_over_the_institution_tool(app_client, boss, org, org_boss, mailer, test_db_session):
+    perms.set_org_tools(test_db_session, org, {"tracking": True}, boss)
+    _invite(_as(app_client, "boss"), org, role="viewer", tools={"tracking": False})
+    app_client.cookies.clear()
+    _accept(app_client, token_from(mailer.sent[0]))
+    assert perms.stored_tool(_user(test_db_session, "nuevo"), perms.TOOL_TRACKING) is False
+
+
+def test_an_institution_admin_invitation_cannot_carry_a_tool_choice(app_client, boss, org):
+    response = _invite(_as(app_client, "boss"), org, role="org_admin", tools={"tracking": True})
+    assert response.status_code == 422
+
+
+def test_an_institution_admin_cannot_invite_with_a_tool_its_institution_lacks(app_client, org, org_boss):
+    response = _org_invite(_as(app_client, "orgboss"), tools={"tracking": True})
+    assert response.status_code == 403
+
+
+def test_resending_keeps_the_tool_choice(app_client, boss, org, org_boss, mailer, test_db_session):
+    perms.set_org_tools(test_db_session, org, {"tracking": True}, boss)
+    sent = _invite(_as(app_client, "boss"), org, role="viewer", tools={"tracking": True}).json()
+    again = app_client.post(f"{ADMIN_URL}/{sent['id']}/resend")
+    assert again.status_code == 200 and again.json()["tools"] == {"tracking": True}

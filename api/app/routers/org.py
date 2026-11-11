@@ -65,10 +65,12 @@ def create_company_user(
         # One savepoint for both steps: if the views are refused the new account is rolled back with them.
         with db.begin_nested():
             user = orgs.create_member(
-                db, actor.organization_id, payload.model_dump(exclude={"radar_detail_view"}), "viewer", actor
+                db, actor.organization_id, payload.model_dump(exclude={"radar_detail_view", "tools"}), "viewer", actor
             )
             if payload.radar_detail_view is not None:
                 permissions.replace_user_radar_views(db, user, payload.radar_detail_view, actor, within_company=True)
+            if payload.tools is not None:
+                permissions.set_user_tools(db, user, payload.tools.model_dump(), actor, within_company=True)
     except permissions.PermissionRuleError as exc:
         raise _rule(exc)
     except orgs.AccountExistsError as exc:
@@ -142,10 +144,14 @@ def revoke_company_user_sessions(
 def set_company_user_permissions(
     user_id: int, payload: RadarViewsUpdate, db: Session = Depends(get_db), actor: User = Depends(require_org_admin)
 ) -> UserResponse:
-    """Replace a member's views, always within the company's views (decision C4)."""
+    """Replace a member's views and/or set its tools, always within what the company has. What is not in the body is
+    not changed."""
     user = _editable(actor, _member_or_404(db, actor, user_id))
     try:
-        permissions.replace_user_radar_views(db, user, payload.radar_detail_view, actor, within_company=True)
+        if payload.radar_detail_view is not None:
+            permissions.replace_user_radar_views(db, user, payload.radar_detail_view, actor, within_company=True)
+        if payload.tools is not None:
+            permissions.set_user_tools(db, user, payload.tools.model_dump(), actor, within_company=True)
     except permissions.PermissionRuleError as exc:
         raise _rule(exc)
     db.commit()

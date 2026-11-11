@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from .permissions import RadarResource
+from .permissions import RadarResource, ToolsState, ToolsUpdate
 from .registration import MAX_EMAIL_LENGTH, MAX_TOKEN_FIELD_LENGTH
 from .text import StrictText
 
@@ -30,6 +30,9 @@ class OrgInvitationCreate(_InvitedMail):
 
     # Radar codes (or ["*"]). Omitted: the person starts with a copy of the institution's list.
     radar_views: Optional[List[RadarResource]] = Field(None, max_length=500)
+    # The tools the person starts with (only for a viewer). Omitted, or the tool left out: a copy of the institution's
+    # tools when the invitation is accepted.
+    tools: Optional[ToolsUpdate] = None
 
 
 class InvitationCreate(OrgInvitationCreate):
@@ -48,6 +51,8 @@ class InvitationResponse(BaseModel):
     organization_name: str
     role: str
     radar_views: Optional[List[str]] = None
+    # The tool choice of the invitation, or None when there is none ("a copy of the institution's").
+    tools: Optional[ToolsState] = None
     created_at: datetime
     expires_at: datetime
     # The mail already has an account (worked out when asked, not stored), and, for the general admin only, the
