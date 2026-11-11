@@ -14,6 +14,7 @@ from playwright.sync_api import Page, expect
 
 from .conftest import ADMIN_PASSWORD, ADMIN_USERNAME, E2E_VIEWER, E2E_VIEWER_PASSWORD, deactivate_user, ensure_viewer
 
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://frontend-v2:80")
 PREFIX_URL = os.getenv("PREFIX_FRONTEND_URL", "http://prefix-proxy-e2e/pfx")
 SITE = urlsplit(PREFIX_URL).netloc
 PREFIX = urlsplit(PREFIX_URL).path  # "/pfx"
@@ -128,4 +129,46 @@ def test_the_company_panel_stays_inside_the_prefix(browser, admin_storage_state)
     finally:
         context.close()
         deactivate_user(admin.request, org_admin_id)
+        admin.close()
+
+
+def test_the_tracking_requests_stay_inside_the_prefix(browser, admin_storage_state):
+    """The radar view asks the tracking service for its availability: that request must carry the prefix too."""
+    code = "E2EB"
+    admin = browser.new_context(storage_state=admin_storage_state, ignore_https_errors=True)
+    api = admin.request
+    api.delete(f"{FRONTEND_URL}/api/v1/admin/radars/{code}")  # leftover of an interrupted run, if any
+    created = api.post(
+        f"{FRONTEND_URL}/api/v1/admin/radars",
+        data={
+            "code": code,
+            "title": "E2E prefijo",
+            "center_lat": -31.4,
+            "center_long": -64.2,
+            "img_radio": 240,
+            "is_active": True,
+            "detail_view_enabled": True,
+        },
+    )
+    assert created.status == 201, created.text()
+    context = browser.new_context(ignore_https_errors=True)
+    page = context.new_page()
+    urls = _track(page)
+    # The test stack has no tracking service: fake the answer that makes the radar view ask for it.
+    page.route(
+        f"**/api/tracking/radars/{code}/availability",
+        lambda route: route.fulfill(
+            json={"radar_code": code, "count": 5, "min_time": None, "max_time": None, "max_last_n": 10}
+        ),
+    )
+    try:
+        _login(page, ADMIN_USERNAME, ADMIN_PASSWORD)  # the general admin always has the tracking tool
+        page.goto(f"{PREFIX_URL}/radar.html?code={code}", wait_until="networkidle")
+        expect(page.locator("#btn-tracking")).to_be_visible()
+        tracking = [u for u in urls if "/api/tracking/" in u]
+        assert tracking and all(urlsplit(u).path.startswith(f"{PREFIX}/api/tracking/") for u in tracking), tracking
+        assert _escaped(urls) == [], _escaped(urls)
+    finally:
+        context.close()
+        api.delete(f"{FRONTEND_URL}/api/v1/admin/radars/{code}")
         admin.close()

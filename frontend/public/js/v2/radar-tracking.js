@@ -65,7 +65,7 @@ const el = id => document.getElementById(id);
  *  tracking service does not answer (not deployed: 502/404). */
 async function fetchRadarAvailability(radar) {
     try {
-        const res = await authFetch(`/api/tracking/radars/${encodeURIComponent(radar)}/availability`);
+        const res = await authFetch(`api/tracking/radars/${encodeURIComponent(radar)}/availability`);
         if (!res.ok) return null;
         return await res.json();
     } catch {
