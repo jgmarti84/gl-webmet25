@@ -517,8 +517,10 @@ class User(Base):
 
 
 # Actions a permission may grant. The CHECK constraint on the table repeats this list, so a typo can never be stored;
-# new features (spec D: map layers) add their action here and in a migration.
-PERMISSION_ACTIONS = ("radar.detail_view",)
+# a new action is added here and in a migration. "radar.detail_view" opens one radar's view (resource: a radar code or
+# "*"); "tool.tracking" is the storm tracking tool (resource always "*": a tool is had or not, there is no list of
+# radars).
+PERMISSION_ACTIONS = ("radar.detail_view", "tool.tracking")
 # Resource meaning "every radar, including the ones added later".
 PERMISSION_ALL = "*"
 
@@ -547,7 +549,7 @@ class Permission(Base):
     organization = relationship("Organization", back_populates="permissions", foreign_keys=[organization_id])
 
     __table_args__ = (
-        CheckConstraint("action IN ('radar.detail_view')", name='ck_permissions_action'),
+        CheckConstraint("action IN ('radar.detail_view', 'tool.tracking')", name='ck_permissions_action'),
         # Exactly one owner: a user or a company.
         CheckConstraint("(user_id IS NULL) <> (organization_id IS NULL)", name='ck_permissions_one_subject'),
         # NULLs never collide in a unique constraint, so these two cover user rows and company rows separately.
@@ -656,6 +658,9 @@ class Invitation(Base):
     # Radar codes (or ["*"] for all) the viewer starts with; NULL = a copy of the organization's list at acceptance.
     # none_as_null: Python None must be a SQL NULL (not the JSON value null), or the check below would refuse it.
     radar_views = Column(JSON(none_as_null=True))
+    # Storm tracking tool for the invited viewer: True/False is the inviter's choice, NULL means "a copy of the
+    # institution's at acceptance". An institution admin uses its institution's tools, so its invitations carry NULL.
+    tracking = Column(Boolean)
     token_hash = Column(String(64), nullable=False, unique=True)
     invited_by = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -669,6 +674,7 @@ class Invitation(Base):
         CheckConstraint("role IN ('org_admin', 'viewer')", name='ck_invitations_role'),
         # Only viewers carry a list of views (a company admin sees the company's list).
         CheckConstraint("role = 'viewer' OR radar_views IS NULL", name='ck_invitations_views_only_viewer'),
+        CheckConstraint("role = 'viewer' OR tracking IS NULL", name='ck_invitations_tracking_only_viewer'),
         Index('ix_invitations_email', 'email'),
         Index('ix_invitations_organization_id', 'organization_id'),
         # The sending caps count the mails of the last hour / day.
