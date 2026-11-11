@@ -7,7 +7,8 @@ import { authApi, initPageSession } from './auth-api.js';
 import { empresaApi } from './empresa-api.js';
 import { api } from './shared/api.js';
 import { mountProfile } from './shared/profile-section.js';
-import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
+import { ALL_RADARS } from './shared/radar-views.js';
+import { readTools, toolsSummary, trackingFieldHtml } from './shared/tools-form.js';
 
 const ROLE_LABELS = { org_admin: 'Admin de institución', viewer: 'Lector' };
 // How long a success notice stays before it closes by itself (errors stay until the × is pressed).
@@ -128,11 +129,11 @@ async function render() {
     const meId = state.me?.id;
     $('empresa-users').innerHTML = users.map((user) => {
         const isViewer = user.role === 'viewer';
-        const views = isViewer ? viewsSummary(user.radar_detail_views) : 'Las de la institución';
+        const views = isViewer ? toolsSummary(user.radar_detail_views, user.tools) : 'Las de la institución';
         const actions = isViewer
             ? `
                 <button class="btn-secondary" data-edit="${user.id}">Editar</button>
-                <button class="btn-secondary" data-views="${user.id}">Vistas</button>
+                <button class="btn-secondary" data-views="${user.id}">Herramientas</button>
                 <button class="btn-secondary" data-reset="${user.id}">Resetear contraseña</button>
                 <button class="btn-secondary" data-revoke="${user.id}">Cerrar sesiones</button>
                 <button class="btn-secondary" data-unlink="${user.id}">Desvincular</button>`
@@ -156,7 +157,7 @@ function renderInvitations() {
     const rows = state.invitations.map((invitation) => `
         <tr>
             <td>${safeText(invitation.email)}${invitation.existing_account ? ' <span class="status-pill">Ya tiene cuenta</span>' : ''}</td>
-            <td>${safeText(viewsSummary(invitation.radar_views || state.company.radar_detail_views))}</td>
+            <td>${safeText(toolsSummary(invitation.radar_views || state.company.radar_detail_views, invitation.tools ?? state.company.tools))}</td>
             <td>${safeText(new Date(invitation.expires_at).toLocaleDateString('es-AR'))}</td>
             <td class="table-actions">
                 <button class="btn-secondary" data-resend-invitation="${safeText(invitation.id)}">Reenviar</button>
@@ -240,6 +241,8 @@ async function invitationViewsHtml() {
  * a link, fill in their own data (or use Google) and come in as a viewer of this institution with the views chosen here.
  */
 async function openAddForm() {
+    // The tracking checkbox is offered only if the institution has the tool: it cannot give what it does not have.
+    const tracking = Boolean(state.company.tools?.tracking);
     let viewsHtml;
     try {
         viewsHtml = await invitationViewsHtml();
@@ -265,15 +268,17 @@ async function openAddForm() {
                 <p class="toolbar-note">Le mandamos un mail con un link (vale 7 días). Completa sus datos o entra con Google y queda como lector de tu institución, con las vistas que marques abajo. Mientras no lo acepte, la invitación reserva un lugar.</p>
             </div>
             ${viewsHtml}
+            ${tracking ? trackingFieldHtml({ checked: true }) : ''}
             <div class="form-actions"><button class="btn" type="submit">Continuar</button></div>
         `,
         async (formData) => {
             // The views picked below apply to both ways: the account made now and the invitation.
             const views = formData.get('all') ? [ALL_RADARS] : formData.getAll('radar');
+            const tools = tracking ? { tools: readTools(formData) } : {};
             if (formData.get('create_mode') === 'invite') {
                 const email = String(formData.get('invite_email') || '').trim();
                 if (!email) throw new Error('Escribí el mail de la persona a invitar');
-                const sent = await empresaApi.createInvitation({ email, radar_views: views });
+                const sent = await empresaApi.createInvitation({ email, radar_views: views, ...tools });
                 await render();
                 // The mail already has an account: a warning, the invitation was sent anyway.
                 showMessage(sent.existing_account
@@ -290,6 +295,7 @@ async function openAddForm() {
                 full_name: formData.get('full_name') || null,
                 email: formData.get('email') || null,
                 radar_detail_view: views,
+                ...tools,
             };
             await empresaApi.createUser(payload);
             await render();
@@ -398,18 +404,24 @@ async function openViewsForm(user) {
             </label>`).join('')
         : '<p class="toolbar-note">La institución no tiene vistas de radar para repartir.</p>';
 
+    // The tracking checkbox is offered only if the institution has the tool: it cannot give what it does not have.
+    const hasTracking = Boolean(state.company.tools?.tracking);
     openModal(
-        `Vistas de radar de ${user.username}`,
+        `Herramientas de ${user.username}`,
         `
             ${allRow}
             <fieldset class="views-radars"><legend>${companyHasAll ? 'O elegir radares' : 'Radares de la institución'}</legend>${rows}</fieldset>
+            ${hasTracking ? trackingFieldHtml({ checked: Boolean(user.tools?.tracking) }) : ''}
             <div class="form-actions"><button class="btn" type="submit">Guardar</button></div>
         `,
         async (formData) => {
             const views = formData.get('all') ? [ALL_RADARS] : [...formData.getAll('radar'), ...keptHidden];
-            await empresaApi.setRadarViews(user.id, views);
+            await empresaApi.setPermissions(user.id, {
+                radar_detail_view: views,
+                ...(hasTracking ? { tools: readTools(formData) } : {}),
+            });
             await render();
-            showMessage(`Vistas de ${user.username} actualizadas`);
+            showMessage(`Herramientas de ${user.username} actualizadas`);
         },
     );
 }

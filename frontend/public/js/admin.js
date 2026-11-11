@@ -5,6 +5,7 @@ import {
 } from './shared/org-form.js';
 import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
+import { readTools, toolsSummary, trackingFieldHtml } from './shared/tools-form.js';
 
 const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'nccubes', 'colormaps', 'colormap-options', 'users', 'organizations', 'invitations', 'mails', 'profile'];
 const STATUS_OPTIONS = ['available', 'missing', 'error', 'pending', 'processing', 'archived'];
@@ -2140,7 +2141,7 @@ async function renderUsers() {
                 <th><button data-sort="full_name">Nombre</button></th>
                 <th><button data-sort="role">Rol</button></th>
                 <th>Institución</th>
-                <th>Vistas de radar</th>
+                <th>Herramientas</th>
                 <th><button data-sort="is_active">Activo</button></th>
                 <th><button data-sort="last_login_at">Último ingreso</button></th>
                 <th>Acciones</th>
@@ -2152,7 +2153,7 @@ async function renderUsers() {
                         <td>${safeText(user.full_name)}</td>
                         <td>${ROLE_LABELS[user.role] || safeText(user.role)}</td>
                         <td>${user.organization_name ? safeText(user.organization_name) : '—'}</td>
-                        <td>${user.role === 'admin' ? 'Todas (admin)' : safeText(viewsSummary(user.radar_detail_views))}</td>
+                        <td>${user.role === 'admin' ? 'Todas (admin)' : safeText(toolsSummary(user.radar_detail_views, user.tools))}</td>
                         <td>${user.is_active ? 'Sí' : 'No'}</td>
                         <td>${user.last_login_at ? fmtDate(user.last_login_at) : '—'}</td>
                         <td class="table-actions">
@@ -2161,7 +2162,7 @@ async function renderUsers() {
                                 <button class="btn-secondary" data-toggle-user="${user.id}">${user.is_active ? 'Desactivar' : 'Activar'}</button>
                                 <button class="btn-secondary" data-reset-user="${user.id}">Resetear contraseña</button>
                             `}
-                            ${user.role === 'admin' ? '' : `<button class="btn-secondary" data-views-user="${user.id}">Vistas</button>`}
+                            ${user.role === 'admin' ? '' : `<button class="btn-secondary" data-views-user="${user.id}">Herramientas</button>`}
                             ${needsMailVerification(user) ? `<button class="btn-secondary" data-verify-user="${user.id}">Verificar mail</button>` : ''}
                             <button class="btn-secondary" data-revoke-user="${user.id}">Cerrar sesiones</button>
                         </td>
@@ -2469,11 +2470,14 @@ function wireMoveNote(user, currentOrgId) {
  * Modal to choose one-radar detail views (spec C), for a user or a company.
  * Only radars with the view enabled are listed. Saved codes of radars whose view is now off are kept as they are
  * (sent back unchanged), so switching a view off for maintenance does not lose anybody's access.
- * `onSave` saves the list and RETURNS the success message: it is shown after `renderSection()`, because
+ * Below the radars, the checkbox of the tools (today only storm tracking); `tools` is what is saved and `trackingNote`
+ * an optional warning shown under it.
+ * `onSave` saves the list and the tools and RETURNS the success message: it is shown after `renderSection()`, because
  * `renderSection()` starts by clearing the notice (showing it before would make it vanish at once).
- * @param {{title: string, stored: string[], onSave: (views: string[]) => Promise<string>}} options
+ * @param {{title: string, stored: string[], tools?: {tracking: boolean}, trackingNote?: string,
+ *          onSave: (views: string[], tools: {tracking: boolean}) => Promise<string>}} options
  */
-async function openRadarViewsForm({ title, stored, onSave }) {
+async function openToolsForm({ title, stored, tools, trackingNote = '', onSave }) {
     const radars = (await adminApi.listRadars()).filter((radar) => radar.detail_view_enabled);
     const hasAll = stored.includes(ALL_RADARS);
     const listedCodes = new Set(radars.map((radar) => radar.code));
@@ -2491,24 +2495,40 @@ async function openRadarViewsForm({ title, stored, onSave }) {
             <label class="checkbox-row"><input type="checkbox" name="all"${hasAll ? ' checked' : ''}> Todas</label>
             <fieldset class="views-radars"><legend>O elegir radares</legend>${radarRows}</fieldset>
             <p class="toolbar-note">Solo se listan los radares con la vista de detalle habilitada.</p>
+            ${trackingFieldHtml({ checked: Boolean(tools?.tracking), note: trackingNote })}
             <div class="form-actions"><button class="btn" type="submit">Guardar</button></div>
         `,
         async (formData) => {
-            const message = await onSave(formData.get('all') ? [ALL_RADARS] : [...formData.getAll('radar'), ...keptHidden]);
+            const views = formData.get('all') ? [ALL_RADARS] : [...formData.getAll('radar'), ...keptHidden];
+            const message = await onSave(views, readTools(formData));
             await renderSection();
             showMessage(message, 'success');
         },
     );
 }
 
-/** Users section: views of one user. */
-function openViewsForm(user) {
-    return openRadarViewsForm({
-        title: `Vistas de radar de ${user.username}`,
+/**
+ * Users section: views and tools of one user. A user of an institution that lacks the tracking tool can be given it,
+ * but it does nothing until the institution has it (members have what they were given AND what the institution has),
+ * so the form says so.
+ */
+async function openViewsForm(user) {
+    let trackingNote = '';
+    if (user.organization_id) {
+        const orgs = state.organizations || await adminApi.listOrganizations();
+        const org = orgs.find((candidate) => candidate.id === user.organization_id);
+        if (org && !org.tools?.tracking) {
+            trackingNote = 'No tiene efecto: la institución no tiene seguimiento de tormentas';
+        }
+    }
+    return openToolsForm({
+        title: `Herramientas de ${user.username}`,
         stored: user.radar_detail_views || [],
-        onSave: async (views) => {
-            await adminApi.setUserRadarViews(user.id, views);
-            return `Vistas de ${user.username} actualizadas`;
+        tools: user.tools,
+        trackingNote,
+        onSave: async (views, tools) => {
+            await adminApi.setUserPermissions(user.id, { radar_detail_view: views, tools });
+            return `Herramientas de ${user.username} actualizadas`;
         },
     });
 }
@@ -2528,7 +2548,7 @@ async function renderOrganizations() {
         <div class="table-wrap">
         <table>
             <thead><tr>
-                <th>Institución</th><th>Lugares</th><th>Activa</th><th>Vistas de radar</th><th>Acciones</th>
+                <th>Institución</th><th>Lugares</th><th>Activa</th><th>Herramientas</th><th>Acciones</th>
             </tr></thead>
             <tbody>
                 ${filterable.map((org) => `
@@ -2536,10 +2556,10 @@ async function renderOrganizations() {
                         <td>${safeText(org.name)}</td>
                         <td>${org.seats_used} de ${org.seat_limit}${org.pending_invitations ? ` (+${org.pending_invitations} invitación${org.pending_invitations === 1 ? '' : 'es'})` : ''}</td>
                         <td>${org.is_active ? 'Sí' : 'No'}</td>
-                        <td>${safeText(viewsSummary(org.radar_detail_views))}</td>
+                        <td>${safeText(toolsSummary(org.radar_detail_views, org.tools))}</td>
                         <td class="table-actions">
                             <button class="btn-secondary" data-edit-org="${org.id}" title="Editar">${ICON_EDIT}</button>
-                            <button class="btn-secondary" data-views-org="${org.id}">Vistas</button>
+                            <button class="btn-secondary" data-views-org="${org.id}">Herramientas</button>
                             <a class="btn-secondary" href="admin#users" data-section="users" data-users-of-org="${org.id}">Usuarios</a>
                         </td>
                     </tr>
@@ -2556,12 +2576,13 @@ async function renderOrganizations() {
     });
     elements.sectionContent.querySelectorAll('[data-views-org]').forEach((el) => {
         const org = byId(el.dataset.viewsOrg);
-        el.onclick = () => openRadarViewsForm({
-            title: `Vistas de radar de ${org.name}`,
+        el.onclick = () => openToolsForm({
+            title: `Herramientas de ${org.name}`,
             stored: org.radar_detail_views,
-            onSave: async (views) => {
-                await adminApi.setOrganizationRadarViews(org.id, views);
-                return `Vistas de ${org.name} actualizadas`;
+            tools: org.tools,
+            onSave: async (views, tools) => {
+                await adminApi.setOrganizationPermissions(org.id, { radar_detail_view: views, tools });
+                return `Herramientas de ${org.name} actualizadas`;
             },
         });
     });
@@ -2582,16 +2603,19 @@ async function renderInvitations() {
     state.organizations = orgs;
     // "Rol" filter needs words: the API gives the code.
     const items = invitations.map((invitation) => ({ ...invitation, role_label: ROLE_LABELS[invitation.role] || invitation.role }));
-    const views = (invitation) => (invitation.role === 'org_admin'
-        ? 'Las de la institución'
-        : (invitation.radar_views ? viewsSummary(invitation.radar_views) : 'Copia de las de la institución'));
+    const views = (invitation) => {
+        if (invitation.role === 'org_admin') return 'Las de la institución';
+        if (!invitation.radar_views && !invitation.tools) return 'Copia de las de la institución';
+        const base = invitation.radar_views ? viewsSummary(invitation.radar_views) : 'Vistas de la institución';
+        return invitation.tools?.tracking ? `${base} · Tracking` : base;
+    };
     elements.sectionContent.innerHTML = `
         <div class="toolbar"><button class="btn" id="invitations-add">+ Invitar por mail</button></div>
         ${renderFilterBar('invitations', items)}
         <div class="table-wrap">
         <table>
             <thead><tr>
-                <th>Mail</th><th>Institución</th><th>Rol</th><th>Vistas de radar</th><th>Vence</th><th>Acciones</th>
+                <th>Mail</th><th>Institución</th><th>Rol</th><th>Herramientas</th><th>Vence</th><th>Acciones</th>
             </tr></thead>
             <tbody>
                 ${items.map((invitation) => `
@@ -2669,15 +2693,19 @@ function openInvitationForm() {
                 <option value="viewer">Lector</option>
             </select></label>
             <p class="toolbar-note">Le mandamos un mail con un link (vale 7 días). Completa sus datos o entra con Google y queda dentro de la institución con ese rol. Un lector necesita que la institución ya tenga un admin activo. Mientras no lo acepte, la invitación reserva un lugar.</p>
+            ${trackingFieldHtml({ note: 'Solo para lectores. Sin marcar: no tiene seguimiento de tormentas.' })}
             <div class="form-actions"><button class="btn" type="submit">Enviar invitación</button></div>
         `,
         async (formData) => {
             const organizationId = formData.get('organization_id');
             if (!organizationId) throw new Error('Elegí una institución de la lista');
+            const role = formData.get('role');
             const sent = await adminApi.createInvitation({
                 email: String(formData.get('email') || '').trim(),
                 organization_id: Number(organizationId),
-                role: formData.get('role'),
+                role,
+                // An institution admin uses its institution's tools: only a reader's invitation carries the choice.
+                ...(role === 'viewer' ? { tools: readTools(formData) } : {}),
             });
             await renderSection();
             showMessage(invitationSentMessage(sent), 'success');
@@ -2913,8 +2941,9 @@ function organizationExtrasHtml(radars) {
             <legend>Vistas de radar de la institución</legend>
             <label class="checkbox-row"><input type="checkbox" name="all"> Todas</label>
             ${radarRows}
-            <p class="toolbar-note">Se pueden cambiar después con el botón Vistas de la institución.</p>
-        </fieldset>`;
+        </fieldset>
+        ${trackingFieldHtml()}
+        <p class="toolbar-note">Las vistas y las herramientas se pueden cambiar después con el botón Herramientas de la institución.</p>`;
 }
 
 /** Show only the fields of the chosen admin option (the other blocks stay hidden). */
@@ -3100,6 +3129,7 @@ async function openOrganizationForm(org = null) {
                 inviteEmail: formData.get('admin_invite_email'),
                 allViews: formData.get('all') === 'on',
                 radars: formData.getAll('radar'),
+                tracking: formData.get('tracking') === 'on',
             });
             const created = await adminApi.createOrganization(payload);
             await renderSection();

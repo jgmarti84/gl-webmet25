@@ -138,5 +138,7 @@ export function buildOrganizationPayload(values) {
     if (admin) payload.admin = admin;
     if (values.allViews) payload.radar_detail_view = [ALL_RADARS];
     else if (values.radars && values.radars.length) payload.radar_detail_view = values.radars;
+    // The storm tracking tool of the new company; left out when it is not ticked (the company starts without it).
+    if (values.tracking) payload.tools = { tracking: true };
     return payload;
 }

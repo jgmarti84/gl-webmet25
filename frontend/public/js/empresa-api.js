@@ -39,7 +39,9 @@ export const empresaApi = {
     },
     resendInvitation(id) { return request(`/invitations/${id}/resend`, { method: 'POST' }); },
     cancelInvitation(id) { return request(`/invitations/${id}/cancel`, { method: 'POST' }); },
-    setRadarViews(id, views) {
-        return request(`/users/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ radar_detail_view: views }) });
+    // Replace a member's permissions: {radar_detail_view?: [...], tools?: {tracking: bool}}. What is left out is not
+    // changed.
+    setPermissions(id, body) {
+        return request(`/users/${id}/permissions`, { method: 'PUT', body: JSON.stringify(body) });
     },
 };
