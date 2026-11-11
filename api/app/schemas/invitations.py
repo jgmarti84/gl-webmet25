@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from .permissions import RadarResource, ToolsState, ToolsUpdate
+from .permissions import RadarResource, ToolsUpdate
 from .registration import MAX_EMAIL_LENGTH, MAX_TOKEN_FIELD_LENGTH
 from .text import StrictText
 
@@ -51,8 +51,9 @@ class InvitationResponse(BaseModel):
     organization_name: str
     role: str
     radar_views: Optional[List[str]] = None
-    # The tool choice of the invitation, or None when there is none ("a copy of the institution's").
-    tools: Optional[ToolsState] = None
+    # The tool choices of the invitation (a tool left null is "a copy of the institution's"), or None when there
+    # are none.
+    tools: Optional[ToolsUpdate] = None
     created_at: datetime
     expires_at: datetime
     # The mail already has an account (worked out when asked, not stored), and, for the general admin only, the

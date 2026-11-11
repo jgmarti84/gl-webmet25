@@ -658,9 +658,10 @@ class Invitation(Base):
     # Radar codes (or ["*"] for all) the viewer starts with; NULL = a copy of the organization's list at acceptance.
     # none_as_null: Python None must be a SQL NULL (not the JSON value null), or the check below would refuse it.
     radar_views = Column(JSON(none_as_null=True))
-    # Storm tracking tool for the invited viewer: True/False is the inviter's choice, NULL means "a copy of the
-    # institution's at acceptance". An institution admin uses its institution's tools, so its invitations carry NULL.
-    tracking = Column(Boolean)
+    # Tools the invited viewer starts with, as {tool name: True/False} for the tools the inviter chose (for example
+    # {"tracking": true}). A tool not named, or NULL for the whole column, means "a copy of the institution's at
+    # acceptance". An institution admin uses its institution's tools, so its invitations carry NULL.
+    tools = Column(JSON(none_as_null=True))
     token_hash = Column(String(64), nullable=False, unique=True)
     invited_by = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -674,7 +675,7 @@ class Invitation(Base):
         CheckConstraint("role IN ('org_admin', 'viewer')", name='ck_invitations_role'),
         # Only viewers carry a list of views (a company admin sees the company's list).
         CheckConstraint("role = 'viewer' OR radar_views IS NULL", name='ck_invitations_views_only_viewer'),
-        CheckConstraint("role = 'viewer' OR tracking IS NULL", name='ck_invitations_tracking_only_viewer'),
+        CheckConstraint("role = 'viewer' OR tools IS NULL", name='ck_invitations_tools_only_viewer'),
         Index('ix_invitations_email', 'email'),
         Index('ix_invitations_organization_id', 'organization_id'),
         # The sending caps count the mails of the last hour / day.

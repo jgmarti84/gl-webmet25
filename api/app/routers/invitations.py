@@ -34,7 +34,7 @@ from ..schemas.invitations import (
     InvitationToken,
     OrgInvitationCreate,
 )
-from ..schemas.permissions import ToolsState
+from ..schemas.permissions import ToolsUpdate
 from .auth import _client_info, _full_access_lifetime, _me
 from .registration import _require_mail, _send_later
 
@@ -60,7 +60,7 @@ def _response(invitation: Invitation, info=(False, None), show_leaves: bool = Fa
         organization_name=invitation.organization.name,
         role=invitation.role,
         radar_views=invitation.radar_views,
-        tools=ToolsState(tracking=invitation.tracking) if invitation.tracking is not None else None,
+        tools=ToolsUpdate(**invitation.tools) if invitation.tools else None,
         created_at=invitation.created_at,
         expires_at=invitation.expires_at,
     )
@@ -86,7 +86,7 @@ def _invite(
     role: str,
     radar_views: Optional[List[str]],
     within_company: bool = False,
-    tracking: Optional[bool] = None,
+    tools: Optional[dict] = None,
 ) -> InvitationResponse:
     """Create the invitation, commit, and send the mail after the response (shared by both inviters).
 
@@ -94,7 +94,7 @@ def _invite(
     _require_mail()
     try:
         invitation, mail = service.create_invitation(
-            db, actor, organization_id, email, role, radar_views, within_company=within_company, tracking=tracking
+            db, actor, organization_id, email, role, radar_views, within_company=within_company, tools=tools
         )
     except service.InvitationError as exc:
         raise _rule(exc)
@@ -148,7 +148,7 @@ def admin_create(
         payload.email,
         payload.role,
         payload.radar_views,
-        tracking=payload.tools.tracking if payload.tools else None,
+        tools=payload.tools.model_dump(exclude_none=True) if payload.tools else None,
     )
 
 
@@ -195,7 +195,7 @@ def org_create(
         "viewer",
         payload.radar_views,
         True,
-        tracking=payload.tools.tracking if payload.tools else None,
+        tools=payload.tools.model_dump(exclude_none=True) if payload.tools else None,
     )
 
 

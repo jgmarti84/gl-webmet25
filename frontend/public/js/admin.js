@@ -5,7 +5,7 @@ import {
 } from './shared/org-form.js';
 import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
-import { readTools, toolsSummary, trackingFieldHtml } from './shared/tools-form.js';
+import { readTools, toolsFieldsHtml, toolsSummary } from './shared/tools-form.js';
 
 const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'nccubes', 'colormaps', 'colormap-options', 'users', 'organizations', 'invitations', 'mails', 'profile'];
 const STATUS_OPTIONS = ['available', 'missing', 'error', 'pending', 'processing', 'archived'];
@@ -2470,14 +2470,14 @@ function wireMoveNote(user, currentOrgId) {
  * Modal to choose one-radar detail views (spec C), for a user or a company.
  * Only radars with the view enabled are listed. Saved codes of radars whose view is now off are kept as they are
  * (sent back unchanged), so switching a view off for maintenance does not lose anybody's access.
- * Below the radars, the checkbox of the tools (today only storm tracking); `tools` is what is saved and `trackingNote`
- * an optional warning shown under it.
+ * Below the radars, the checkbox of each tool; `tools` is what is saved ({tool: bool}) and `toolNotes` optional
+ * warnings shown under a tool ({tool: text}).
  * `onSave` saves the list and the tools and RETURNS the success message: it is shown after `renderSection()`, because
  * `renderSection()` starts by clearing the notice (showing it before would make it vanish at once).
- * @param {{title: string, stored: string[], tools?: {tracking: boolean}, trackingNote?: string,
- *          onSave: (views: string[], tools: {tracking: boolean}) => Promise<string>}} options
+ * @param {{title: string, stored: string[], tools?: object, toolNotes?: object,
+ *          onSave: (views: string[], tools: object) => Promise<string>}} options
  */
-async function openToolsForm({ title, stored, tools, trackingNote = '', onSave }) {
+async function openToolsForm({ title, stored, tools, toolNotes = {}, onSave }) {
     const radars = (await adminApi.listRadars()).filter((radar) => radar.detail_view_enabled);
     const hasAll = stored.includes(ALL_RADARS);
     const listedCodes = new Set(radars.map((radar) => radar.code));
@@ -2495,7 +2495,7 @@ async function openToolsForm({ title, stored, tools, trackingNote = '', onSave }
             <label class="checkbox-row"><input type="checkbox" name="all"${hasAll ? ' checked' : ''}> Todas</label>
             <fieldset class="views-radars"><legend>O elegir radares</legend>${radarRows}</fieldset>
             <p class="toolbar-note">Solo se listan los radares con la vista de detalle habilitada.</p>
-            ${trackingFieldHtml({ checked: Boolean(tools?.tracking), note: trackingNote })}
+            ${toolsFieldsHtml({ values: tools || {}, notes: toolNotes })}
             <div class="form-actions"><button class="btn" type="submit">Guardar</button></div>
         `,
         async (formData) => {
@@ -2513,19 +2513,19 @@ async function openToolsForm({ title, stored, tools, trackingNote = '', onSave }
  * so the form says so.
  */
 async function openViewsForm(user) {
-    let trackingNote = '';
+    const toolNotes = {};
     if (user.organization_id) {
         const orgs = state.organizations || await adminApi.listOrganizations();
         const org = orgs.find((candidate) => candidate.id === user.organization_id);
         if (org && !org.tools?.tracking) {
-            trackingNote = 'No tiene efecto: la institución no tiene seguimiento de tormentas';
+            toolNotes.tracking = 'No tiene efecto: la institución no tiene seguimiento de tormentas';
         }
     }
     return openToolsForm({
         title: `Herramientas de ${user.username}`,
         stored: user.radar_detail_views || [],
         tools: user.tools,
-        trackingNote,
+        toolNotes,
         onSave: async (views, tools) => {
             await adminApi.setUserPermissions(user.id, { radar_detail_view: views, tools });
             return `Herramientas de ${user.username} actualizadas`;
@@ -2693,7 +2693,7 @@ function openInvitationForm() {
                 <option value="viewer">Lector</option>
             </select></label>
             <p class="toolbar-note">Le mandamos un mail con un link (vale 7 días). Completa sus datos o entra con Google y queda dentro de la institución con ese rol. Un lector necesita que la institución ya tenga un admin activo. Mientras no lo acepte, la invitación reserva un lugar.</p>
-            ${trackingFieldHtml({ note: 'Solo para lectores. Sin marcar: no tiene seguimiento de tormentas.' })}
+            ${toolsFieldsHtml({ notes: { tracking: 'Solo para lectores. Sin marcar: no tiene seguimiento de tormentas.' } })}
             <div class="form-actions"><button class="btn" type="submit">Enviar invitación</button></div>
         `,
         async (formData) => {
@@ -2942,7 +2942,7 @@ function organizationExtrasHtml(radars) {
             <label class="checkbox-row"><input type="checkbox" name="all"> Todas</label>
             ${radarRows}
         </fieldset>
-        ${trackingFieldHtml()}
+        ${toolsFieldsHtml()}
         <p class="toolbar-note">Las vistas y las herramientas se pueden cambiar después con el botón Herramientas de la institución.</p>`;
 }
 
@@ -3129,7 +3129,7 @@ async function openOrganizationForm(org = null) {
                 inviteEmail: formData.get('admin_invite_email'),
                 allViews: formData.get('all') === 'on',
                 radars: formData.getAll('radar'),
-                tracking: formData.get('tracking') === 'on',
+                tools: readTools(formData),
             });
             const created = await adminApi.createOrganization(payload);
             await renderSection();

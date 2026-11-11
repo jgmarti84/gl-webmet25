@@ -6,11 +6,12 @@
  * here it only decides whether the button is shown. No DOM here, so it can be tested with node.
  */
 import { canOpenDetailView } from './radar-views.js';
+import { hasTool } from './tools-form.js';
 
 /**
  * @param {string} code        radar code of the view
  * @param {object} permissions the body of GET /permissions/me
  */
 export function canUseTracking(code, permissions) {
-    return canOpenDetailView(code, permissions?.radar_detail_views) && permissions?.tools?.tracking === true;
+    return canOpenDetailView(code, permissions?.radar_detail_views) && hasTool(permissions, 'tracking');
 }

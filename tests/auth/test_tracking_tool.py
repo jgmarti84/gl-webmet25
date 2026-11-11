@@ -46,7 +46,7 @@ def test_an_institution_admin_invitation_cannot_carry_tracking(make_org, test_db
             email="x@ejemplo.com.ar",
             organization_id=org.id,
             role="org_admin",
-            tracking=True,
+            tools={"tracking": True},
             token_hash="a" * 64,
             expires_at=now + timedelta(days=1),
         ),

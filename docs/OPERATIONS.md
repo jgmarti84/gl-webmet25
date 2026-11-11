@@ -384,9 +384,20 @@ The map shows every radar to every logged-in user, but the **one-radar page** (`
 
 ### 11.1 Storm tracking tool
 
-Storm tracking (button in the one-radar view) is a **tool** that is given or not, like the views but yes/no: the general admin gives it to an institution (when creating it, or later with the button **Herramientas** of its row), and the institution admin gives it to its users from its own panel, only while the institution has it. A user uses it on each radar view they can open. Taking the tool from an institution takes it from all its members at once; taking a radar's view only removes tracking from that radar. Invitations carry the choice (a reader's); without a choice the person starts with a copy of the institution's. nginx enforces it: everything under `/api/tracking/` and the page `/tracking` need the tool (probe `/_auth_tracking`), and the per-radar routes (`/api/tracking/radars/CODE/...`) need the tool **and** that radar's view (probe `/_auth_tracking_radar`). Without it nginx answers 403 (the page goes back to the map).
+Storm tracking (button in the one-radar view) is a **tool** that is given or not, like the views but yes/no: the general admin gives it to an institution (when creating it, or later with the button **Herramientas** of its row), and the institution admin gives it to its users from its own panel, only while the institution has it. A user uses it on each radar view they can open. Taking the tool from an institution takes it from all its members at once; taking a radar's view only removes tracking from that radar. Invitations carry the choice (a reader's); without a choice the person starts with a copy of the institution's. nginx enforces it: everything under `/api/tracking/` and the page `/tracking` need the tool (probe `/_auth_tool` with `set $auth_tool tracking`), and the per-radar routes (`/api/tracking/radars/CODE/...`) need the tool **and** that radar's view (probe `/_auth_tool_radar`). Without it nginx answers 403 (the page goes back to the map).
 
-**Deployment note:** the migration `c8e1f4a7b2d9` (permissions constraint + `invitations.tracking`) is applied by `db-init`. After it, **nobody has tracking**, not even the people who use it today: the general admin must give it to the institutions (and, if needed, to users without an institution) from **Herramientas**. Tell the users before deploying. No new `.env` keys.
+**Deployment note:** the migration `c8e1f4a7b2d9` (permissions constraint + `invitations.tools`) is applied by `db-init`. After it, **nobody has tracking**, not even the people who use it today: the general admin must give it to the institutions (and, if needed, to users without an institution) from **Herramientas**. Tell the users before deploying. No new `.env` keys.
+
+#### How to add a tool
+
+A tool is a yes/no permission (see above). Adding another one, say `export`, takes these steps; the test `tests/auth/test_tools_registry.py` fails and says which one was forgotten:
+
+1. `api/app/auth/permissions.py`: one entry in `TOOLS` (`"export": "tool.export"`). The rules (own AND institution's, copy when joining an institution, removal when leaving, the 403 of an institution admin) and `/auth/check?tool=export` follow the list.
+2. `database/radar_db/models.py` and a new migration: add the action to `PERMISSION_ACTIONS` and to the `ck_permissions_action` constraint (copy `c8e1f4a7b2d9`: drop the constraint and create it again with the new list; do the reverse in `downgrade`).
+3. `api/app/schemas/permissions.py`: one field in `ToolsState` (`export: bool = False`) and in `ToolsUpdate` (`export: Optional[bool] = None`). Invitations need nothing: they store `{tool: bool}` as JSON.
+4. `frontend/public/js/shared/tools-form.js`: one entry in `TOOL_LIST` (`{ key: 'export', label: '...', short: '...' }`). The forms, the summaries and the readers of both panels follow the list. If a button must be shown or hidden, a function like `canUseTracking` using `hasTool`.
+5. `frontend/nginx.conf`, only if the tool protects routes: `set $auth_tool export;` and `auth_request /_auth_tool;` in their `location` (or `/_auth_tool_radar` with `set $tool_radar` when the radar is in the URL).
+6. Docs of the tool itself.
 
 ## 12. Company Accounts
 

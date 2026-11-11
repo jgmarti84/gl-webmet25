@@ -156,11 +156,12 @@ def create_invitation(
     radar_views: Optional[List[str]],
     now: Optional[datetime] = None,
     within_company: bool = False,
-    tracking: Optional[bool] = None,
+    tools: Optional[dict] = None,
 ) -> Tuple[Invitation, OutgoingMail]:
     """Invite `email` to the institution with `role`. Returns the invitation and the mail to send.
 
-    `tracking` is the storm tracking tool the viewer starts with (None: a copy of the institution's when accepted).
+    `tools` are the tools the viewer starts with, as {tool name: bool}; a tool not named (or None) is a copy of the
+    institution's when the invitation is accepted.
 
     Rules (all checked with the institution row locked, so two simultaneous invitations cannot both take the last
     seat): the institution is active (409), no pending invitation of another institution (409; one of the same
@@ -185,9 +186,12 @@ def create_invitation(
             permissions.ensure_within_org(org, set(views))
         except permissions.PermissionRuleError as exc:
             raise InvitationError(exc.status_code, exc.detail) from exc
-    if tracking is not None and role != "viewer":
+    tools = {name: bool(on) for name, on in (tools or {}).items() if name in permissions.TOOLS and on is not None}
+    if tools and role != "viewer":
         raise InvitationError(422, "Solo un lector lleva la elección de herramientas")
-    if within_company and tracking and not permissions.stored_tool(org, permissions.TOOL_TRACKING):
+    if within_company and any(
+        on and not permissions.stored_tool(org, permissions.TOOLS[name]) for name, on in tools.items()
+    ):
         raise InvitationError(403, "Solo podés asignar herramientas que tenga tu institución")
 
     existing = get_user_by_email(db, email)
@@ -217,7 +221,7 @@ def create_invitation(
         organization_id=org.id,
         role=role,
         radar_views=views,
-        tracking=tracking,
+        tools=tools or None,
         token_hash=hash_token(token),
         invited_by=actor.id,
         created_at=now,
@@ -272,7 +276,7 @@ def resend(
         invitation.role,
         invitation.radar_views,
         now,
-        tracking=invitation.tracking,
+        tools=invitation.tools,
     )
 
 
@@ -315,11 +319,10 @@ def _prepare_accept(db: Session, invitation: Invitation) -> Organization:
 
 
 def _apply_invited_tools(db: Session, invitation: Invitation, user: User, granter: User) -> None:
-    """The tracking choice of a viewer's invitation, or a copy of the institution's tools when there is none."""
-    if invitation.role == "viewer" and invitation.tracking is not None:
-        permissions.set_user_tools(db, user, {"tracking": invitation.tracking}, granter)
-    else:
-        permissions.copy_company_tools_to(db, user, granter)
+    """The tools of a viewer's invitation: a copy of the institution's tools, then the ones the inviter chose on top."""
+    permissions.copy_company_tools_to(db, user, granter)
+    if invitation.role == "viewer" and invitation.tools:
+        permissions.set_user_tools(db, user, invitation.tools, granter)
 
 
 def _finish(db: Session, invitation: Invitation, user: User, now: datetime) -> User:

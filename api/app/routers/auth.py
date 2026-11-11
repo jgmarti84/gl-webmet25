@@ -167,7 +167,7 @@ def me(request: Request, user: User = Depends(get_current_user)) -> MeResponse:
 @router.get("/check", status_code=204)
 def check(
     role: Optional[Literal["admin", "org_admin"]] = None,
-    tool: Optional[Literal["tracking"]] = None,
+    tool: Optional[str] = None,
     # Same format the tracking service accepts in its URLs: letters and digits only.
     radar: Optional[str] = Query(None, pattern=r"^[A-Za-z0-9]{1,16}$"),
     db: Session = Depends(get_db),
@@ -176,13 +176,15 @@ def check(
     """Session probe for nginx auth_request: 204 ok, 401 no session, 403 not allowed. Never has a body.
 
     `role` asks for a role. `tool=tracking` asks for the storm tracking tool; with `radar` it also asks for that
-    radar's view (the per-radar tracking routes: a job costs seconds of CPU, so the view is checked here, not only by
-    hiding the button). `radar` without `tool` is ignored."""
+    radar's view (the per-radar routes: a tracking job costs seconds of CPU, so the view is checked here, not only by
+    hiding the button). `tool` is any name of `permissions.TOOLS` (422 otherwise). `radar` without `tool` is ignored."""
     if role is not None and user.role != role:
         raise HTTPException(status_code=403, detail="No tenés permisos para esta acción")
     if tool is not None:
+        if tool not in permissions.TOOLS:
+            raise HTTPException(status_code=422, detail="Herramienta desconocida")
         allowed = (
-            permissions.can_use_tracking_on(db, user, radar) if radar else permissions.effective_tools(db, user)[tool]
+            permissions.can_use_tool_on(db, user, tool, radar) if radar else permissions.effective_tools(db, user)[tool]
         )
         if not allowed:
             raise HTTPException(status_code=403, detail="No tenés esta herramienta")

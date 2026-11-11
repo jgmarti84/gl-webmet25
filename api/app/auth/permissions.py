@@ -177,11 +177,16 @@ def effective_tools(db: Session, user: User) -> dict:
     return result
 
 
-def can_use_tracking_on(db: Session, user: User, radar_code: str) -> bool:
-    """Tracking on one radar: the tool AND that radar's view. What nginx asks for the per-radar tracking routes.
+def can_use_tool_on(db: Session, user: User, tool: str, radar_code: str) -> bool:
+    """A tool on one radar: the tool AND that radar's view. What nginx asks for the per-radar routes of a tool.
 
     A tracking job costs seconds of CPU, so hiding the button is not enough: the server checks the view too."""
-    return effective_tools(db, user)["tracking"] and radar_code.upper() in effective_radar_views(db, user)
+    return effective_tools(db, user)[tool] and radar_code.upper() in effective_radar_views(db, user)
+
+
+def can_use_tracking_on(db: Session, user: User, radar_code: str) -> bool:
+    """can_use_tool_on for the storm tracking tool."""
+    return can_use_tool_on(db, user, "tracking", radar_code)
 
 
 def _set_tools(db: Session, rows: list, tools: dict, granted_by: User) -> None:

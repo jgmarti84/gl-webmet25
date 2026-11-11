@@ -802,3 +802,10 @@ def test_resending_keeps_the_tool_choice(app_client, boss, org, org_boss, mailer
     sent = _invite(_as(app_client, "boss"), org, role="viewer", tools={"tracking": True}).json()
     again = app_client.post(f"{ADMIN_URL}/{sent['id']}/resend")
     assert again.status_code == 200 and again.json()["tools"] == {"tracking": True}
+
+
+def test_an_invitation_that_names_no_tool_stores_no_choice(app_client, boss, org, org_boss):
+    """`tools: {}` or a tool left null is "no choice": the invitation keeps nothing and the answer says null."""
+    for body in ({"tools": {}}, {"tools": {"tracking": None}}):
+        response = _invite(_as(app_client, "boss"), org, role="viewer", **body)
+        assert response.status_code == 201 and response.json()["tools"] is None

@@ -8,7 +8,7 @@ import { empresaApi } from './empresa-api.js';
 import { api } from './shared/api.js';
 import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS } from './shared/radar-views.js';
-import { readTools, toolsSummary, trackingFieldHtml } from './shared/tools-form.js';
+import { readTools, toolsFieldsHtml, toolsSummary } from './shared/tools-form.js';
 
 const ROLE_LABELS = { org_admin: 'Admin de institución', viewer: 'Lector' };
 // How long a success notice stays before it closes by itself (errors stay until the × is pressed).
@@ -241,8 +241,8 @@ async function invitationViewsHtml() {
  * a link, fill in their own data (or use Google) and come in as a viewer of this institution with the views chosen here.
  */
 async function openAddForm() {
-    // The tracking checkbox is offered only if the institution has the tool: it cannot give what it does not have.
-    const tracking = Boolean(state.company.tools?.tracking);
+    // Only the tools the institution has are offered, ticked: it cannot give what it does not have.
+    const companyTools = state.company.tools || {};
     let viewsHtml;
     try {
         viewsHtml = await invitationViewsHtml();
@@ -268,13 +268,14 @@ async function openAddForm() {
                 <p class="toolbar-note">Le mandamos un mail con un link (vale 7 días). Completa sus datos o entra con Google y queda como lector de tu institución, con las vistas que marques abajo. Mientras no lo acepte, la invitación reserva un lugar.</p>
             </div>
             ${viewsHtml}
-            ${tracking ? trackingFieldHtml({ checked: true }) : ''}
+            ${toolsFieldsHtml({ values: companyTools, only: companyTools })}
             <div class="form-actions"><button class="btn" type="submit">Continuar</button></div>
         `,
         async (formData) => {
             // The views picked below apply to both ways: the account made now and the invitation.
             const views = formData.get('all') ? [ALL_RADARS] : formData.getAll('radar');
-            const tools = tracking ? { tools: readTools(formData) } : {};
+            const chosen = readTools(formData, companyTools);
+            const tools = Object.keys(chosen).length ? { tools: chosen } : {};
             if (formData.get('create_mode') === 'invite') {
                 const email = String(formData.get('invite_email') || '').trim();
                 if (!email) throw new Error('Escribí el mail de la persona a invitar');
@@ -404,21 +405,22 @@ async function openViewsForm(user) {
             </label>`).join('')
         : '<p class="toolbar-note">La institución no tiene vistas de radar para repartir.</p>';
 
-    // The tracking checkbox is offered only if the institution has the tool: it cannot give what it does not have.
-    const hasTracking = Boolean(state.company.tools?.tracking);
+    // Only the tools the institution has are offered: it cannot give what it does not have.
+    const companyTools = state.company.tools || {};
     openModal(
         `Herramientas de ${user.username}`,
         `
             ${allRow}
             <fieldset class="views-radars"><legend>${companyHasAll ? 'O elegir radares' : 'Radares de la institución'}</legend>${rows}</fieldset>
-            ${hasTracking ? trackingFieldHtml({ checked: Boolean(user.tools?.tracking) }) : ''}
+            ${toolsFieldsHtml({ values: user.tools || {}, only: companyTools })}
             <div class="form-actions"><button class="btn" type="submit">Guardar</button></div>
         `,
         async (formData) => {
             const views = formData.get('all') ? [ALL_RADARS] : [...formData.getAll('radar'), ...keptHidden];
+            const chosen = readTools(formData, companyTools);
             await empresaApi.setPermissions(user.id, {
                 radar_detail_view: views,
-                ...(hasTracking ? { tools: readTools(formData) } : {}),
+                ...(Object.keys(chosen).length ? { tools: chosen } : {}),
             });
             await render();
             showMessage(`Herramientas de ${user.username} actualizadas`);
