@@ -8,7 +8,7 @@ import { empresaApi } from './empresa-api.js';
 import { api } from './shared/api.js';
 import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS } from './shared/radar-views.js';
-import { readTools, toolsCellHtml, toolsFieldsHtml, toolsSummary } from './shared/tools-form.js';
+import { readTools, toolsFieldsHtml, toolsSummary, usableToolsSummary } from './shared/tools-form.js';
 
 const ROLE_LABELS = { org_admin: 'Admin de institución', viewer: 'Lector' };
 // How long a success notice stays before it closes by itself (errors stay until the × is pressed).
@@ -130,7 +130,7 @@ async function render() {
     $('empresa-users').innerHTML = users.map((user) => {
         const isViewer = user.role === 'viewer';
         const views = isViewer
-            ? toolsCellHtml(user, state.company, safeText, { showInstitution: false })
+            ? safeText(usableToolsSummary(user, state.company))
             : safeText('Las de la institución');
         const actions = isViewer
             ? `

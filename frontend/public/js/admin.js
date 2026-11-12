@@ -5,7 +5,7 @@ import {
 } from './shared/org-form.js';
 import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
-import { readTools, toolsCellHtml, toolsFieldsHtml, toolsSummary } from './shared/tools-form.js';
+import { beyondInstitution, readTools, toolsFieldsHtml, toolsSummary, usableToolsSummary } from './shared/tools-form.js';
 
 const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'nccubes', 'colormaps', 'colormap-options', 'users', 'organizations', 'invitations', 'mails', 'profile'];
 const STATUS_OPTIONS = ['available', 'missing', 'error', 'pending', 'processing', 'archived'];
@@ -2153,7 +2153,7 @@ async function renderUsers() {
                         <td>${safeText(user.full_name)}</td>
                         <td>${ROLE_LABELS[user.role] || safeText(user.role)}</td>
                         <td>${user.organization_name ? safeText(user.organization_name) : '—'}</td>
-                        <td>${user.role === 'admin' ? 'Todas (admin)' : toolsCellHtml(user, orgs.find((o) => o.id === user.organization_id) || null, safeText)}</td>
+                        <td>${user.role === 'admin' ? 'Todas (admin)' : safeText(usableToolsSummary(user, orgs.find((o) => o.id === user.organization_id) || null))}</td>
                         <td>${user.is_active ? 'Sí' : 'No'}</td>
                         <td>${user.last_login_at ? fmtDate(user.last_login_at) : '—'}</td>
                         <td class="table-actions">
@@ -2557,12 +2557,15 @@ function wireMoveNote(user, currentOrgId) {
  * (sent back unchanged), so switching a view off for maintenance does not lose anybody's access.
  * Below the radars, the checkbox of each tool; `tools` is what is saved ({tool: bool}) and `toolNotes` optional
  * warnings shown under a tool ({tool: text}).
+ * `institution` (the user's institution, when it is a user of one) turns on a live warning under the form for what is
+ * ticked beyond the institution's own list and tools, because it would do nothing (see wireInstitutionLimitWarning);
+ * `isInstitutionAdmin` says the user is the institution's admin, who uses the institution's lists, not their own.
  * `onSave` saves the list and the tools and RETURNS the success message: it is shown after `renderSection()`, because
  * `renderSection()` starts by clearing the notice (showing it before would make it vanish at once).
- * @param {{title: string, stored: string[], tools?: object, toolNotes?: object,
- *          onSave: (views: string[], tools: object) => Promise<string>}} options
+ * @param {{title: string, stored: string[], tools?: object, toolNotes?: object, institution?: object|null,
+ *          isInstitutionAdmin?: boolean, onSave: (views: string[], tools: object) => Promise<string>}} options
  */
-async function openToolsForm({ title, stored, tools, toolNotes = {}, onSave }) {
+async function openToolsForm({ title, stored, tools, toolNotes = {}, institution = null, isInstitutionAdmin = false, onSave }) {
     const radars = (await adminApi.listRadars()).filter((radar) => radar.detail_view_enabled);
     const hasAll = stored.includes(ALL_RADARS);
     const listedCodes = new Set(radars.map((radar) => radar.code));
@@ -2581,6 +2584,8 @@ async function openToolsForm({ title, stored, tools, toolNotes = {}, onSave }) {
             <fieldset class="views-radars"><legend>O elegir radares</legend>${radarRows}</fieldset>
             <p class="toolbar-note">Solo se listan los radares con la vista de detalle habilitada.</p>
             ${toolsFieldsHtml({ values: tools || {}, notes: toolNotes })}
+            ${isInstitutionAdmin ? '<p class="form-warning">Es administrador de la institución: usa lo que tiene la institución, así que lo que marques acá no tiene efecto.</p>' : ''}
+            <p id="tools-warning" class="form-warning" hidden></p>
             <div class="form-actions"><button class="btn" type="submit">Guardar</button></div>
         `,
         async (formData) => {
@@ -2590,27 +2595,55 @@ async function openToolsForm({ title, stored, tools, toolNotes = {}, onSave }) {
             showMessage(message, 'success');
         },
     );
+    if (institution && !isInstitutionAdmin) wireInstitutionLimitWarning(institution);
 }
 
 /**
- * Users section: views and tools of one user. A user of an institution that lacks the tracking tool can be given it,
- * but it does nothing until the institution has it (members have what they were given AND what the institution has),
- * so the form says so.
+ * Live warning of the tools window of a reader of an institution: what is ticked beyond the institution's views and
+ * tools does nothing, because a reader has what it was given AND what the institution has. It does not block saving
+ * (the institution may get it later); it only says so, and what to do (give it to the institution first).
+ */
+function wireInstitutionLimitWarning(org) {
+    const form = elements.formModalBody;
+    const box = form.querySelector('#tools-warning');
+    const update = () => {
+        const views = form.querySelector('input[name="all"]').checked
+            ? [ALL_RADARS]
+            : [...form.querySelectorAll('input[name="radar"]:checked')].map((input) => input.value);
+        const beyond = beyondInstitution(views, readTools(new FormData(form)), org);
+        const lines = [];
+        if (beyond.all) lines.push('"Todas" no tiene efecto completo: la institución no tiene todas las vistas, solo valen las suyas.');
+        if (beyond.radars.length) {
+            lines.push(`${beyond.radars.length === 1 ? 'La vista' : 'Las vistas'} ${beyond.radars.join(', ')} no ${beyond.radars.length === 1 ? 'tiene' : 'tienen'} efecto: la institución no ${beyond.radars.length === 1 ? 'la tiene' : 'las tiene'}.`);
+        }
+        for (const label of beyond.tools) lines.push(`${label} no tiene efecto: la institución no tiene esa herramienta.`);
+        box.hidden = lines.length === 0;
+        box.innerHTML = lines.length
+            ? `${lines.map((line) => safeText(line)).join('<br>')}<br>Para que valga, dáselo primero a la institución.`
+            : '';
+    };
+    form.addEventListener('change', update);
+    update();
+}
+
+/**
+ * Users section: views and tools of one user. A user of an institution can be given more than the institution has, but
+ * it does nothing until the institution has it (members have what they were given AND what the institution has), so
+ * the form warns while the admin ticks it (wireInstitutionLimitWarning). An institution admin uses the institution's
+ * lists, so the form says that nothing ticked there counts.
  */
 async function openViewsForm(user) {
-    const toolNotes = {};
+    let institution = null;
     if (user.organization_id) {
         const orgs = state.organizations || await adminApi.listOrganizations();
-        const org = orgs.find((candidate) => candidate.id === user.organization_id);
-        if (org && !org.tools?.tracking) {
-            toolNotes.tracking = 'No tiene efecto: la institución no tiene seguimiento de tormentas';
-        }
+        institution = orgs.find((candidate) => candidate.id === user.organization_id) || null;
     }
     return openToolsForm({
         title: `Herramientas de ${user.username}`,
         stored: user.radar_detail_views || [],
         tools: user.tools,
-        toolNotes,
+        institution,
+        isInstitutionAdmin: user.role === 'org_admin',
         onSave: async (views, tools) => {
             await adminApi.setUserPermissions(user.id, { radar_detail_view: views, tools });
             return `Herramientas de ${user.username} actualizadas`;

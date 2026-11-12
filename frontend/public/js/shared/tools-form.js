@@ -6,7 +6,7 @@
  * `tools`, label = the checkbox text, short = the word in the tables); the form, the summaries and the readers below
  * follow it. The backend list is `TOOLS` in api/app/auth/permissions.py (see "How to add a tool" in docs/OPERATIONS.md).
  */
-import { viewsSummary } from './radar-views.js';
+import { ALL_RADARS, viewsSummary } from './radar-views.js';
 
 export const TOOL_LIST = [{ key: 'tracking', label: 'Seguimiento de tormentas', short: 'Tracking' }];
 
@@ -20,22 +20,59 @@ export function toolsSummary(views, tools) {
 }
 
 /**
- * The "Herramientas" cell of a users table: one line with the person's own list and one with their institution's, so
- * it is clear which of the two a tool comes from (an institution admin uses the institution's list, so their own is
- * shown grey). `org` is the institution as the API returns it ({radar_detail_views, tools}) or null. `esc` escapes
- * text for HTML. `showInstitution: false` (the institution panel, where it is always the same institution) leaves just
- * the own summary, without labels.
+ * The views a person can really open, as a saved-style list (codes or ["*"]). A reader of an institution needs the view
+ * in its own list AND in the institution's; an institution admin uses the institution's list; no institution means
+ * the own list. Mirrors effective_radar_views in api/app/auth/permissions.py, but on saved lists (where "*" is every
+ * radar) instead of the real codes.
  */
-export function toolsCellHtml(user, org, esc, { showInstitution = true } = {}) {
-    const own = toolsSummary(user.radar_detail_views, user.tools);
-    if (!org || !showInstitution) return esc(own);
-    const line = (label, text, muted = false) =>
-        `<div class="cell-line${muted ? ' cell-line--muted' : ''}"><span class="cell-label">${label}</span> ${esc(text)}</div>`;
-    const ignored = user.role === 'org_admin';
-    return (
-        line('Propias:', ignored ? `${own} (no se usan)` : own, ignored) +
-        line('Institución:', toolsSummary(org.radar_detail_views, org.tools))
-    );
+function effectiveViews(user, org) {
+    const own = user.radar_detail_views || [];
+    if (!org) return own;
+    const company = org.radar_detail_views || [];
+    if (user.role === 'org_admin') return company;
+    if (own.includes(ALL_RADARS)) return company;
+    if (company.includes(ALL_RADARS)) return own;
+    return own.filter((code) => company.includes(code));
+}
+
+/** The tools a person can really use, {key: bool}: own AND the institution's (an institution admin: the institution's). */
+function effectiveToolFlags(user, org) {
+    const flags = {};
+    for (const tool of TOOL_LIST) {
+        const own = user.tools?.[tool.key] === true;
+        const company = org?.tools?.[tool.key] === true;
+        if (!org) flags[tool.key] = own;
+        else flags[tool.key] = user.role === 'org_admin' ? company : own && company;
+    }
+    return flags;
+}
+
+/**
+ * What the "Herramientas" column of a users table shows: the views and tools the person really has, in one text. A
+ * person with no institution has their own; an institution admin has the institution's; a reader of an institution has
+ * their own, as far as the institution has them too. `org` is the institution as the API returns it
+ * ({radar_detail_views, tools}) or null.
+ */
+export function usableToolsSummary(user, org) {
+    return toolsSummary(effectiveViews(user, org), effectiveToolFlags(user, org));
+}
+
+/**
+ * What a reader of an institution is being given that the institution does not have, so it would do nothing (a reader
+ * has what it was given AND what the institution has). `views` are the saved-style codes being ticked (["*"] for
+ * "Todas"), `tools` is {key: bool}, `org` is the institution ({radar_detail_views, tools}). Returns
+ * {all: true when "Todas" goes beyond the institution's list, radars: codes the institution lacks, tools: labels}.
+ */
+export function beyondInstitution(views, tools, org) {
+    const companyViews = org.radar_detail_views || [];
+    const companyAll = companyViews.includes(ALL_RADARS);
+    const result = { all: false, radars: [], tools: [] };
+    if (views.includes(ALL_RADARS)) result.all = !companyAll;
+    else if (!companyAll) result.radars = views.filter((code) => !companyViews.includes(code));
+    for (const tool of TOOL_LIST) {
+        if (tools?.[tool.key] && !org.tools?.[tool.key]) result.tools.push(tool.label);
+    }
+    return result;
 }
 
 /**

@@ -545,15 +545,14 @@ th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
 .toggle-cell input[type="checkbox"] { transform: scale(1.25); accent-color: var(--primary); cursor: pointer; }
 .toolbar-note { font-size: 12.5px; color: var(--muted); }
 
+/* Warning inside a form (something ticked that would do nothing): amber, not red, because saving is still allowed. */
+.form-warning { margin: 0; padding: 9px 12px; font-size: 12.5px; line-height: 1.45; color: #92400e; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; }
+.form-warning[hidden] { display: none; }
+
 /* Second line of a table cell (the mail under the username), small and grey. word-break keeps a long mail inside the
    cell instead of stretching the table. */
 .cell-sub { font-size: 12px; color: var(--muted); margin-top: 2px; word-break: break-all; }
 
-/* The "Herramientas" cell of the users tables: one line per source (own, institution, what the person can use).
-   Muted lines are the ones that do not count (an institution admin's own list). */
-.cell-line { font-size: 12.5px; line-height: 1.45; }
-.cell-line--muted { color: var(--muted); }
-.cell-label { font-weight: 600; }
 
 /* ── Colormap creator ────────────────────────────────────── */
 .modal-card--wide { width: min(720px, 100%); }
