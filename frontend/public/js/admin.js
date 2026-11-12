@@ -5,7 +5,7 @@ import {
 } from './shared/org-form.js';
 import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
-import { readTools, toolsFieldsHtml, toolsSummary } from './shared/tools-form.js';
+import { readTools, toolsCellHtml, toolsFieldsHtml, toolsSummary } from './shared/tools-form.js';
 
 const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'nccubes', 'colormaps', 'colormap-options', 'users', 'organizations', 'invitations', 'mails', 'profile'];
 const STATUS_OPTIONS = ['available', 'missing', 'error', 'pending', 'processing', 'archived'];
@@ -2149,11 +2149,11 @@ async function renderUsers() {
             <tbody>
                 ${users.map((user) => `
                     <tr${rowFacetAttr('users', user)}>
-                        <td>${safeText(user.username)}${user.password_is_bootstrap ? ' <span class="status-pill">contraseña inicial</span>' : ''}${needsMailVerification(user) ? ' <span class="status-pill">mail sin verificar</span>' : ''}</td>
+                        <td>${safeText(user.username)}${user.password_is_bootstrap ? ' <span class="status-pill">contraseña inicial</span>' : ''}${needsMailVerification(user) ? ' <span class="status-pill">mail sin verificar</span>' : ''}${user.email ? `<div class="cell-sub">${safeText(user.email)}</div>` : ''}</td>
                         <td>${safeText(user.full_name)}</td>
                         <td>${ROLE_LABELS[user.role] || safeText(user.role)}</td>
                         <td>${user.organization_name ? safeText(user.organization_name) : '—'}</td>
-                        <td>${user.role === 'admin' ? 'Todas (admin)' : safeText(toolsSummary(user.radar_detail_views, user.tools))}</td>
+                        <td>${user.role === 'admin' ? 'Todas (admin)' : toolsCellHtml(user, orgs.find((o) => o.id === user.organization_id) || null, safeText)}</td>
                         <td>${user.is_active ? 'Sí' : 'No'}</td>
                         <td>${user.last_login_at ? fmtDate(user.last_login_at) : '—'}</td>
                         <td class="table-actions">

@@ -20,6 +20,25 @@ export function toolsSummary(views, tools) {
 }
 
 /**
+ * The "Herramientas" cell of a users table: one line with the person's own list and one with their institution's, so
+ * it is clear which of the two a tool comes from (an institution admin uses the institution's list, so their own is
+ * shown grey). `org` is the institution as the API returns it ({radar_detail_views, tools}) or null. `esc` escapes
+ * text for HTML. `showInstitution: false` (the institution panel, where it is always the same institution) leaves just
+ * the own summary, without labels.
+ */
+export function toolsCellHtml(user, org, esc, { showInstitution = true } = {}) {
+    const own = toolsSummary(user.radar_detail_views, user.tools);
+    if (!org || !showInstitution) return esc(own);
+    const line = (label, text, muted = false) =>
+        `<div class="cell-line${muted ? ' cell-line--muted' : ''}"><span class="cell-label">${label}</span> ${esc(text)}</div>`;
+    const ignored = user.role === 'org_admin';
+    return (
+        line('Propias:', ignored ? `${own} (no se usan)` : own, ignored) +
+        line('Institución:', toolsSummary(org.radar_detail_views, org.tools))
+    );
+}
+
+/**
  * One checkbox per tool, in a "Herramientas" fieldset (the checkbox of a tool is named `tool_<key>`).
  * `values`: {key: bool} of what is ticked. `notes`: {key: text} shown under that tool, for example "No tiene efecto".
  * `only`: {key: bool}, the tools the institution has; when given, only the tools that are true there are offered

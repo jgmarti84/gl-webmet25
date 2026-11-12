@@ -8,7 +8,7 @@ import { empresaApi } from './empresa-api.js';
 import { api } from './shared/api.js';
 import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS } from './shared/radar-views.js';
-import { readTools, toolsFieldsHtml, toolsSummary } from './shared/tools-form.js';
+import { readTools, toolsCellHtml, toolsFieldsHtml, toolsSummary } from './shared/tools-form.js';
 
 const ROLE_LABELS = { org_admin: 'Admin de institución', viewer: 'Lector' };
 // How long a success notice stays before it closes by itself (errors stay until the × is pressed).
@@ -129,7 +129,9 @@ async function render() {
     const meId = state.me?.id;
     $('empresa-users').innerHTML = users.map((user) => {
         const isViewer = user.role === 'viewer';
-        const views = isViewer ? toolsSummary(user.radar_detail_views, user.tools) : 'Las de la institución';
+        const views = isViewer
+            ? toolsCellHtml(user, state.company, safeText, { showInstitution: false })
+            : safeText('Las de la institución');
         const actions = isViewer
             ? `
                 <button class="btn-secondary" data-edit="${user.id}">Editar</button>
@@ -140,11 +142,11 @@ async function render() {
             : '<span class="toolbar-note">Lo administra el administrador general</span>';
         return `
             <tr>
-                <td>${safeText(user.username)}${user.id === meId ? ' <span class="status-pill">vos</span>' : ''}</td>
+                <td>${safeText(user.username)}${user.id === meId ? ' <span class="status-pill">vos</span>' : ''}${user.email ? `<div class="cell-sub">${safeText(user.email)}</div>` : ''}</td>
                 <td>${safeText(user.full_name)}</td>
                 <td>${ROLE_LABELS[user.role] || safeText(user.role)}</td>
                 <td>${user.is_active ? 'Sí' : 'No'}</td>
-                <td>${safeText(views)}</td>
+                <td>${views}</td>
                 <td class="table-actions">${actions}</td>
             </tr>`;
     }).join('');
