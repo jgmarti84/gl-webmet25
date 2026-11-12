@@ -5,8 +5,8 @@ The form has an optional block "Agregar gente a esta institución" with four opt
 existing user) and a role (admin of the company or reader). On save the company data is saved first and then the
 person is added, so the seats can be raised and someone added in the same form.
 
-Companies cannot be deleted, so every test makes a company of its own through the API and deactivates it (and the
-users and invitations it made) at the end. Runs on the isolated test stack.
+Every test makes a company of its own through the API and deactivates it (and the users and invitations it made) at
+the end. Runs on the isolated test stack.
 """
 
 import os

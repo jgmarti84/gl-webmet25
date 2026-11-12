@@ -1,7 +1,7 @@
 import { adminApi, EXPIRED_SESSION_MESSAGE } from './admin-api.js';
 import { authApi, redirectToLogin } from './auth-api.js';
 import {
-    buildMemberRequest, buildOrganizationPayload, eligibleAdmins, filterAdmins, filterOrganizations,
+    buildMemberRequest, buildOrganizationPayload, eligibleAdmins, filterAdmins, filterOrganizations, organizationMembers,
 } from './shared/org-form.js';
 import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
@@ -2416,6 +2416,7 @@ async function renderOrganizations() {
                             <button class="btn-secondary" data-edit-org="${org.id}" title="Editar">${ICON_EDIT}</button>
                             <button class="btn-secondary" data-views-org="${org.id}">Vistas</button>
                             <a class="btn-secondary" href="admin#users" data-section="users" data-users-of-org="${org.id}">Usuarios</a>
+                            <button class="btn-secondary" data-delete-org="${org.id}" title="Eliminar">${ICON_TRASH}</button>
                         </td>
                     </tr>
                 `).join('')}
@@ -2440,12 +2441,111 @@ async function renderOrganizations() {
             },
         });
     });
+    elements.sectionContent.querySelectorAll('[data-delete-org]').forEach((el) => {
+        el.onclick = () => deleteOrganization(byId(el.dataset.deleteOrg));
+    });
     elements.sectionContent.querySelectorAll('[data-users-of-org]').forEach((el) => {
         // Opens the users section filtered by this company (see renderUsers). Sets the filter here; the delegated
         // [data-section] handler then does the navigation. The link's own address is the full "admin#users": a bare
         // "#users" would resolve against <base href> and leave the panel for the map.
         el.onclick = () => { state.usersOrgFilter = Number(el.dataset.usersOfOrg); };
     });
+}
+
+/** "3 invitaciones pendientes" / "1 invitación pendiente", or '' when there are none. */
+function pendingInvitationsText(count) {
+    if (!count) return '';
+    return `${count} ${count === 1 ? 'invitación pendiente' : 'invitaciones pendientes'}`;
+}
+
+/**
+ * The trash button of an institution. Without users it asks for a browser confirmation; with users it opens the window
+ * where the admin chooses what happens to them (see openOrganizationDeleteForm). The pending invitations of the
+ * institution are cancelled in every case. The server decides in the end: it refuses (409) if the institution got users
+ * in the meantime and the default way was used.
+ */
+async function deleteOrganization(org) {
+    let members;
+    try {
+        members = organizationMembers(await adminApi.listUsers(), org.id);
+    } catch (error) {
+        showMessage(error.message, 'error');
+        return;
+    }
+    const invitations = org.pending_invitations || 0;
+    if (members.total > 0) {
+        openOrganizationDeleteForm(org, members, invitations);
+        return;
+    }
+    const cancelled = invitations ? ` Se cancelan ${pendingInvitationsText(invitations)}.` : '';
+    if (!window.confirm(`¿Eliminar la institución ${org.name}?${cancelled} No se puede deshacer.`)) return;
+    try {
+        await adminApi.deleteOrganization(org.id);
+        if (state.usersOrgFilter === org.id) state.usersOrgFilter = null;
+        await renderSection();
+        showMessage(`Institución ${org.name} eliminada`, 'success');
+    } catch (error) {
+        showMessage(error.message, 'error');
+    }
+}
+
+/**
+ * The window of an institution that still has users: it says how many and offers the two ways out. "Desvincularlos"
+ * (the default, harmless) sets every user free as a reader with no institution; "Eliminar" deletes their accounts too
+ * and only enables its button once the name of the institution is typed. `members` comes from organizationMembers.
+ */
+function openOrganizationDeleteForm(org, members, invitations) {
+    const people = `${members.total} ${members.total === 1 ? 'usuario' : 'usuarios'}`;
+    const detail = `${members.active} ${members.active === 1 ? 'activo' : 'activos'}`
+        + (members.inactive ? `, ${members.inactive} ${members.inactive === 1 ? 'inactivo' : 'inactivos'}` : '')
+        + (members.admins ? `, ${members.admins} ${members.admins === 1 ? 'administrador' : 'administradores'}` : '');
+    const cancelled = invitations
+        ? `<p class="toolbar-note">Se cancelan ${pendingInvitationsText(invitations)}: sus links dejan de servir.</p>`
+        : '';
+    openFormModal(
+        `Eliminar ${org.name}`,
+        `
+            <p><strong>${safeText(org.name)}</strong> tiene ${people} (${detail}). No se puede eliminar sin decidir qué pasa con ellos.</p>
+            <label class="checkbox-row"><input type="radio" name="users_action" value="unlink" checked> Desvincularlos de la institución</label>
+            <p class="toolbar-note">Quedan como lectores sin institución y sin vistas de radar, y se les cierran las sesiones. Los administradores pasan a lector.</p>
+            <label class="checkbox-row"><input type="radio" name="users_action" value="delete"> Eliminar también a sus ${people}</label>
+            <p class="toolbar-note">Se borran sus cuentas, con sus sesiones y sus vistas. No se puede deshacer.</p>
+            <div id="org-delete-confirm-box" hidden>
+                <label for="org-delete-confirm">Para confirmar, escribí el nombre de la institución</label>
+                <input id="org-delete-confirm" type="text" autocomplete="off" placeholder="${safeText(org.name)}">
+            </div>
+            ${cancelled}
+            <div class="form-actions"><button class="btn-danger" type="submit">Eliminar institución</button></div>
+        `,
+        async (formData) => {
+            const action = formData.get('users_action');
+            if (action === 'delete' && elements.formModalBody.querySelector('#org-delete-confirm').value.trim() !== org.name) {
+                throw new Error('Escribí el nombre de la institución para confirmar');
+            }
+            await adminApi.deleteOrganization(org.id, action);
+            if (state.usersOrgFilter === org.id) state.usersOrgFilter = null;
+            await renderSection();
+            showMessage(
+                action === 'delete'
+                    ? `Institución ${org.name} eliminada, con sus ${people}`
+                    : `Institución ${org.name} eliminada; sus ${people} quedaron sin institución`,
+                'success',
+            );
+        },
+    );
+    // "Eliminar" needs the name typed: its box shows up and the button stays off until what is typed matches.
+    const form = elements.formModalBody;
+    const submit = form.querySelector('button[type="submit"]');
+    const box = form.querySelector('#org-delete-confirm-box');
+    const typed = form.querySelector('#org-delete-confirm');
+    const update = () => {
+        const deleting = form.querySelector('input[name="users_action"]:checked').value === 'delete';
+        box.hidden = !deleting;
+        submit.disabled = deleting && typed.value.trim() !== org.name;
+    };
+    form.querySelectorAll('input[name="users_action"]').forEach((radio) => radio.addEventListener('change', update));
+    typed.addEventListener('input', update);
+    update();
 }
 
 /**
