@@ -2158,13 +2158,11 @@ async function renderUsers() {
                         <td>${user.last_login_at ? fmtDate(user.last_login_at) : '—'}</td>
                         <td class="table-actions">
                             <button class="btn-secondary" data-edit-user="${user.id}" title="Editar">${ICON_EDIT}</button>
-                            ${user.id === meId ? '' : `
-                                <button class="btn-secondary" data-toggle-user="${user.id}">${user.is_active ? 'Desactivar' : 'Activar'}</button>
-                                <button class="btn-secondary" data-reset-user="${user.id}">Resetear contraseña</button>
-                            `}
+                            ${user.id === meId ? '' : `<button class="btn-secondary" data-toggle-user="${user.id}">${user.is_active ? 'Desactivar' : 'Activar'}</button>`}
                             ${user.role === 'admin' ? '' : `<button class="btn-secondary" data-views-user="${user.id}">Herramientas</button>`}
+                            <button class="btn-secondary" data-security-user="${user.id}">Seguridad</button>
                             ${needsMailVerification(user) ? `<button class="btn-secondary" data-verify-user="${user.id}">Verificar mail</button>` : ''}
-                            <button class="btn-secondary" data-revoke-user="${user.id}">Cerrar sesiones</button>
+                            ${user.id === meId ? '' : `<button class="btn-secondary" data-delete-user="${user.id}" title="Eliminar">${ICON_TRASH}</button>`}
                         </td>
                     </tr>
                 `).join('')}
@@ -2201,8 +2199,11 @@ async function renderUsers() {
             showMessage(`Usuario ${user.username} ${wasActive ? 'desactivado' : 'activado'}`, 'success');
         };
     });
-    elements.sectionContent.querySelectorAll('[data-reset-user]').forEach((el) => {
-        el.onclick = () => openPasswordResetForm(byId(el.dataset.resetUser));
+    elements.sectionContent.querySelectorAll('[data-delete-user]').forEach((el) => {
+        el.onclick = () => deleteUser(byId(el.dataset.deleteUser));
+    });
+    elements.sectionContent.querySelectorAll('[data-security-user]').forEach((el) => {
+        el.onclick = () => openSecurityForm(byId(el.dataset.securityUser));
     });
     elements.sectionContent.querySelectorAll('[data-views-user]').forEach((el) => {
         el.onclick = () => openViewsForm(byId(el.dataset.viewsUser));
@@ -2216,16 +2217,58 @@ async function renderUsers() {
             showMessage(`Mail de ${user.username} verificado`, 'success');
         };
     });
-    elements.sectionContent.querySelectorAll('[data-revoke-user]').forEach((el) => {
-        el.onclick = async () => {
-            const user = byId(el.dataset.revokeUser);
-            const self = user.id === meId ? ' (incluida la tuya: vas a tener que volver a entrar)' : '';
-            if (!window.confirm(`¿Cerrar todas las sesiones de ${user.username}${self}?`)) return;
-            await adminApi.revokeUserSessions(user.id);
-            await renderSection();
-            showMessage(`Sesiones de ${user.username} cerradas`, 'success');
-        };
-    });
+}
+
+/**
+ * Delete an account for good (the trash button of the users table). A manual confirmation names the user; the server
+ * may refuse (for example an institution's only admin), and then its message is shown instead of deleting anything.
+ */
+async function deleteUser(user) {
+    if (!window.confirm(`¿Eliminar a ${user.username}? Se borra su cuenta, sus sesiones y sus vistas. No se puede deshacer.`)) return;
+    try {
+        await adminApi.deleteUser(user.id);
+        await renderSection();
+        showMessage(`Usuario ${user.username} eliminado`, 'success');
+    } catch (error) {
+        showMessage(error.message, 'error');
+    }
+}
+
+/**
+ * "Seguridad": the window of the Seguridad button of a user row, with the two account actions: reset the password
+ * (opens its own window) and close every session (asks for confirmation). On your own row only the second one is
+ * offered, as before. The window has no Guardar: each action does its own thing.
+ */
+function openSecurityForm(user) {
+    const isSelf = user.id === state.me?.id;
+    openFormModal(
+        `Seguridad de ${user.username}`,
+        `<div class="security-list">
+            ${isSelf ? '' : '<button id="user-reset" class="security-action" type="button"><strong>Resetear contraseña</strong><span>Define una contraseña nueva y cierra sus sesiones</span></button>'}
+            <button id="user-revoke" class="security-action" type="button"><strong>Cerrar sesiones</strong><span>Lo obliga a volver a entrar en todos sus dispositivos</span></button>
+        </div>`,
+        async () => {},
+    );
+    const resetButton = document.getElementById('user-reset');
+    if (resetButton) resetButton.onclick = () => openPasswordResetForm(user);
+    document.getElementById('user-revoke').onclick = () => revokeUserSessions(user);
+}
+
+/**
+ * Close every session of a user (a button of the Seguridad window). Closing your own also logs you out, so the question
+ * says so.
+ */
+async function revokeUserSessions(user) {
+    const self = user.id === state.me?.id ? ' (incluida la tuya: vas a tener que volver a entrar)' : '';
+    if (!window.confirm(`¿Cerrar todas las sesiones de ${user.username}${self}?`)) return;
+    try {
+        await adminApi.revokeUserSessions(user.id);
+        closeFormModal();
+        await renderSection();
+        showMessage(`Sesiones de ${user.username} cerradas`, 'success');
+    } catch (error) {
+        setFormModalError(error.message);
+    }
 }
 
 function openUserForm(user = null) {
@@ -2275,10 +2318,6 @@ function openUserForm(user = null) {
             ${orgField}
             ${isEdit ? '' : '<label>Contraseña inicial <input name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required></label><p class="toolbar-note">Mínimo 10 caracteres, con al menos un carácter especial (por ejemplo ! - _ . @ #).</p>'}
             <div class="form-actions"><button class="btn" type="submit">${isEdit ? 'Guardar' : 'Crear'}</button></div>
-            ${isEdit && !isSelf ? `<div class="form-danger">
-                <p class="toolbar-note">Eliminar la cuenta la borra para siempre, con sus sesiones y sus vistas.</p>
-                <button id="user-delete" class="btn-danger" type="button">Eliminar usuario</button>
-            </div>` : ''}
         `,
         async (formData) => {
             const payload = {
@@ -2317,21 +2356,6 @@ function openUserForm(user = null) {
             showMessage(message, 'success');
         },
     );
-    // Eliminar usuario (spec G): a manual confirmation that names the user; the server may refuse (an institution's only admin).
-    const deleteButton = document.getElementById('user-delete');
-    if (deleteButton) {
-        deleteButton.onclick = async () => {
-            if (!window.confirm(`¿Eliminar a ${user.username}? Se borra su cuenta, sus sesiones y sus vistas. No se puede deshacer.`)) return;
-            try {
-                await adminApi.deleteUser(user.id);
-                closeFormModal();
-                await renderSection();
-                showMessage(`Usuario ${user.username} eliminado`, 'success');
-            } catch (error) {
-                setFormModalError(error.message);
-            }
-        };
-    }
     if (orgItems.length) wireOrgCombobox(orgItems);
     if (canMove) wireMoveNote(user, currentOrgId);
     if (canLeave) wireLeaveNote(user);

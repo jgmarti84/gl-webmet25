@@ -136,8 +136,7 @@ async function render() {
             ? `
                 <button class="btn-secondary" data-edit="${user.id}">Editar</button>
                 <button class="btn-secondary" data-views="${user.id}">Herramientas</button>
-                <button class="btn-secondary" data-reset="${user.id}">Resetear contraseña</button>
-                <button class="btn-secondary" data-revoke="${user.id}">Cerrar sesiones</button>
+                <button class="btn-secondary" data-security="${user.id}">Seguridad</button>
                 <button class="btn-secondary" data-unlink="${user.id}">Desvincular</button>`
             : '<span class="toolbar-note">Lo administra el administrador general</span>';
         return `
@@ -211,8 +210,7 @@ function wireRowButtons() {
     };
     each('[data-edit]', openEditForm);
     each('[data-views]', openViewsForm);
-    each('[data-reset]', openPasswordForm);
-    each('[data-revoke]', revokeSessions);
+    each('[data-security]', openSecurityForm);
     each('[data-unlink]', unlinkUser);
 }
 
@@ -353,6 +351,23 @@ async function unlinkUser(user) {
     }
 }
 
+/**
+ * "Seguridad": the window of the Seguridad button of a user row, with the two account actions: reset the password
+ * (opens its own window) and close every session (asks for confirmation). It has no Guardar button.
+ */
+function openSecurityForm(user) {
+    openModal(
+        `Seguridad de ${user.username}`,
+        `<div class="security-list">
+            <button id="user-reset" class="security-action" type="button"><strong>Resetear contraseña</strong><span>Define una contraseña nueva y cierra sus sesiones</span></button>
+            <button id="user-revoke" class="security-action" type="button"><strong>Cerrar sesiones</strong><span>Lo obliga a volver a entrar en todos sus dispositivos</span></button>
+        </div>`,
+        async () => {},
+    );
+    $('user-reset').onclick = () => openPasswordForm(user);
+    $('user-revoke').onclick = () => revokeSessions(user);
+}
+
 function openPasswordForm(user) {
     openModal(
         `Resetear contraseña de ${user.username}`,
@@ -370,14 +385,16 @@ function openPasswordForm(user) {
     );
 }
 
+/** Close every session of a user (a button of the Seguridad window); on a refusal the error is shown inside that window. */
 async function revokeSessions(user) {
     if (!window.confirm(`¿Cerrar todas las sesiones de ${user.username}?`)) return;
     try {
         await empresaApi.revokeSessions(user.id);
+        closeModal();
         await render();
         showMessage(`Sesiones de ${user.username} cerradas`);
     } catch (error) {
-        showMessage(error.message, 'error');
+        setModalError($('form-modal-body'), error.message || 'La operación falló');
     }
 }
 
