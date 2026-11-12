@@ -288,6 +288,8 @@ terms_accepted_at: datetime (nullable) # cuándo aceptó los términos al regist
 
 Las reglas (a quién se puede borrar, el único admin activo de una institución, un admin general borrándose a sí mismo) están en `user_admin.delete_user`, que usan `DELETE /api/v1/admin/users/{id}` (admin general) y `DELETE /api/v1/profile` (el usuario con sesión; no recibe id).
 
+**Borrar una institución** (`DELETE /api/v1/admin/organizations/{id}?users=block|unlink|delete`, solo admin general; reglas en `organizations.delete_org`). `users` dice qué pasa con las personas de la institución, activas o inactivas, admins incluidos: `block` (por defecto) rechaza con 409 si tiene alguna, `unlink` deja libres a todas (un admin de institución pasa a lector, se le quitan las vistas propias y se le cierran las sesiones; la cuenta sigue) y `delete` borra las cuentas con un solo `DELETE` de SQL, como al borrar un usuario. La regla de "una institución conserva un admin" no se aplica, porque la institución desaparece. La institución es también un `DELETE` de SQL: la base borra sus vistas (`permissions.organization_id`, cascada) y TODAS sus invitaciones (`invitations.organization_id`, cascada), pendientes, aceptadas o canceladas, así que un link ya enviado deja de servir. Las otras instituciones no se tocan. La fila se bloquea primero (`lock_org`) y todo corre en una transacción.
+
 #### **UserSession** (una fila por login)
 ```python
 id: UUID (PK)                         # id del login; el refresh token es "<id>.<secreto>"
