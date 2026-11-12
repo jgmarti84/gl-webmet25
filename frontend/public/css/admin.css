@@ -509,6 +509,10 @@ th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
     gap: 12px;
     padding: 18px;
     overflow-y: auto;
+    /* Every row is as tall as its content. Without this, when the form is taller than the modal, the grid squeezes
+       the rows that scroll by themselves (the radar views and tools frames, which have overflow-y: auto) down to a
+       sliver and their options cannot be seen; with it, the whole form scrolls instead. */
+    grid-auto-rows: max-content;
 }
 .form-grid label { display: grid; gap: 5px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
 .form-grid label input, .form-grid label select { font-weight: 400; color: var(--text); }
