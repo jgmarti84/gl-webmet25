@@ -1,8 +1,7 @@
 # tests/e2e/test_org_create.py
 """Creating a company from the admin panel with its admin and radar views in one form (spec C, follow-up).
 
-Companies cannot be deleted, so every test uses a company name of its own and deactivates it (and the users it made)
-at the end. Runs on the isolated test stack.
+Every test uses a company name of its own and deactivates it (and the users it made) at the end. Runs on the isolated test stack.
 """
 
 import os

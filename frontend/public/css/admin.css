@@ -416,6 +416,24 @@ th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
 
 .table-actions { display: flex; gap: 6px; align-items: center; }
 
+/* A link that sits among the buttons of an actions cell (the "Usuarios" link of the institutions table) looks exactly
+   like them: the base `button` rule gives buttons their padding, border, radius and bold text, and a link does not get
+   it by itself. */
+.table-actions a.btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    box-sizing: border-box;
+    padding: 7px 13px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    font: inherit;
+    font-weight: 600;
+    line-height: normal;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
 /* Icon action buttons (edit pencil / delete trash) */
 .ico { width: 15px; height: 15px; display: block; }
 .table-actions button:has(.ico) {

@@ -1,9 +1,10 @@
 # api/app/routers/organizations.py
 """Company accounts, managed by the general admin (spec C §7.2)."""
 
-from typing import List
+import logging
+from typing import List, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from radar_db import get_db
@@ -17,6 +18,8 @@ from ..mail.service import Mailer, get_mailer
 from ..schemas.organizations import OrganizationCreate, OrganizationResponse, OrganizationUpdate
 from ..schemas.permissions import RadarViewsUpdate
 from .registration import _require_mail, _send_later
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/admin/organizations",
@@ -116,3 +119,23 @@ def set_organization_permissions(
     db.commit()
     db.refresh(org)
     return org_response(db, org)
+
+
+@router.delete("/{org_id}", status_code=204)
+def delete_organization(
+    org_id: int,
+    users: Literal["block", "unlink", "delete"] = "block",
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_admin),
+) -> Response:
+    """Delete a company for good. `users` says what happens to the people in it: "block" (default) refuses when it has
+    any (409), "unlink" sets them free as viewers with no company, "delete" deletes their accounts too. Its pending
+    invitations are cancelled in every case. The rules are in organizations.delete_org."""
+    org = _get_or_404(db, org_id)
+    try:
+        orgs.delete_org(db, actor, org, users)
+    except orgs.OrgRuleError as exc:
+        raise _rule(exc)
+    db.commit()
+    logger.info("organization deleted id=%s users=%s by=%s", org_id, users, actor.id)  # ids only: no names, no mails
+    return Response(status_code=204)
