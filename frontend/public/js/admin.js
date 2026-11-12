@@ -1,7 +1,7 @@
 import { adminApi, EXPIRED_SESSION_MESSAGE } from './admin-api.js';
 import { authApi, redirectToLogin } from './auth-api.js';
 import {
-    buildMemberRequest, buildOrganizationPayload, eligibleAdmins, filterAdmins, filterOrganizations,
+    buildMemberRequest, buildOrganizationPayload, eligibleAdmins, filterAdmins, filterOrganizations, soleAdminBlock,
 } from './shared/org-form.js';
 import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
@@ -2189,18 +2189,10 @@ async function renderUsers() {
         el.onclick = () => openUserForm(byId(el.dataset.editUser));
     });
     elements.sectionContent.querySelectorAll('[data-toggle-user]').forEach((el) => {
-        el.onclick = async () => {
-            const user = byId(el.dataset.toggleUser);
-            const action = user.is_active ? 'desactivar' : 'activar';
-            if (!window.confirm(`¿Confirma ${action} a ${user.username}?`)) return;
-            const wasActive = user.is_active;
-            await adminApi.patchUser(user.id, { is_active: !wasActive });
-            await renderSection();
-            showMessage(`Usuario ${user.username} ${wasActive ? 'desactivado' : 'activado'}`, 'success');
-        };
+        el.onclick = () => toggleUserActive(byId(el.dataset.toggleUser), allUsers);
     });
     elements.sectionContent.querySelectorAll('[data-delete-user]').forEach((el) => {
-        el.onclick = () => deleteUser(byId(el.dataset.deleteUser));
+        el.onclick = () => deleteUser(byId(el.dataset.deleteUser), allUsers);
     });
     elements.sectionContent.querySelectorAll('[data-security-user]').forEach((el) => {
         el.onclick = () => openSecurityForm(byId(el.dataset.securityUser));
@@ -2220,10 +2212,79 @@ async function renderUsers() {
 }
 
 /**
+ * Activate or deactivate an account (the button of the users table). Deactivating the only admin of an institution that
+ * has more users opens the "name another admin" window first (see openSoleAdminForm).
+ */
+async function toggleUserActive(user, allUsers) {
+    const block = user.is_active ? soleAdminBlock(user, allUsers) : null;
+    if (block) {
+        openSoleAdminForm(user, block, 'deactivate', allUsers);
+        return;
+    }
+    const action = user.is_active ? 'desactivar' : 'activar';
+    if (!window.confirm(`¿Confirma ${action} a ${user.username}?`)) return;
+    const wasActive = user.is_active;
+    await adminApi.patchUser(user.id, { is_active: !wasActive });
+    await renderSection();
+    showMessage(`Usuario ${user.username} ${wasActive ? 'desactivado' : 'activado'}`, 'success');
+}
+
+/**
+ * The window that explains why `user` cannot be deleted (or deactivated): it is the only admin of its institution and
+ * the institution would be left with active users and no admin. It offers a search box with the institution's active
+ * readers; "Asignar como administrador" promotes the picked one, and then the original action goes on with its usual
+ * confirmation (so naming the admin and deleting stay two separate decisions). `block` comes from soleAdminBlock.
+ * Changing a user's role closes that user's sessions, and the window says so.
+ */
+function openSoleAdminForm(user, block, action, allUsers) {
+    const verb = action === 'delete' ? 'eliminar' : 'desactivar';
+    const orgName = user.organization_name || 'su institución';
+    const left = block.remaining === 1 ? '1 usuario activo' : `${block.remaining} usuarios activos`;
+    openFormModal(
+        `No se puede ${verb} a ${user.username}`,
+        `
+            <p><strong>${safeText(user.username)}</strong> es el único administrador de <strong>${safeText(orgName)}</strong> y la
+            institución quedaría con ${left} y sin administrador.</p>
+            <p class="toolbar-note">Nombrá administrador a otro de sus usuarios y después seguimos con el ${action === 'delete' ? 'borrado' : 'cambio'}.
+            Al cambiarle el rol a esa persona se le cierran las sesiones.</p>
+            <label for="sole-admin-search">Nuevo administrador</label>
+            <div class="combo">
+                <input id="sole-admin-search" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sole-admin-list" autocomplete="off" placeholder="Escribí para buscar por usuario, nombre o mail…">
+                <input type="hidden" name="new_admin_id" value="">
+                <ul id="sole-admin-list" class="combo-list" role="listbox" hidden></ul>
+            </div>
+            <div class="form-actions"><button class="btn" type="submit">Asignar como administrador</button></div>
+        `,
+        async (formData) => {
+            const newAdminId = formData.get('new_admin_id');
+            if (!newAdminId) throw new Error('Elegí a quién nombrar administrador');
+            const newAdmin = block.candidates.find((candidate) => String(candidate.id) === newAdminId);
+            await adminApi.patchUser(Number(newAdminId), { role: 'org_admin' });
+            closeFormModal();
+            await renderSection();
+            showMessage(`${newAdmin.username} ahora es administrador de ${orgName}`, 'success');
+            // The list changed: ask again with fresh data. The block is gone now, so the usual confirmation follows.
+            const fresh = await adminApi.listUsers();
+            const current = fresh.find((candidate) => candidate.id === user.id);
+            if (!current) return;
+            if (action === 'delete') await deleteUser(current, fresh);
+            else await toggleUserActive(current, fresh);
+        },
+    );
+    wireAdminCombobox(block.candidates, { search: '#sole-admin-search', list: '#sole-admin-list', hidden: 'new_admin_id' });
+}
+
+/**
  * Delete an account for good (the trash button of the users table). A manual confirmation names the user; the server
  * may refuse (for example an institution's only admin), and then its message is shown instead of deleting anything.
  */
-async function deleteUser(user) {
+async function deleteUser(user, allUsers) {
+    // The only admin of an institution that has more users cannot go: name another admin first.
+    const block = soleAdminBlock(user, allUsers);
+    if (block) {
+        openSoleAdminForm(user, block, 'delete', allUsers);
+        return;
+    }
     if (!window.confirm(`¿Eliminar a ${user.username}? Se borra su cuenta, sus sesiones y sus vistas. No se puede deshacer.`)) return;
     try {
         await adminApi.deleteUser(user.id);
