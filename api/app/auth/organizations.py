@@ -263,3 +263,44 @@ def update_org(db: Session, org: Organization, changes: dict) -> Organization:
     except IntegrityError as exc:
         raise OrgRuleError(409, f"Ya existe una institución llamada {changes.get('name')}") from exc
     return org
+
+
+def delete_org(db: Session, actor: User, org: Organization, users: str = "block") -> None:
+    """Delete an institution for good. Only the general admin (the router requires it). Functions flush; routers commit.
+
+    What happens to the users of the institution (active or inactive, admins included) is chosen with `users`:
+    * "block" (default): an institution with users is refused (409) and nothing changes; one without users is deleted.
+    * "unlink": every user is set free, as leave_org does for one (its own views are removed, its sessions are closed).
+      An institution admin becomes a viewer first, because an admin always needs an institution. The accounts stay
+      active (or inactive, if they were), as viewers with no institution and no views.
+    * "delete": every user is deleted with its sessions, mail tokens and own views (one SQL DELETE, so the DATABASE
+      applies its foreign keys, as in user_admin.delete_user).
+    The "an institution keeps an admin" rule does not apply: the institution goes away with its users, so nobody is left
+    without an admin. The institution row is locked first (see lock_org), so nobody joins while it is being deleted.
+
+    The institution itself is one SQL DELETE too: the database deletes its own views and ALL its invitations (pending,
+    accepted or cancelled) by cascade, so a link that was sent stops working. Other institutions are never touched.
+    """
+    org = lock_org(db, org.id)
+    members = db.query(User).filter(User.organization_id == org.id).all()
+    if members and users == "block":
+        count = len(members)
+        raise OrgRuleError(
+            409,
+            f"La institución {org.name} tiene {count} {'usuario' if count == 1 else 'usuarios'}: "
+            "desvinculalos o eliminalos primero",
+        )
+    if users == "unlink":
+        for member in members:
+            if member.role == "org_admin":
+                member.role = "viewer"
+                db.flush()  # leave_org reloads the user: the new role must already be in the database
+            leave_org(db, actor, member)
+    elif users == "delete":
+        db.query(User).filter(User.organization_id == org.id).delete(synchronize_session=False)
+        for member in members:
+            db.expunge(member)  # the rows are gone: the session must not keep objects that point at them
+    db.flush()
+    db.query(Organization).filter(Organization.id == org.id).delete(synchronize_session=False)
+    db.flush()
+    db.expunge(org)

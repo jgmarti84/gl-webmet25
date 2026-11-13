@@ -286,6 +286,8 @@ terms_accepted_at: datetime (nullable) # when the person accepted the terms at s
 
 The rules (who can be deleted, an institution's only active admin, a general admin deleting itself) are in `user_admin.delete_user`, used by `DELETE /api/v1/admin/users/{id}` (general admin) and `DELETE /api/v1/profile` (the logged-in user; it takes no id).
 
+**Deleting an institution** (`DELETE /api/v1/admin/organizations/{id}?users=block|unlink|delete`, general admin only; rules in `organizations.delete_org`). `users` says what happens to the people of the institution, active or inactive, admins included: `block` (default) refuses with a 409 when it has any, `unlink` sets every one free (an institution admin becomes a viewer, its own views are removed and its sessions closed; the account stays), and `delete` deletes the accounts with one SQL `DELETE`, like deleting a user. The "an institution keeps an admin" rule does not apply, because the institution goes away. The institution is one SQL `DELETE` too: the database deletes its own views (`permissions.organization_id`, cascade) and ALL its invitations (`invitations.organization_id`, cascade), pending, accepted or cancelled, so a link already sent stops working. Other institutions are never touched. The row is locked first (`lock_org`), and everything runs in one transaction.
+
 #### **UserSession** (one row per login)
 ```python
 id: UUID (PK)                         # login id; the refresh token is "<id>.<secret>"

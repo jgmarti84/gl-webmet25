@@ -73,3 +73,30 @@ def test_create_from_a_foreign_origin_returns_403():
         headers = {**session_headers(), **FOREIGN_ORIGIN}
         response = client.post(PREFIX, json={"name": "Nunca", "seat_limit": 1}, headers=headers)
     assert response.status_code == 403
+
+
+def test_delete_without_session_returns_401():
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        assert client.delete(f"{PREFIX}/{UNKNOWN_ID}").status_code == 401
+
+
+def test_delete_unknown_organization_returns_404():
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        response = client.delete(f"{PREFIX}/{UNKNOWN_ID}", headers=session_headers())
+    assert response.status_code == 404
+    assert response.headers["content-type"].startswith("application/json")
+
+
+def test_delete_with_a_bad_id_or_a_bad_users_value_returns_422():
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        headers = session_headers()
+        assert client.delete(f"{PREFIX}/abc", headers=headers).status_code == 422
+        # The value is checked before the institution is looked up, so even an unknown id answers 422.
+        assert client.delete(f"{PREFIX}/{UNKNOWN_ID}", params={"users": "todos"}, headers=headers).status_code == 422
+
+
+def test_delete_from_a_foreign_origin_returns_403():
+    with httpx.Client(base_url=API_BASE_URL) as client:
+        headers = {**session_headers(), **FOREIGN_ORIGIN}
+        response = client.delete(f"{PREFIX}/{UNKNOWN_ID}", headers=headers)
+    assert response.status_code == 403

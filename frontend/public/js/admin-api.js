@@ -182,6 +182,10 @@ export const adminApi = {
         return request(`/organizations/${id}/permissions`, { method: 'PUT', body: JSON.stringify(body) });
     },
     // Delete a user for good (spec G). Only the general admin; 409 when the institution would be left without an admin.
+    // users: what happens to the people of the institution: 'block' (refuse if it has any), 'unlink' or 'delete'.
+    deleteOrganization(id, users = 'block') {
+        return request(`/organizations/${id}?users=${encodeURIComponent(users)}`, { method: 'DELETE' });
+    },
     deleteUser(id) { return request(`/users/${id}`, { method: 'DELETE' }); },
     // The text of the mails (spec F): the four mails, save one, go back to the original, and a preview of a draft.
     listMailTemplates() { return request('/mail-templates'); },
