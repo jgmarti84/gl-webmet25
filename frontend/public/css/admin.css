@@ -98,13 +98,61 @@ body {
     text-transform: uppercase;
 }
 
+/* The groups of the side menu (see js/shared/sidebar-groups.js): a header button and a body with the links. The body
+   opens and closes by animating its grid row between 1fr and 0fr (a height that needs no fixed number), the links fade,
+   and the arrow turns. A closed body is also `visibility: hidden` (after the animation), so Tab skips its links. */
+.nav-group { margin-top: 6px; }
 .nav-group-label {
-    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    margin: 0;
+    padding: 9px 12px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: #94a3b8;
+    font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: #64748b;
-    margin: 14px 12px 6px;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.nav-group-label:hover { background: rgba(148, 163, 184, 0.12); color: #e2e8f0; }
+.nav-group-label:active { transform: none; } /* the base button rule presses buttons down a pixel */
+.nav-group-label:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* The arrow is two borders of a small square turned 45 degrees: down when the group is open, right when it is closed. */
+.nav-chevron {
+    flex-shrink: 0;
+    width: 7px;
+    height: 7px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: translateY(-2px) rotate(45deg);
+    transition: transform 0.25s ease;
+}
+.nav-group.is-collapsed .nav-chevron { transform: translateX(-2px) rotate(-45deg); }
+.nav-group-body {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 0.28s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s;
+}
+.nav-group-inner { min-height: 0; overflow: hidden; padding-bottom: 2px; transition: opacity 0.2s ease; }
+.nav-group.is-collapsed .nav-group-body {
+    grid-template-rows: 0fr;
+    visibility: hidden;
+    transition: grid-template-rows 0.28s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s 0.28s; /* hidden once it has closed */
+}
+.nav-group.is-collapsed .nav-group-inner { opacity: 0; }
+/* While the page loads the groups are set without animation; and for people who asked for less motion, never. */
+#sidebar-nav.no-anim .nav-group-body,
+#sidebar-nav.no-anim .nav-group-inner,
+#sidebar-nav.no-anim .nav-chevron { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+    .nav-group-body, .nav-group-inner, .nav-chevron { transition: none; }
 }
 
 #sidebar-nav {
@@ -692,8 +740,7 @@ th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
 @media (max-width: 980px) {
     .admin-layout { grid-template-columns: 1fr; }
     .sidebar { height: auto; position: static; }
-    #sidebar-nav { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; }
-    .nav-group-label { grid-column: 1 / -1; }
+    .nav-group-inner { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; }
     .main-content { padding: 18px; }
     .logout-hint { display: none; }
     .table-wrap { max-height: none; }

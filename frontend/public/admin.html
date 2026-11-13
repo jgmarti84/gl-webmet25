@@ -18,28 +18,48 @@
                 <span class="sidebar-brand-mark">◑</span>
                 <span class="sidebar-brand-text">WebMet25<small>Admin</small></span>
             </div>
-            <nav id="sidebar-nav">
+            <nav id="sidebar-nav" data-menu="admin">
                 <a href="#dashboard" data-section="dashboard" class="active"><span class="nav-ico">▣</span> Panel</a>
-                <div class="nav-group-label">Cuenta</div>
-                <a href="#profile" data-section="profile"><span class="nav-ico">🙍</span> Mi perfil</a>
-                <div class="nav-group-label">Datos</div>
-                <a href="#radars" data-section="radars"><span class="nav-ico">📡</span> Radares</a>
-                <a href="#products" data-section="products"><span class="nav-ico">⊞</span> Productos</a>
-                <a href="#references" data-section="references"><span class="nav-ico">▤</span> Referencias</a>
-                <a href="#cogs" data-section="cogs"><span class="nav-ico">🗺</span> COGs</a>
-                <a href="#tops-cores" data-section="tops-cores"><span class="nav-ico">⛰</span> Tops &amp; Cores</a>
-                <a href="#nccubes" data-section="nccubes"><span class="nav-ico">▥</span> Cubos NetCDF</a>
-                <div class="nav-group-label">Configuración</div>
-                <a href="#estrategias" data-section="estrategias"><span class="nav-ico">⚙</span> Estrategias</a>
-                <a href="#volumenes" data-section="volumenes"><span class="nav-ico">▦</span> Volumenes</a>
-                <a href="#mails" data-section="mails"><span class="nav-ico">✎</span> Textos de los mails</a>
-                <div class="nav-group-label">Mapas de colores</div>
-                <a href="#colormaps" data-section="colormaps"><span class="nav-ico">🎨</span> Mapas de colores</a>
-                <a href="#colormap-options" data-section="colormap-options"><span class="nav-ico">⚭</span> Opciones de mapa de colores</a>
-                <div class="nav-group-label">Acceso</div>
-                <a href="#users" data-section="users"><span class="nav-ico">👤</span> Usuarios</a>
-                <a href="#organizations" data-section="organizations"><span class="nav-ico">🏢</span> Instituciones</a>
-                <a href="#invitations" data-section="invitations"><span class="nav-ico">✉</span> Invitaciones</a>
+                <div class="nav-group is-collapsed" data-group="cuenta">
+                    <button class="nav-group-label" type="button" aria-expanded="false" aria-controls="nav-group-cuenta">Cuenta<span class="nav-chevron" aria-hidden="true"></span></button>
+                    <div class="nav-group-body" id="nav-group-cuenta"><div class="nav-group-inner">
+                        <a href="#profile" data-section="profile"><span class="nav-ico">🙍</span> Mi perfil</a>
+                    </div></div>
+                </div>
+                <div class="nav-group is-collapsed" data-group="datos">
+                    <button class="nav-group-label" type="button" aria-expanded="false" aria-controls="nav-group-datos">Datos<span class="nav-chevron" aria-hidden="true"></span></button>
+                    <div class="nav-group-body" id="nav-group-datos"><div class="nav-group-inner">
+                        <a href="#radars" data-section="radars"><span class="nav-ico">📡</span> Radares</a>
+                        <a href="#products" data-section="products"><span class="nav-ico">⊞</span> Productos</a>
+                        <a href="#references" data-section="references"><span class="nav-ico">▤</span> Referencias</a>
+                        <a href="#cogs" data-section="cogs"><span class="nav-ico">🗺</span> COGs</a>
+                        <a href="#tops-cores" data-section="tops-cores"><span class="nav-ico">⛰</span> Tops &amp; Cores</a>
+                        <a href="#nccubes" data-section="nccubes"><span class="nav-ico">▥</span> Cubos NetCDF</a>
+                    </div></div>
+                </div>
+                <div class="nav-group is-collapsed" data-group="configuracion">
+                    <button class="nav-group-label" type="button" aria-expanded="false" aria-controls="nav-group-configuracion">Configuración<span class="nav-chevron" aria-hidden="true"></span></button>
+                    <div class="nav-group-body" id="nav-group-configuracion"><div class="nav-group-inner">
+                        <a href="#estrategias" data-section="estrategias"><span class="nav-ico">⚙</span> Estrategias</a>
+                        <a href="#volumenes" data-section="volumenes"><span class="nav-ico">▦</span> Volumenes</a>
+                        <a href="#mails" data-section="mails"><span class="nav-ico">✎</span> Textos de los mails</a>
+                    </div></div>
+                </div>
+                <div class="nav-group is-collapsed" data-group="mapas-de-colores">
+                    <button class="nav-group-label" type="button" aria-expanded="false" aria-controls="nav-group-mapas-de-colores">Mapas de colores<span class="nav-chevron" aria-hidden="true"></span></button>
+                    <div class="nav-group-body" id="nav-group-mapas-de-colores"><div class="nav-group-inner">
+                        <a href="#colormaps" data-section="colormaps"><span class="nav-ico">🎨</span> Mapas de colores</a>
+                        <a href="#colormap-options" data-section="colormap-options"><span class="nav-ico">⚭</span> Opciones de mapa de colores</a>
+                    </div></div>
+                </div>
+                <div class="nav-group is-collapsed" data-group="acceso">
+                    <button class="nav-group-label" type="button" aria-expanded="false" aria-controls="nav-group-acceso">Acceso<span class="nav-chevron" aria-hidden="true"></span></button>
+                    <div class="nav-group-body" id="nav-group-acceso"><div class="nav-group-inner">
+                        <a href="#users" data-section="users"><span class="nav-ico">👤</span> Usuarios</a>
+                        <a href="#organizations" data-section="organizations"><span class="nav-ico">🏢</span> Instituciones</a>
+                        <a href="#invitations" data-section="invitations"><span class="nav-ico">✉</span> Invitaciones</a>
+                    </div></div>
+                </div>
             </nav>
             <div class="sidebar-footer">
                 <button id="sidebar-back-map" class="btn btn-ghost btn-block" type="button">← Volver al mapa</button>
@@ -79,6 +99,7 @@
     </div>
 
     <script type="module" src="js/shared/tooltip.js"></script>
+    <script type="module" src="js/shared/sidebar-groups.js"></script>
     <script type="module" src="js/admin.js"></script>
 
     <!-- Colormap creator modal (separate from the generic form-modal) -->

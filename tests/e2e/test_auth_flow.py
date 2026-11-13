@@ -13,6 +13,7 @@ from .conftest import (
     deactivate_user,
     ensure_viewer,
     login_via_form,
+    open_nav_group,
 )
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://frontend-v2:80")
@@ -55,6 +56,7 @@ def test_login_ignores_open_redirect_in_next(page: Page):
 
 def test_users_section_lists_current_admin(page: Page):
     login_via_form(page)
+    open_nav_group(page, "users")
     page.click('a[data-section="users"]')
     page.wait_for_selector("table tbody tr")
     # Usernames are stored lowercase, whatever case ADMIN_USERNAME has in .env.

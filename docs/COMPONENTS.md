@@ -484,6 +484,12 @@ settings), and animation controls (bottom-center).
 
 ---
 
+### **Side menu groups** — `js/shared/sidebar-groups.js` and `.nav-group*` in `css/admin.css`
+
+**Responsibility:** the side menu of the admin, institution and profile panels is a list of collapsible groups (Cuenta, Datos, Configuración, ...). Each group is a `.nav-group` with a header button (`.nav-group-label`, with an arrow) and a body (`.nav-group-body` > `.nav-group-inner`) with its links. Pressing the header opens or closes the body: the CSS animates the grid row between `1fr` and `0fr` (no fixed height needed), the links fade and the arrow turns; a closed body is also `visibility: hidden`, so Tab skips its links. The module only keeps the state: the group that holds the active link is always open (and opens by itself when a panel moves the `active` class to a link of another group), in the admin panel the others start closed so its long menu stays short, while the institution and profile panels (a couple of links) say `data-groups-open="true"` on their menu and start with every group open; what the person opens or closes is remembered in `localStorage` for each panel on its own (`data-menu` names it: `webmet25_sidebar_groups_<menu>`, one entry per group name). The first state is set without animation (`.no-anim` on the menu) and `prefers-reduced-motion` turns the animation off. The links keep their `data-section` and `.active`, so the panels' own code does not change. A page with the menu loads the module with one `<script type="module">`. On a narrow screen each body shows its links in two columns.
+
+---
+
 ### **Tooltips** — `js/shared/tooltip.js` and `css/tooltip.css`
 
 **Responsibility:** the app's own tooltip, in place of the browser's (a box with a dark border that cannot be styled). One floating bubble (`<div id="app-tooltip">`, a child of `<body>` with `position: fixed`), so no table, panel or modal can clip it or draw over it: a bubble inside a scrolling table was hidden by the sticky header. It opens above its control, flips below when there is no room, stays inside the window, and fades in with a small movement after 300 ms (at once if another one just closed). Mouse hover and keyboard focus both open it; a click, Escape, a scroll or a resize close it.

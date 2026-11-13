@@ -22,11 +22,19 @@
                 <span class="sidebar-brand-mark">◑</span>
                 <span class="sidebar-brand-text">WebMet25<small>Institución</small></span>
             </div>
-            <nav id="sidebar-nav">
-                <div class="nav-group-label">Cuenta</div>
-                <a href="#perfil" data-section="perfil"><span class="nav-ico">🙍</span> Mi perfil</a>
-                <div class="nav-group-label">Gestión</div>
-                <a href="#usuarios" data-section="usuarios" class="active"><span class="nav-ico">👤</span> Usuarios</a>
+            <nav id="sidebar-nav" data-menu="empresa" data-groups-open="true">
+                <div class="nav-group" data-group="cuenta">
+                    <button class="nav-group-label" type="button" aria-expanded="true" aria-controls="nav-group-cuenta">Cuenta<span class="nav-chevron" aria-hidden="true"></span></button>
+                    <div class="nav-group-body" id="nav-group-cuenta"><div class="nav-group-inner">
+                        <a href="#perfil" data-section="perfil"><span class="nav-ico">🙍</span> Mi perfil</a>
+                    </div></div>
+                </div>
+                <div class="nav-group" data-group="gestion">
+                    <button class="nav-group-label" type="button" aria-expanded="true" aria-controls="nav-group-gestion">Gestión<span class="nav-chevron" aria-hidden="true"></span></button>
+                    <div class="nav-group-body" id="nav-group-gestion"><div class="nav-group-inner">
+                        <a href="#usuarios" data-section="usuarios" class="active"><span class="nav-ico">👤</span> Usuarios</a>
+                    </div></div>
+                </div>
             </nav>
             <div class="sidebar-footer">
                 <a id="empresa-back-sidebar" class="btn btn-ghost btn-block" href="./">← Volver al mapa</a>
@@ -112,6 +120,7 @@
     </div>
 
     <script type="module" src="js/shared/tooltip.js"></script>
+    <script type="module" src="js/shared/sidebar-groups.js"></script>
     <script type="module" src="js/empresa.js"></script>
 </body>
 </html>

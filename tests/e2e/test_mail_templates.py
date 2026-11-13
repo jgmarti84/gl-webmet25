@@ -12,6 +12,8 @@ import os
 import pytest
 from playwright.sync_api import Page, expect
 
+from .conftest import open_nav_group
+
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://frontend-v2:80")
 API = f"{FRONTEND_URL}/api/v1/admin/mail-templates"
 KEY = "verify_email"
@@ -48,6 +50,7 @@ def _pick(page: Page, key: str) -> None:
 def test_the_section_lists_the_four_mails(page: Page):
     _open(page)
     expect(page.locator("#mail-list [data-mail-key]")).to_have_count(4)
+    open_nav_group(page, "mails")
     expect(page.locator("#sidebar-nav [data-section=mails]")).to_be_visible()
 
 

@@ -467,6 +467,12 @@ Pipeline de composición en canvas:
 
 ---
 
+### **Grupos del menú lateral** — `js/shared/sidebar-groups.js` y `.nav-group*` en `css/admin.css`
+
+**Responsabilidad:** el menú lateral de los paneles de admin, institución y perfil es una lista de grupos desplegables (Cuenta, Datos, Configuración, ...). Cada grupo es un `.nav-group` con un botón de encabezado (`.nav-group-label`, con una flecha) y un cuerpo (`.nav-group-body` > `.nav-group-inner`) con sus enlaces. Apretar el encabezado abre o cierra el cuerpo: el CSS anima la fila de la grilla entre `1fr` y `0fr` (sin necesitar un alto fijo), los enlaces hacen un fundido y la flecha gira; un cuerpo cerrado también es `visibility: hidden`, así que Tab se saltea sus enlaces. El módulo solo guarda el estado: el grupo que tiene el enlace activo siempre está abierto (y se abre solo cuando un panel mueve el `active` a un enlace de otro grupo), en el panel de admin los demás arrancan cerrados para que su menú largo quede corto, mientras que los paneles de institución y de perfil (un par de links) dicen `data-groups-open="true"` en su menú y arrancan con todos los grupos abiertos; lo que la persona abre o cierra se recuerda en `localStorage` para cada panel por separado (`data-menu` lo nombra: `webmet25_sidebar_groups_<menu>`, una entrada por nombre de grupo). El primer estado se pone sin animación (`.no-anim` en el menú) y `prefers-reduced-motion` apaga la animación. Los enlaces conservan su `data-section` y su `.active`, así que el código propio de los paneles no cambia. Una página con el menú carga el módulo con un `<script type="module">`. En pantallas angostas cada cuerpo muestra sus enlaces en dos columnas.
+
+---
+
 ### **Tooltips** — `js/shared/tooltip.js` y `css/tooltip.css`
 
 **Responsabilidad:** el tooltip propio de la app, en lugar del del navegador (una caja con borde oscuro que no se puede estilar). Una sola burbuja flotante (`<div id="app-tooltip">`, hija de `<body>` con `position: fixed`), así que ninguna tabla, panel o modal puede cortarla ni taparla: una burbuja dentro de una tabla con scroll la tapaba el encabezado fijo. Se abre arriba de su control, pasa abajo si no hay lugar, queda dentro de la ventana y aparece con un fundido y un pequeño movimiento a los 300 ms (de inmediato si acaba de cerrarse otra). Se abre con el mouse y con el foco del teclado; un clic, Escape, un scroll o un cambio de tamaño la cierran.

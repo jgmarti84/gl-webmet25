@@ -22,9 +22,13 @@
                 <span class="sidebar-brand-mark">◑</span>
                 <span class="sidebar-brand-text">WebMet25<small>Perfil</small></span>
             </div>
-            <nav id="sidebar-nav">
-                <div class="nav-group-label">Cuenta</div>
-                <a href="perfil" class="active"><span class="nav-ico">🙍</span> Mi perfil</a>
+            <nav id="sidebar-nav" data-menu="perfil" data-groups-open="true">
+                <div class="nav-group" data-group="cuenta">
+                    <button class="nav-group-label" type="button" aria-expanded="true" aria-controls="nav-group-cuenta">Cuenta<span class="nav-chevron" aria-hidden="true"></span></button>
+                    <div class="nav-group-body" id="nav-group-cuenta"><div class="nav-group-inner">
+                        <a href="perfil" class="active"><span class="nav-ico">🙍</span> Mi perfil</a>
+                    </div></div>
+                </div>
             </nav>
             <div class="sidebar-footer">
                 <a id="perfil-back-sidebar" class="btn btn-ghost btn-block" href="./">← Volver al mapa</a>
@@ -65,6 +69,7 @@
     </div>
 
     <script type="module" src="js/shared/tooltip.js"></script>
+    <script type="module" src="js/shared/sidebar-groups.js"></script>
     <script type="module" src="js/perfil.js"></script>
 </body>
 </html>

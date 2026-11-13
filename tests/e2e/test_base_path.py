@@ -12,7 +12,15 @@ from urllib.parse import urlsplit
 
 from playwright.sync_api import Page, expect
 
-from .conftest import ADMIN_PASSWORD, ADMIN_USERNAME, E2E_VIEWER, E2E_VIEWER_PASSWORD, deactivate_user, ensure_viewer
+from .conftest import (
+    ADMIN_PASSWORD,
+    ADMIN_USERNAME,
+    E2E_VIEWER,
+    E2E_VIEWER_PASSWORD,
+    deactivate_user,
+    ensure_viewer,
+    open_nav_group,
+)
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://frontend-v2:80")
 PREFIX_URL = os.getenv("PREFIX_FRONTEND_URL", "http://prefix-proxy-e2e/pfx")
@@ -74,6 +82,7 @@ def test_logged_in_walk_never_leaves_the_prefix(browser):
 
         page.goto(f"{PREFIX_URL}/admin", wait_until="networkidle")
         for section in ("users", "radars", "invitations", "mails", "profile"):
+            open_nav_group(page, section)
             page.click(f"#sidebar-nav [data-section={section}]")
             page.wait_for_load_state("networkidle")
             assert urlsplit(page.url).path == f"{PREFIX}/admin"
@@ -119,6 +128,7 @@ def test_the_company_panel_stays_inside_the_prefix(browser, admin_storage_state)
         assert urlsplit(page.url).path == f"{PREFIX}/empresa"
         expect(page.locator("#empresa-name")).to_be_visible()
         # The profile section (spec D) and the way back: the address keeps the prefix and gets only the hash.
+        open_nav_group(page, "perfil")
         page.click("#sidebar-nav [data-section=perfil]")
         expect(page.locator("#perfil-username")).to_be_visible()
         assert urlsplit(page.url).path == f"{PREFIX}/empresa" and urlsplit(page.url).fragment == "perfil"
