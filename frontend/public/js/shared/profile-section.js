@@ -54,6 +54,7 @@ function skeleton(isCompanyAdmin, isGeneralAdmin) {
                 <div class="card"><h3>Institución</h3><div class="card-stat" id="perfil-company-name"></div></div>
                 <div class="card"><h3>Lugares</h3><div class="card-stat" id="perfil-company-seats"></div></div>
                 <div class="card"><h3>Vistas de radar de la institución</h3><div class="card-stat" id="perfil-company-views"></div></div>
+                <div class="card"><h3>Seguimiento de tormentas</h3><div class="card-stat" id="perfil-company-tracking"></div></div>
             </div>
         </div>`
         : '';
@@ -134,6 +135,7 @@ async function fillCompany(container) {
     container.querySelector('#perfil-company-views').textContent = views.includes(ALL_RADARS)
         ? 'Todas'
         : (views.length ? views.join(', ') : 'ninguna');
+    container.querySelector('#perfil-company-tracking').textContent = company.tools?.tracking ? 'Sí' : 'No';
     container.querySelector('#perfil-company').hidden = false;
 }
 

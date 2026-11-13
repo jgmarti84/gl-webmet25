@@ -450,3 +450,16 @@ def test_the_sign_up_ways_still_refuse_a_mail_that_has_an_account(
     assert app_client.post(f"{PUBLIC_URL}/accept", json=form).status_code == 409
     google_verifier.identity = GoogleIdentity(sub="g-9", email=INVITED, email_verified=True, name="Otra")
     assert app_client.post(f"{PUBLIC_URL}/accept-google", json={"token": token, "credential": "x"}).status_code == 409
+
+
+def test_accepting_with_an_existing_account_applies_the_tool_choice(
+    app_client, boss, org, make_user, mailer, test_db_session
+):
+    from api.app.auth import permissions as perms
+
+    perms.set_org_tools(test_db_session, org, {"tracking": True}, boss)
+    make_user(username="ana", email=INVITED)
+    token = _invited_by(app_client, "boss", org, mailer, role="viewer", tools={"tracking": True})
+    login(app_client, "ana")
+    assert _accept_existing(app_client, token).status_code == 200
+    assert perms.stored_tool(_user(test_db_session, "ana"), perms.TOOL_TRACKING) is True

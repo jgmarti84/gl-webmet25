@@ -15,7 +15,8 @@
 
 import { authFetch } from '../auth-api.js';
 
-const TRACKING_BASE = '/api/tracking';
+// Relative on purpose: <base href> keeps it inside the base path.
+const TRACKING_BASE = 'api/tracking';
 
 /**
  * Styling. Everything is drawn over COLMAX, whose colormap spans greens,

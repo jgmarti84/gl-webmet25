@@ -14,7 +14,7 @@ from radar_db.models import User
 from ..auth import organizations, permissions, user_admin
 from ..auth.dependencies import check_origin, require_admin
 from ..schemas.auth import PasswordReset, UserCreate, UserResponse, UserUpdate
-from ..schemas.permissions import RadarViewsUpdate
+from ..schemas.permissions import RadarViewsUpdate, ToolsState
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ def _response(user: User) -> UserResponse:
         created_at=user.created_at,
         updated_at=user.updated_at,
         radar_detail_views=permissions.stored_radar_views(user),
+        tools=ToolsState(**permissions.stored_tools(user)),
         organization_id=user.organization_id,
         organization_name=user.organization.name if user.organization else None,
     )
@@ -154,10 +155,14 @@ def verify_email(user_id: int, db: Session = Depends(get_db), actor: User = Depe
 def set_user_permissions(
     user_id: int, payload: RadarViewsUpdate, db: Session = Depends(get_db), actor: User = Depends(require_admin)
 ) -> UserResponse:
-    """Replace the user's whole list of one-radar detail views (all or nothing, in one transaction)."""
+    """Replace the user's list of one-radar detail views and/or set its tools (all or nothing, in one transaction).
+    What is not in the body is not changed."""
     user = _get_or_404(db, user_id)
     try:
-        permissions.replace_user_radar_views(db, user, payload.radar_detail_view, actor)
+        if payload.radar_detail_view is not None:
+            permissions.replace_user_radar_views(db, user, payload.radar_detail_view, actor)
+        if payload.tools is not None:
+            permissions.set_user_tools(db, user, payload.tools.model_dump(), actor)
     except permissions.PermissionRuleError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
     db.commit()

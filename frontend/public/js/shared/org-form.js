@@ -16,6 +16,20 @@ export function eligibleAdmins(users) {
         .sort((a, b) => a.username.localeCompare(b.username));
 }
 
+/**
+ * Is `user` the only active admin of an institution that keeps other active users? Then it can neither be deleted nor
+ * deactivated (the server answers 409) until another user is named admin. Returns null when nothing blocks it, or
+ * {remaining, candidates}: how many other active users the institution would be left with, and the ones that can be
+ * named admin (all the active readers, sorted by name). `users` is the full list of users.
+ */
+export function soleAdminBlock(user, users) {
+    if (user.role !== 'org_admin' || !user.is_active || !user.organization_id) return null;
+    const others = users.filter((u) => u.organization_id === user.organization_id && u.id !== user.id && u.is_active);
+    if (others.length === 0 || others.some((u) => u.role === 'org_admin')) return null;
+    const candidates = others.filter((u) => u.role === 'viewer').sort((a, b) => a.username.localeCompare(b.username));
+    return { remaining: others.length, candidates };
+}
+
 /** Lower case and without accents, so "Perez" finds "Pérez" and "MARIA" finds "María". */
 function plain(text) {
     return String(text || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -138,5 +152,7 @@ export function buildOrganizationPayload(values) {
     if (admin) payload.admin = admin;
     if (values.allViews) payload.radar_detail_view = [ALL_RADARS];
     else if (values.radars && values.radars.length) payload.radar_detail_view = values.radars;
+    // The tools of the new company ({tool: bool}); left out when none is ticked (the company starts without them).
+    if (values.tools && Object.values(values.tools).some(Boolean)) payload.tools = values.tools;
     return payload;
 }

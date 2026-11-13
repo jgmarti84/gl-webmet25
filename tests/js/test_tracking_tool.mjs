@@ -87,10 +87,12 @@ assert(trackingRequest('RMA1', null, 3, {}) === null, 'missing window -> null');
 
 // ── access ────────────────────────────────────────────────────────────────────
 console.log('canUseTracking');
-assert(canUseTracking('RMA1', { radar_detail_views: ['RMA1', 'RMA7'] }), 'whoever can open the view can use it');
-assert(!canUseTracking('RMA3', { radar_detail_views: ['RMA1'] }), 'not for a radar outside the user\'s views');
-assert(!canUseTracking('RMA1', {}), 'no list -> no access');
-assert(!canUseTracking('RMA1', null), 'no permissions -> no access');
+const perm = (views, tracking) => ({ radar_detail_views: views, tools: { tracking } });
+assert(canUseTracking('RMA1', perm(['RMA1'], true)) === true, 'view and tool: yes');
+assert(canUseTracking('RMA1', perm(['RMA1'], false)) === false, 'view without the tool: no');
+assert(canUseTracking('RMA1', perm(['RMA5'], true)) === false, 'tool without this view: no');
+assert(canUseTracking('RMA1', { radar_detail_views: ['RMA1'] }) === false, 'an old answer without tools: no');
+assert(canUseTracking('RMA1', null) === false, 'no permissions: no');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

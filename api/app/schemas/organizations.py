@@ -6,7 +6,7 @@ from typing import Annotated, List, Literal, Optional, Union
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from .permissions import RadarResource
+from .permissions import RadarResource, ToolsState, ToolsUpdate
 
 
 class NewOrgAdmin(BaseModel):
@@ -46,10 +46,12 @@ class OrganizationCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     seat_limit: int = Field(..., gt=0, le=10000)
     is_active: bool = True
-    # Optional, created in the same transaction as the company (spec C follow-up): its admin, and its radar views
-    # (radar codes, or ["*"], the same shape as PUT /organizations/{id}/permissions).
+    # Optional, created in the same transaction as the company: its admin, its radar views (radar codes, or ["*"],
+    # the same shape as PUT /organizations/{id}/permissions) and its tools, which are set before the admin is created
+    # so the admin starts with them.
     admin: Optional[OrgAdminChoice] = None
     radar_detail_view: Optional[List[RadarResource]] = Field(None, max_length=500)
+    tools: Optional[ToolsUpdate] = None
 
     @field_validator("name")
     @classmethod
@@ -75,6 +77,8 @@ class OrganizationResponse(BaseModel):
     is_active: bool
     # The company's list as saved: radar codes, or ["*"].
     radar_detail_views: List[str]
+    # The company's tools as saved.
+    tools: ToolsState = ToolsState()
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -89,6 +93,8 @@ class OrgUserCreate(BaseModel):
     # The views the new user starts with (radar codes, or ["*"]); they must fit inside the company's list. Omitted:
     # a copy of the company's list, as before.
     radar_detail_view: Optional[List[RadarResource]] = Field(None, max_length=500)
+    # The tools the new user starts with; they must fit inside the company's. Omitted: a copy of the company's.
+    tools: Optional[ToolsUpdate] = None
 
     @field_validator("username")
     @classmethod

@@ -382,6 +382,23 @@ The map shows every radar to every logged-in user, but the **one-radar page** (`
 
 **Deployment note:** after this version is applied, **nobody but the admin can open a one-radar view** until the admin assigns them. Assign the views before announcing the change, or tell the users. The migration (`c4d5e6f7a8b9`, table `permissions`) is applied by `db-init` on the next `docker compose up -d --build`; it needs no new `.env` key.
 
+### 11.1 Storm tracking tool
+
+Storm tracking (button in the one-radar view) is a **tool** that is given or not, like the views but yes/no: the general admin gives it to an institution (when creating it, or later with the button **Herramientas** of its row), and the institution admin gives it to its users from its own panel, only while the institution has it. A user uses it on each radar view they can open. Taking the tool from an institution takes it from all its members at once; taking a radar's view only removes tracking from that radar. Invitations carry the choice (a reader's); without a choice the person starts with a copy of the institution's. nginx enforces it: everything under `/api/tracking/` and the page `/tracking` need the tool (probe `/_auth_tool` with `set $auth_tool tracking`), and the per-radar routes (`/api/tracking/radars/CODE/...`) need the tool **and** that radar's view (probe `/_auth_tool_radar`). Without it nginx answers 403 (the page goes back to the map). When the general admin turns the tool on for an institution, **every user already in it gets it right away**; the institution admin switches it off by hand for whoever should not have it (turning it off and on again for the institution gives it to everybody again).
+
+**Deployment note:** the migration `c8e1f4a7b2d9` (permissions constraint + `invitations.tools`) is applied by `db-init`. After it, **nobody has tracking**, not even the people who use it today: the general admin must give it to the institutions (and, if needed, to users without an institution) from **Herramientas**. Tell the users before deploying. No new `.env` keys.
+
+#### How to add a tool
+
+A tool is a yes/no permission (see above). Adding another one, say `export`, takes these steps; the test `tests/auth/test_tools_registry.py` fails and says which one was forgotten:
+
+1. `api/app/auth/permissions.py`: one entry in `TOOLS` (`"export": "tool.export"`). The rules (own AND institution's, copy when joining an institution, removal when leaving, the 403 of an institution admin) and `/auth/check?tool=export` follow the list.
+2. `database/radar_db/models.py` and a new migration: add the action to `PERMISSION_ACTIONS` and to the `ck_permissions_action` constraint (copy `c8e1f4a7b2d9`: drop the constraint and create it again with the new list; do the reverse in `downgrade`).
+3. `api/app/schemas/permissions.py`: one field in `ToolsState` (`export: bool = False`) and in `ToolsUpdate` (`export: Optional[bool] = None`). Invitations need nothing: they store `{tool: bool}` as JSON.
+4. `frontend/public/js/shared/tools-form.js`: one entry in `TOOL_LIST` (`{ key: 'export', label: '...', short: '...' }`). The forms, the summaries and the readers of both panels follow the list. If a button must be shown or hidden, a function like `canUseTracking` using `hasTool`.
+5. `frontend/nginx.conf`, only if the tool protects routes: `set $auth_tool export;` and `auth_request /_auth_tool;` in their `location` (or `/_auth_tool_radar` with `set $tool_radar` when the radar is in the URL).
+6. Docs of the tool itself.
+
 ## 12. Company Accounts
 
 > **Names.** On screen (admin panel, company panel, map) a company is called **"institución"** (plural "instituciones"): "Instituciones" section, "Agregar institución", "Admin de institución", "Mi institución". In the code, the database and the URLs it keeps its own names (`organizations`, `org_admin`, `/api/v1/org`, `/empresa`). The Spanish messages the API sends also say "institución".

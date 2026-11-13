@@ -4,6 +4,7 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from .permissions import ToolsState
 from .text import StrictText
 
 
@@ -74,5 +75,7 @@ class UserResponse(BaseModel):
     last_login_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    # The user's own list of one-radar detail views as saved: radar codes, or ["*"] for every radar (spec C).
+    # The user's own list of one-radar detail views as saved: radar codes, or ["*"] for every radar.
     radar_detail_views: List[str] = []
+    # The tools as saved (not intersected with the institution's): what the panel shows and edits.
+    tools: ToolsState = ToolsState()

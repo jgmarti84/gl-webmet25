@@ -1,7 +1,7 @@
 # tests/e2e/test_user_delete.py
 """E2E: deleting users (spec G).
 
-The general admin deletes a user from "Editar usuario" (a red button at the bottom of the form, not in the table);
+The general admin deletes a user with the trash button of the users table;
 a person deletes their own account from "Mi perfil"; an institution admin that is the only admin of an institution with
 other users is told to name another admin first. The browser asks for a manual confirmation each time.
 
@@ -43,7 +43,7 @@ def _exists(api, username: str) -> bool:
     return any(u["username"] == username for u in api.get(f"{ADMIN_API}/users").json())
 
 
-def test_the_admin_deletes_a_user_from_the_edit_form(browser, admin_storage_state, admin_api, person):
+def test_the_admin_deletes_a_user_from_the_table(browser, admin_storage_state, admin_api, person):
     username, user_id = person
     context = browser.new_context(storage_state=admin_storage_state, ignore_https_errors=True)
     page = context.new_page()
@@ -52,10 +52,7 @@ def test_the_admin_deletes_a_user_from_the_edit_form(browser, admin_storage_stat
     try:
         page.goto(f"{FRONTEND_URL}/admin#users", wait_until="networkidle")
         row = page.locator("tr", has_text=username)
-        # There is no delete button in the table row: it is inside the edit form.
-        expect(row.locator("[data-delete-user]")).to_have_count(0)
-        row.locator(f"[data-edit-user='{user_id}']").click()
-        page.click("#user-delete")
+        row.locator(f"[data-delete-user='{user_id}']").click()
         expect(page.locator("tr", has_text=username)).to_have_count(0)
         assert dialogs and username in dialogs[0]  # the confirmation names the user
         assert not _exists(admin_api, username)
@@ -69,9 +66,8 @@ def test_the_admin_does_not_get_a_delete_button_for_its_own_account(browser, adm
     try:
         page.goto(f"{FRONTEND_URL}/admin#users", wait_until="networkidle")
         own_row = page.locator("tr", has_text=os.getenv("ADMIN_USERNAME", "admin")).first
-        own_row.locator("[data-edit-user]").click()
-        expect(page.locator("#form-modal-body")).to_be_visible()
-        expect(page.locator("#user-delete")).to_have_count(0)
+        expect(own_row.locator("[data-edit-user]")).to_have_count(1)
+        expect(own_row.locator("[data-delete-user]")).to_have_count(0)
     finally:
         context.close()
 

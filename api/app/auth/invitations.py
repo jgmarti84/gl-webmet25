@@ -156,8 +156,12 @@ def create_invitation(
     radar_views: Optional[List[str]],
     now: Optional[datetime] = None,
     within_company: bool = False,
+    tools: Optional[dict] = None,
 ) -> Tuple[Invitation, OutgoingMail]:
     """Invite `email` to the institution with `role`. Returns the invitation and the mail to send.
+
+    `tools` are the tools the viewer starts with, as {tool name: bool}; a tool not named (or None) is a copy of the
+    institution's when the invitation is accepted.
 
     Rules (all checked with the institution row locked, so two simultaneous invitations cannot both take the last
     seat): the institution is active (409), no pending invitation of another institution (409; one of the same
@@ -182,6 +186,13 @@ def create_invitation(
             permissions.ensure_within_org(org, set(views))
         except permissions.PermissionRuleError as exc:
             raise InvitationError(exc.status_code, exc.detail) from exc
+    tools = {name: bool(on) for name, on in (tools or {}).items() if name in permissions.TOOLS and on is not None}
+    if tools and role != "viewer":
+        raise InvitationError(422, "Solo un lector lleva la elección de herramientas")
+    if within_company and any(
+        on and not permissions.stored_tool(org, permissions.TOOLS[name]) for name, on in tools.items()
+    ):
+        raise InvitationError(403, "Solo podés asignar herramientas que tenga tu institución")
 
     existing = get_user_by_email(db, email)
     if existing is not None:
@@ -210,6 +221,7 @@ def create_invitation(
         organization_id=org.id,
         role=role,
         radar_views=views,
+        tools=tools or None,
         token_hash=hash_token(token),
         invited_by=actor.id,
         created_at=now,
@@ -257,7 +269,14 @@ def resend(
 ) -> Tuple[Invitation, OutgoingMail]:
     """A new link for the same person: the old invitation is replaced by a new one with the same data."""
     return create_invitation(
-        db, actor, invitation.organization_id, invitation.email, invitation.role, invitation.radar_views, now
+        db,
+        actor,
+        invitation.organization_id,
+        invitation.email,
+        invitation.role,
+        invitation.radar_views,
+        now,
+        tools=invitation.tools,
     )
 
 
@@ -299,9 +318,17 @@ def _prepare_accept(db: Session, invitation: Invitation) -> Organization:
     return org
 
 
+def _apply_invited_tools(db: Session, invitation: Invitation, user: User, granter: User) -> None:
+    """The tools of a viewer's invitation: a copy of the institution's tools, then the ones the inviter chose on top."""
+    permissions.copy_company_tools_to(db, user, granter)
+    if invitation.role == "viewer" and invitation.tools:
+        permissions.set_user_tools(db, user, invitation.tools, granter)
+
+
 def _finish(db: Session, invitation: Invitation, user: User, now: datetime) -> User:
-    """Give the new account the views of the invitation and close it. A viewer without a list starts with a copy of
-    the institution's list (decision C5); an institution admin sees the institution's list and has none of its own."""
+    """Give the new account the views and tools of the invitation and close it. A viewer without a list starts with a
+    copy of the institution's list, and without a tool choice with a copy of the institution's tools; an institution
+    admin sees the institution's list and has none of its own."""
     if invitation.role == "viewer":
         granter = db.get(User, invitation.invited_by) if invitation.invited_by else None
         granter = granter or user
@@ -309,6 +336,7 @@ def _finish(db: Session, invitation: Invitation, user: User, now: datetime) -> U
             permissions.copy_company_views_to(db, user, granter)
         else:
             permissions.replace_user_radar_views(db, user, invitation.radar_views, granter)
+        _apply_invited_tools(db, invitation, user, granter)
     invitation.accepted_at = now
     user.last_login_at = now
     db.flush()
@@ -430,6 +458,8 @@ def accept_existing(db: Session, session_user: User, token: str, now: Optional[d
         permissions.replace_user_radar_views(db, user, invitation.radar_views, granter)
     else:
         permissions.copy_company_views_to(db, user, granter)
+    if invitation.role == "viewer":
+        _apply_invited_tools(db, invitation, user, granter)
     invitation.accepted_at = now
     user.last_login_at = now
     revoke_all_sessions(db, user)

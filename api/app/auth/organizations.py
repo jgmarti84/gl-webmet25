@@ -1,5 +1,5 @@
 # api/app/auth/organizations.py
-"""Company accounts (spec C §5): seats, creating company users, editing companies. Functions flush; routers commit."""
+"""Company accounts: seats, creating company users, editing companies. Functions flush; routers commit."""
 
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -132,12 +132,15 @@ def leave_org(db: Session, actor: User, user: User) -> None:
     """Take a viewer out of its institution. Used by the general admin (move to "none") and by the company admin.
 
     It frees the seat (seats count the ACTIVE users of the company, so the person simply stops being counted), removes
-    the radar views the person had (they were a copy of what the institution gave it: someone who leaves must not keep
-    seeing the institution's radars) and closes its sessions, because what it can see changes. The account stays active
-    and can still log in, as a viewer with no institution and no views. The caller checks who may do this.
+    the radar views and tools the person had (they were a copy of what the institution gave it: someone who leaves must
+    not keep seeing the institution's radars) and closes its sessions, because what it can see changes. The account
+    stays active and can still log in, as a viewer with no institution and no views. The caller checks who may do
+    this.
     """
     # The views go first: replace_user_radar_views locks and reloads the user, which must not happen after the change.
     permissions.replace_user_radar_views(db, user, [], actor)
+    # Its tools were a copy of the institution's, like the views: someone who leaves does not keep them.
+    permissions.set_user_tools(db, user, {name: False for name in permissions.TOOLS}, actor)
     user.organization = None
     revoke_all_sessions(db, user)
     db.flush()
@@ -211,6 +214,7 @@ def create_org_with_admin(
     data: dict,
     admin,
     views: Optional[list],
+    tools: Optional[dict] = None,
     mails: Optional[list] = None,
     notes: Optional[dict] = None,
 ) -> Organization:
@@ -227,6 +231,8 @@ def create_org_with_admin(
         org = create_org(db, data)
         if views:
             permissions.replace_org_radar_views(db, org, views, actor)
+        if tools:
+            permissions.set_org_tools(db, org, tools, actor)
         if admin is not None and admin.mode == "new":
             fields = admin.model_dump(exclude={"mode"})
             create_member(db, org.id, fields, "org_admin", actor)

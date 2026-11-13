@@ -333,6 +333,23 @@ El mapa muestra todos los radares a todos los usuarios con sesión, pero la **p�
 
 **Nota de despliegue:** después de aplicar esta versión, **nadie salvo el admin puede abrir la vista de un radar** hasta que el admin se la asigne. Conviene asignar las vistas antes de anunciar el cambio, o avisar a los usuarios. La migración (`c4d5e6f7a8b9`, tabla `permissions`) la aplica `db-init` en el próximo `docker compose up -d --build`; no necesita ninguna clave nueva en el `.env`.
 
+### 9.1 Herramienta de seguimiento de tormentas
+
+El seguimiento de tormentas (botón de la vista de un radar) es una **herramienta** que se da o no, como las vistas pero de sí/no: el admin general se la da a una institución (al crearla, o después con el botón **Herramientas** de su fila) y el admin de la institución se la da a sus usuarios desde su panel, solo mientras la institución la tenga. Cada usuario la usa en cada vista de radar que puede abrir. Sacarle la herramienta a una institución se la saca a todos sus miembros al instante; sacar la vista de un radar solo quita el tracking de ese radar. Las invitaciones llevan la elección (la de un lector); sin elección la persona arranca con una copia de la institución. nginx lo exige: todo `/api/tracking/` y la página `/tracking` necesitan la herramienta (consulta `/_auth_tool` (con `set $auth_tool tracking`)), y las rutas por radar (`/api/tracking/radars/CÓDIGO/...`) necesitan la herramienta **y** la vista de ese radar (consulta `/_auth_tool_radar`). Sin ella nginx responde 403 (la página vuelve al mapa). Cuando el admin general activa la herramienta para una institución, **todos los usuarios que ya están en ella la reciben en el momento**; el admin de la institución se la quita a mano a quien no corresponda (sacarla y volver a ponerla para la institución se la da otra vez a todos).
+
+**Nota de despliegue:** la migración `c8e1f4a7b2d9` (restricción de `permissions` + `invitations.tools`) la aplica `db-init`. Después, **nadie tiene tracking**, ni siquiera quienes lo usan hoy: el admin general tiene que dárselo a las instituciones (y, si hace falta, a usuarios sin institución) desde **Herramientas**. Avisar a los usuarios antes de desplegar. Sin claves nuevas en `.env`.
+
+#### Cómo agregar una herramienta
+
+Una herramienta es un permiso de sí/no (ver arriba). Agregar otra, por ejemplo `export`, lleva estos pasos; el test `tests/auth/test_tools_registry.py` falla y dice cuál se olvidó:
+
+1. `api/app/auth/permissions.py`: una entrada en `TOOLS` (`"export": "tool.export"`). Las reglas (la propia Y la de la institución, copia al entrar a una institución, quitarla al salir, el 403 del admin de institución) y `/auth/check?tool=export` siguen la lista.
+2. `database/radar_db/models.py` y una migración nueva: sumar la acción a `PERMISSION_ACTIONS` y a la restricción `ck_permissions_action` (copiar `c8e1f4a7b2d9`: borrar la restricción y crearla de nuevo con la lista nueva; lo inverso en `downgrade`).
+3. `api/app/schemas/permissions.py`: un campo en `ToolsState` (`export: bool = False`) y en `ToolsUpdate` (`export: Optional[bool] = None`). Las invitaciones no necesitan nada: guardan `{herramienta: bool}` como JSON.
+4. `frontend/public/js/shared/tools-form.js`: una entrada en `TOOL_LIST` (`{ key: 'export', label: '...', short: '...' }`). Los formularios, los resúmenes y los lectores de los dos paneles siguen la lista. Si un botón se muestra u oculta, una función como `canUseTracking` con `hasTool`.
+5. `frontend/nginx.conf`, solo si la herramienta protege rutas: `set $auth_tool export;` y `auth_request /_auth_tool;` en su `location` (o `/_auth_tool_radar` con `set $tool_radar` cuando el radar está en la URL).
+6. Docs de la herramienta misma.
+
 ## 10. Cuentas de empresa
 
 > **Nombres.** En pantalla (panel de admin, panel de la institución, mapa, mensajes de la API) a la empresa se la llama **"institución"** (plural "instituciones"): sección "Instituciones", "Agregar institución", "Admin de institución", "Mi institución". En el código, la base de datos y las URLs conserva sus nombres (`organizations`, `org_admin`, `/api/v1/org`, `/empresa`). Los mensajes en español que manda la API también dicen "institución".

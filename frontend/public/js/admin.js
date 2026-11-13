@@ -1,10 +1,11 @@
 import { adminApi, EXPIRED_SESSION_MESSAGE } from './admin-api.js';
 import { authApi, redirectToLogin } from './auth-api.js';
 import {
-    buildMemberRequest, buildOrganizationPayload, eligibleAdmins, filterAdmins, filterOrganizations,
+    buildMemberRequest, buildOrganizationPayload, eligibleAdmins, filterAdmins, filterOrganizations, soleAdminBlock,
 } from './shared/org-form.js';
 import { mountProfile } from './shared/profile-section.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
+import { beyondInstitution, readTools, toolsFieldsHtml, toolsSummary, usableToolsSummary } from './shared/tools-form.js';
 
 const SECTIONS = ['dashboard', 'radars', 'products', 'references', 'cogs', 'estrategias', 'volumenes', 'tops-cores', 'nccubes', 'colormaps', 'colormap-options', 'users', 'organizations', 'invitations', 'mails', 'profile'];
 const STATUS_OPTIONS = ['available', 'missing', 'error', 'pending', 'processing', 'archived'];
@@ -2140,7 +2141,7 @@ async function renderUsers() {
                 <th><button data-sort="full_name">Nombre</button></th>
                 <th><button data-sort="role">Rol</button></th>
                 <th>Institución</th>
-                <th>Vistas de radar</th>
+                <th>Herramientas</th>
                 <th><button data-sort="is_active">Activo</button></th>
                 <th><button data-sort="last_login_at">Último ingreso</button></th>
                 <th>Acciones</th>
@@ -2148,22 +2149,20 @@ async function renderUsers() {
             <tbody>
                 ${users.map((user) => `
                     <tr${rowFacetAttr('users', user)}>
-                        <td>${safeText(user.username)}${user.password_is_bootstrap ? ' <span class="status-pill">contraseña inicial</span>' : ''}${needsMailVerification(user) ? ' <span class="status-pill">mail sin verificar</span>' : ''}</td>
+                        <td>${safeText(user.username)}${user.password_is_bootstrap ? ' <span class="status-pill">contraseña inicial</span>' : ''}${needsMailVerification(user) ? ' <span class="status-pill">mail sin verificar</span>' : ''}${user.email ? `<div class="cell-sub">${safeText(user.email)}</div>` : ''}</td>
                         <td>${safeText(user.full_name)}</td>
                         <td>${ROLE_LABELS[user.role] || safeText(user.role)}</td>
                         <td>${user.organization_name ? safeText(user.organization_name) : '—'}</td>
-                        <td>${user.role === 'admin' ? 'Todas (admin)' : safeText(viewsSummary(user.radar_detail_views))}</td>
+                        <td>${user.role === 'admin' ? 'Todas (admin)' : safeText(usableToolsSummary(user, orgs.find((o) => o.id === user.organization_id) || null))}</td>
                         <td>${user.is_active ? 'Sí' : 'No'}</td>
                         <td>${user.last_login_at ? fmtDate(user.last_login_at) : '—'}</td>
                         <td class="table-actions">
                             <button class="btn-secondary" data-edit-user="${user.id}" title="Editar">${ICON_EDIT}</button>
-                            ${user.id === meId ? '' : `
-                                <button class="btn-secondary" data-toggle-user="${user.id}">${user.is_active ? 'Desactivar' : 'Activar'}</button>
-                                <button class="btn-secondary" data-reset-user="${user.id}">Resetear contraseña</button>
-                            `}
-                            ${user.role === 'admin' ? '' : `<button class="btn-secondary" data-views-user="${user.id}">Vistas</button>`}
+                            ${user.id === meId ? '' : `<button class="btn-secondary" data-toggle-user="${user.id}">${user.is_active ? 'Desactivar' : 'Activar'}</button>`}
+                            ${user.role === 'admin' ? '' : `<button class="btn-secondary" data-views-user="${user.id}">Herramientas</button>`}
+                            <button class="btn-secondary" data-security-user="${user.id}">Seguridad</button>
                             ${needsMailVerification(user) ? `<button class="btn-secondary" data-verify-user="${user.id}">Verificar mail</button>` : ''}
-                            <button class="btn-secondary" data-revoke-user="${user.id}">Cerrar sesiones</button>
+                            ${user.id === meId ? '' : `<button class="btn-secondary" data-delete-user="${user.id}" title="Eliminar">${ICON_TRASH}</button>`}
                         </td>
                     </tr>
                 `).join('')}
@@ -2190,18 +2189,13 @@ async function renderUsers() {
         el.onclick = () => openUserForm(byId(el.dataset.editUser));
     });
     elements.sectionContent.querySelectorAll('[data-toggle-user]').forEach((el) => {
-        el.onclick = async () => {
-            const user = byId(el.dataset.toggleUser);
-            const action = user.is_active ? 'desactivar' : 'activar';
-            if (!window.confirm(`¿Confirma ${action} a ${user.username}?`)) return;
-            const wasActive = user.is_active;
-            await adminApi.patchUser(user.id, { is_active: !wasActive });
-            await renderSection();
-            showMessage(`Usuario ${user.username} ${wasActive ? 'desactivado' : 'activado'}`, 'success');
-        };
+        el.onclick = () => toggleUserActive(byId(el.dataset.toggleUser), allUsers);
     });
-    elements.sectionContent.querySelectorAll('[data-reset-user]').forEach((el) => {
-        el.onclick = () => openPasswordResetForm(byId(el.dataset.resetUser));
+    elements.sectionContent.querySelectorAll('[data-delete-user]').forEach((el) => {
+        el.onclick = () => deleteUser(byId(el.dataset.deleteUser), allUsers);
+    });
+    elements.sectionContent.querySelectorAll('[data-security-user]').forEach((el) => {
+        el.onclick = () => openSecurityForm(byId(el.dataset.securityUser));
     });
     elements.sectionContent.querySelectorAll('[data-views-user]').forEach((el) => {
         el.onclick = () => openViewsForm(byId(el.dataset.viewsUser));
@@ -2215,16 +2209,127 @@ async function renderUsers() {
             showMessage(`Mail de ${user.username} verificado`, 'success');
         };
     });
-    elements.sectionContent.querySelectorAll('[data-revoke-user]').forEach((el) => {
-        el.onclick = async () => {
-            const user = byId(el.dataset.revokeUser);
-            const self = user.id === meId ? ' (incluida la tuya: vas a tener que volver a entrar)' : '';
-            if (!window.confirm(`¿Cerrar todas las sesiones de ${user.username}${self}?`)) return;
-            await adminApi.revokeUserSessions(user.id);
+}
+
+/**
+ * Activate or deactivate an account (the button of the users table). Deactivating the only admin of an institution that
+ * has more users opens the "name another admin" window first (see openSoleAdminForm).
+ */
+async function toggleUserActive(user, allUsers) {
+    const block = user.is_active ? soleAdminBlock(user, allUsers) : null;
+    if (block) {
+        openSoleAdminForm(user, block, 'deactivate', allUsers);
+        return;
+    }
+    const action = user.is_active ? 'desactivar' : 'activar';
+    if (!window.confirm(`¿Confirma ${action} a ${user.username}?`)) return;
+    const wasActive = user.is_active;
+    await adminApi.patchUser(user.id, { is_active: !wasActive });
+    await renderSection();
+    showMessage(`Usuario ${user.username} ${wasActive ? 'desactivado' : 'activado'}`, 'success');
+}
+
+/**
+ * The window that explains why `user` cannot be deleted (or deactivated): it is the only admin of its institution and
+ * the institution would be left with active users and no admin. It offers a search box with the institution's active
+ * readers; "Asignar como administrador" promotes the picked one, and then the original action goes on with its usual
+ * confirmation (so naming the admin and deleting stay two separate decisions). `block` comes from soleAdminBlock.
+ * Changing a user's role closes that user's sessions, and the window says so.
+ */
+function openSoleAdminForm(user, block, action, allUsers) {
+    const verb = action === 'delete' ? 'eliminar' : 'desactivar';
+    const orgName = user.organization_name || 'su institución';
+    const left = block.remaining === 1 ? '1 usuario activo' : `${block.remaining} usuarios activos`;
+    openFormModal(
+        `No se puede ${verb} a ${user.username}`,
+        `
+            <p><strong>${safeText(user.username)}</strong> es el único administrador de <strong>${safeText(orgName)}</strong> y la
+            institución quedaría con ${left} y sin administrador.</p>
+            <p class="toolbar-note">Nombrá administrador a otro de sus usuarios y después seguimos con el ${action === 'delete' ? 'borrado' : 'cambio'}.
+            Al cambiarle el rol a esa persona se le cierran las sesiones.</p>
+            <label for="sole-admin-search">Nuevo administrador</label>
+            <div class="combo">
+                <input id="sole-admin-search" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sole-admin-list" autocomplete="off" placeholder="Escribí para buscar por usuario, nombre o mail…">
+                <input type="hidden" name="new_admin_id" value="">
+                <ul id="sole-admin-list" class="combo-list" role="listbox" hidden></ul>
+            </div>
+            <div class="form-actions"><button class="btn" type="submit">Asignar como administrador</button></div>
+        `,
+        async (formData) => {
+            const newAdminId = formData.get('new_admin_id');
+            if (!newAdminId) throw new Error('Elegí a quién nombrar administrador');
+            const newAdmin = block.candidates.find((candidate) => String(candidate.id) === newAdminId);
+            await adminApi.patchUser(Number(newAdminId), { role: 'org_admin' });
+            closeFormModal();
             await renderSection();
-            showMessage(`Sesiones de ${user.username} cerradas`, 'success');
-        };
-    });
+            showMessage(`${newAdmin.username} ahora es administrador de ${orgName}`, 'success');
+            // The list changed: ask again with fresh data. The block is gone now, so the usual confirmation follows.
+            const fresh = await adminApi.listUsers();
+            const current = fresh.find((candidate) => candidate.id === user.id);
+            if (!current) return;
+            if (action === 'delete') await deleteUser(current, fresh);
+            else await toggleUserActive(current, fresh);
+        },
+    );
+    wireAdminCombobox(block.candidates, { search: '#sole-admin-search', list: '#sole-admin-list', hidden: 'new_admin_id' });
+}
+
+/**
+ * Delete an account for good (the trash button of the users table). A manual confirmation names the user; the server
+ * may refuse (for example an institution's only admin), and then its message is shown instead of deleting anything.
+ */
+async function deleteUser(user, allUsers) {
+    // The only admin of an institution that has more users cannot go: name another admin first.
+    const block = soleAdminBlock(user, allUsers);
+    if (block) {
+        openSoleAdminForm(user, block, 'delete', allUsers);
+        return;
+    }
+    if (!window.confirm(`¿Eliminar a ${user.username}? Se borra su cuenta, sus sesiones y sus vistas. No se puede deshacer.`)) return;
+    try {
+        await adminApi.deleteUser(user.id);
+        await renderSection();
+        showMessage(`Usuario ${user.username} eliminado`, 'success');
+    } catch (error) {
+        showMessage(error.message, 'error');
+    }
+}
+
+/**
+ * "Seguridad": the window of the Seguridad button of a user row, with the two account actions: reset the password
+ * (opens its own window) and close every session (asks for confirmation). On your own row only the second one is
+ * offered, as before. The window has no Guardar: each action does its own thing.
+ */
+function openSecurityForm(user) {
+    const isSelf = user.id === state.me?.id;
+    openFormModal(
+        `Seguridad de ${user.username}`,
+        `<div class="security-list">
+            ${isSelf ? '' : '<button id="user-reset" class="security-action" type="button"><strong>Resetear contraseña</strong><span>Define una contraseña nueva y cierra sus sesiones</span></button>'}
+            <button id="user-revoke" class="security-action" type="button"><strong>Cerrar sesiones</strong><span>Lo obliga a volver a entrar en todos sus dispositivos</span></button>
+        </div>`,
+        async () => {},
+    );
+    const resetButton = document.getElementById('user-reset');
+    if (resetButton) resetButton.onclick = () => openPasswordResetForm(user);
+    document.getElementById('user-revoke').onclick = () => revokeUserSessions(user);
+}
+
+/**
+ * Close every session of a user (a button of the Seguridad window). Closing your own also logs you out, so the question
+ * says so.
+ */
+async function revokeUserSessions(user) {
+    const self = user.id === state.me?.id ? ' (incluida la tuya: vas a tener que volver a entrar)' : '';
+    if (!window.confirm(`¿Cerrar todas las sesiones de ${user.username}${self}?`)) return;
+    try {
+        await adminApi.revokeUserSessions(user.id);
+        closeFormModal();
+        await renderSection();
+        showMessage(`Sesiones de ${user.username} cerradas`, 'success');
+    } catch (error) {
+        setFormModalError(error.message);
+    }
 }
 
 function openUserForm(user = null) {
@@ -2274,10 +2379,6 @@ function openUserForm(user = null) {
             ${orgField}
             ${isEdit ? '' : '<label>Contraseña inicial <input name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required></label><p class="toolbar-note">Mínimo 10 caracteres, con al menos un carácter especial (por ejemplo ! - _ . @ #).</p>'}
             <div class="form-actions"><button class="btn" type="submit">${isEdit ? 'Guardar' : 'Crear'}</button></div>
-            ${isEdit && !isSelf ? `<div class="form-danger">
-                <p class="toolbar-note">Eliminar la cuenta la borra para siempre, con sus sesiones y sus vistas.</p>
-                <button id="user-delete" class="btn-danger" type="button">Eliminar usuario</button>
-            </div>` : ''}
         `,
         async (formData) => {
             const payload = {
@@ -2316,21 +2417,6 @@ function openUserForm(user = null) {
             showMessage(message, 'success');
         },
     );
-    // Eliminar usuario (spec G): a manual confirmation that names the user; the server may refuse (an institution's only admin).
-    const deleteButton = document.getElementById('user-delete');
-    if (deleteButton) {
-        deleteButton.onclick = async () => {
-            if (!window.confirm(`¿Eliminar a ${user.username}? Se borra su cuenta, sus sesiones y sus vistas. No se puede deshacer.`)) return;
-            try {
-                await adminApi.deleteUser(user.id);
-                closeFormModal();
-                await renderSection();
-                showMessage(`Usuario ${user.username} eliminado`, 'success');
-            } catch (error) {
-                setFormModalError(error.message);
-            }
-        };
-    }
     if (orgItems.length) wireOrgCombobox(orgItems);
     if (canMove) wireMoveNote(user, currentOrgId);
     if (canLeave) wireLeaveNote(user);
@@ -2469,11 +2555,17 @@ function wireMoveNote(user, currentOrgId) {
  * Modal to choose one-radar detail views (spec C), for a user or a company.
  * Only radars with the view enabled are listed. Saved codes of radars whose view is now off are kept as they are
  * (sent back unchanged), so switching a view off for maintenance does not lose anybody's access.
- * `onSave` saves the list and RETURNS the success message: it is shown after `renderSection()`, because
+ * Below the radars, the checkbox of each tool; `tools` is what is saved ({tool: bool}) and `toolNotes` optional
+ * warnings shown under a tool ({tool: text}).
+ * `institution` (the user's institution, when it is a user of one) turns on a live warning under the form for what is
+ * ticked beyond the institution's own list and tools, because it would do nothing (see wireInstitutionLimitWarning);
+ * `isInstitutionAdmin` says the user is the institution's admin, who uses the institution's lists, not their own.
+ * `onSave` saves the list and the tools and RETURNS the success message: it is shown after `renderSection()`, because
  * `renderSection()` starts by clearing the notice (showing it before would make it vanish at once).
- * @param {{title: string, stored: string[], onSave: (views: string[]) => Promise<string>}} options
+ * @param {{title: string, stored: string[], tools?: object, toolNotes?: object, institution?: object|null,
+ *          isInstitutionAdmin?: boolean, onSave: (views: string[], tools: object) => Promise<string>}} options
  */
-async function openRadarViewsForm({ title, stored, onSave }) {
+async function openToolsForm({ title, stored, tools, toolNotes = {}, institution = null, isInstitutionAdmin = false, onSave }) {
     const radars = (await adminApi.listRadars()).filter((radar) => radar.detail_view_enabled);
     const hasAll = stored.includes(ALL_RADARS);
     const listedCodes = new Set(radars.map((radar) => radar.code));
@@ -2491,24 +2583,70 @@ async function openRadarViewsForm({ title, stored, onSave }) {
             <label class="checkbox-row"><input type="checkbox" name="all"${hasAll ? ' checked' : ''}> Todas</label>
             <fieldset class="views-radars"><legend>O elegir radares</legend>${radarRows}</fieldset>
             <p class="toolbar-note">Solo se listan los radares con la vista de detalle habilitada.</p>
+            ${toolsFieldsHtml({ values: tools || {}, notes: toolNotes })}
+            ${isInstitutionAdmin ? '<p class="form-warning">Es administrador de la institución: usa lo que tiene la institución, así que lo que marques acá no tiene efecto.</p>' : ''}
+            <p id="tools-warning" class="form-warning" hidden></p>
             <div class="form-actions"><button class="btn" type="submit">Guardar</button></div>
         `,
         async (formData) => {
-            const message = await onSave(formData.get('all') ? [ALL_RADARS] : [...formData.getAll('radar'), ...keptHidden]);
+            const views = formData.get('all') ? [ALL_RADARS] : [...formData.getAll('radar'), ...keptHidden];
+            const message = await onSave(views, readTools(formData));
             await renderSection();
             showMessage(message, 'success');
         },
     );
+    if (institution && !isInstitutionAdmin) wireInstitutionLimitWarning(institution);
 }
 
-/** Users section: views of one user. */
-function openViewsForm(user) {
-    return openRadarViewsForm({
-        title: `Vistas de radar de ${user.username}`,
+/**
+ * Live warning of the tools window of a reader of an institution: what is ticked beyond the institution's views and
+ * tools does nothing, because a reader has what it was given AND what the institution has. It does not block saving
+ * (the institution may get it later); it only says so, and what to do (give it to the institution first).
+ */
+function wireInstitutionLimitWarning(org) {
+    const form = elements.formModalBody;
+    const box = form.querySelector('#tools-warning');
+    const update = () => {
+        const views = form.querySelector('input[name="all"]').checked
+            ? [ALL_RADARS]
+            : [...form.querySelectorAll('input[name="radar"]:checked')].map((input) => input.value);
+        const beyond = beyondInstitution(views, readTools(new FormData(form)), org);
+        const lines = [];
+        if (beyond.all) lines.push('"Todas" no tiene efecto completo: la institución no tiene todas las vistas, solo valen las suyas.');
+        if (beyond.radars.length) {
+            lines.push(`${beyond.radars.length === 1 ? 'La vista' : 'Las vistas'} ${beyond.radars.join(', ')} no ${beyond.radars.length === 1 ? 'tiene' : 'tienen'} efecto: la institución no ${beyond.radars.length === 1 ? 'la tiene' : 'las tiene'}.`);
+        }
+        for (const label of beyond.tools) lines.push(`${label} no tiene efecto: la institución no tiene esa herramienta.`);
+        box.hidden = lines.length === 0;
+        box.innerHTML = lines.length
+            ? `${lines.map((line) => safeText(line)).join('<br>')}<br>Para que valga, dáselo primero a la institución.`
+            : '';
+    };
+    form.addEventListener('change', update);
+    update();
+}
+
+/**
+ * Users section: views and tools of one user. A user of an institution can be given more than the institution has, but
+ * it does nothing until the institution has it (members have what they were given AND what the institution has), so
+ * the form warns while the admin ticks it (wireInstitutionLimitWarning). An institution admin uses the institution's
+ * lists, so the form says that nothing ticked there counts.
+ */
+async function openViewsForm(user) {
+    let institution = null;
+    if (user.organization_id) {
+        const orgs = state.organizations || await adminApi.listOrganizations();
+        institution = orgs.find((candidate) => candidate.id === user.organization_id) || null;
+    }
+    return openToolsForm({
+        title: `Herramientas de ${user.username}`,
         stored: user.radar_detail_views || [],
-        onSave: async (views) => {
-            await adminApi.setUserRadarViews(user.id, views);
-            return `Vistas de ${user.username} actualizadas`;
+        tools: user.tools,
+        institution,
+        isInstitutionAdmin: user.role === 'org_admin',
+        onSave: async (views, tools) => {
+            await adminApi.setUserPermissions(user.id, { radar_detail_view: views, tools });
+            return `Herramientas de ${user.username} actualizadas`;
         },
     });
 }
@@ -2528,7 +2666,7 @@ async function renderOrganizations() {
         <div class="table-wrap">
         <table>
             <thead><tr>
-                <th>Institución</th><th>Lugares</th><th>Activa</th><th>Vistas de radar</th><th>Acciones</th>
+                <th>Institución</th><th>Lugares</th><th>Activa</th><th>Herramientas</th><th>Acciones</th>
             </tr></thead>
             <tbody>
                 ${filterable.map((org) => `
@@ -2536,10 +2674,10 @@ async function renderOrganizations() {
                         <td>${safeText(org.name)}</td>
                         <td>${org.seats_used} de ${org.seat_limit}${org.pending_invitations ? ` (+${org.pending_invitations} invitación${org.pending_invitations === 1 ? '' : 'es'})` : ''}</td>
                         <td>${org.is_active ? 'Sí' : 'No'}</td>
-                        <td>${safeText(viewsSummary(org.radar_detail_views))}</td>
+                        <td>${safeText(toolsSummary(org.radar_detail_views, org.tools))}</td>
                         <td class="table-actions">
                             <button class="btn-secondary" data-edit-org="${org.id}" title="Editar">${ICON_EDIT}</button>
-                            <button class="btn-secondary" data-views-org="${org.id}">Vistas</button>
+                            <button class="btn-secondary" data-views-org="${org.id}">Herramientas</button>
                             <a class="btn-secondary" href="admin#users" data-section="users" data-users-of-org="${org.id}">Usuarios</a>
                         </td>
                     </tr>
@@ -2556,12 +2694,17 @@ async function renderOrganizations() {
     });
     elements.sectionContent.querySelectorAll('[data-views-org]').forEach((el) => {
         const org = byId(el.dataset.viewsOrg);
-        el.onclick = () => openRadarViewsForm({
-            title: `Vistas de radar de ${org.name}`,
+        el.onclick = () => openToolsForm({
+            title: `Herramientas de ${org.name}`,
             stored: org.radar_detail_views,
-            onSave: async (views) => {
-                await adminApi.setOrganizationRadarViews(org.id, views);
-                return `Vistas de ${org.name} actualizadas`;
+            tools: org.tools,
+            // Turning a tool on gives it to every user of the institution; its admin can then switch it off by hand.
+            toolNotes: org.tools?.tracking
+                ? {}
+                : { tracking: 'Al activarla se habilita para todos los usuarios de la institución; el admin de la institución puede quitarla a mano.' },
+            onSave: async (views, tools) => {
+                await adminApi.setOrganizationPermissions(org.id, { radar_detail_view: views, tools });
+                return `Herramientas de ${org.name} actualizadas`;
             },
         });
     });
@@ -2582,16 +2725,19 @@ async function renderInvitations() {
     state.organizations = orgs;
     // "Rol" filter needs words: the API gives the code.
     const items = invitations.map((invitation) => ({ ...invitation, role_label: ROLE_LABELS[invitation.role] || invitation.role }));
-    const views = (invitation) => (invitation.role === 'org_admin'
-        ? 'Las de la institución'
-        : (invitation.radar_views ? viewsSummary(invitation.radar_views) : 'Copia de las de la institución'));
+    const views = (invitation) => {
+        if (invitation.role === 'org_admin') return 'Las de la institución';
+        if (!invitation.radar_views && !invitation.tools) return 'Copia de las de la institución';
+        const base = invitation.radar_views ? viewsSummary(invitation.radar_views) : 'Vistas de la institución';
+        return invitation.tools?.tracking ? `${base} · Tracking` : base;
+    };
     elements.sectionContent.innerHTML = `
         <div class="toolbar"><button class="btn" id="invitations-add">+ Invitar por mail</button></div>
         ${renderFilterBar('invitations', items)}
         <div class="table-wrap">
         <table>
             <thead><tr>
-                <th>Mail</th><th>Institución</th><th>Rol</th><th>Vistas de radar</th><th>Vence</th><th>Acciones</th>
+                <th>Mail</th><th>Institución</th><th>Rol</th><th>Herramientas</th><th>Vence</th><th>Acciones</th>
             </tr></thead>
             <tbody>
                 ${items.map((invitation) => `
@@ -2669,15 +2815,19 @@ function openInvitationForm() {
                 <option value="viewer">Lector</option>
             </select></label>
             <p class="toolbar-note">Le mandamos un mail con un link (vale 7 días). Completa sus datos o entra con Google y queda dentro de la institución con ese rol. Un lector necesita que la institución ya tenga un admin activo. Mientras no lo acepte, la invitación reserva un lugar.</p>
+            ${toolsFieldsHtml({ notes: { tracking: 'Solo para lectores. Sin marcar: no tiene seguimiento de tormentas.' } })}
             <div class="form-actions"><button class="btn" type="submit">Enviar invitación</button></div>
         `,
         async (formData) => {
             const organizationId = formData.get('organization_id');
             if (!organizationId) throw new Error('Elegí una institución de la lista');
+            const role = formData.get('role');
             const sent = await adminApi.createInvitation({
                 email: String(formData.get('email') || '').trim(),
                 organization_id: Number(organizationId),
-                role: formData.get('role'),
+                role,
+                // An institution admin uses its institution's tools: only a reader's invitation carries the choice.
+                ...(role === 'viewer' ? { tools: readTools(formData) } : {}),
             });
             await renderSection();
             showMessage(invitationSentMessage(sent), 'success');
@@ -2913,8 +3063,9 @@ function organizationExtrasHtml(radars) {
             <legend>Vistas de radar de la institución</legend>
             <label class="checkbox-row"><input type="checkbox" name="all"> Todas</label>
             ${radarRows}
-            <p class="toolbar-note">Se pueden cambiar después con el botón Vistas de la institución.</p>
-        </fieldset>`;
+        </fieldset>
+        ${toolsFieldsHtml()}
+        <p class="toolbar-note">Las vistas y las herramientas se pueden cambiar después con el botón Herramientas de la institución.</p>`;
 }
 
 /** Show only the fields of the chosen admin option (the other blocks stay hidden). */
@@ -3100,6 +3251,7 @@ async function openOrganizationForm(org = null) {
                 inviteEmail: formData.get('admin_invite_email'),
                 allViews: formData.get('all') === 'on',
                 radars: formData.getAll('radar'),
+                tools: readTools(formData),
             });
             const created = await adminApi.createOrganization(payload);
             await renderSection();

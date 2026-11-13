@@ -509,6 +509,10 @@ th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
     gap: 12px;
     padding: 18px;
     overflow-y: auto;
+    /* Every row is as tall as its content. Without this, when the form is taller than the modal, the grid squeezes
+       the rows that scroll by themselves (the radar views and tools frames, which have overflow-y: auto) down to a
+       sliver and their options cannot be seen; with it, the whole form scrolls instead. */
+    grid-auto-rows: max-content;
 }
 .form-grid label { display: grid; gap: 5px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
 .form-grid label input, .form-grid label select { font-weight: 400; color: var(--text); }
@@ -540,6 +544,15 @@ th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
 
 .toggle-cell input[type="checkbox"] { transform: scale(1.25); accent-color: var(--primary); cursor: pointer; }
 .toolbar-note { font-size: 12.5px; color: var(--muted); }
+
+/* Warning inside a form (something ticked that would do nothing): amber, not red, because saving is still allowed. */
+.form-warning { margin: 0; padding: 9px 12px; font-size: 12.5px; line-height: 1.45; color: #92400e; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; }
+.form-warning[hidden] { display: none; }
+
+/* Second line of a table cell (the mail under the username), small and grey. word-break keeps a long mail inside the
+   cell instead of stretching the table. */
+.cell-sub { font-size: 12px; color: var(--muted); margin-top: 2px; word-break: break-all; }
+
 
 /* ── Colormap creator ────────────────────────────────────── */
 .modal-card--wide { width: min(720px, 100%); }
@@ -790,10 +803,17 @@ th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
 .mail-preview { width: 100%; height: 560px; border: 1px solid var(--border-strong, #cbd5e1); border-radius: 6px; background: #eef2f7; }
 @media (max-width: 900px) { .mail-editor { grid-template-columns: 1fr; } }
 
-/* Deleting an account (spec G): the red button sits apart from Guardar, in its own block. */
-.form-danger { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--border); }
-.form-danger .toolbar-note { margin: 0; }
-/* The button text stays on one line: the note beside it is the one that wraps, never the button. */
-.form-danger .btn-danger, .profile-danger .btn-danger { white-space: nowrap; flex-shrink: 0; }
+/* Window of the "Seguridad" button of a user row (reset password, close sessions): each action is a full-width row with
+   its name and a line saying what it does, grouped in one frame. */
+.security-list { display: grid; border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden; background: #fff; }
+.security-list .security-action { display: grid; gap: 2px; width: 100%; padding: 12px 14px; text-align: left; font: inherit; color: var(--text); background: #fff; border: 0; border-radius: 0; cursor: pointer; }
+.security-list .security-action + .security-action { border-top: 1px solid var(--border); }
+.security-list .security-action:hover { background: var(--panel-2); }
+.security-list .security-action strong { font-size: 13.5px; }
+.security-list .security-action span { font-size: 12px; font-weight: 400; color: var(--muted); }
+
+/* Deleting your own account (profile page): the red button sits apart, in its own block. The button text stays on one
+   line: the note beside it is the one that wraps, never the button. */
+.profile-danger .btn-danger { white-space: nowrap; flex-shrink: 0; }
 .profile-danger { display: grid; gap: 12px; }
 .profile-danger .toolbar-note { margin: 0; }

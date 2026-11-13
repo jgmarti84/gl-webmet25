@@ -176,8 +176,10 @@ export const adminApi = {
     listOrganizations() { return request('/organizations'); },
     createOrganization(payload) { return request('/organizations', { method: 'POST', body: JSON.stringify(payload) }); },
     patchOrganization(id, payload) { return request(`/organizations/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }); },
-    setOrganizationRadarViews(id, views) {
-        return request(`/organizations/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ radar_detail_view: views }) });
+    // Replace an institution's permissions: {radar_detail_view?: [...], tools?: {tracking: bool}}. What is left out is
+    // not changed.
+    setOrganizationPermissions(id, body) {
+        return request(`/organizations/${id}/permissions`, { method: 'PUT', body: JSON.stringify(body) });
     },
     // Delete a user for good (spec G). Only the general admin; 409 when the institution would be left without an admin.
     deleteUser(id) { return request(`/users/${id}`, { method: 'DELETE' }); },
@@ -194,8 +196,9 @@ export const adminApi = {
     resendInvitation(id) { return request(`/invitations/${id}/resend`, { method: 'POST' }); },
     cancelInvitation(id) { return request(`/invitations/${id}/cancel`, { method: 'POST' }); },
     // Replace the user's whole list of one-radar detail views: radar codes, ['*'] for all, [] for none.
-    setUserRadarViews(id, views) {
-        return request(`/users/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ radar_detail_view: views }) });
+    // Same for one user.
+    setUserPermissions(id, body) {
+        return request(`/users/${id}/permissions`, { method: 'PUT', body: JSON.stringify(body) });
     },
 
     // Colormap cache (outside /admin, also admin-only)

@@ -34,6 +34,7 @@ from ..schemas.invitations import (
     InvitationToken,
     OrgInvitationCreate,
 )
+from ..schemas.permissions import ToolsUpdate
 from .auth import _client_info, _full_access_lifetime, _me
 from .registration import _require_mail, _send_later
 
@@ -59,6 +60,7 @@ def _response(invitation: Invitation, info=(False, None), show_leaves: bool = Fa
         organization_name=invitation.organization.name,
         role=invitation.role,
         radar_views=invitation.radar_views,
+        tools=ToolsUpdate(**invitation.tools) if invitation.tools else None,
         created_at=invitation.created_at,
         expires_at=invitation.expires_at,
     )
@@ -84,6 +86,7 @@ def _invite(
     role: str,
     radar_views: Optional[List[str]],
     within_company: bool = False,
+    tools: Optional[dict] = None,
 ) -> InvitationResponse:
     """Create the invitation, commit, and send the mail after the response (shared by both inviters).
 
@@ -91,7 +94,7 @@ def _invite(
     _require_mail()
     try:
         invitation, mail = service.create_invitation(
-            db, actor, organization_id, email, role, radar_views, within_company=within_company
+            db, actor, organization_id, email, role, radar_views, within_company=within_company, tools=tools
         )
     except service.InvitationError as exc:
         raise _rule(exc)
@@ -137,7 +140,15 @@ def admin_create(
 ) -> InvitationResponse:
     """Invite someone to any institution as its admin (org_admin) or as a viewer."""
     return _invite(
-        db, background, mailer, actor, payload.organization_id, payload.email, payload.role, payload.radar_views
+        db,
+        background,
+        mailer,
+        actor,
+        payload.organization_id,
+        payload.email,
+        payload.role,
+        payload.radar_views,
+        tools=payload.tools.model_dump(exclude_none=True) if payload.tools else None,
     )
 
 
@@ -175,7 +186,16 @@ def org_create(
 ) -> InvitationResponse:
     """Invite a viewer to the caller's institution. Any institution or role in the body is ignored."""
     return _invite(
-        db, background, mailer, actor, actor.organization_id, payload.email, "viewer", payload.radar_views, True
+        db,
+        background,
+        mailer,
+        actor,
+        actor.organization_id,
+        payload.email,
+        "viewer",
+        payload.radar_views,
+        True,
+        tools=payload.tools.model_dump(exclude_none=True) if payload.tools else None,
     )
 
 

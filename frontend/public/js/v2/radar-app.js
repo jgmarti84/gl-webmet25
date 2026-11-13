@@ -1552,7 +1552,7 @@ const app = {
                 // Always fetch cd-mode (Conventional + Doppler) products only
                 api.getProducts(CD_MODE.include),
                 // If permissions cannot be read, treat it as "no access" (the safe side).
-                api.getMyPermissions().catch(() => ({ radar_detail_views: [] })),
+                api.getMyPermissions().catch(() => ({ radar_detail_views: [], tools: { tracking: false } })),
             ]);
 
             state.radar    = radars.find(r => r.code === RADAR_CODE) || null;

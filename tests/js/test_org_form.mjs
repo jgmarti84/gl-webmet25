@@ -99,6 +99,12 @@ assert(asAdmin.body.organization_id === 7 && asAdmin.body.role === 'org_admin', 
 assert(throws(() => buildMemberRequest({ ...member, mode: 'existing', existingUserId: '' })) !== null,
     'choosing "existing" without choosing a user is an error');
 
+console.log('T8: the tracking tool of a new company');
+const withTool = buildOrganizationPayload({ ...base, tools: { tracking: true } });
+assert(JSON.stringify(withTool.tools) === '{"tracking":true}', 'ticked: the tools are sent'); 
+assert(!('tools' in buildOrganizationPayload(base)), 'no tools: no tools key (a company is created as before)');
+assert(!('tools' in buildOrganizationPayload({ ...base, tools: { tracking: false } })), 'all unticked: no tools key either');
+
 console.log(`\n${'─'.repeat(40)}`);
 console.log(`Results: ${passed} passed, ${failed} failed`);
 if (failed > 0) { console.error('TESTS FAILED'); process.exit(1); }

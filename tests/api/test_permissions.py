@@ -33,11 +33,13 @@ def test_my_permissions_returns_json():
 
 def test_my_permissions_has_required_fields():
     with httpx.Client(base_url=API_BASE_URL) as client:
-        assert set(client.get(URL, headers=session_headers()).json()) == {"radar_detail_views"}
+        assert set(client.get(URL, headers=session_headers()).json()) == {"radar_detail_views", "tools"}
 
 
 def test_my_permissions_field_types():
     with httpx.Client(base_url=API_BASE_URL) as client:
-        views = client.get(URL, headers=session_headers()).json()["radar_detail_views"]
+        body = client.get(URL, headers=session_headers()).json()
+    views = body["radar_detail_views"]
     assert isinstance(views, list)
     assert all(isinstance(code, str) and code != "*" for code in views)
+    assert isinstance(body["tools"]["tracking"], bool)
