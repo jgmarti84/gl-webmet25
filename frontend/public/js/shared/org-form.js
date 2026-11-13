@@ -30,6 +30,21 @@ export function soleAdminBlock(user, users) {
     return { remaining: others.length, candidates };
 }
 
+/**
+ * The people of an institution, counted for the "delete institution" window: {total, active, inactive, admins}.
+ * Inactive accounts count too (they also keep an institution from being deleted), and `admins` are institution admins.
+ * `users` is the full list of users.
+ */
+export function organizationMembers(users, organizationId) {
+    const members = users.filter((user) => user.organization_id === organizationId);
+    return {
+        total: members.length,
+        active: members.filter((user) => user.is_active).length,
+        inactive: members.filter((user) => !user.is_active).length,
+        admins: members.filter((user) => user.role === 'org_admin').length,
+    };
+}
+
 /** Lower case and without accents, so "Perez" finds "Pérez" and "MARIA" finds "María". */
 function plain(text) {
     return String(text || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();

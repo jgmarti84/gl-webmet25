@@ -467,6 +467,14 @@ Pipeline de composición en canvas:
 
 ---
 
+### **Borrar instituciones** — el botón de basurero de la tabla de instituciones
+
+**Archivos:** `deleteOrganization()` y `openOrganizationDeleteForm()` en [`frontend/public/js/admin.js`](../../frontend/public/js/admin.js), `organizationMembers()` en `js/shared/org-form.js` y `deleteOrganization` en `admin-api.js`.
+
+**Responsabilidad:** cada fila de la tabla de instituciones termina con un botón blanco de basurero (`data-delete-org`). Cuenta las personas de la institución con la lista de usuarios (las inactivas también). Sin personas pide `window.confirm` nombrando la institución y cuántas invitaciones pendientes se cancelan, y llama a `DELETE /api/v1/admin/organizations/{id}`. Con personas abre una ventana con dos botones de opción (`users_action`): `unlink` (marcada) y `delete`. `delete` muestra `#org-delete-confirm` y deja el botón de enviar deshabilitado hasta escribir el nombre de la institución tal cual. El valor elegido va en `?users=`. Un rechazo del servidor (409) se muestra en la ventana o en el aviso de la página.
+
+---
+
 ### **perfil.html / perfil.js / perfil-api.js** — Página de perfil para lectores (spec D)
 
 **Archivos:** [`frontend/public/perfil.html`](../../frontend/public/perfil.html), [`frontend/public/js/perfil.js`](../../frontend/public/js/perfil.js), [`frontend/public/js/perfil-api.js`](../../frontend/public/js/perfil-api.js)
