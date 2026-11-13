@@ -14,6 +14,10 @@ const MAX_PAGE_SIZE = 100;
 
 // Inline icons for row actions (inherit button text color via currentColor).
 const ICON_EDIT = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><title>Editar</title><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>';
+// Wrench of the "Herramientas" button and padlock of the "Seguridad" button of the users table. Like the other icons,
+// each carries its <title>, which the browser shows as a tooltip.
+const ICON_TOOLS = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><title>Herramientas</title><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>';
+const ICON_LOCK = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><title>Seguridad</title><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
 const ICON_TRASH = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><title>Eliminar</title><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
 
 const state = {
@@ -2158,9 +2162,8 @@ async function renderUsers() {
                         <td>${user.last_login_at ? fmtDate(user.last_login_at) : '—'}</td>
                         <td class="table-actions">
                             <button class="btn-secondary" data-edit-user="${user.id}" title="Editar">${ICON_EDIT}</button>
-                            ${user.id === meId ? '' : `<button class="btn-secondary" data-toggle-user="${user.id}">${user.is_active ? 'Desactivar' : 'Activar'}</button>`}
-                            ${user.role === 'admin' ? '' : `<button class="btn-secondary" data-views-user="${user.id}">Herramientas</button>`}
-                            <button class="btn-secondary" data-security-user="${user.id}">Seguridad</button>
+                            ${user.role === 'admin' ? '' : `<button class="btn-secondary" data-views-user="${user.id}" title="Herramientas" aria-label="Herramientas">${ICON_TOOLS}</button>`}
+                            <button class="btn-secondary" data-security-user="${user.id}" title="Seguridad" aria-label="Seguridad">${ICON_LOCK}</button>
                             ${needsMailVerification(user) ? `<button class="btn-secondary" data-verify-user="${user.id}">Verificar mail</button>` : ''}
                             ${user.id === meId ? '' : `<button class="btn-secondary" data-delete-user="${user.id}" title="Eliminar">${ICON_TRASH}</button>`}
                         </td>
@@ -2188,14 +2191,11 @@ async function renderUsers() {
     elements.sectionContent.querySelectorAll('[data-edit-user]').forEach((el) => {
         el.onclick = () => openUserForm(byId(el.dataset.editUser));
     });
-    elements.sectionContent.querySelectorAll('[data-toggle-user]').forEach((el) => {
-        el.onclick = () => toggleUserActive(byId(el.dataset.toggleUser), allUsers);
-    });
     elements.sectionContent.querySelectorAll('[data-delete-user]').forEach((el) => {
         el.onclick = () => deleteUser(byId(el.dataset.deleteUser), allUsers);
     });
     elements.sectionContent.querySelectorAll('[data-security-user]').forEach((el) => {
-        el.onclick = () => openSecurityForm(byId(el.dataset.securityUser));
+        el.onclick = () => openSecurityForm(byId(el.dataset.securityUser), allUsers);
     });
     elements.sectionContent.querySelectorAll('[data-views-user]').forEach((el) => {
         el.onclick = () => openViewsForm(byId(el.dataset.viewsUser));
@@ -2212,7 +2212,7 @@ async function renderUsers() {
 }
 
 /**
- * Activate or deactivate an account (the button of the users table). Deactivating the only admin of an institution that
+ * Activate or deactivate an account (the last action of the Seguridad window). Deactivating the only admin of an institution that
  * has more users opens the "name another admin" window first (see openSoleAdminForm).
  */
 async function toggleUserActive(user, allUsers) {
@@ -2296,23 +2296,37 @@ async function deleteUser(user, allUsers) {
 }
 
 /**
- * "Seguridad": the window of the Seguridad button of a user row, with the two account actions: reset the password
- * (opens its own window) and close every session (asks for confirmation). On your own row only the second one is
- * offered, as before. The window has no Guardar: each action does its own thing.
+ * "Seguridad": the window of the padlock button of a user row, with the account actions: reset the password (opens its
+ * own window), close every session (asks for confirmation) and deactivate or activate the account (see
+ * toggleUserActive, which asks its own confirmation). On your own row only "Cerrar sesiones" is offered. The window has
+ * no Guardar: each action does its own thing. `allUsers` is the full list of users, which the deactivation needs to
+ * know whether the user is the only admin of an institution.
  */
-function openSecurityForm(user) {
+function openSecurityForm(user, allUsers) {
     const isSelf = user.id === state.me?.id;
+    const action = (id, title, text) => `<button id="${id}" class="security-action" type="button"><strong>${title}</strong><span>${text}</span></button>`;
+    const toggle = user.is_active
+        ? action('user-toggle', 'Desactivar usuario', 'No puede ingresar y se le cierran las sesiones. Se puede volver a activar.')
+        : action('user-toggle', 'Activar usuario', 'Vuelve a poder ingresar.');
     openFormModal(
         `Seguridad de ${user.username}`,
         `<div class="security-list">
-            ${isSelf ? '' : '<button id="user-reset" class="security-action" type="button"><strong>Resetear contraseña</strong><span>Define una contraseña nueva y cierra sus sesiones</span></button>'}
-            <button id="user-revoke" class="security-action" type="button"><strong>Cerrar sesiones</strong><span>Lo obliga a volver a entrar en todos sus dispositivos</span></button>
+            ${isSelf ? '' : action('user-reset', 'Resetear contraseña', 'Define una contraseña nueva y cierra sus sesiones')}
+            ${action('user-revoke', 'Cerrar sesiones', 'Lo obliga a volver a entrar en todos sus dispositivos')}
+            ${isSelf ? '' : toggle}
         </div>`,
         async () => {},
     );
     const resetButton = document.getElementById('user-reset');
     if (resetButton) resetButton.onclick = () => openPasswordResetForm(user);
     document.getElementById('user-revoke').onclick = () => revokeUserSessions(user);
+    const toggleButton = document.getElementById('user-toggle');
+    if (toggleButton) {
+        toggleButton.onclick = () => {
+            closeFormModal();  // toggleUserActive may open another window (the only admin of an institution)
+            toggleUserActive(user, allUsers);
+        };
+    }
 }
 
 /**
