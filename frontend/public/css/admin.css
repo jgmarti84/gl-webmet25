@@ -83,12 +83,6 @@ body {
     margin: 4px 6px 22px;
 }
 
-.sidebar-brand-mark {
-    font-size: 22px;
-    color: var(--accent);
-    line-height: 1;
-}
-
 .sidebar-brand-text { display: flex; flex-direction: column; line-height: 1.05; }
 .sidebar-brand-text small {
     font-size: 11px;
