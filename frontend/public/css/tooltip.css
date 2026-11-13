@@ -1,0 +1,32 @@
+/* The tooltip of the app (js/shared/tooltip.js adds the element). Dark, small, no border; it fades in while it moves a few
+   pixels toward its control. It is fixed to the window and above everything else (modals, menus, the map), so nothing
+   can clip it. pointer-events none keeps it from taking the mouse away from the control. */
+#app-tooltip {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 100000;
+    width: max-content;
+    max-width: 260px;
+    padding: 6px 9px;
+    border-radius: 6px;
+    background: #1e293b;
+    /* A hairline of light, so it also stands out on the dark pages (the map); on light pages it is not noticeable. */
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 6px 18px rgba(15, 23, 42, 0.22);
+    color: #fff;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.35;
+    text-align: left;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(4px); /* it rises when it opens above its control */
+    transition: opacity 0.14s ease, transform 0.14s ease;
+}
+#app-tooltip[data-placement="below"] { transform: translateY(-4px); } /* ... and drops when it opens below it */
+#app-tooltip.is-visible { opacity: 1; transform: translateY(0); }
+
+@media (prefers-reduced-motion: reduce) {
+    #app-tooltip { transition: opacity 0.01s; }
+}
