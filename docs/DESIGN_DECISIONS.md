@@ -24,7 +24,8 @@ gained, what is lost, what is left for later). Decisions that were later changed
 10. [Storm tracking tool](#10-storm-tracking-tool)
 11. [Infrastructure and performance](#11-infrastructure-and-performance)
 12. [Testing](#12-testing)
-13. [Known gaps](#13-known-gaps)
+13. [Interface](#13-interface)
+14. [Known gaps](#14-known-gaps)
 
 ---
 
@@ -441,7 +442,72 @@ gained, what is lost, what is left for later). Decisions that were later changed
 
 ---
 
-## 13. Known gaps
+## 13. Interface
+
+### 13.1 One tooltip of our own, a floating bubble
+
+- **Context:** the browser draws a `title` as a box with a dark border that cannot be styled, and a tooltip written in CSS
+  inside a table was hidden by the sticky header (and clipped by the table's scrolling box).
+- **Decision:** one bubble, a child of `<body>` with `position: fixed`, fed by every `title` of the page (also the ones
+  the code sets later) and by the `<title>` inside icons. It opens above its control and flips below when there is no
+  room.
+- **Alternatives:** a `::after` on each control (clipped by `overflow` and by stacking contexts; it failed in the
+  tables); keeping the browser's own (no control over look or timing).
+- **Consequences:** the text moves from `title` to `data-tooltip` and `aria-label`; text fields are skipped because their
+  `title` is also part of the browser's format message. A page with tooltips loads one script.
+
+### 13.2 Our own confirmation window instead of `window.confirm`
+
+- **Decision:** `confirmAction` is a small window with the motion of the others, answering a promise. For an action that
+  cannot be undone the red button does it and the focus starts on Cancel.
+- **Why:** the browser box cannot be styled or animated and looks different on every system. The cost is that every
+  question became asynchronous, and the e2e tests answer the window (`answer_confirmation`) instead of the browser
+  dialog.
+
+### 13.3 One account chip for the map and the panels, in two themes
+
+- **Decision:** the same pill (avatar, name, role, logout) everywhere; every color is a variable. The map keeps the dark
+  theme; the panels use a light one, because a dark pill stood out too much in a light header. In the light theme the
+  general admin's badge is blue (the color of the panel) and the institution admin's is slate.
+- **Alternatives:** a different chip in each place (they drifted apart); the dark pill in the panels (too loud); a
+  yellow badge for the general admin (it did not fit the blue panels).
+- **Consequences:** the shortcut to the panel of the role exists only on the map; a panel has only logout, since the
+  person is already there.
+
+### 13.4 Row actions as icons; the rare ones live under "Seguridad"
+
+- **Context:** the users table had too many buttons per row.
+- **Decision:** icons with a tooltip for the frequent ones (edit, tools, delete); **Seguridad** (a padlock) opens a
+  window with reset password, close sessions and deactivate or activate. Delete is its own trash button, at the end
+  and white (a red fill drew too much attention).
+- **Alternatives:** smaller text buttons (it only delays the problem), moving the rare ones into the edit form.
+
+### 13.5 Collapsible side menu; the active group always open
+
+- **Decision:** the groups open and close with a soft animation. The group that holds the active link is always open. In
+  the admin panel the others start closed, because its menu is long; the institution and profile panels have a couple
+  of links, so everything starts open. What the person opens is remembered, for each panel on its own.
+- **Turned down:** an animated radar sweep as the background of the sidebar. It was tried (rings and a beam, CSS only)
+  and removed: it was only visible at the bottom and did not convince. The login panel keeps its radar and takes the
+  color of the sidebar.
+
+### 13.6 "Mis datos" as one compact card
+
+- **Decision:** the head (avatar, name, `@user`, role, "Editar nombre") and, under a line, the data that is not already
+  in the head. Two big cards repeated the username, the name and the role.
+
+### 13.7 Motion: short, soft and easy to turn off
+
+- **Decision:** windows, notices, sections, table rows and search lists animate briefly, with transform and opacity only
+  (the browser does it on the graphics card). Closing a window fades out first and only then empties its form. A section
+  animates when it changes, not when the same one is drawn again after an action (it would blink).
+- **Why:** it helps the eye follow what changed; it must never delay what the person wants to do, so everything stops
+  with `prefers-reduced-motion`.
+- **Left for later:** the floating panels of the map open with an animation but still close at once.
+
+---
+
+## 14. Known gaps
 
 These were left out on purpose and are worth knowing:
 
