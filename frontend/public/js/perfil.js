@@ -3,8 +3,9 @@
  * (admin#profile and empresa#perfil), so this page sends them there. The profile itself is drawn by
  * shared/profile-section.js, the same code the panels use.
  */
-import { authApi, initPageSession } from './auth-api.js';
+import { initPageSession } from './auth-api.js';
 import { mountProfile } from './shared/profile-section.js';
+import { renderSessionBox } from './shared/session-box.js';
 
 // How long a success notice stays before it closes by itself (errors stay until the × is pressed).
 const SUCCESS_MESSAGE_MS = 4000;
@@ -90,10 +91,7 @@ async function init() {
         return;
     }
 
-    $('logout-btn').onclick = async () => {
-        await authApi.logout();
-        window.location.assign('login');
-    };
+    renderSessionBox(me, { afterLogout: () => window.location.assign('login') });
     $('close-form-modal').onclick = closeModal;
     $('form-modal').addEventListener('click', (event) => {
         if (event.target === $('form-modal')) closeModal();

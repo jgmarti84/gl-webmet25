@@ -473,6 +473,12 @@ Pipeline de composición en canvas:
 
 ---
 
+### **Chip de cuenta** — `css/account-chip.css`, `js/shared/session-box.js`
+
+**Responsabilidad:** la píldora de "quién está conectado" es la misma en las páginas del mapa (`index`, `radar`) y en los tres paneles (admin, institución y perfil): una píldora de 48 px de alto (oscura sobre el mapa, `account-chip--light`, blanca con un borde fino, en el encabezado claro de los paneles: cada color es una variable de `css/account-chip.css`, así que un tema es solo la lista de ellas), con el avatar (iniciales), el nombre, la insignia del rol (no para lectores) y botones redondos con ícono. Su aspecto vive en `css/account-chip.css`, que cargan todas esas páginas; dónde va lo decide cada página: sobre el mapa flota en la esquina superior derecha (`.account-chip` en `css/styles.css`), en un panel es el último elemento del encabezado. El HTML es el mismo bloque `#account-chip` en cada página y `renderSessionBox(me, { afterLogout })` de `session-box.js` lo llena: en las páginas del mapa cerrar sesión recarga la página (nginx sirve el login en el lugar), y los paneles pasan `afterLogout` para ir a `login`. El atajo al panel del rol (`#admin-chip-link`, `#empresa-chip-link`, `#profile-chip-link`) existe solo en las páginas del mapa; un panel tiene solo el botón de cerrar sesión. La sección de perfil actualiza el nombre y las iniciales del chip cuando la persona los edita.
+
+---
+
 ### **Tooltips** — `js/shared/tooltip.js` y `css/tooltip.css`
 
 **Responsabilidad:** el tooltip propio de la app, en lugar del del navegador (una caja con borde oscuro que no se puede estilar). Una sola burbuja flotante (`<div id="app-tooltip">`, hija de `<body>` con `position: fixed`), así que ninguna tabla, panel o modal puede cortarla ni taparla: una burbuja dentro de una tabla con scroll la tapaba el encabezado fijo. Se abre arriba de su control, pasa abajo si no hay lugar, queda dentro de la ventana y aparece con un fundido y un pequeño movimiento a los 300 ms (de inmediato si acaba de cerrarse otra). Se abre con el mouse y con el foco del teclado; un clic, Escape, un scroll o un cambio de tamaño la cierran.

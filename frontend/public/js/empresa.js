@@ -3,10 +3,11 @@
  * Company admins manage only the viewers of their company; other company admins are listed read-only (the general
  * admin looks after them).
  */
-import { authApi, initPageSession } from './auth-api.js';
+import { initPageSession } from './auth-api.js';
 import { empresaApi } from './empresa-api.js';
 import { api } from './shared/api.js';
 import { mountProfile } from './shared/profile-section.js';
+import { renderSessionBox } from './shared/session-box.js';
 import { ALL_RADARS } from './shared/radar-views.js';
 import { readTools, toolsFieldsHtml, toolsSummary, usableToolsSummary } from './shared/tools-form.js';
 
@@ -489,11 +490,7 @@ async function init() {
     const me = await initPageSession();
     if (!me) return;  // initPageSession reloads the page, and nginx then serves the login
     state.me = me;
-    $('session-user').textContent = me.full_name || me.username;
-    $('logout-btn').onclick = async () => {
-        await authApi.logout();
-        window.location.assign('login');
-    };
+    renderSessionBox(me, { afterLogout: () => window.location.assign('login') });
     $('empresa-add').onclick = openAddForm;
     $('close-form-modal').onclick = closeModal;
     $('form-modal').addEventListener('click', (event) => {

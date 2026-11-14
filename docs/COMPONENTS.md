@@ -490,6 +490,12 @@ settings), and animation controls (bottom-center).
 
 ---
 
+### **Account chip** — `css/account-chip.css`, `js/shared/session-box.js`
+
+**Responsibility:** the "who is signed in" pill is the same on the map pages (`index`, `radar`) and in the three panels (admin, institution and profile): a pill 48 px tall (dark over the map, `account-chip--light`, white with a thin border, in the light header of the panels: every color is a variable of `css/account-chip.css`, so a theme is just the list of them), with the avatar (initials), the name, the role badge (not for viewers) and round icon buttons. Its look lives in `css/account-chip.css`, which every one of those pages loads; where it sits is up to the page: over the map it floats at the top-right corner (`.account-chip` in `css/styles.css`), in a panel it is the last element of the page header. The markup is the same `#account-chip` block in each page and `renderSessionBox(me, { afterLogout })` of `session-box.js` fills it: on the map pages logout reloads the page (nginx serves the login in place), and the panels pass `afterLogout` to go to `login`. The shortcut to the panel of the role (`#admin-chip-link`, `#empresa-chip-link`, `#profile-chip-link`) exists only on the map pages; a panel has just the logout button. The profile section updates the name and the initials of the chip when the person edits them.
+
+---
+
 ### **Tooltips** — `js/shared/tooltip.js` and `css/tooltip.css`
 
 **Responsibility:** the app's own tooltip, in place of the browser's (a box with a dark border that cannot be styled). One floating bubble (`<div id="app-tooltip">`, a child of `<body>` with `position: fixed`), so no table, panel or modal can clip it or draw over it: a bubble inside a scrolling table was hidden by the sticky header. It opens above its control, flips below when there is no room, stays inside the window, and fades in with a small movement after 300 ms (at once if another one just closed). Mouse hover and keyboard focus both open it; a click, Escape, a scroll or a resize close it.

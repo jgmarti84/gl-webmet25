@@ -2213,100 +2213,14 @@ code {
     font-family: 'Courier New', monospace;
 }
 
-/* Account chip: always-visible "who is signed in" pill, top-right, right above the icon bar (the icon bar
-   starts 6 px below it, see #icon-bar). It carries the avatar, the name, the role badge (admins only), the
-   admin panel shortcut and the logout button. It is always 48 px tall (fixed, so it is the same with or without
-   the role badge): #icon-bar and .floating-panel count on that. */
+/* Account chip over the map: it floats at the top-right corner, right above the icon bar (the icon bar starts 6 px
+   below it, see #icon-bar). The chip itself (look, avatar, name, buttons) is css/account-chip.css, shared with the panels.
+   It is always 48 px tall there: #icon-bar and .floating-panel count on that. */
 .account-chip {
     position: absolute;
     top: 10px;
     right: 10px;
     z-index: 1100;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    height: 48px;
-    box-sizing: border-box;
-    max-width: calc(100vw - 20px);
-    padding: 5px 6px 5px 5px;
-    border-radius: 999px;
-    background: rgba(26, 26, 46, 0.92);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
-}
-
-/* Without this the display:flex above would win over the hidden attribute. */
-.account-chip[hidden] {
-    display: none;
-}
-
-.account-chip .account-avatar {
-    width: 32px;
-    height: 32px;
-    font-size: 12px;
-}
-
-/* Long names are cut with "…" instead of stretching the pill. */
-.account-chip .account-name {
-    max-width: 170px;
-    font-size: 13px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.account-chip .account-meta {
-    gap: 2px;
-}
-
-.account-chip .account-role {
-    font-size: 9px;
-    padding: 1px 7px;
-}
-
-.account-chip .account-role[hidden] {
-    display: none;
-}
-
-/* Round icon buttons at the end of the chip: the admin panel shortcut (a link) and logout (a button). */
-.account-chip-btn {
-    flex-shrink: 0;
-    text-decoration: none;
-    width: 30px;
-    height: 30px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    border: none;
-    border-radius: 50%;
-    background: none;
-    color: #90a4ae;
-    cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
-}
-
-/* Two icon buttons in a row (admins): pull the second one a little closer to the first. */
-.account-chip-btn + .account-chip-btn {
-    margin-left: -4px;
-}
-
-/* Without this the display:flex above would win over the hidden attribute (the link is hidden for viewers). */
-.account-chip-btn[hidden] {
-    display: none;
-}
-
-.account-chip-btn:hover,
-.account-chip-btn:focus-visible {
-    background: rgba(79, 195, 247, 0.15);
-    color: #4fc3f7;
-}
-
-/* Logout turns red instead of blue: it is the one that ends the session. */
-.account-logout:hover,
-.account-logout:focus-visible {
-    background: rgba(239, 83, 80, 0.15);
-    color: #ef9a9a;
 }
 
 /* Small screens: the chip is 5 px from the corner, like the icon bar. This block is HERE, after the base
@@ -2316,65 +2230,11 @@ code {
     .account-chip { top: 5px; right: 5px; }
 }
 
-/* Narrow screens: only the avatar and the icon buttons stay (name and role are hidden), so the chip is
-   narrower and does not run into the logo at the top-left. */
+/* Narrow screens: a smaller logo, so the chip (top-right) does not cover the end of it on a phone. */
 @media (max-width: 640px) {
-    .account-chip .account-meta {
-        display: none;
-    }
-
-    /* A smaller logo, so the chip (top-right) does not cover the end of it on a phone. */
     #logo-container img {
         height: 62px;
     }
-}
-
-.account-avatar {
-    flex-shrink: 0;
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #4fc3f7 0%, #1e6fa8 100%);
-    color: #0d1b2a;
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.account-meta {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-    min-width: 0;
-}
-
-.account-name {
-    font-size: 14px;
-    font-weight: 600;
-    color: #e8eef3;
-    word-break: break-word;
-}
-
-.account-role {
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.6px;
-    text-transform: uppercase;
-    padding: 2px 8px;
-    border-radius: 999px;
-    color: #90caf9;
-    background: rgba(144, 202, 249, 0.12);
-    border: 1px solid rgba(144, 202, 249, 0.3);
-}
-
-.account-role.is-admin {
-    color: #ffcc80;
-    background: rgba(255, 204, 128, 0.12);
-    border-color: rgba(255, 204, 128, 0.35);
 }
 
 /* Link row of the settings panel (admin panel link). */

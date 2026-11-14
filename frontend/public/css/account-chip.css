@@ -1,0 +1,185 @@
+/* The account chip: the "who is signed in" pill, the same on the map pages and in the panels (admin, institution and
+   profile). It carries the avatar, the name, the role badge (not for viewers) and the buttons: the shortcut of the
+   map pages and logout. Only the look lives here; where the chip sits is up to each page: over the map it floats at the
+   top-right corner (styles.css), in a panel it is part of the page header (admin.css). It is always 48 px tall, so it
+   is the same with or without the role badge.
+
+   Two themes, the same shape: the dark one (the default) suits the map; `.account-chip--light` is for the light header of
+   the panels, where a dark pill stood out too much. Every color is a variable, so a theme is just the list of them. */
+.account-chip {
+    --chip-bg: rgba(26, 26, 46, 0.92);
+    --chip-border: rgba(255, 255, 255, 0.1);
+    --chip-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+    --chip-name: #e8eef3;
+    --chip-btn: #90a4ae;
+    --chip-btn-hover-bg: rgba(79, 195, 247, 0.15);
+    --chip-btn-hover: #4fc3f7;
+    --chip-logout-hover-bg: rgba(239, 83, 80, 0.15);
+    --chip-logout-hover: #ef9a9a;
+    --chip-role: #90caf9;
+    --chip-role-bg: rgba(144, 202, 249, 0.12);
+    --chip-role-border: rgba(144, 202, 249, 0.3);
+    --chip-admin: #ffcc80;
+    --chip-admin-bg: rgba(255, 204, 128, 0.12);
+    --chip-admin-border: rgba(255, 204, 128, 0.35);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 48px;
+    box-sizing: border-box;
+    max-width: calc(100vw - 20px);
+    padding: 5px 6px 5px 5px;
+    border-radius: 999px;
+    background: var(--chip-bg);
+    border: 1px solid var(--chip-border);
+    box-shadow: var(--chip-shadow);
+}
+
+/* The light theme, for the header of the panels: white pill, thin border, dark text. */
+.account-chip--light {
+    --chip-bg: #ffffff;
+    --chip-border: #e2e8f0;
+    --chip-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --chip-name: #1e293b;
+    --chip-btn: #64748b;
+    --chip-btn-hover-bg: #eff6ff;
+    --chip-btn-hover: #1d4ed8;
+    --chip-logout-hover-bg: #fef2f2;
+    --chip-logout-hover: #dc2626;
+    /* The institution admin's badge is a quiet slate; the general admin's is the blue of the panels (below). */
+    --chip-role: #475569;
+    --chip-role-bg: #f1f5f9;
+    --chip-role-border: #cbd5e1;
+    --chip-admin: #1d4ed8;
+    --chip-admin-bg: #dbeafe;
+    --chip-admin-border: #93c5fd;
+}
+
+/* Without this the display:flex above would win over the hidden attribute. */
+.account-chip[hidden] {
+    display: none;
+}
+
+.account-chip .account-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+}
+
+/* Long names are cut with "…" instead of stretching the pill. */
+.account-chip .account-name {
+    max-width: 170px;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.account-chip .account-meta {
+    gap: 2px;
+}
+
+.account-chip .account-role {
+    font-size: 9px;
+    padding: 1px 7px;
+}
+
+.account-chip .account-role[hidden] {
+    display: none;
+}
+
+/* Round icon buttons at the end of the chip: the shortcut to a panel (a link) and logout (a button). */
+.account-chip-btn {
+    flex-shrink: 0;
+    text-decoration: none;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: none;
+    color: var(--chip-btn);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+/* Two icon buttons in a row: pull the second one a little closer to the first. */
+.account-chip-btn + .account-chip-btn {
+    margin-left: -4px;
+}
+
+/* Without this the display:flex above would win over the hidden attribute (the link is hidden for some roles). */
+.account-chip-btn[hidden] {
+    display: none;
+}
+
+.account-chip-btn:hover,
+.account-chip-btn:focus-visible {
+    background: var(--chip-btn-hover-bg);
+    color: var(--chip-btn-hover);
+}
+
+/* Logout turns red instead of blue: it is the one that ends the session. */
+.account-logout:hover,
+.account-logout:focus-visible {
+    background: var(--chip-logout-hover-bg);
+    color: var(--chip-logout-hover);
+}
+
+/* Narrow screens: only the avatar and the icon buttons stay (name and role are hidden), so the chip is narrower. */
+@media (max-width: 640px) {
+    .account-chip .account-meta {
+        display: none;
+    }
+}
+
+.account-avatar {
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4fc3f7 0%, #1e6fa8 100%);
+    color: #0d1b2a;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.account-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+}
+
+.account-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--chip-name);
+    word-break: break-word;
+}
+
+.account-role {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 999px;
+    color: var(--chip-role);
+    background: var(--chip-role-bg);
+    border: 1px solid var(--chip-role-border);
+}
+
+.account-role.is-admin {
+    color: var(--chip-admin);
+    background: var(--chip-admin-bg);
+    border-color: var(--chip-admin-border);
+}

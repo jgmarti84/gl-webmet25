@@ -106,7 +106,7 @@ def test_a_company_admin_changes_its_name_from_the_company_panel(browser, admin_
         page.fill("input[name=full_name]", "Jefa E2E")
         page.click("#form-modal-body button[type=submit]")
         expect(page.locator("#perfil-name")).to_have_text("Jefa E2E")
-        expect(page.locator("#session-user")).to_have_text("Jefa E2E")
+        expect(page.locator("#account-name")).to_have_text("Jefa E2E")
     finally:
         page.close()
         deactivate_user(admin_api, org_admin_id)

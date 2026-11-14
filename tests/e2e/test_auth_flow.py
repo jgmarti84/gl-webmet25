@@ -35,8 +35,8 @@ def test_wrong_password_shows_generic_error(page: Page):
 
 def test_login_then_logout(page: Page, js_errors):
     login_via_form(page)
-    expect(page.locator("#session-user")).to_be_visible()
-    page.click("#logout-btn")
+    expect(page.locator("#account-name")).to_be_visible()
+    page.click("#session-box-logout")
     page.wait_for_url("**/login**")
     page.goto(f"{FRONTEND_URL}/admin", wait_until="networkidle")
     expect(page.locator("#login-form")).to_be_visible()

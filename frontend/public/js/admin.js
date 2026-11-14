@@ -4,6 +4,7 @@ import {
     buildMemberRequest, buildOrganizationPayload, eligibleAdmins, filterAdmins, filterOrganizations, soleAdminBlock,
 } from './shared/org-form.js';
 import { mountProfile } from './shared/profile-section.js';
+import { renderSessionBox } from './shared/session-box.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
 import { beyondInstitution, readTools, toolsFieldsHtml, toolsSummary, usableToolsSummary } from './shared/tools-form.js';
 
@@ -3445,11 +3446,6 @@ async function renderSection() {
     }
 }
 
-async function logout() {
-    await authApi.logout();
-    window.location.assign('login');
-}
-
 function renderNoPermission() {
     document.getElementById('sidebar-nav').classList.add('hidden');
     elements.sectionTitle.textContent = 'Sin permisos';
@@ -3469,8 +3465,7 @@ async function init() {
         return;
     }
     state.me = me;
-    document.getElementById('session-user').textContent = me.full_name || me.username;
-    document.getElementById('logout-btn').onclick = logout;
+    renderSessionBox(me, { afterLogout: () => window.location.assign('login') });
     document.getElementById('back-to-map').onclick = goBackToMap;
     document.getElementById('sidebar-back-map').onclick = goBackToMap;
     if (me.role !== 'admin') {

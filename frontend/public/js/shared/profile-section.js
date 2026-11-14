@@ -121,9 +121,11 @@ function fillProfile(container, profile) {
         ? views.map((view) => `<tr><td>${safeText(view.code)}</td><td>${safeText(view.title)}</td></tr>`).join('')
         : '<tr><td colspan="2">Todavía no tenés vistas de radar asignadas.</td></tr>';
     $('perfil-views-note').textContent = viewsNote(profile.role);
-    // The name also shows in the header of the page (every page that hosts the profile has #session-user).
-    const header = document.getElementById('session-user');
-    if (header) header.textContent = displayName;
+    // The name also shows in the account chip of the page header (every page that hosts the profile has it).
+    const chipName = document.getElementById('account-name');
+    if (chipName) chipName.textContent = displayName;
+    const chipAvatar = document.getElementById('account-avatar');
+    if (chipAvatar) chipAvatar.textContent = initialsOf(displayName);
 }
 
 /** The card of the company of a company admin: name, seats and the company's views. */
