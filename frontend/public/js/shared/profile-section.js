@@ -44,6 +44,9 @@ export function viewsNote(role) {
         : 'Son los radares cuya vista detallada podés abrir desde el mapa.';
 }
 
+/** What the head of the card already shows (who the person is), so the details below do not repeat it. */
+const DETAILS_SHOWN_IN_HEAD = new Set(['Usuario', 'Nombre', 'Rol']);
+
 /** The skeleton of the section. The ids are the ones the tests and the page header look for. */
 function skeleton(isCompanyAdmin, isGeneralAdmin) {
     const companyCard = isCompanyAdmin
@@ -60,23 +63,23 @@ function skeleton(isCompanyAdmin, isGeneralAdmin) {
         : '';
     return `
         <p class="section-subtitle">Mis datos</p>
-        <div class="card-grid profile-grid">
-            <div class="card profile-identity">
+        <div class="card profile-card">
+            <div class="profile-card-head">
                 <div id="perfil-avatar" class="profile-avatar" aria-hidden="true"></div>
-                <div>
+                <div class="profile-card-id">
                     <div id="perfil-name" class="profile-name"></div>
-                    <div id="perfil-username" class="profile-sub"></div>
-                    <span id="perfil-role" class="status-pill"></span>
+                    <div class="profile-card-sub">
+                        <span id="perfil-username" class="profile-sub"></span>
+                        <span id="perfil-role" class="status-pill"></span>
+                    </div>
                 </div>
+                <button class="btn-secondary profile-edit" id="perfil-edit-name" type="button">
+                    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                    Editar nombre
+                </button>
             </div>
-            <div class="card">
-                <h3>Datos de la cuenta</h3>
-                <dl id="perfil-details" class="profile-details"></dl>
-            </div>
-        </div>
-        <div class="toolbar">
-            <button class="btn" id="perfil-edit-name" type="button">Editar nombre</button>
-            <span class="toolbar-note">El usuario y el mail no se pueden cambiar desde acá.</span>
+            <dl id="perfil-details" class="profile-details"></dl>
+            <p class="toolbar-note profile-card-note">El usuario y el mail no se pueden cambiar desde acá.</p>
         </div>
         ${companyCard}
         <p class="section-subtitle">Mis vistas de radar</p>
@@ -114,6 +117,7 @@ function fillProfile(container, profile) {
     $('perfil-username').textContent = `@${profile.username}`;
     $('perfil-role').textContent = ROLE_LABELS[profile.role] || profile.role;
     $('perfil-details').innerHTML = profileRows(profile)
+        .filter(([label]) => !DETAILS_SHOWN_IN_HEAD.has(label))
         .map(([label, value]) => `<div><dt>${safeText(label)}</dt><dd>${safeText(value)}</dd></div>`)
         .join('');
     const views = profile.radar_detail_views;

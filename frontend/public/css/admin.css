@@ -747,40 +747,48 @@ th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
 .checkbox-row input { flex-shrink: 0; margin: 0; }
 .views-radars { border: 1px solid var(--border, #ccc); border-radius: 6px; padding: 8px 12px; margin: 8px 0; max-height: 240px; overflow-y: auto; }
 
-/* ── User profile page (/perfil, spec D) ───────────────────────────────────── */
-/* The identity card: a big round avatar with the initials, and the name next to it. */
-.profile-identity { display: flex; align-items: center; gap: 16px; }
+/* ── User profile page (/perfil) ───────────────────────────────────────────── */
+/* "Mis datos" is one card: the head (avatar, name, @user and role, and the button to edit the name) and under it the
+   rest of the data in columns, so it takes little room. The padding is the card's own, bigger than the one of the
+   stat cards, so nothing touches an edge. It does not lift on hover like the stat cards: there is nothing to click. */
+.profile-card { padding: 22px 26px; margin-bottom: 22px; }
+.profile-card:hover { transform: none; box-shadow: var(--shadow-sm); }
+.profile-card-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.profile-card-id { flex: 1; min-width: 0; }
 .profile-avatar {
     flex-shrink: 0;
-    width: 64px;
-    height: 64px;
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     background: linear-gradient(135deg, #4fc3f7 0%, #1e6fa8 100%);
     color: #0d1b2a;
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 700;
     letter-spacing: 0.5px;
 }
-.profile-name { font-size: 18px; font-weight: 700; margin-bottom: 2px; }
-.profile-sub { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
-
-/* "Datos de la cuenta": label and value in two columns, one row per datum. */
-.profile-details { margin: 0; display: grid; gap: 8px; }
-.profile-details > div { display: grid; grid-template-columns: 130px 1fr; gap: 10px; font-size: 14px; }
-.profile-details dt { color: var(--muted); font-weight: 600; font-size: 12.5px; }
-.profile-details dd { margin: 0; overflow-wrap: anywhere; }
-
-/* The two cards at the top of the profile: the identity card is narrower than the details card, and on a phone
-   they stack. The role pill keeps the text as written ("Admin de institución"), not capitalized word by word. */
-.profile-grid { grid-template-columns: minmax(240px, 1fr) minmax(300px, 2fr); }
+.profile-name { font-size: 18px; font-weight: 700; margin-bottom: 4px; overflow-wrap: anywhere; }
+.profile-card-sub { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.profile-sub { font-size: 13px; color: var(--muted); }
+/* The role pill keeps the text as written ("Admin de institución"), not capitalized word by word. */
 #perfil-role { text-transform: none; }
-@media (max-width: 720px) {
-    .profile-grid { grid-template-columns: minmax(0, 1fr); }
-    .profile-details > div { grid-template-columns: 110px 1fr; }
+/* The button of the head: a pencil and the text, the same look as the other secondary buttons of the panel. */
+.profile-edit { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; }
+
+/* The rest of the data: label above, value below, as many columns as fit. A line separates it from the head. */
+.profile-details {
+    margin: 20px 0 0;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 18px 24px;
 }
+.profile-details dt { color: var(--muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.profile-details dd { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.profile-card-note { margin: 18px 0 0; }
 
 /* "Agregar institución": the fields of the chosen admin option sit under their radio button, a little indented. */
 .org-admin-fields { display: grid; gap: 10px; padding: 4px 0 8px 26px; }

@@ -474,7 +474,7 @@ settings), and animation controls (bottom-center).
 
 **File:** [`frontend/public/js/shared/profile-section.js`](../../frontend/public/js/shared/profile-section.js)
 
-**Responsibility:** `mountProfile(container, {me, openModal, showMessage})` draws the user's own profile into a container: the account data, the radars the person may open and, for company admins, the card of their company, plus the name edit. The host page passes its own modal and notice functions, so the form behaves like the rest of that page. It is used by three pages: the admin panel (section `profile`), the company panel (section `perfil`) and `perfil.html`. Pure helpers (`formatDate`, `profileRows`, `viewsNote`) are unit-tested in `tests/js/test_profile_section.mjs`.
+**Responsibility:** `mountProfile(container, {me, openModal, showMessage})` draws the user's own profile into a container: the account data, the radars the person may open and, for company admins, the card of their company, plus the name edit. "Mis datos" is a single compact card (`.profile-card`): the head has the avatar, the name, `@user`, the role pill and the "Editar nombre" button, and under a line the rest of the data (mail, institution, sign-up and last login) in columns; what the head already shows is not repeated below. The host page passes its own modal and notice functions, so the form behaves like the rest of that page. It is used by three pages: the admin panel (section `profile`), the company panel (section `perfil`) and `perfil.html`. Pure helpers (`formatDate`, `profileRows`, `viewsNote`) are unit-tested in `tests/js/test_profile_section.mjs`.
 
 ### **Deleting accounts** — "Eliminar usuario" and "Eliminar mi cuenta" (spec G)
 
