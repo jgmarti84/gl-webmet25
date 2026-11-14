@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 import pytest
 from playwright.sync_api import Page, expect
 
-from .conftest import deactivate_by_username, mailpit_clear, mailpit_message
+from .conftest import answer_confirmation, deactivate_by_username, mailpit_clear, mailpit_message
 from .test_empresa import ORG_ADMIN, ORG_ADMIN_PASSWORD, ORG_NAME, _ensure_company, _ensure_org_admin, _login
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://frontend-v2:80")
@@ -125,7 +125,6 @@ def test_the_company_admin_invites_a_viewer_from_its_panel_and_cancels_another(b
     org_id = _ensure_company(admin_api)
     org_admin_id = _ensure_org_admin(admin_api, org_id)
     page = _login(browser, ORG_ADMIN, ORG_ADMIN_PASSWORD)
-    page.on("dialog", lambda dialog: dialog.accept())  # Cancelar may ask "¿Seguro?"
     try:
         page.goto(f"{FRONTEND_URL}/empresa", wait_until="networkidle")
         for address in (email, other):
@@ -136,6 +135,7 @@ def test_the_company_admin_invites_a_viewer_from_its_panel_and_cancels_another(b
             expect(page.locator("#empresa-invitations")).to_contain_text(address)
         row = page.locator("#empresa-invitations tr", has_text=other)
         row.locator("[data-cancel-invitation]").click()
+        answer_confirmation(page)  # Cancelar asks for confirmation
         expect(page.locator("#empresa-invitations")).not_to_contain_text(other)
         expect(page.locator("#empresa-invitations")).to_contain_text(email)
 
@@ -164,12 +164,12 @@ def test_the_admin_panel_lists_the_pending_invitations_and_cancels_one(browser, 
     assert created.status == 201, created.text()
     context = browser.new_context(storage_state=admin_storage_state, ignore_https_errors=True)
     page = context.new_page()
-    page.on("dialog", lambda dialog: dialog.accept())  # Cancelar may ask "¿Seguro?"
     try:
         page.goto(f"{FRONTEND_URL}/admin#invitations", wait_until="networkidle")
         row = page.locator("tr", has_text=email)
         expect(row).to_contain_text(INVITE_ORG)
         row.locator("[data-cancel-invitation]").click()
+        answer_confirmation(page)  # Cancelar asks for confirmation
         expect(page.locator("tr", has_text=email)).to_have_count(0)
     finally:
         context.close()

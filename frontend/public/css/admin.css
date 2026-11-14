@@ -598,6 +598,13 @@ th button[data-sort] .sort-ind { font-size: 10px; opacity: 0.9; }
 
 /* ── Colormap creator ────────────────────────────────────── */
 .modal-card--wide { width: min(720px, 100%); }
+
+/* The confirmation window (js/shared/confirm-dialog.js): small, above any form window that may be open under it. */
+.confirm-modal { z-index: 200; }
+.confirm-card { width: min(440px, 100%); }
+.confirm-body { padding: 6px 18px 4px; }
+.confirm-body p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--text); }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 18px 18px; }
 .creator-card { max-height: calc(100vh - 32px); }
 
 .creator-body {

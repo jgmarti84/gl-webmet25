@@ -496,6 +496,19 @@ settings), and animation controls (bottom-center).
 
 ---
 
+### **Motion** — `css/modal-motion.css`, `css/motion.css`, `js/shared/modal-motion.js`, `js/shared/confirm-dialog.js`
+
+**Responsibility:** the soft transitions of the panels. All of it is short and stops with `prefers-reduced-motion`.
+
+- **Windows (modals):** the backdrop fades in and the window rises and grows to its size; closing is the same backwards and faster (`css/modal-motion.css`). A `.modal` is shown by `showModal` and hidden by `hideModal` (`modal-motion.js`): the second one adds `is-closing` to play the fade-out, and only then adds `hidden` and runs `afterClosed` (where the form is emptied, so it does not collapse while fading). Opening again while it closes cancels the closing. The radar page's windows (`.modal-backdrop`) animate when they open. A window whose content changes while it is open fades the new content in (`modal-swap`).
+- **Confirmations:** `confirmAction({message, confirmLabel, cancelLabel, danger})` (`confirm-dialog.js`) replaces the browser's `window.confirm`: a small window with the same look and motion, that answers a promise of `true` or `false`. For `danger: true` the red button does the action and the focus starts on Cancel; Escape and a click outside cancel. Tests answer it with `answer_confirmation(page)` (`tests/e2e/conftest.py`).
+- **Notices** (`.feedback-message`): they drop in and fade out; one that replaces another nudges (`css/motion.css`, the same `showModal` / `hideModal`).
+- **Sections:** in the admin panel `renderSection` puts `section-enter` on the content only when the section changes (not when the same one is drawn again after an action, which would blink): the content rises and the first ten table rows come in one after the other. The institution and profile panels show and hide their sections, which starts the animation by itself.
+- **Search lists** (`.combo-list`) open with a short fade.
+- **Not covered:** the floating panels of the map already had an entrance animation; closing them is still immediate.
+
+---
+
 ### **Tooltips** — `js/shared/tooltip.js` and `css/tooltip.css`
 
 **Responsibility:** the app's own tooltip, in place of the browser's (a box with a dark border that cannot be styled). One floating bubble (`<div id="app-tooltip">`, a child of `<body>` with `position: fixed`), so no table, panel or modal can clip it or draw over it: a bubble inside a scrolling table was hidden by the sticky header. It opens above its control, flips below when there is no room, stays inside the window, and fades in with a small movement after 300 ms (at once if another one just closed). Mouse hover and keyboard focus both open it; a click, Escape, a scroll or a resize close it.

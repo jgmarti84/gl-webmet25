@@ -479,6 +479,19 @@ Pipeline de composición en canvas:
 
 ---
 
+### **Movimiento** — `css/modal-motion.css`, `css/motion.css`, `js/shared/modal-motion.js`, `js/shared/confirm-dialog.js`
+
+**Responsabilidad:** las transiciones suaves de los paneles. Todo es corto y se apaga con `prefers-reduced-motion`.
+
+- **Ventanas (modales):** el fondo aparece con un fundido y la ventana sube y crece hasta su tamaño; al cerrar es lo mismo al revés y más rápido (`css/modal-motion.css`). Un `.modal` se muestra con `showModal` y se oculta con `hideModal` (`modal-motion.js`): la segunda agrega `is-closing` para el fundido de salida y recién después pone `hidden` y corre `afterClosed` (donde se vacía el formulario, para que no se achique mientras se desvanece). Abrir de nuevo mientras se cierra cancela el cierre. Las ventanas de la página del radar (`.modal-backdrop`) animan al abrirse. Una ventana cuyo contenido cambia estando abierta hace aparecer el contenido nuevo con un fundido (`modal-swap`).
+- **Confirmaciones:** `confirmAction({message, confirmLabel, cancelLabel, danger})` (`confirm-dialog.js`) reemplaza el `window.confirm` del navegador: una ventana chica con el mismo aspecto y movimiento, que responde con una promesa de `true` o `false`. Con `danger: true` el botón rojo hace la acción y el foco arranca en Cancelar; Escape y un clic afuera cancelan. Los tests la responden con `answer_confirmation(page)` (`tests/e2e/conftest.py`).
+- **Avisos** (`.feedback-message`): entran cayendo y se van con un fundido; uno que reemplaza a otro da un pequeño empujón (`css/motion.css`, los mismos `showModal` / `hideModal`).
+- **Secciones:** en el panel de admin `renderSection` pone `section-enter` en el contenido solo cuando cambia la sección (no cuando se dibuja la misma después de una acción, que parpadearía): el contenido sube y las primeras diez filas de una tabla entran una tras otra. Los paneles de institución y de perfil muestran y ocultan sus secciones, lo que inicia la animación solo.
+- **Listas de búsqueda** (`.combo-list`): se abren con un fundido corto.
+- **Sin cubrir:** los paneles flotantes del mapa ya tenían animación de entrada; cerrarlos sigue siendo inmediato.
+
+---
+
 ### **Tooltips** — `js/shared/tooltip.js` y `css/tooltip.css`
 
 **Responsabilidad:** el tooltip propio de la app, en lugar del del navegador (una caja con borde oscuro que no se puede estilar). Una sola burbuja flotante (`<div id="app-tooltip">`, hija de `<body>` con `position: fixed`), así que ninguna tabla, panel o modal puede cortarla ni taparla: una burbuja dentro de una tabla con scroll la tapaba el encabezado fijo. Se abre arriba de su control, pasa abajo si no hay lugar, queda dentro de la ventana y aparece con un fundido y un pequeño movimiento a los 300 ms (de inmediato si acaba de cerrarse otra). Se abre con el mouse y con el foco del teclado; un clic, Escape, un scroll o un cambio de tamaño la cierran.

@@ -3,6 +3,8 @@ import { authApi, redirectToLogin } from './auth-api.js';
 import {
     buildMemberRequest, buildOrganizationPayload, eligibleAdmins, filterAdmins, filterOrganizations, soleAdminBlock,
 } from './shared/org-form.js';
+import { confirmAction } from './shared/confirm-dialog.js';
+import { hideModal, playOnce, showModal } from './shared/modal-motion.js';
 import { mountProfile } from './shared/profile-section.js';
 import { renderSessionBox } from './shared/session-box.js';
 import { ALL_RADARS, viewsSummary } from './shared/radar-views.js';
@@ -342,8 +344,12 @@ let messageTimer = null;
 function showMessage(text, type = 'success') {
     state.message = text;
     elements.feedbackMessage.querySelector('.feedback-text').textContent = text;
-    elements.feedbackMessage.classList.remove('hidden', 'success', 'error');
-    elements.feedbackMessage.classList.add(type);
+    const box = elements.feedbackMessage;
+    box.classList.remove('success', 'error');
+    box.classList.add(type);
+    const replacing = !box.classList.contains('hidden') && !box.classList.contains('is-closing');
+    showModal(box); // takes off `hidden` (and cancels a fade-out that was running): the CSS animates the entrance
+    if (replacing) playOnce(box, 'is-replaced', 300); // a notice that replaces another nudges, so the change is seen
     // A new notice replaces the previous one, so the old timer must not close the new notice early.
     clearTimeout(messageTimer);
     messageTimer = type === 'success' ? setTimeout(hideMessage, SUCCESS_MESSAGE_MS) : null;
@@ -353,9 +359,11 @@ function hideMessage() {
     clearTimeout(messageTimer);
     messageTimer = null;
     state.message = null;
-    elements.feedbackMessage.querySelector('.feedback-text').textContent = '';
-    elements.feedbackMessage.classList.add('hidden');
-    elements.feedbackMessage.classList.remove('success', 'error');
+    // It fades out first; the text goes once it is gone, so the box does not shrink while it fades.
+    hideModal(elements.feedbackMessage, () => {
+        elements.feedbackMessage.querySelector('.feedback-text').textContent = '';
+        elements.feedbackMessage.classList.remove('success', 'error');
+    });
 }
 
 // The × of any notice (the feedback one and the initial-password warning) hides its own box.
@@ -480,6 +488,8 @@ function setFormModalError(text) {
  * page notice behind it) and the form stays open so the person can fix the data.
  */
 function openFormModal(title, html, onSubmit) {
+    // Already open (Seguridad -> Resetear contraseña): the content changes, so it fades in on its own.
+    const swapping = !elements.formModal.classList.contains('hidden') && !elements.formModal.classList.contains('is-closing');
     elements.formModalTitle.textContent = title;
     elements.formModalBody.innerHTML = html;
     elements.formModalBody.onsubmit = async (event) => {
@@ -492,12 +502,13 @@ function openFormModal(title, html, onSubmit) {
             setFormModalError(error.message || 'La operación falló');
         }
     };
-    elements.formModal.classList.remove('hidden');
+    showModal(elements.formModal);
+    if (swapping) playOnce(elements.formModal.querySelector('.modal-card'), 'modal-swap', 300);
 }
 
 function closeFormModal() {
-    elements.formModal.classList.add('hidden');
-    elements.formModalBody.innerHTML = '';
+    // The form is emptied once the fade-out ends, not before: it would collapse in front of the person.
+    hideModal(elements.formModal, () => { elements.formModalBody.innerHTML = ''; });
 }
 
 function sortableValue(value) {
@@ -534,8 +545,9 @@ function wireSortHeaders(section) {
     });
 }
 
+/** The question before deleting something from a table: a promise of true when the person accepts. */
 function requireConfirmation(label) {
-    return window.confirm(`¿Confirma la eliminación de ${label}?`);
+    return confirmAction({ message: `¿Confirma la eliminación de ${label}?`, confirmLabel: 'Eliminar', danger: true });
 }
 
 async function renderDashboard() {
@@ -678,7 +690,7 @@ async function renderRadars() {
     elements.sectionContent.querySelectorAll('[data-delete-radar]').forEach((element) => {
         element.onclick = async () => {
             const code = element.dataset.deleteRadar;
-            if (!requireConfirmation(`radar ${code}`)) return;
+            if (!(await requireConfirmation(`radar ${code}`))) return;
             await adminApi.deleteRadar(code);
             showMessage(`Radar ${code} eliminado`, 'success');
             renderSection();
@@ -796,7 +808,7 @@ async function renderProducts() {
     elements.sectionContent.querySelectorAll('[data-delete-product]').forEach((element) => {
         element.onclick = async () => {
             const id = element.dataset.deleteProduct;
-            if (!requireConfirmation(`product ${id}`)) return;
+            if (!(await requireConfirmation(`product ${id}`))) return;
             await adminApi.deleteProduct(id);
             showMessage(`Producto ${id} eliminado`, 'success');
             renderSection();
@@ -896,7 +908,7 @@ async function renderReferences() {
             return;
         }
         const productKey = productsById.get(Number(selectedProductId))?.product_key || selectedProductId;
-        if (!requireConfirmation(`todas las referencias del producto ${productKey}`)) return;
+        if (!(await requireConfirmation(`todas las referencias del producto ${productKey}`))) return;
         const result = await adminApi.bulkDeleteReferences(selectedProductId);
         showMessage(`Se eliminaron ${result.deleted_count} referencias`, 'success');
         renderSection();
@@ -908,7 +920,7 @@ async function renderReferences() {
     elements.sectionContent.querySelectorAll('[data-delete-reference]').forEach((element) => {
         element.onclick = async () => {
             const id = element.dataset.deleteReference;
-            if (!requireConfirmation(`reference ${id}`)) return;
+            if (!(await requireConfirmation(`reference ${id}`))) return;
             await adminApi.deleteReference(id);
             showMessage(`Referencia ${id} eliminada`, 'success');
             renderSection();
@@ -1185,7 +1197,7 @@ async function renderCogs() {
     elements.sectionContent.querySelectorAll('[data-cog-delete]').forEach((element) => {
         element.onclick = async () => {
             const id = Number(element.dataset.cogDelete);
-            if (!requireConfirmation(`COG ${id}`)) return;
+            if (!(await requireConfirmation(`COG ${id}`))) return;
             await adminApi.deleteCog(id);
             state.cogs.selected.delete(id);
             showMessage(`COG ${id} eliminado`, 'success');
@@ -1199,7 +1211,7 @@ async function renderCogs() {
             showMessage('Primero seleccione al menos un registro COG', 'error');
             return;
         }
-        if (!requireConfirmation(`${ids.length} registros COG seleccionados`)) return;
+        if (!(await requireConfirmation(`${ids.length} registros COG seleccionados`))) return;
         await Promise.all(ids.map((id) => adminApi.deleteCog(id)));
         state.cogs.selected.clear();
         showMessage(`Se eliminaron ${ids.length} registros COG seleccionados`, 'success');
@@ -1252,7 +1264,7 @@ async function renderEstrategias() {
     elements.sectionContent.querySelectorAll('[data-delete-estrategia]').forEach((element) => {
         element.onclick = async () => {
             const code = element.dataset.deleteEstrategia;
-            if (!requireConfirmation(`estrategia ${code}`)) return;
+            if (!(await requireConfirmation(`estrategia ${code}`))) return;
             await adminApi.deleteEstrategia(code);
             showMessage(`Estrategia ${code} eliminada`, 'success');
             renderSection();
@@ -1325,7 +1337,7 @@ async function renderVolumenes() {
     elements.sectionContent.querySelectorAll('[data-delete-volumen]').forEach((element) => {
         element.onclick = async () => {
             const id = element.dataset.deleteVolumen;
-            if (!requireConfirmation(`volumen ${id}`)) return;
+            if (!(await requireConfirmation(`volumen ${id}`))) return;
             await adminApi.deleteVolumen(id);
             showMessage(`Volumen ${id} eliminado`, 'success');
             renderSection();
@@ -1535,7 +1547,7 @@ async function renderTopsCores() {
     elements.sectionContent.querySelectorAll('[data-top-delete]').forEach((element) => {
         element.onclick = async () => {
             const id = Number(element.dataset.topDelete);
-            if (!requireConfirmation(`tops & cores ${id}`)) return;
+            if (!(await requireConfirmation(`tops & cores ${id}`))) return;
             await adminApi.deleteTopsCores(id);
             state.tops.selected.delete(id);
             showMessage(`Tops & Cores ${id} eliminado`, 'success');
@@ -1549,7 +1561,7 @@ async function renderTopsCores() {
             showMessage('Primero seleccione al menos un registro', 'error');
             return;
         }
-        if (!requireConfirmation(`${ids.length} registros de Tops & Cores seleccionados`)) return;
+        if (!(await requireConfirmation(`${ids.length} registros de Tops & Cores seleccionados`))) return;
         await Promise.all(ids.map((id) => adminApi.deleteTopsCores(id)));
         state.tops.selected.clear();
         showMessage(`Se eliminaron ${ids.length} registros de Tops & Cores seleccionados`, 'success');
@@ -1739,7 +1751,7 @@ function openColormapCreator(products, existing = null) {
         ];
 
     const modal = elements.creatorModal;
-    modal.classList.remove('hidden');
+    showModal(modal);
 
     const title = document.getElementById('creator-modal-title');
     const nameInput = document.getElementById('creator-name');
@@ -1899,7 +1911,7 @@ function openColormapCreator(products, existing = null) {
             }
             // Invalidate the in-process cache so the API picks up the change.
             await adminApi.invalidateColormapCache();
-            modal.classList.add('hidden');
+            hideModal(modal);
             showMessage(`Mapa de colores "${cmapName}" ${isEdit ? 'actualizado' : 'creado'}`, 'success');
             renderSection();
         } catch (error) {
@@ -2011,7 +2023,7 @@ async function renderColormaps() {
     elements.sectionContent.querySelectorAll('[data-delete-cmap]').forEach((btn) => {
         btn.onclick = async () => {
             const name = btn.dataset.deleteCmap;
-            if (!requireConfirmation(`el mapa de colores "${name}"`)) return;
+            if (!(await requireConfirmation(`el mapa de colores "${name}"`))) return;
             try {
                 await adminApi.deleteColormap(name);
                 showMessage(`Mapa de colores "${name}" eliminado`, 'success');
@@ -2113,7 +2125,7 @@ async function renderColormapOptions() {
     elements.sectionContent.querySelectorAll('[data-delete-cmap-option]').forEach((btn) => {
         btn.onclick = async () => {
             const id = parseInt(btn.dataset.deleteCmapOption, 10);
-            if (!requireConfirmation(`la opción de mapa de colores #${id}`)) return;
+            if (!(await requireConfirmation(`la opción de mapa de colores #${id}`))) return;
             try {
                 await adminApi.deleteColormapOption(id);
                 showMessage('Opción de mapa de colores eliminada', 'success');
@@ -2204,7 +2216,11 @@ async function renderUsers() {
     elements.sectionContent.querySelectorAll('[data-verify-user]').forEach((el) => {
         el.onclick = async () => {
             const user = byId(el.dataset.verifyUser);
-            if (!window.confirm(`¿Marcar como verificado el mail de ${user.username} (${user.email})? Va a poder ingresar sin abrir el link.`)) return;
+            const accepted = await confirmAction({
+                message: `¿Marcar como verificado el mail de ${user.username} (${user.email})? Va a poder ingresar sin abrir el link.`,
+                confirmLabel: 'Verificar mail',
+            });
+            if (!accepted) return;
             await adminApi.verifyUserEmail(user.id);
             await renderSection();
             showMessage(`Mail de ${user.username} verificado`, 'success');
@@ -2223,7 +2239,12 @@ async function toggleUserActive(user, allUsers) {
         return;
     }
     const action = user.is_active ? 'desactivar' : 'activar';
-    if (!window.confirm(`¿Confirma ${action} a ${user.username}?`)) return;
+    const accepted = await confirmAction({
+        message: `¿Confirma ${action} a ${user.username}?`,
+        confirmLabel: user.is_active ? 'Desactivar' : 'Activar',
+        danger: user.is_active,
+    });
+    if (!accepted) return;
     const wasActive = user.is_active;
     await adminApi.patchUser(user.id, { is_active: !wasActive });
     await renderSection();
@@ -2286,7 +2307,12 @@ async function deleteUser(user, allUsers) {
         openSoleAdminForm(user, block, 'delete', allUsers);
         return;
     }
-    if (!window.confirm(`¿Eliminar a ${user.username}? Se borra su cuenta, sus sesiones y sus vistas. No se puede deshacer.`)) return;
+    const accepted = await confirmAction({
+        message: `¿Eliminar a ${user.username}? Se borra su cuenta, sus sesiones y sus vistas. No se puede deshacer.`,
+        confirmLabel: 'Eliminar',
+        danger: true,
+    });
+    if (!accepted) return;
     try {
         await adminApi.deleteUser(user.id);
         await renderSection();
@@ -2336,7 +2362,11 @@ function openSecurityForm(user, allUsers) {
  */
 async function revokeUserSessions(user) {
     const self = user.id === state.me?.id ? ' (incluida la tuya: vas a tener que volver a entrar)' : '';
-    if (!window.confirm(`¿Cerrar todas las sesiones de ${user.username}${self}?`)) return;
+    const accepted = await confirmAction({
+        message: `¿Cerrar todas las sesiones de ${user.username}${self}?`,
+        confirmLabel: 'Cerrar sesiones',
+    });
+    if (!accepted) return;
     try {
         await adminApi.revokeUserSessions(user.id);
         closeFormModal();
@@ -2789,7 +2819,13 @@ async function renderInvitations() {
     elements.sectionContent.querySelectorAll('[data-cancel-invitation]').forEach((el) => {
         el.onclick = async () => {
             const invitation = invitations.find((item) => String(item.id) === el.dataset.cancelInvitation);
-            if (!window.confirm(`¿Cancelar la invitación a ${invitation ? invitation.email : 'esta persona'}? El link deja de funcionar.`)) return;
+            const accepted = await confirmAction({
+                message: `¿Cancelar la invitación a ${invitation ? invitation.email : 'esta persona'}? El link deja de funcionar.`,
+                confirmLabel: 'Cancelar invitación',
+                cancelLabel: 'Volver',
+                danger: true,
+            });
+            if (!accepted) return;
             try {
                 await adminApi.cancelInvitation(el.dataset.cancelInvitation);
                 await renderSection();
@@ -2944,9 +2980,17 @@ async function renderMails() {
         syncButtons();
     };
 
-    const select = (key) => {
+    const select = async (key) => {
         // Do not lose what was typed by changing mail by mistake.
-        if (current && current !== key && isDirty() && !window.confirm('Tenés cambios sin guardar en este mail. ¿Querés descartarlos?')) return;
+        if (current && current !== key && isDirty()) {
+            const discard = await confirmAction({
+                message: 'Tenés cambios sin guardar en este mail. ¿Querés descartarlos?',
+                confirmLabel: 'Descartar',
+                cancelLabel: 'Seguir editando',
+                danger: true,
+            });
+            if (!discard) return;
+        }
         current = key;
         const item = itemOf(key);
         lastField = null;
@@ -3014,7 +3058,12 @@ async function renderMails() {
         };
         // Restaurar original: delete the customization, so the mail goes back to its default text.
         $('mail-restore').onclick = async () => {
-            if (!window.confirm('¿Volver al texto original de este mail? Se pierde el texto personalizado.')) return;
+            const accepted = await confirmAction({
+                message: '¿Volver al texto original de este mail? Se pierde el texto personalizado.',
+                confirmLabel: 'Volver al original',
+                danger: true,
+            });
+            if (!accepted) return;
             try {
                 await adminApi.restoreMailTemplate(current);
                 items = await adminApi.listMailTemplates();
@@ -3395,6 +3444,10 @@ async function renderProfile() {
 async function renderSection() {
     hideMessage();
     state.section = parseHashSection();
+    // Opening another section animates (the content rises and the table rows come in); drawing the same one again after
+    // an action does not, or the table would blink every time.
+    const sectionChanged = state.renderedSection !== state.section;
+    state.renderedSection = state.section;
     // The "only this company's users" filter belongs to one visit of the users section.
     if (state.section !== 'users') state.usersOrgFilter = null;
     setActiveSidebar(state.section);
@@ -3437,6 +3490,7 @@ async function renderSection() {
         if (state.section === 'mails') await renderMails();
         if (state.section === 'profile') await renderProfile();
         decorateSortHeaders(state.section);
+        if (sectionChanged) playOnce(elements.sectionContent, 'section-enter', 800);
     } catch (error) {
         if ((error.message || '').includes(EXPIRED_SESSION_MESSAGE)) {
             showMessage(EXPIRED_SESSION_MESSAGE, 'error');
@@ -3480,7 +3534,7 @@ async function init() {
         }
     });
 
-    const hideCreator = () => elements.creatorModal.classList.add('hidden');
+    const hideCreator = () => hideModal(elements.creatorModal);
     document.getElementById('close-creator-modal').onclick = hideCreator;
     document.getElementById('creator-cancel').onclick = hideCreator;
     elements.creatorModal.addEventListener('click', (event) => {

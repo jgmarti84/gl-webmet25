@@ -1,0 +1,51 @@
+/* Soft motion of the panels (admin, institution and profile), apart from the windows (css/modal-motion.css). Every piece
+   is short and quiet: it helps the eye follow what changed, and none of it delays what the person wants to do.
+   Everything here stops for people who asked for less motion (the block at the end). */
+
+/* ── Notices ("Usuario creado", errors) ─────────────────────────────────────────────────────────────
+   A notice drops in from above while it fades in; when it goes away it fades out (js/shared/modal-motion.js adds
+   `is-closing` for the fade-out). One that replaces another gets a small nudge (`is-replaced`), so the change is seen. */
+@keyframes notice-in { from { opacity: 0; transform: translateY(-8px); } }
+@keyframes notice-out { to { opacity: 0; transform: translateY(-6px); } }
+@keyframes notice-nudge { 40% { transform: translateY(-3px); } }
+.feedback-message:not(.hidden):not(.is-closing) { animation: notice-in 0.28s cubic-bezier(0.16, 1, 0.3, 1); }
+.feedback-message.is-replaced:not(.is-closing) { animation: notice-nudge 0.3s ease-out; }
+.feedback-message.is-closing { animation: notice-out 0.18s ease-in forwards; pointer-events: none; }
+
+/* ── A section opens ──────────────────────────────────────────────────────────────────────────────
+   The content rises a few pixels while it fades in. In the admin panel the script puts `section-enter` on the content
+   when the section changes (not when the same section is drawn again after an action, which would blink); in the
+   institution and profile panels the sections are shown and hidden, which starts the animation by itself. The rows of
+   a table then come in one after the other (only the first ten are staggered, so a long table does not take long). */
+@keyframes section-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes row-in { from { opacity: 0; transform: translateX(-6px); } }
+#section-content.section-enter { animation: section-in 0.3s ease-out; }
+#empresa-section-usuarios:not([hidden]),
+#empresa-section-perfil:not([hidden]) { animation: section-in 0.3s ease-out; }
+.section-enter tbody tr { animation: row-in 0.32s ease-out both; }
+.section-enter tbody tr:nth-child(1) { animation-delay: 0ms; }
+.section-enter tbody tr:nth-child(2) { animation-delay: 25ms; }
+.section-enter tbody tr:nth-child(3) { animation-delay: 50ms; }
+.section-enter tbody tr:nth-child(4) { animation-delay: 75ms; }
+.section-enter tbody tr:nth-child(5) { animation-delay: 100ms; }
+.section-enter tbody tr:nth-child(6) { animation-delay: 125ms; }
+.section-enter tbody tr:nth-child(7) { animation-delay: 150ms; }
+.section-enter tbody tr:nth-child(8) { animation-delay: 175ms; }
+.section-enter tbody tr:nth-child(9) { animation-delay: 200ms; }
+.section-enter tbody tr:nth-child(n + 10) { animation-delay: 225ms; }
+
+/* ── Search lists (the user and institution pickers) open with a short fade ───────────────────────────── */
+@keyframes combo-in { from { opacity: 0; transform: translateY(-4px); } }
+.combo-list:not([hidden]) { animation: combo-in 0.16s ease-out; }
+
+/* ── A window whose content changes while it is open (Seguridad -> Resetear contraseña) ─────────────────
+   The window does not open again, so its content fades in on its own (`modal-swap`, put by the script). The selector is
+   as specific as the one of the window opening, which it replaces for a moment. */
+@keyframes modal-swap { from { opacity: 0; transform: translateY(6px); } }
+.modal:not(.hidden):not(.is-closing) .modal-card.modal-swap { animation: modal-swap 0.22s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+    .feedback-message, .feedback-message.is-replaced, .feedback-message.is-closing,
+    #section-content.section-enter, #empresa-section-usuarios, #empresa-section-perfil,
+    .section-enter tbody tr, .combo-list, .modal-card.modal-swap { animation: none !important; }
+}

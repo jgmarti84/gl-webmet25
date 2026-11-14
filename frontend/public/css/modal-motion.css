@@ -1,0 +1,23 @@
+/* Motion of the modals. Opening: the dark backdrop fades in and the window rises a few pixels and grows to its size, with
+   a soft ease-out. Closing (the modals of the panels, see js/shared/modal-motion.js): the same, backwards and a little
+   faster, because the person is already leaving. Two families use it: `.modal` / `.modal-card` (the panels, hidden with
+   the `hidden` class) and `.modal-backdrop` / `.modal-box` (the radar page, shown with display flex). A CSS animation
+   starts every time the element stops being `display: none`, so opening needs no script. */
+@keyframes modal-backdrop-in { from { opacity: 0; } }
+@keyframes modal-backdrop-out { to { opacity: 0; } }
+@keyframes modal-card-in { from { opacity: 0; transform: translateY(14px) scale(0.97); } }
+@keyframes modal-card-out { to { opacity: 0; transform: translateY(8px) scale(0.98); } }
+
+.modal:not(.hidden):not(.is-closing) { animation: modal-backdrop-in 0.2s ease-out; }
+.modal:not(.hidden):not(.is-closing) .modal-card { animation: modal-card-in 0.26s cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* Closing: the window cannot be clicked while it fades out, so the person cannot press a button twice. */
+.modal.is-closing { animation: modal-backdrop-out 0.16s ease-in forwards; pointer-events: none; }
+.modal.is-closing .modal-card { animation: modal-card-out 0.16s ease-in forwards; }
+
+.modal-backdrop { animation: modal-backdrop-in 0.2s ease-out; }
+.modal-backdrop .modal-box { animation: modal-card-in 0.26s cubic-bezier(0.16, 1, 0.3, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+    .modal, .modal-card, .modal-backdrop, .modal-box { animation: none !important; }
+}

@@ -8,6 +8,7 @@
  * `onSubmit` resolves and shows its error inside the modal when it rejects.
  */
 import { empresaApi } from '../empresa-api.js';
+import { confirmAction } from './confirm-dialog.js';
 import { perfilApi } from '../perfil-api.js';
 import { ALL_RADARS } from './radar-views.js';
 import { ROLE_LABELS, initialsOf } from './session-box.js';
@@ -165,7 +166,12 @@ export async function mountProfile(container, { me, openModal, showMessage }) {
         deleteButton.onclick = async () => {
             const error = container.querySelector('#profile-delete-error');
             error.hidden = true;
-            if (!window.confirm('¿Eliminar tu cuenta? Se borran tu cuenta, tus sesiones y tus vistas de radar. No se puede deshacer.')) return;
+            const accepted = await confirmAction({
+                message: '¿Eliminar tu cuenta? Se borran tu cuenta, tus sesiones y tus vistas de radar. No se puede deshacer.',
+                confirmLabel: 'Eliminar mi cuenta',
+                danger: true,
+            });
+            if (!accepted) return;
             try {
                 await perfilApi.deleteAccount();
                 window.location.assign('login');

@@ -12,7 +12,7 @@ import os
 import pytest
 from playwright.sync_api import Page, expect
 
-from .conftest import open_nav_group
+from .conftest import answer_confirmation, open_nav_group
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://frontend-v2:80")
 API = f"{FRONTEND_URL}/api/v1/admin/mail-templates"
@@ -69,8 +69,8 @@ def test_a_change_shows_in_the_preview_is_saved_and_can_be_restored(page: Page, 
     _pick(page, KEY)
     expect(page.locator("#mail-form input[name=subject]")).to_have_value(NEW_SUBJECT)
 
-    page.once("dialog", lambda dialog: dialog.accept())  # "Restaurar" asks for confirmation
     page.click("#mail-restore")
+    answer_confirmation(page)  # "Restaurar" asks for confirmation
     expect(page.locator("#mail-form input[name=subject]")).to_have_value(original)
     expect(page.locator("#mail-list [data-mail-key=verify_email]")).not_to_contain_text("personalizado")
 
