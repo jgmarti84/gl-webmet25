@@ -457,7 +457,8 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role = Column(String(16), nullable=False, default='viewer', server_default='viewer')
     # The company this user belongs to, or NULL. Fixed when the account is created (decision C14).
-    # RESTRICT: an organization with users cannot be deleted (and the app never deletes organizations).
+    # RESTRICT: the database refuses to delete an organization that still has users. The app frees or deletes them first
+    # (organizations.delete_org), so this is the safety net, not the normal path.
     organization_id = Column(Integer, ForeignKey('organizations.id', ondelete='RESTRICT'), index=True)
     is_active = Column(Boolean, nullable=False, default=True, server_default='true')
     # Copied into each access token at login and compared on every request. Adding 1 makes all

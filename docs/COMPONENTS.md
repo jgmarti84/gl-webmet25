@@ -517,6 +517,14 @@ Pages do not call it: they load `js/shared/tooltip.js` as a module (`admin`, `em
 
 ---
 
+### **Deleting institutions** — the trash button of the institutions table
+
+**Files:** `deleteOrganization()` and `openOrganizationDeleteForm()` in [`frontend/public/js/admin.js`](../../frontend/public/js/admin.js), `organizationMembers()` in `js/shared/org-form.js` and `deleteOrganization` in `admin-api.js`.
+
+**Responsibility:** each row of the institutions table ends with a white trash button (`data-delete-org`). It counts the people of the institution from the users list (inactive ones too). Without people it asks `window.confirm` naming the institution and how many pending invitations are cancelled, then calls `DELETE /api/v1/admin/organizations/{id}`. With people it opens a window with two radio buttons (`users_action`): `unlink` (checked) and `delete`. `delete` shows `#org-delete-confirm` and keeps the submit button disabled until the name of the institution is typed exactly. The chosen value goes in `?users=`. A refusal of the server (409) shows in the window or in the page notice.
+
+---
+
 ### **perfil.html / perfil.js / perfil-api.js** — User profile page for viewers (spec D)
 
 **Files:** [`frontend/public/perfil.html`](../../frontend/public/perfil.html), [`frontend/public/js/perfil.js`](../../frontend/public/js/perfil.js), [`frontend/public/js/perfil-api.js`](../../frontend/public/js/perfil-api.js)
