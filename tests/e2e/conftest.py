@@ -197,6 +197,30 @@ def link_in(message: dict) -> str:
     return f"{FRONTEND_URL}{match.group(1)}"
 
 
+def open_nav_group(page, section: str) -> None:
+    """Open the group of the side menu that holds the link of `section`, if it is closed.
+
+    The menu starts with its groups closed (only the one with the active link is open), and a link in a closed group
+    is not visible, so a test that clicks it opens its group first."""
+    link = page.locator(f'#sidebar-nav [data-section="{section}"]')
+    if not link.is_visible():
+        link.locator("xpath=ancestor::div[contains(@class, 'nav-group')]/button").click()
+
+
+def answer_confirmation(page, accept: bool = True) -> str:
+    """Answer the app's own confirmation window (it replaced the browser's confirm box) and return its question.
+
+    The window fades in, so the answer waits until it is on screen; accepting clicks the button of the action,
+    cancelling the other one."""
+    from playwright.sync_api import expect
+
+    dialog = page.locator("#confirm-dialog")
+    expect(dialog).to_be_visible()
+    message = dialog.locator("#confirm-message").inner_text()
+    page.click("#confirm-accept" if accept else "#confirm-cancel")
+    return message
+
+
 def deactivate_by_username(api, username: str) -> None:
     """Deactivate a test account through the admin API; `api` is an admin APIRequestContext."""
     users = api.get(f"{FRONTEND_URL}/api/v1/admin/users").json()

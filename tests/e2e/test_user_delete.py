@@ -14,7 +14,7 @@ import time
 import pytest
 from playwright.sync_api import expect
 
-from .conftest import deactivate_by_username
+from .conftest import answer_confirmation, deactivate_by_username
 from .test_empresa import ORG_ADMIN, ORG_ADMIN_PASSWORD, _ensure_company, _ensure_org_admin, _login
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://frontend-v2:80")
@@ -47,14 +47,13 @@ def test_the_admin_deletes_a_user_from_the_table(browser, admin_storage_state, a
     username, user_id = person
     context = browser.new_context(storage_state=admin_storage_state, ignore_https_errors=True)
     page = context.new_page()
-    dialogs = []
-    page.on("dialog", lambda dialog: (dialogs.append(dialog.message), dialog.accept()))
     try:
         page.goto(f"{FRONTEND_URL}/admin#users", wait_until="networkidle")
         row = page.locator("tr", has_text=username)
         row.locator(f"[data-delete-user='{user_id}']").click()
+        question = answer_confirmation(page)
         expect(page.locator("tr", has_text=username)).to_have_count(0)
-        assert dialogs and username in dialogs[0]  # the confirmation names the user
+        assert username in question  # the confirmation names the user
         assert not _exists(admin_api, username)
     finally:
         context.close()
@@ -75,10 +74,10 @@ def test_the_admin_does_not_get_a_delete_button_for_its_own_account(browser, adm
 def test_a_person_deletes_their_own_account_from_my_profile_and_lands_on_the_login(browser, admin_api, person):
     username, _ = person
     page = _login(browser, username, PASSWORD)
-    page.on("dialog", lambda dialog: dialog.accept())  # the manual confirmation
     try:
         page.goto(f"{FRONTEND_URL}/perfil", wait_until="networkidle")
         page.click("#profile-delete")
+        answer_confirmation(page)  # the manual confirmation
         page.wait_for_url(lambda url: "/login" in url)
         expect(page.locator("#login-form")).to_be_visible()
         assert not _exists(admin_api, username)
@@ -89,10 +88,10 @@ def test_a_person_deletes_their_own_account_from_my_profile_and_lands_on_the_log
 def test_cancelling_the_confirmation_deletes_nothing(browser, admin_api, person):
     username, _ = person
     page = _login(browser, username, PASSWORD)
-    page.on("dialog", lambda dialog: dialog.dismiss())
     try:
         page.goto(f"{FRONTEND_URL}/perfil", wait_until="networkidle")
         page.click("#profile-delete")
+        answer_confirmation(page, accept=False)
         page.wait_for_timeout(500)
         assert "/perfil" in page.url and _exists(admin_api, username)
     finally:
@@ -105,10 +104,10 @@ def test_the_only_admin_of_an_institution_with_other_users_is_told_to_name_anoth
     org_admin_id = _ensure_org_admin(admin_api, org_id)
     admin_api.patch(f"{ADMIN_API}/users/{_user_id(admin_api, username)}", data={"organization_id": org_id})
     page = _login(browser, ORG_ADMIN, ORG_ADMIN_PASSWORD)
-    page.on("dialog", lambda dialog: dialog.accept())
     try:
         page.goto(f"{FRONTEND_URL}/empresa#perfil", wait_until="networkidle")
         page.click("#profile-delete")
+        answer_confirmation(page)
         expect(page.locator("#profile-delete-error")).to_contain_text("administrador")
         assert _exists(admin_api, ORG_ADMIN)  # nothing was deleted
     finally:

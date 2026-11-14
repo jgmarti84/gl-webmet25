@@ -8,6 +8,9 @@
     <title>WebMet25 · Mi perfil</title>
     <link rel="icon" type="image/png" href="assets/images/logos/OHMC@3x.png">
     <link rel="stylesheet" href="css/admin.css">
+    <link rel="stylesheet" href="css/account-chip.css">
+    <link rel="stylesheet" href="css/modal-motion.css">
+    <link rel="stylesheet" href="css/motion.css">
 </head>
 <body>
     <!-- User profile (spec D) for viewers. nginx serves it to any logged-in user, but admins and company admins have
@@ -19,12 +22,15 @@
                 <img class="sidebar-logo" src="assets/images/logos/OHMC@3x.png" alt="OHMC Radar Meteorology System">
             </div>
             <div class="sidebar-brand">
-                <span class="sidebar-brand-mark">◑</span>
                 <span class="sidebar-brand-text">WebMet25<small>Perfil</small></span>
             </div>
-            <nav id="sidebar-nav">
-                <div class="nav-group-label">Cuenta</div>
-                <a href="perfil" class="active"><span class="nav-ico">🙍</span> Mi perfil</a>
+            <nav id="sidebar-nav" data-menu="perfil" data-groups-open="true">
+                <div class="nav-group" data-group="cuenta">
+                    <button class="nav-group-label" type="button" aria-expanded="true" aria-controls="nav-group-cuenta">Cuenta<span class="nav-chevron" aria-hidden="true"></span></button>
+                    <div class="nav-group-body" id="nav-group-cuenta"><div class="nav-group-inner">
+                        <a href="perfil" class="active"><span class="nav-ico">🙍</span> Mi perfil</a>
+                    </div></div>
+                </div>
             </nav>
             <div class="sidebar-footer">
                 <a id="perfil-back-sidebar" class="btn btn-ghost btn-block" href="./">← Volver al mapa</a>
@@ -37,9 +43,15 @@
                     <a id="perfil-back" class="btn btn-ghost btn-back" href="./" title="Volver al mapa">←</a>
                     <h1 id="perfil-title">Mi perfil</h1>
                 </div>
-                <div class="session-box">
-                    <span id="session-user" class="session-user"></span>
-                    <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Cerrar sesión</button>
+                <div id="account-chip" class="account-chip account-chip--light" hidden>
+                    <div id="account-avatar" class="account-avatar" aria-hidden="true"></div>
+                    <div class="account-meta">
+                        <div id="account-name" class="account-name"></div>
+                        <span id="account-role" class="account-role"></span>
+                    </div>
+                    <button id="session-box-logout" type="button" class="account-chip-btn account-logout" title="Cerrar sesión" aria-label="Cerrar sesión">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+                    </button>
                 </div>
             </header>
 
@@ -64,6 +76,8 @@
         </div>
     </div>
 
+    <script type="module" src="js/shared/tooltip.js"></script>
+    <script type="module" src="js/shared/sidebar-groups.js"></script>
     <script type="module" src="js/perfil.js"></script>
 </body>
 </html>

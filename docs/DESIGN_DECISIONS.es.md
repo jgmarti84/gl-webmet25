@@ -24,7 +24,8 @@ gana, qué se pierde, qué queda para después). Las decisiones que después cam
 10. [Herramienta de seguimiento de tormentas](#10-herramienta-de-seguimiento-de-tormentas)
 11. [Infraestructura y rendimiento](#11-infraestructura-y-rendimiento)
 12. [Tests](#12-tests)
-13. [Pendientes conocidos](#13-pendientes-conocidos)
+13. [Interfaz](#13-interfaz)
+14. [Pendientes conocidos](#14-pendientes-conocidos)
 
 ---
 
@@ -458,7 +459,75 @@ gana, qué se pierde, qué queda para después). Las decisiones que después cam
 
 ---
 
-## 13. Pendientes conocidos
+## 13. Interfaz
+
+### 13.1 Un tooltip propio, una burbuja flotante
+
+- **Contexto:** el navegador dibuja un `title` como una caja con borde oscuro que no se puede estilar, y un tooltip hecho
+  en CSS dentro de una tabla quedaba tapado por el encabezado fijo (y cortado por la caja con scroll de la tabla).
+- **Decisión:** una sola burbuja, hija de `<body>` con `position: fixed`, alimentada por todos los `title` de la página
+  (también los que el código pone después) y por el `<title>` dentro de los íconos. Se abre arriba de su control y pasa
+  abajo si no hay lugar.
+- **Alternativas:** un `::after` en cada control (lo cortan el `overflow` y los contextos de apilamiento; falló en las
+  tablas); dejar el del navegador (sin control del aspecto ni de los tiempos).
+- **Consecuencias:** el texto pasa de `title` a `data-tooltip` y a `aria-label`; los campos de texto se saltean porque su
+  `title` también es parte del mensaje de formato del navegador. Una página con tooltips carga un script.
+
+### 13.2 Una ventana de confirmación propia en lugar de `window.confirm`
+
+- **Decisión:** `confirmAction` es una ventana chica con el movimiento de las demás, que responde con una promesa. En una
+  acción que no se puede deshacer, el botón rojo la hace y el foco arranca en Cancelar.
+- **Por qué:** el cuadro del navegador no se puede estilar ni animar y se ve distinto en cada sistema. El costo es que
+  cada pregunta pasó a ser asincrónica, y los tests e2e responden la ventana (`answer_confirmation`) en lugar del
+  diálogo del navegador.
+
+### 13.3 Un solo chip de cuenta para el mapa y los paneles, en dos temas
+
+- **Decisión:** la misma píldora (avatar, nombre, rol, salir) en todos lados; cada color es una variable. El mapa
+  conserva el tema oscuro; los paneles usan uno claro, porque una píldora oscura resaltaba demasiado en un encabezado
+  claro. En el tema claro la insignia del administrador general es azul (el color del panel) y la del admin de
+  institución es gris pizarra.
+- **Alternativas:** un chip distinto en cada lugar (se desalineaban); la píldora oscura en los paneles (muy llamativa);
+  una insignia amarilla para el administrador general (no combinaba con los paneles azules).
+- **Consecuencias:** el atajo al panel del rol existe solo en el mapa; un panel tiene solo el botón de salir, porque la
+  persona ya está ahí.
+
+### 13.4 Acciones de la fila como íconos; las poco frecuentes viven en "Seguridad"
+
+- **Contexto:** la tabla de usuarios tenía demasiados botones por fila.
+- **Decisión:** íconos con tooltip para las frecuentes (editar, herramientas, eliminar); **Seguridad** (un candado) abre
+  una ventana con resetear contraseña, cerrar sesiones y desactivar o activar. Eliminar es su propio basurero, al final
+  y blanco (un relleno rojo llamaba demasiado la atención).
+- **Alternativas:** botones de texto más chicos (solo posterga el problema), mover las poco frecuentes al formulario de
+  edición.
+
+### 13.5 Menú lateral plegable; el grupo activo siempre abierto
+
+- **Decisión:** los grupos se abren y se cierran con una animación suave. El grupo que tiene el enlace activo siempre
+  está abierto. En el panel de admin los demás arrancan cerrados, porque su menú es largo; los paneles de institución y
+  de perfil tienen un par de enlaces, así que todo arranca abierto. Lo que la persona abre se recuerda, para cada panel
+  por separado.
+- **Descartado:** un barrido de radar animado como fondo del sidebar. Se probó (anillos y un haz, solo CSS) y se sacó: se
+  veía solo abajo y no convencía. El panel del login conserva su radar y toma el color del sidebar.
+
+### 13.6 "Mis datos" como una tarjeta compacta
+
+- **Decisión:** el encabezado (avatar, nombre, `@usuario`, rol, "Editar nombre") y, bajo una línea, los datos que no están
+  ya en el encabezado. Dos tarjetas grandes repetían el usuario, el nombre y el rol.
+
+### 13.7 Movimiento: corto, suave y fácil de apagar
+
+- **Decisión:** ventanas, avisos, secciones, filas de tabla y listas de búsqueda se animan brevemente, solo con
+  transformación y opacidad (el navegador lo hace en la placa gráfica). Al cerrar una ventana primero se desvanece y
+  recién después se vacía su formulario. Una sección se anima cuando cambia, no cuando se dibuja la misma después de
+  una acción (parpadearía).
+- **Por qué:** ayuda al ojo a seguir lo que cambió; nunca debe demorar lo que la persona quiere hacer, así que todo se
+  apaga con `prefers-reduced-motion`.
+- **Queda para después:** los paneles flotantes del mapa se abren con una animación pero todavía se cierran de golpe.
+
+---
+
+## 14. Pendientes conocidos
 
 Quedaron afuera a propósito y conviene conocerlos:
 

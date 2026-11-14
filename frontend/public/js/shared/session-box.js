@@ -1,7 +1,7 @@
 /**
- * Account chip of the map pages: always visible, top-right right above the icon bar. It shows the user's avatar (initials),
- * the name, the role badge (admins only) and the "Cerrar sesión" button. For admins it also reveals the
- * admin panel link that lives in the settings panel.
+ * Account chip: always visible, top-right right above the icon bar on the map pages, and in the header of the panels.
+ * It shows the user's avatar (initials), the name, the role badge (admins only) and the "Cerrar sesión" button. On the
+ * map pages it also reveals the shortcut to the panel of the role (admin panel, institution panel or profile).
  */
 import { authApi } from '../auth-api.js';
 
@@ -28,7 +28,11 @@ export function chipLinksFor(role) {
     };
 }
 
-export function renderSessionBox(me) {
+/**
+ * Fill the account chip of the page with the user. `afterLogout` is what happens once the session is closed: on the map
+ * pages the page reloads (nginx serves the login in place); the panels go to the login.
+ */
+export function renderSessionBox(me, { afterLogout = () => window.location.reload() } = {}) {
     const displayName = me.full_name || me.username;
 
     const links = chipLinksFor(me.role);
@@ -56,7 +60,7 @@ export function renderSessionBox(me) {
     role.hidden = me.role === 'viewer';
     document.getElementById('session-box-logout').addEventListener('click', async () => {
         await authApi.logout();
-        window.location.reload();  // nginx serves the login in place
+        afterLogout();
     });
     chip.hidden = false;
 }

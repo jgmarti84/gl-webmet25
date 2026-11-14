@@ -13,6 +13,7 @@ from .conftest import (
     deactivate_user,
     ensure_viewer,
     login_via_form,
+    open_nav_group,
 )
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://frontend-v2:80")
@@ -34,8 +35,8 @@ def test_wrong_password_shows_generic_error(page: Page):
 
 def test_login_then_logout(page: Page, js_errors):
     login_via_form(page)
-    expect(page.locator("#session-user")).to_be_visible()
-    page.click("#logout-btn")
+    expect(page.locator("#account-name")).to_be_visible()
+    page.click("#session-box-logout")
     page.wait_for_url("**/login**")
     page.goto(f"{FRONTEND_URL}/admin", wait_until="networkidle")
     expect(page.locator("#login-form")).to_be_visible()
@@ -55,6 +56,7 @@ def test_login_ignores_open_redirect_in_next(page: Page):
 
 def test_users_section_lists_current_admin(page: Page):
     login_via_form(page)
+    open_nav_group(page, "users")
     page.click('a[data-section="users"]')
     page.wait_for_selector("table tbody tr")
     # Usernames are stored lowercase, whatever case ADMIN_USERNAME has in .env.

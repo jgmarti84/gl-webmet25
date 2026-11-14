@@ -551,7 +551,9 @@
     padding-left: max(60px, env(safe-area-inset-left, 0px));
     padding-right: 56px;
     gap: 40px;
-    background: var(--nvy-800);
+    /* The same color as the side menu of the panels (--sidebar and --sidebar-2 in admin.css, which this page does
+       not load). */
+    background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
 }
 
 /* The canvas covers the whole panel, behind everything. */
@@ -564,15 +566,16 @@
     display: block;
 }
 
-/* Dark gradient over the radar, strongest under the text, so the text keeps its contrast. */
+/* Dark gradient over the radar, strongest under the text, so the text keeps its contrast. It is the sidebar's dark
+   (15, 23, 42), so the panel reads in the same color. */
 .login-page--radar .login-hero::after {
     content: "";
     position: absolute;
     inset: 0;
     z-index: -1;
     background:
-        linear-gradient(103deg, rgba(6, 15, 31, 0.94) 0%, rgba(6, 15, 31, 0.76) 34%, rgba(6, 15, 31, 0.3) 66%, rgba(6, 15, 31, 0.14) 100%),
-        linear-gradient(to top, rgba(6, 15, 31, 0.62) 0%, rgba(6, 15, 31, 0) 46%);
+        linear-gradient(103deg, rgba(15, 23, 42, 0.94) 0%, rgba(15, 23, 42, 0.76) 34%, rgba(15, 23, 42, 0.3) 66%, rgba(15, 23, 42, 0.14) 100%),
+        linear-gradient(to top, rgba(15, 23, 42, 0.62) 0%, rgba(15, 23, 42, 0) 46%);
 }
 
 .login-page--radar .login-hero-logo { width: 268px; }

@@ -68,7 +68,8 @@ En la página de inicio de sesión se entra con el **usuario o el mail**, más l
 
 - La sesión **se renueva sola** mientras el sitio esté abierto: no hace falta volver a entrar cada media hora.
 - Se cierra sola después de **48 horas sin usarla**, y como máximo a los **7 días** de haber entrado.
-- **Cerrar sesión:** en el mapa, desde la franja de tu cuenta, arriba a la derecha (tu nombre e iniciales).
+- **Cerrar sesión:** desde la franja de tu cuenta, arriba a la derecha. Es la misma en el mapa y en los paneles: tus
+  iniciales, tu nombre, tu rol (si sos administrador) y el botón de salir.
 - Si un administrador te cambia el rol, la institución o la contraseña, o cierra tus sesiones, tenés que volver a
   entrar.
 
@@ -99,6 +100,18 @@ sola vez:
 
 Si el link venció o ya se usó, pedile a quien te invitó que te lo reenvíe.
 
+### 2.6 Cómo se ve: íconos, confirmaciones y avisos
+
+- **Botones con solo un ícono** (lápiz, llave inglesa, candado, basurero): al pasar el mouse por encima, o al llegar
+  con el teclado, aparece una etiqueta que dice qué hacen.
+- **Confirmaciones:** lo que no se puede deshacer (eliminar, desvincular, cerrar sesiones) pide confirmación en una
+  ventana. En las acciones que borran, el botón rojo es el que la hace y **Cancelar** viene seleccionado, así que
+  apretar Enter sin querer no borra nada. **Escape** o un clic afuera cancelan.
+- **Avisos:** el resultado de una acción ("Usuario creado", un error) aparece arriba de la página. Los verdes se van
+  solos; todos se pueden cerrar con la **×**.
+- **Menú lateral de los paneles:** sus secciones se agrupan en títulos que se **abren y se cierran**. El sitio recuerda
+  cuáles dejaste abiertos.
+
 ---
 
 ## 3. El mapa
@@ -114,7 +127,7 @@ Es la página principal. **Todos los usuarios ven todos los radares** en el mapa
 - **Ajustes:** el mapa de fondo, la cobertura de los radares, el suavizado, y los **Tops & Cores** (núcleos y topes de
   tormenta, disponibles con el campo COLMAX).
 - **Botón ›** junto a un radar: abre su **vista de radar** (§4). Solo aparece en los radares que podés abrir.
-- **Franja de cuenta**, arriba a la derecha: tu nombre, el acceso a **Mi perfil** (lectores), al **Panel de
+- **Franja de cuenta**, arriba a la derecha (es la misma que en los paneles): tu nombre, el acceso a **Mi perfil** (lectores), al **Panel de
   institución** (admins de institución) o al **Panel de administración** (administrador general), y **cerrar sesión**.
 
 Los datos son productos automáticos de la red de radares: pueden tener errores o demoras y **no reemplazan los avisos
@@ -168,7 +181,8 @@ En la vista de un radar, el botón **⛈ Seguimiento de tormentas** abre su pane
 
 ## 6. Mi perfil
 
-Muestra tus datos: usuario, nombre, mail, rol, institución, fecha de alta y último ingreso, y **los radares cuya vista
+Muestra tus datos en **una sola tarjeta**: arriba tus iniciales, tu nombre, tu usuario, tu rol y el botón **Editar
+nombre**; abajo el mail, la institución, la fecha de alta y el último ingreso. Más abajo, **los radares cuya vista
 podés abrir**. Un admin de institución ve además la tarjeta de **su institución** (lugares y lo que tiene habilitado).
 
 - **Cómo llegar:** los lectores, desde la franja de cuenta del mapa. Los admins, desde **"Mi perfil"** en el menú de su
@@ -182,7 +196,8 @@ podés abrir**. Un admin de institución ve además la tarjeta de **su instituci
 ## 7. Admin de institución: el panel de su institución
 
 Se abre desde la franja de cuenta del mapa, con el botón **"Panel de institución"**. Arriba muestra el nombre de la
-institución, los **lugares** usados ("3 de 5") y lo que la institución tiene habilitado.
+institución, los **lugares** usados ("3 de 5") y lo que la institución tiene habilitado. El menú lateral tiene los
+grupos **Cuenta** (Mi perfil) y **Gestión** (Usuarios), que se abren con un clic y arrancan abiertos.
 
 ### 7.1 Agregar usuarios
 
@@ -206,8 +221,8 @@ administrador general (o invitala por mail, si no está en otra institución).
 En la tabla de usuarios, cada lector tiene sus botones:
 
 - **Editar:** nombre y mail.
-- **Resetear contraseña:** le ponés una contraseña nueva; se le cierran las sesiones.
-- **Cerrar sesiones:** lo obliga a volver a entrar.
+- **Seguridad:** una ventana con dos acciones. **Resetear contraseña**: le ponés una contraseña nueva y se le cierran
+  las sesiones. **Cerrar sesiones**: lo obliga a volver a entrar.
 - **Desvincular:** la persona deja tu institución. Libera su lugar, pierde las vistas y herramientas que le dio la
   institución y se le cierran las sesiones. **La cuenta sigue existiendo**; solo el administrador general puede
   volver a sumarla.
@@ -246,7 +261,13 @@ Las secciones de **Datos**, **Configuración** y **Mapas de colores** administra
 existen, sus productos, sus escalas de colores). Entre ellas, en **Radares** se enciende o apaga la **vista de
 detalle** de cada radar. Este manual se centra en la parte de **Acceso**.
 
+Los grupos del menú son **desplegables**: al entrar, solo está abierto el grupo de la sección en la que estás, y el resto
+se abre apretando su título. El panel recuerda lo que abriste o cerraste.
+
 ### 8.1 Usuarios
+
+Cada fila tiene botones con ícono: **lápiz** (Editar), **llave inglesa** (Herramientas), **candado** (Seguridad),
+**Verificar mail** (solo cuando falta) y **basurero** (Eliminar).
 
 - **Agregar usuario:** usuario, nombre, mail, rol y contraseña inicial. Se puede elegir una **institución**; para el
   rol "Admin de institución", la institución es obligatoria.
@@ -254,15 +275,19 @@ detalle** de cada radar. Este manual se centra en la parte de **Acceso**.
   a otra o sacarlo con "Ninguna"). El formulario avisa qué va a pasar antes de guardar: al entrar a una institución,
   la persona ocupa un lugar y sus vistas y herramientas pasan a ser **una copia de las de la institución**; al salir,
   las pierde. En los dos casos se le cierran las sesiones.
-- **Herramientas:** vistas de radar ("Todas", incluidos los radares futuros, o radares sueltos) y seguimiento de
+- **Herramientas** (llave inglesa): vistas de radar ("Todas", incluidos los radares futuros, o radares sueltos) y seguimiento de
   tormentas. Si la persona es de una institución que **no** tiene algo, la ventana avisa que darlo **no tiene efecto**:
   cada miembro ve solo lo que tiene él **y** su institución.
-- **Desactivar / activar:** desactivar impide entrar y libera el lugar en la institución; se puede revertir.
-- **Seguridad:** **Resetear contraseña** (define una nueva y cierra sus sesiones; la propia se cambia desde el
-  servidor) y **Cerrar sesiones** (lo obliga a volver a entrar en todos sus dispositivos).
+- **Seguridad** (candado): una ventana con tres acciones. **Resetear contraseña**: define una nueva y cierra sus
+  sesiones (la propia se cambia desde el servidor). **Cerrar sesiones**: lo obliga a volver a entrar en todos sus
+  dispositivos. **Desactivar usuario / Activar usuario**: desactivar impide entrar y libera el lugar en la institución;
+  se puede revertir. Si es el único admin activo de una institución con más usuarios activos, el sitio pide antes
+  nombrar a otro admin. En tu propia fila solo está Cerrar sesiones.
 - **Verificar mail:** para una cuenta registrada que nunca confirmó su mail.
 - **Eliminar** (basurero en la fila): pide confirmación y **no se puede deshacer**.
-- Las tablas muestran, para cada usuario, lo que tiene **él** y lo que tiene **su institución**.
+- La columna **Herramientas** muestra lo que cada persona **realmente tiene**: lo suyo si no tiene institución, lo de
+  la institución si es admin de institución, y lo suyo en lo que su institución también tenga si es lector. Debajo
+  del usuario se ve su mail.
 
 ### 8.2 Instituciones
 
@@ -339,6 +364,7 @@ cuenta" y la invitación) sin tocar código: asunto, título, párrafos, texto d
 | La cuenta quedó bloqueada | Esperá 15 minutos o pedile a un administrador que te ponga una contraseña nueva |
 | "Tenés que verificar tu mail para entrar" | Abrí el mail de confirmación (revisá spam). El inicio de sesión ofrece reenviarlo |
 | No veo el botón › de un radar | No tenés asignada esa vista. Pedísela al admin de tu institución o al administrador general |
+| Un botón no tiene texto | Es un ícono: pasá el mouse por encima y aparece una etiqueta que dice qué hace |
 | No veo el seguimiento de tormentas | No tenés la herramienta, o no hay datos de seguimiento para ese radar |
 | El link de un mail no funciona | Venció o ya se usó. Pedí uno nuevo (recupero de contraseña, reenvío de confirmación o reenvío de la invitación) |
 | "La institución no tiene lugares libres" | Hay que liberar un lugar (desactivar o desvincular a alguien, o cancelar una invitación) o pedir al administrador general que suba el tope |

@@ -3,10 +3,13 @@
  * Company admins manage only the viewers of their company; other company admins are listed read-only (the general
  * admin looks after them).
  */
-import { authApi, initPageSession } from './auth-api.js';
+import { initPageSession } from './auth-api.js';
 import { empresaApi } from './empresa-api.js';
 import { api } from './shared/api.js';
+import { confirmAction } from './shared/confirm-dialog.js';
+import { hideModal, playOnce, showModal } from './shared/modal-motion.js';
 import { mountProfile } from './shared/profile-section.js';
+import { renderSessionBox } from './shared/session-box.js';
 import { ALL_RADARS } from './shared/radar-views.js';
 import { readTools, toolsFieldsHtml, toolsSummary, usableToolsSummary } from './shared/tools-form.js';
 
@@ -32,16 +35,21 @@ function hideMessage() {
     clearTimeout(messageTimer);
     messageTimer = null;
     const box = $('empresa-message');
-    box.querySelector('.feedback-text').textContent = '';
-    box.classList.add('hidden');
-    box.classList.remove('success', 'error');
+    // It fades out first; the text goes once it is gone, so the box does not shrink while it fades.
+    hideModal(box, () => {
+        box.querySelector('.feedback-text').textContent = '';
+        box.classList.remove('success', 'error');
+    });
 }
 
 function showMessage(text, kind = 'success') {
     const box = $('empresa-message');
     box.querySelector('.feedback-text').textContent = text;
-    box.classList.remove('hidden', 'success', 'error');
+    box.classList.remove('success', 'error');
     box.classList.add(kind);
+    const replacing = !box.classList.contains('hidden') && !box.classList.contains('is-closing');
+    showModal(box); // takes off `hidden` (and cancels a fade-out that was running): the CSS animates the entrance
+    if (replacing) playOnce(box, 'is-replaced', 300); // a notice that replaces another nudges, so the change is seen
     // A new notice replaces the previous one, so the old timer must not close the new one early.
     clearTimeout(messageTimer);
     messageTimer = kind === 'success' ? setTimeout(hideMessage, SUCCESS_MESSAGE_MS) : null;
@@ -50,8 +58,8 @@ function showMessage(text, kind = 'success') {
 // --- modal (same markup and classes as the admin panel) ---------------------------------------------------------
 
 function closeModal() {
-    $('form-modal').classList.add('hidden');
-    $('form-modal-body').innerHTML = '';
+    // The form is emptied once the fade-out ends, not before: it would collapse in front of the person.
+    hideModal($('form-modal'), () => { $('form-modal-body').innerHTML = ''; });
 }
 
 /** Show (or clear, with no text) the error inside the open modal, just above the buttons. */
@@ -76,6 +84,8 @@ function setModalError(form, text) {
  * the modal (not in the page notice behind it), and the form stays open so the person can fix the data.
  */
 function openModal(title, html, onSubmit) {
+    // Already open (Seguridad -> Resetear contraseña): the content changes, so it fades in on its own.
+    const swapping = !$('form-modal').classList.contains('hidden') && !$('form-modal').classList.contains('is-closing');
     $('form-modal-title').textContent = title;
     const form = $('form-modal-body');
     form.innerHTML = html;
@@ -89,7 +99,8 @@ function openModal(title, html, onSubmit) {
             setModalError(form, error.message || 'La operación falló');
         }
     };
-    $('form-modal').classList.remove('hidden');
+    showModal($('form-modal'));
+    if (swapping) playOnce($('form-modal').querySelector('.modal-card'), 'modal-swap', 300);
 }
 
 // --- the page ----------------------------------------------------------------------------------------------------
@@ -189,7 +200,13 @@ async function resendInvitation(id) {
 /** Close an invitation: its link stops working and its seat is free again. */
 async function cancelInvitation(id) {
     const invitation = state.invitations.find((item) => String(item.id) === String(id));
-    if (!window.confirm(`¿Cancelar la invitación a ${invitation ? invitation.email : 'esta persona'}? El link deja de funcionar.`)) return;
+    const accepted = await confirmAction({
+        message: `¿Cancelar la invitación a ${invitation ? invitation.email : 'esta persona'}? El link deja de funcionar.`,
+        confirmLabel: 'Cancelar invitación',
+        cancelLabel: 'Volver',
+        danger: true,
+    });
+    if (!accepted) return;
     try {
         await empresaApi.cancelInvitation(id);
         await render();
@@ -341,7 +358,8 @@ function openEditForm(user) {
 async function unlinkUser(user) {
     const question = `¿Confirma desvincular a ${user.username} de la institución? Se le cierran las sesiones y pierde `
         + 'sus vistas de radar. Deja de ocupar un lugar. Solo el administrador general podrá volver a sumarlo.';
-    if (!window.confirm(question)) return;
+    const accepted = await confirmAction({ message: question, confirmLabel: 'Desvincular', danger: true });
+    if (!accepted) return;
     try {
         await empresaApi.unlinkUser(user.id);
         await render();
@@ -387,7 +405,11 @@ function openPasswordForm(user) {
 
 /** Close every session of a user (a button of the Seguridad window); on a refusal the error is shown inside that window. */
 async function revokeSessions(user) {
-    if (!window.confirm(`¿Cerrar todas las sesiones de ${user.username}?`)) return;
+    const accepted = await confirmAction({
+        message: `¿Cerrar todas las sesiones de ${user.username}?`,
+        confirmLabel: 'Cerrar sesiones',
+    });
+    if (!accepted) return;
     try {
         await empresaApi.revokeSessions(user.id);
         closeModal();
@@ -489,11 +511,7 @@ async function init() {
     const me = await initPageSession();
     if (!me) return;  // initPageSession reloads the page, and nginx then serves the login
     state.me = me;
-    $('session-user').textContent = me.full_name || me.username;
-    $('logout-btn').onclick = async () => {
-        await authApi.logout();
-        window.location.assign('login');
-    };
+    renderSessionBox(me, { afterLogout: () => window.location.assign('login') });
     $('empresa-add').onclick = openAddForm;
     $('close-form-modal').onclick = closeModal;
     $('form-modal').addEventListener('click', (event) => {

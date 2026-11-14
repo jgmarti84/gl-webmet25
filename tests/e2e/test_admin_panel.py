@@ -13,6 +13,8 @@ import os
 import pytest
 from playwright.sync_api import Page, expect
 
+from .conftest import open_nav_group
+
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://frontend-v2:80")
 
 
@@ -24,6 +26,7 @@ def browser_context_args(browser_context_args, admin_storage_state):
 
 def _open_radars(page: Page):
     page.goto(f"{FRONTEND_URL}/admin", wait_until="networkidle")
+    open_nav_group(page, "radars")
     page.click('a[data-section="radars"]')
     page.wait_for_selector("table tbody tr")
 
@@ -35,6 +38,7 @@ def test_admin_page_loads(page: Page, js_errors):
     """The admin SPA loads, shows the sidebar, and logs no JS errors."""
     page.goto(f"{FRONTEND_URL}/admin", wait_until="networkidle")
     expect(page.locator(".sidebar")).to_be_visible()
+    open_nav_group(page, "radars")
     expect(page.locator('#sidebar-nav a[data-section="radars"]')).to_be_visible()
     assert not js_errors, f"JS errors on admin load: {js_errors}"
 

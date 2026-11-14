@@ -3,8 +3,10 @@
  * (admin#profile and empresa#perfil), so this page sends them there. The profile itself is drawn by
  * shared/profile-section.js, the same code the panels use.
  */
-import { authApi, initPageSession } from './auth-api.js';
+import { initPageSession } from './auth-api.js';
+import { hideModal, playOnce, showModal } from './shared/modal-motion.js';
 import { mountProfile } from './shared/profile-section.js';
+import { renderSessionBox } from './shared/session-box.js';
 
 // How long a success notice stays before it closes by itself (errors stay until the × is pressed).
 const SUCCESS_MESSAGE_MS = 4000;
@@ -19,16 +21,21 @@ function hideMessage() {
     clearTimeout(messageTimer);
     messageTimer = null;
     const box = $('perfil-message');
-    box.querySelector('.feedback-text').textContent = '';
-    box.classList.add('hidden');
-    box.classList.remove('success', 'error');
+    // It fades out first; the text goes once it is gone, so the box does not shrink while it fades.
+    hideModal(box, () => {
+        box.querySelector('.feedback-text').textContent = '';
+        box.classList.remove('success', 'error');
+    });
 }
 
 function showMessage(text, kind = 'success') {
     const box = $('perfil-message');
     box.querySelector('.feedback-text').textContent = text;
-    box.classList.remove('hidden', 'success', 'error');
+    box.classList.remove('success', 'error');
     box.classList.add(kind);
+    const replacing = !box.classList.contains('hidden') && !box.classList.contains('is-closing');
+    showModal(box); // takes off `hidden` (and cancels a fade-out that was running): the CSS animates the entrance
+    if (replacing) playOnce(box, 'is-replaced', 300); // a notice that replaces another nudges, so the change is seen
     clearTimeout(messageTimer);
     messageTimer = kind === 'success' ? setTimeout(hideMessage, SUCCESS_MESSAGE_MS) : null;
 }
@@ -36,8 +43,8 @@ function showMessage(text, kind = 'success') {
 // --- modal (errors are shown INSIDE it, like the other panels) --------------------------------------------------
 
 function closeModal() {
-    $('form-modal').classList.add('hidden');
-    $('form-modal-body').innerHTML = '';
+    // The form is emptied once the fade-out ends, not before: it would collapse in front of the person.
+    hideModal($('form-modal'), () => { $('form-modal-body').innerHTML = ''; });
 }
 
 /** Show (or clear, with no text) the error inside the open modal, just above the buttons. */
@@ -58,6 +65,8 @@ function setModalError(form, text) {
 
 /** Open the shared modal. `onSubmit` gets the FormData; the modal closes when it resolves, a rejection is shown. */
 function openModal(title, html, onSubmit) {
+    // Already open (Seguridad -> Resetear contraseña): the content changes, so it fades in on its own.
+    const swapping = !$('form-modal').classList.contains('hidden') && !$('form-modal').classList.contains('is-closing');
     $('form-modal-title').textContent = title;
     const form = $('form-modal-body');
     form.innerHTML = html;
@@ -71,7 +80,8 @@ function openModal(title, html, onSubmit) {
             setModalError(form, error.message || 'La operación falló');
         }
     };
-    $('form-modal').classList.remove('hidden');
+    showModal($('form-modal'));
+    if (swapping) playOnce($('form-modal').querySelector('.modal-card'), 'modal-swap', 300);
 }
 
 // --- the page ---------------------------------------------------------------------------------------------------
@@ -90,10 +100,7 @@ async function init() {
         return;
     }
 
-    $('logout-btn').onclick = async () => {
-        await authApi.logout();
-        window.location.assign('login');
-    };
+    renderSessionBox(me, { afterLogout: () => window.location.assign('login') });
     $('close-form-modal').onclick = closeModal;
     $('form-modal').addEventListener('click', (event) => {
         if (event.target === $('form-modal')) closeModal();

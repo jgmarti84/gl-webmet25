@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 import pytest
 from playwright.sync_api import expect
 
-from .conftest import E2E_VIEWER, E2E_VIEWER_PASSWORD, deactivate_user, ensure_viewer
+from .conftest import E2E_VIEWER, E2E_VIEWER_PASSWORD, deactivate_user, ensure_viewer, open_nav_group
 from .test_empresa import (
     ORG_ADMIN,
     ORG_ADMIN_PASSWORD,
@@ -79,6 +79,7 @@ def test_a_company_admin_has_its_profile_inside_the_company_panel(browser, admin
         expect(page.locator("#empresa-chip-link")).to_be_visible()
         expect(page.locator("#profile-chip-link")).to_be_hidden()
         page.goto(f"{FRONTEND_URL}/empresa", wait_until="networkidle")
+        open_nav_group(page, "perfil")
         page.click("#sidebar-nav [data-section=perfil]")
         # Same page (the panel), another section: the address keeps /empresa and gets the section in the hash.
         assert urlparse(page.url).path == "/empresa" and urlparse(page.url).fragment == "perfil"
@@ -105,7 +106,7 @@ def test_a_company_admin_changes_its_name_from_the_company_panel(browser, admin_
         page.fill("input[name=full_name]", "Jefa E2E")
         page.click("#form-modal-body button[type=submit]")
         expect(page.locator("#perfil-name")).to_have_text("Jefa E2E")
-        expect(page.locator("#session-user")).to_have_text("Jefa E2E")
+        expect(page.locator("#account-name")).to_have_text("Jefa E2E")
     finally:
         page.close()
         deactivate_user(admin_api, org_admin_id)
@@ -116,12 +117,14 @@ def test_the_general_admin_has_its_profile_inside_the_admin_panel(browser, admin
     page = context.new_page()
     try:
         page.goto(f"{FRONTEND_URL}/admin", wait_until="networkidle")
+        open_nav_group(page, "profile")
         page.click("#sidebar-nav [data-section=profile]")
         assert urlparse(page.url).path == "/admin" and urlparse(page.url).fragment == "profile"
         expect(page.locator("#perfil-username")).to_be_visible()
         expect(page.locator("#section-title")).to_have_text("Mi perfil")
         expect(page.locator("#perfil-company")).to_have_count(0)  # the general admin has no company
         # The other sections keep working after visiting the profile.
+        open_nav_group(page, "users")
         page.click("#sidebar-nav [data-section=users]")
         expect(page.locator("#section-title")).to_have_text("Usuarios")
     finally:

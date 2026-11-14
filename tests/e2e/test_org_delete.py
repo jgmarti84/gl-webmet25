@@ -1,7 +1,7 @@
 # tests/e2e/test_org_delete.py
 """E2E: the general admin deletes institutions from the admin panel.
 
-An institution without users is deleted after a browser confirmation. One with users opens a window with two options:
+An institution without users is deleted after a confirmation. One with users opens a window with two options:
 free all its users (they stay as readers with no institution) or delete them too (the button stays disabled until the
 name of the institution is typed). Runs on the isolated test stack.
 
@@ -15,7 +15,7 @@ import time
 import pytest
 from playwright.sync_api import expect
 
-from .conftest import deactivate_by_username
+from .conftest import answer_confirmation, deactivate_by_username
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://frontend-v2:80")
 ADMIN_API = f"{FRONTEND_URL}/api/v1/admin"
@@ -74,21 +74,20 @@ def _user(api, username: str):
 def test_an_empty_institution_is_deleted_after_the_confirmation(scene):
     page, api, make_org, open_panel = scene
     org = make_org("vacia")
-    dialogs = []
-    page.on("dialog", lambda dialog: (dialogs.append(dialog.message), dialog.accept()))
     open_panel()
     page.locator("tr", has_text=org["name"]).locator(f"[data-delete-org='{org['id']}']").click()
+    question = answer_confirmation(page)
     expect(page.locator("tr", has_text=org["name"])).to_have_count(0)
-    assert dialogs and org["name"] in dialogs[0]  # the confirmation names the institution
+    assert org["name"] in question  # the confirmation names the institution
     assert org["name"] not in _org_names(api)
 
 
 def test_cancelling_the_confirmation_keeps_the_institution(scene):
     page, api, make_org, open_panel = scene
     org = make_org("conserva")
-    page.on("dialog", lambda dialog: dialog.dismiss())
     open_panel()
     page.locator("tr", has_text=org["name"]).locator(f"[data-delete-org='{org['id']}']").click()
+    answer_confirmation(page, accept=False)
     page.wait_for_timeout(500)
     expect(page.locator("tr", has_text=org["name"])).to_have_count(1)
     assert org["name"] in _org_names(api)
@@ -97,7 +96,6 @@ def test_cancelling_the_confirmation_keeps_the_institution(scene):
 def test_an_institution_with_users_opens_a_window_with_the_two_options(scene):
     page, api, make_org, open_panel = scene
     org = make_org("con-gente", with_users=True)
-    page.on("dialog", lambda dialog: pytest.fail("a window with options was expected, not a confirmation"))
     open_panel()
     page.locator("tr", has_text=org["name"]).locator(f"[data-delete-org='{org['id']}']").click()
     body = page.locator("#form-modal-body")
@@ -107,6 +105,7 @@ def test_an_institution_with_users_opens_a_window_with_the_two_options(scene):
     expect(page.locator("input[name=users_action][value=unlink]")).to_be_checked()  # the harmless option is the default
     expect(page.locator("input[name=users_action][value=delete]")).not_to_be_checked()
     expect(page.locator("#org-delete-confirm")).to_be_hidden()
+    expect(page.locator("#confirm-dialog")).to_be_hidden()  # a window with options, not a plain confirmation
     assert org["name"] in _org_names(api)  # nothing was deleted by opening the window
 
 
