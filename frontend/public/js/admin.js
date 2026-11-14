@@ -2792,7 +2792,12 @@ async function deleteOrganization(org) {
         return;
     }
     const cancelled = invitations ? ` Se cancelan ${pendingInvitationsText(invitations)}.` : '';
-    if (!window.confirm(`¿Eliminar la institución ${org.name}?${cancelled} No se puede deshacer.`)) return;
+    const accepted = await confirmAction({
+        message: `¿Eliminar la institución ${org.name}?${cancelled} No se puede deshacer.`,
+        confirmLabel: 'Eliminar',
+        danger: true,
+    });
+    if (!accepted) return;
     try {
         await adminApi.deleteOrganization(org.id);
         if (state.usersOrgFilter === org.id) state.usersOrgFilter = null;
